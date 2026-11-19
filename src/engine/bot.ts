@@ -587,9 +587,6 @@ function findFeed(game: Game, me: Pt, wisp: Wisp, homes: Pt[], partners: Pt[]): 
  * Per game, each bot's half: the axis (x or y) and the side of the brazier (+1 or -1) it
  * works from, and how long its partner has been on that same side (to swap if they stay).
  */
-/** Per game, where each partner was last seen and since which tick they've stood there. */
-const mateStill = new WeakMap<Game, Map<number, { at: Pt; since: number }>>();
-
 const halves = new WeakMap<Game, Map<number, { axis: "x" | "y"; side: number; crowded: number }>>();
 
 /**
@@ -608,13 +605,8 @@ export function halfCommand(game: Game, me: Game["players"][number], mate: Game[
   if (!all) halves.set(game, (all = new Map()));
   let half = all.get(me.id);
   const mdx = mate.pos.x - c.x, mdy = mate.pos.y - c.y;
-  // Wait for my partner to settle somewhere (stand still 3 ticks) before taking the other half;
-  // till then, play as usual.
-  let seen = mateStill.get(game);
-  if (!seen) mateStill.set(game, (seen = new Map()));
-  const was = seen.get(mate.id);
-  if (!was || !samePt(was.at, mate.pos)) seen.set(mate.id, { at: mate.pos, since: game.tick });
-  if (!half && game.tick - (seen.get(mate.id)!.since) < 3) return undefined;
+  // At the start I take the far side straight away: the half across the brazier from where
+  // my guild starts (my partner is starting there too).
   if (!half) {
     const axis = Math.abs(mdx) >= Math.abs(mdy) ? "x" : "y";
     const m = axis === "x" ? mdx : mdy;

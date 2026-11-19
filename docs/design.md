@@ -84,8 +84,8 @@ bot gets about 30.
 
   A team of two coords by halves on the smaller shrines, like pairs do in the orb game: each
   takes the half of the shrine opposite the other and moves about inside the archways there.
-  The bot waits for its partner to settle (stand still 3 ticks) and then takes the half
-  opposite, split along whichever axis the partner is further out on.
+  At the start the bot heads straight for the far side, across the brazier from where its
+  guild starts (split along whichever axis its partner is further out on).
   From its half it pulls in wisps on its partner's side, over the rim. A wisp on its own side
   that's out of its partner's reach it pulls in until the partner can reach it, so the partner
   never has to leave their half. If its partner (a person, say) settles on its half, it swaps.
