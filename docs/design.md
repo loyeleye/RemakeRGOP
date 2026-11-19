@@ -78,8 +78,9 @@ bot gets about 30.
   across the brazier from. A home-square bot pulls in whatever it can bank from there and waits
   while a teammate is bringing one, and otherwise goes and fetches one itself. The rest fetch:
   each sticks to one wisp nobody else is working on, and pulls it where a home square can
-  finish it if that's quicker. Two co-op Hard bots bank about 1.5 to 2 times what two solo Hard
-  bots do (e.g. Fairy Ring 21 to 39, Castle Rise 11 to 20).
+  finish it if that's quicker. Like the rest of Hard's judgment the teamwork lapses: 70% of
+  its decisions are solo ones. That leaves a pair of Hard bots banking about 1.25 times what
+  two solo Hard bots do (with no lapses it was about 1.8 times).
 
 Alone over a round, Easy banks about 2 to 5 on the regular islands, Medium 7 to 12, Hard 9 to
 16. On Old Bastion and Sunwell Terrace, Easy banks about 1 and the others 2 to 5. A human who

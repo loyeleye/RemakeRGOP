@@ -632,7 +632,7 @@ describe("co-op hard bots", () => {
       const g = new Game(shrineFor("fairy-ring", 2), roster, seed);
       for (let t = 0; t < ROUND_TICKS; t++) {
         for (const r of roster) {
-          const c = botCommand(g, r.id, { ...BOT_HARD, coop }, rand);
+          const c = botCommand(g, r.id, { ...BOT_HARD, coop, coopLapse: 0 }, rand);
           if (c) g.command(r.id, c);
         }
         g.step();
@@ -642,7 +642,7 @@ describe("co-op hard bots", () => {
     return total;
   };
 
-  it("bank more as a pair than two hard bots each playing alone", () => {
+  it("bank more as a pair than two hard bots each playing alone (with their teamwork lapses off)", () => {
     expect(teamScore(true)).toBeGreaterThan(teamScore(false) * 1.3);
   });
 });

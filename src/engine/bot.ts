@@ -38,6 +38,8 @@ export interface BotStyle {
    * the home squares, and nobody chases a wisp a teammate already has.
    */
   coop?: boolean;
+  /** Chance per decision to forget the team and play alone. */
+  coopLapse?: number;
 }
 
 /** Easy: Medium's straight pulls, but it stops to think for 3 to 12 ticks before each new move. */
@@ -49,7 +51,7 @@ export const BOT_MEDIUM: BotStyle = { pushy: 0, sloppiness: 0.3, straightOnly: t
  * to bank, but half its decisions are Medium ones. It never taps: juggling wisps with taps is
  * left as the trick a human can learn to beat it.
  */
-export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.15, lapse: 1 / 2, coop: true };
+export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.15, lapse: 1 / 2, coop: true, coopLapse: 0.7 };
 export const BOT_LEVELS = { easy: BOT_EASY, medium: BOT_MEDIUM, hard: BOT_HARD } as const;
 export type BotLevel = keyof typeof BOT_LEVELS;
 /** Kept for older callers: the old "sharper bot". */
@@ -58,7 +60,8 @@ export const BOT_FAIR = BOT_HARD;
 export function botCommand(game: Game, id: number, style: BotStyle, rand: () => number = Math.random): Command | null {
   const me = game.players.find((p) => p.id === id);
   if (!me) return null;
-  if (style.coop) {
+  // Teamwork lapses like the rest of a bot's judgment: some team decisions are solo ones.
+  if (style.coop && rand() >= (style.coopLapse ?? 0)) {
     const team = coopTeam(game, me);
     if (team) {
       const cmd = coopCommand(game, me, team, style, rand);
