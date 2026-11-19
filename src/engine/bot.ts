@@ -130,12 +130,12 @@ function waited(game: Game, id: number, style: BotStyle, rand: () => number): Co
 }
 
 const UNREACHABLE = 0x7fff;
-const bankCache = new WeakMap<Board, Int16Array>();
+const bankCache = new WeakMap<Board, { version: number; d: Int16Array }>();
 
 /** For each tile, how many wisp steps it is from the brazier rim (going round the archways). */
 export function bankDistances(board: Board): Int16Array {
   const cached = bankCache.get(board);
-  if (cached) return cached;
+  if (cached && cached.version === board.version) return cached.d;
   const W = board.width, H = board.height;
   const d = new Int16Array(W * H).fill(UNREACHABLE);
   const q: Pt[] = [];
@@ -158,7 +158,7 @@ export function bankDistances(board: Board): Int16Array {
   }
   // A wisp can't rest on ice, it skates on: count ending there as well short of banking.
   for (let i = 0; i < W * H; i++) if (isSlick(board.tiles[i]!) && d[i]! > 0 && d[i]! < UNREACHABLE) d[i] = d[i]! + 6;
-  bankCache.set(board, d);
+  bankCache.set(board, { version: board.version, d });
   return d;
 }
 

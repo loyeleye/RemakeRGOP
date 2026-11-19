@@ -35,6 +35,10 @@ export enum Tile {
   Rime = 9,
   /** Petal bed: open ground that hurries a wisp along: one crossing it moves 2 tiles a tick. */
   Bloom = 10,
+  /** Ember vent: open ground that erupts every few ticks, flinging a wisp on it toward the brazier. */
+  Vent = 11,
+  /** Portcullis: a gate in the archways that is open or shut by the clock (shut, it's a wall). */
+  Gate = 12,
 }
 
 /** Do wisps skate on this tile? */
@@ -66,6 +70,9 @@ export class Board {
   ) {
     this.center = pt(Math.floor(width / 2), Math.floor(height / 2));
   }
+
+  /** Bumped whenever the tiles change during a round (portcullises), so caches know. */
+  version = 0;
 
   inside(p: Pt) {
     return p.x >= 0 && p.y >= 0 && p.x < this.width && p.y < this.height;

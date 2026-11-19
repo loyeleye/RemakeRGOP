@@ -24,6 +24,20 @@ export const CRYSTAL_FLIGHT = 8;
 /** How far a wisp flies on out of a moon pond. */
 export const PONDS_FLIGHT = 3;
 
+/** How far a vent flings a wisp. */
+export const VENT_FLIGHT = 6;
+
+/** Is a portcullis at (dx, dy) from the centre open on this tick? East-west ones open first. */
+export function gateOpen(tick: number, period: number, dx: number, dy: number) {
+  const eastWest = Math.abs(dx) >= Math.abs(dy);
+  return (Math.floor(tick / period) % 2 === 0) === eastWest;
+}
+
+/** Does a vent erupt on this tick? */
+export function ventErupts(tick: number, period: number) {
+  return tick % period === 0;
+}
+
 /** Is the tide coming in on this tick (it turns every `period` ticks, starting in)? */
 export function tideIn(tick: number, period: number) {
   return Math.floor(tick / period) % 2 === 0;
@@ -222,6 +236,8 @@ export interface JoinSpec {
 
 export class Game {
   readonly board: Board;
+  /** The portcullis tiles, if any, as offsets from the centre too. */
+  private gates: { p: Pt; dx: number; dy: number }[] = [];
   tick = 0;
   scores: number[];
   wisps: Wisp[] = [];
@@ -236,7 +252,18 @@ export class Game {
     seed: number,
     wispsPerGuild = WISPS_PER_GUILD,
   ) {
-    this.board = shrine.board;
+    const gp = shrine.gimmicks?.portcullis;
+    // Portcullises change the tiles mid-round, so this round gets its own copy of the board.
+    this.board = gp ? new Board(shrine.board.width, shrine.board.height, shrine.board.tiles.slice()) : shrine.board;
+    if (gp) {
+      const c = this.board.center;
+      this.board.tiles.forEach((t, i) => {
+        if (t !== Tile.Gate) return;
+        const p = pt(i % this.board.width, Math.floor(i / this.board.width));
+        this.gates.push({ p, dx: p.x - c.x, dy: p.y - c.y });
+      });
+      this.setGates();
+    }
     this.rng = new Rng(seed);
     this.scores = Array<number>(this.teams).fill(0);
     const used = new Set<string>();
@@ -318,6 +345,20 @@ export class Game {
     this.tick++;
     this.banks = [];
     for (const w of this.wisps) w.pullers = [];
+    const g = this.shrine.gimmicks;
+    if (g?.portcullis && this.tick % g.portcullis === 0) this.setGates();
+    if (g?.vents && ventErupts(this.tick, g.vents)) {
+      const c = this.board.center;
+      for (const w of this.wisps) {
+        if (this.board.tile(w.pos) !== Tile.Vent) continue;
+        // The vent erupts: off it goes toward the brazier, out of every staff's grip.
+        w.skate = pt(sign(c.x - w.pos.x), sign(c.y - w.pos.y));
+        w.glide = VENT_FLIGHT;
+        w.target = null;
+        w.touched = false;
+        this.letGo(w);
+      }
+    }
     for (const w of this.wisps) this.stepWisp(w);
     for (const p of this.players) this.stepPlayer(p);
     for (const w of this.wisps) {
@@ -398,11 +439,16 @@ export class Game {
     if (!w.target || samePt(w.target, w.pos)) {
       w.target = null;
       // Loose on a pool when the tide runs: it drifts a tile in or out.
-      const tide = this.shrine.gimmicks.tide;
-      if (tide && !held && this.board.tile(w.pos) === Tile.Water) {
+      const { tide, current } = this.shrine.gimmicks;
+      if ((tide || current) && !held && this.board.tile(w.pos) === Tile.Water) {
         const c = this.board.center;
-        const dir = tideIn(this.tick, tide) ? 1 : -1;
-        const tx = dir * sign(c.x - w.pos.x), ty = dir * sign(c.y - w.pos.y);
+        const dir = tide && tideIn(this.tick, tide) ? 1 : -1;
+        // The tide runs in or out; a stream runs clockwise round the brazier (y grows south).
+        // The stream steps along one axis, the tangent of whichever side of the brazier it is on.
+        const ox = w.pos.x - c.x, oy = w.pos.y - c.y;
+        const northSouth = Math.abs(oy) >= Math.abs(ox);
+        const tx = tide ? dir * sign(c.x - w.pos.x) : northSouth ? -sign(oy) : 0;
+        const ty = tide ? dir * sign(c.y - w.pos.y) : northSouth ? 0 : sign(ox);
         const mv = (tx || ty) && wispMove(this.board, w.pos, tx, ty, Math.abs(c.x - w.pos.x), Math.abs(c.y - w.pos.y));
         if (mv && !mv.bounce) w.pos = pt(w.pos.x + mv.step[0], w.pos.y + mv.step[1]);
       }
@@ -428,6 +474,13 @@ export class Game {
     if (samePt(w.pos, w.target)) w.target = null;
     // On ice it keeps its way: the moment nobody is pulling it, it skates on.
     if (isSlick(this.board.tile(w.pos)) && !this.board.inBankZone(w.pos)) w.skate = pt(dx, dy);
+  }
+
+  /** Open and shut the portcullises for this tick. Shut, a gate is wall. */
+  private setGates() {
+    const period = this.shrine.gimmicks.portcullis!;
+    for (const g of this.gates) this.board.tiles[g.p.y * this.board.width + g.p.x] = gateOpen(this.tick, period, g.dx, g.dy) ? Tile.Gate : Tile.Wall;
+    this.board.version++;
   }
 
   /** Every staff on this wisp lets go. */

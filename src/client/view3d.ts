@@ -10,7 +10,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { Tile, type Board } from "../engine/board.js";
-import { PULL_REACH, PUSH_REACH, type GameSnapshot, type Guild } from "../engine/game.js";
+import { PULL_REACH, PUSH_REACH, gateOpen, type GameSnapshot, type Guild } from "../engine/game.js";
 import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js";
 import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
@@ -480,6 +480,56 @@ function makeMirror(x: number, z: number, slash: boolean, colour: string): THREE
   return g;
 }
 
+/** A vent: a dark cracked ring with an ember core and a plume that rises on eruption. */
+function makeVent(x: number, z: number): { g: THREE.Group; plume: THREE.Mesh; core: THREE.MeshStandardMaterial } {
+  const g = new THREE.Group();
+  g.position.set(x, 0.03, z);
+  const rim = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.6, 14), new THREE.MeshStandardMaterial({ color: "#3a2a24", roughness: 0.95 }));
+  rim.rotation.x = -Math.PI / 2;
+  g.add(rim);
+  const core = new THREE.MeshStandardMaterial({ color: "#ff7a2a", emissive: "#ff5a10", emissiveIntensity: 0.6 });
+  const hole = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), core);
+  hole.rotation.x = -Math.PI / 2;
+  hole.position.y = 0.005;
+  g.add(hole);
+  const plume = new THREE.Mesh(
+    new THREE.ConeGeometry(0.45, 2.4, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: "#ffb060", transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  plume.rotation.x = Math.PI;
+  plume.position.y = 1.2;
+  g.add(plume);
+  return { g, plume, core };
+}
+
+/** A portcullis: two posts and an iron grille that drops shut or lifts open. */
+function makeGate(x: number, z: number, eastWest: boolean): { g: THREE.Group; grille: THREE.Group } {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  // The grille spans across the way a walker passes through it.
+  if (eastWest) g.rotation.y = Math.PI / 2;
+  const stone = new THREE.MeshStandardMaterial({ color: "#8a8178", roughness: 0.9 });
+  for (const s of [-0.55, 0.55]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.2, 0.3), stone);
+    post.position.set(s, 1.1, 0);
+    g.add(post);
+  }
+  const grille = new THREE.Group();
+  const iron = new THREE.MeshStandardMaterial({ color: "#3b3a40", metalness: 0.6, roughness: 0.5 });
+  for (let i = 0; i < 5; i++) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.9, 0.06), iron);
+    bar.position.set(-0.4 + i * 0.2, 0.95, 0);
+    grille.add(bar);
+  }
+  for (const h of [0.5, 1.4]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.06, 0.06), iron);
+    rail.position.y = h;
+    grille.add(rail);
+  }
+  g.add(grille);
+  return { g, grille };
+}
+
 /** A petal bed: a soft pink patch scattered with petals, flat on the floor. */
 function makePetals(x: number, z: number, seed: number): THREE.Group {
   const g = new THREE.Group();
@@ -575,6 +625,9 @@ export class World {
   private shrineId = "";
   private distantPush = 0;
   private timeUniforms: { value: number }[] = [];
+  private vents: { plume: THREE.Mesh; core: THREE.MeshStandardMaterial }[] = [];
+  private gates: { grille: THREE.Group; dx: number; dy: number; lift: number }[] = [];
+  private gimmicks: Shrine["gimmicks"] = {};
   private players = new Map<number, PlayerRig>();
   private wisps = new Map<number, WispRig>();
   private brazierLight = new THREE.PointLight("#ff9a4a", 60, 30, 1.6);
@@ -758,6 +811,9 @@ export class World {
     this.shrineId = shrine.id + "~" + shrine.teams;
     this.shrineGroup.clear();
     this.propSlots = [];
+    this.vents = [];
+    this.gates = [];
+    this.gimmicks = shrine.gimmicks ?? {};
     for (const r of this.players.values()) this.scene.remove(r.root);
     this.players.clear();
     for (const r of this.wisps.values()) this.scene.remove(r.root);
@@ -937,6 +993,16 @@ export class World {
           this.addProp(court && th.deflector ? th.deflector : th.boulder, wx, wz, court && th.deflector ? 1.3 : 0.9, 1.05, seed);
         } else if (t === Tile.Bloom) this.shrineGroup.add(makePetals(wx, wz, seed));
         else if (t === Tile.CrystalA || t === Tile.CrystalB) this.shrineGroup.add(makeMirror(wx, wz, t === Tile.CrystalA, th.crystal ?? "#e6c8ff"));
+        else if (t === Tile.Vent) {
+          const v = makeVent(wx, wz);
+          this.shrineGroup.add(v.g);
+          this.vents.push(v);
+        } else if (t === Tile.Gate) {
+          const dx = x - b.center.x, dy = y - b.center.y;
+          const gt = makeGate(wx, wz, Math.abs(dx) >= Math.abs(dy));
+          this.shrineGroup.add(gt.g);
+          this.gates.push({ grille: gt.grille, dx, dy, lift: 0 });
+        }
       }
     for (const [kind, ice] of [[Tile.Water, 0], [Tile.Ice, 1]] as const) {
       const mask = poolMask(b, kind);
@@ -1303,6 +1369,24 @@ export class World {
     for (const u of this.timeUniforms) u.value = time;
     for (const f of this.floaters) f.obj.position.y = f.y + Math.sin(time * 0.25 * f.drift + f.phase) * 0.8;
     this.brazierLight.intensity = 18 + Math.sin(time * 9) * 3 + Math.sin(time * 23) * 2;
+    const { vents, portcullis } = this.gimmicks;
+    if (vents) {
+      // The plume flares on the eruption tick and fades over the next one; the core glows hotter as it nears.
+      const since = (st.snap.tick % vents) + Math.min(1, st.t);
+      const flare = Math.max(0, 1 - since / 1.5);
+      const warm = (st.snap.tick % vents) / (vents - 1 || 1);
+      for (const v of this.vents) {
+        (v.plume.material as THREE.MeshBasicMaterial).opacity = flare * 0.75;
+        v.plume.scale.set(1, 0.4 + flare * 0.6, 1);
+        v.core.emissiveIntensity = 0.4 + warm * 1.4 + flare * 2;
+      }
+    }
+    if (portcullis)
+      for (const gt of this.gates) {
+        const goal = gateOpen(st.snap.tick, portcullis, gt.dx, gt.dy) ? 1.85 : 0;
+        gt.lift += (goal - gt.lift) * 0.15;
+        gt.grille.position.y = gt.lift;
+      }
     const lerp = (a: number, z: number) => a + (z - a) * Math.min(1, st.t);
 
     // Wisps.

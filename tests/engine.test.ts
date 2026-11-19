@@ -111,7 +111,8 @@ describe("shrines", () => {
         for (let dy = -r.radius; dy <= r.radius; dy++)
           for (let dx = -r.radius; dx <= r.radius; dx++) {
             if (Math.max(Math.abs(dx), Math.abs(dy)) !== r.radius) continue;
-            const t = b.tile(pt(c.x + dx, c.y + dy));
+            // A portcullis stands in a gap: still a gap, just one that shuts now and then.
+            const t = b.tile(pt(c.x + dx, c.y + dy)) === Tile.Gate ? Tile.Floor : b.tile(pt(c.x + dx, c.y + dy));
             expect(t, `${s.id} ${s.teams} (${dx},${dy})`).toBe(walls.has(`${dx},${dy}`) ? Tile.Wall : Tile.Floor);
           }
     }
@@ -413,6 +414,45 @@ describe("game", () => {
     expect(g.players[0]!.action.kind).toBe("idle");
     g.step();
     expect(g.wisps[0]!.pos).toEqual(pt(19, 20));
+  });
+
+  it("portcullises open and shut by the clock, east and west first", () => {
+    const def = SHRINE_DEFS.find((d) => d.id === "castle-rise")!;
+    const g = new Game(buildShrine(def), duo, 1);
+    const c = g.board.center;
+    expect(g.board.tile(pt(c.x + 5, c.y))).toBe(Tile.Gate);
+    expect(g.board.tile(pt(c.x, c.y + 5))).toBe(Tile.Wall);
+    for (let i = 0; i < 10; i++) g.step();
+    expect(g.board.tile(pt(c.x + 5, c.y))).toBe(Tile.Wall);
+    expect(g.board.tile(pt(c.x, c.y + 5))).toBe(Tile.Gate);
+    // The shared shrine board is never touched.
+    expect(SHRINES.find((s) => s.id === "castle-rise")!.board.tile(pt(c.x, c.y + 5))).toBe(Tile.Gate);
+  });
+
+  it("an erupting vent flings a wisp on it toward the brazier", () => {
+    const shrine = openShrine([pt(6, 13)], [pt(20, 23)]);
+    shrine.board.tiles[13 * 27 + 6] = Tile.Vent;
+    shrine.gimmicks = { vents: 2 };
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(2, 2);
+    g.step(); // tick 1: nothing
+    g.step(); // tick 2: erupts, first step
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 13));
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(9, 13));
+  });
+
+  it("a stream carries a loose wisp clockwise round the brazier", () => {
+    const shrine = openShrine([pt(13, 6)], [pt(20, 23)]);
+    for (let x = 10; x <= 16; x++) shrine.board.tiles[6 * 27 + x] = Tile.Water;
+    shrine.gimmicks = { current: "swirl" };
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(2, 2);
+    g.step();
+    g.step();
+    // North of the brazier, clockwise is east.
+    expect(g.wisps[0]!.pos).toEqual(pt(15, 6));
   });
 
   it("teammates pulling one wisp pull it toward the point between them", () => {
