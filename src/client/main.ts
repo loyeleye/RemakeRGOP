@@ -358,6 +358,7 @@ window.addEventListener("keydown", (e) => {
   else if (k === "r") act({ toggleRun: true });
   else if (k === " " || k === "s") act({ action: { kind: "idle" } });
   else if (k === "c") cam.follow = true;
+  else if (k === "+" || k === "=" || k === "-" || k === "_") cam.scale *= k === "-" || k === "_" ? 1 / 1.25 : 1.25;
   else if (k.startsWith("arrow")) {
     const step = 120 / Math.max(1, cam.scale);
     cam.follow = false;
