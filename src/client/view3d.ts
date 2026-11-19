@@ -283,13 +283,47 @@ void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(
 const WATER_FS = /* glsl */ `
 varying vec2 vUv;
 uniform float uTime;
+uniform sampler2D uMask;
+uniform vec2 uSize;
+uniform float uIce;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+}
 void main() {
-  vec2 p = vUv * 40.0;
+  // The pools' soft outline: a blurred tile mask, its edge roughened with noise.
+  vec2 t = vUv * uSize;
+  vec2 warp = vec2(noise(t * 0.9 + 3.1), noise(t * 0.9 + 7.7)) - 0.5;
+  float m = texture2D(uMask, vUv + warp * 0.7 / uSize).r + (noise(t * 1.7) - 0.5) * 0.14 + (noise(t * 4.3) - 0.5) * 0.05;
+  float shore = smoothstep(0.30, 0.40, m);
+  float body = smoothstep(0.46, 0.52, m);
+  if (shore < 0.01) discard;
+  vec3 col;
+  if (uIce > 0.5) {
+    float streak = noise(vec2(t.x * 0.6 + t.y * 0.9, t.y * 3.0));
+    vec3 deep = vec3(0.30, 0.66, 0.90);
+    vec3 lit = vec3(0.86, 0.97, 1.0);
+    col = mix(deep, lit, smoothstep(0.35, 0.9, streak) * 0.7 + smoothstep(0.52, 0.8, m) * 0.15);
+    col = mix(vec3(0.92, 0.97, 1.0), col, body);
+    gl_FragColor = vec4(col * 1.05, mix(0.5, 0.92, body) * shore);
+    return;
+  }
+  vec2 p = t * 1.6;
   float w = sin(p.x * 1.3 + uTime * 1.4) * sin(p.y * 1.1 - uTime * 1.1) + sin((p.x + p.y) * 0.7 + uTime);
-  vec3 deep = vec3(0.01, 0.08, 0.13);
-  vec3 lit = vec3(0.20, 0.70, 0.80);
-  vec3 col = mix(deep, lit, smoothstep(0.6, 1.9, w) * 0.6);
-  gl_FragColor = vec4(col, 0.88);
+  vec3 deep = vec3(0.01, 0.13, 0.24);
+  vec3 lit = vec3(0.12, 0.56, 0.72);
+  // Shallower (lighter) near the edge, deeper in the middle.
+  float depth = smoothstep(0.5, 0.85, m);
+  col = mix(lit, deep, depth);
+  col = mix(col, lit, smoothstep(0.6, 1.9, w) * 0.45);
+  // A thin line of foam where the water meets the stone.
+  float foam = body * (1.0 - smoothstep(0.52, 0.58, m));
+  col = mix(col, vec3(0.92, 0.97, 1.0), foam * 0.7);
+  // Outside the water: a dark wet band on the stone.
+  vec3 wet = vec3(0.10, 0.10, 0.09);
+  gl_FragColor = vec4(mix(wet, col, body), mix(0.35, 0.96, body) * shore);
 }`;
 
 const PILLAR_FS = /* glsl */ `
@@ -391,6 +425,43 @@ function glowTexture() {
   return t;
 }
 const GLOW = glowTexture();
+
+/**
+ * A soft mask of every tile of one kind: a disc on each tile, blurred, so neighbouring tiles
+ * melt into one rounded pool. The water shader thresholds it into a natural outline.
+ */
+function poolMask(b: Board, kind: Tile): THREE.Texture | null {
+  const PX = 16;
+  const c = document.createElement("canvas");
+  c.width = b.width * PX;
+  c.height = b.height * PX;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#000";
+  g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = "#fff";
+  let any = false;
+  for (let y = 0; y < b.height; y++)
+    for (let x = 0; x < b.width; x++) {
+      if (b.tiles[y * b.width + x] !== kind) continue;
+      any = true;
+      g.beginPath();
+      g.arc((x + 0.5) * PX, (y + 0.5) * PX, PX * 0.6, 0, Math.PI * 2);
+      g.fill();
+      // Join to the right and below so pools are one body, not beads.
+      if (b.tiles[y * b.width + x + 1] === kind && x + 1 < b.width) g.fillRect((x + 0.5) * PX, (y + 0.5) * PX - PX * 0.45, PX, PX * 0.9);
+      if (y + 1 < b.height && b.tiles[(y + 1) * b.width + x] === kind) g.fillRect((x + 0.5) * PX - PX * 0.45, (y + 0.5) * PX, PX * 0.9, PX);
+    }
+  if (!any) return null;
+  const out = document.createElement("canvas");
+  out.width = c.width;
+  out.height = c.height;
+  const o = out.getContext("2d")!;
+  o.filter = `blur(${PX * 0.45}px)`;
+  o.drawImage(c, 0, 0);
+  const t = new THREE.CanvasTexture(out);
+  t.colorSpace = THREE.NoColorSpace;
+  return t;
+}
 
 function glowSprite(color: string, size: number, opacity = 1) {
   const s = new THREE.Sprite(
@@ -725,12 +796,10 @@ export class World {
       this.addProp(th.wall, p.x, p.z, 4.2, 1.3, k);
     }
 
-    // Tiles.
+    // Tiles. Walls and boulders are props; pools and ice are painted as soft shapes over the
+    // floor from a blurred mask of their tiles, so they read as natural pools, not squares.
     const waterU = { value: 0 };
     this.timeUniforms.push(waterU);
-    const waterMat = new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: WATER_FS, uniforms: { uTime: waterU }, transparent: true });
-    const water: THREE.BufferGeometry[] = [];
-    const ice: THREE.BufferGeometry[] = [];
     let seed = 1;
     for (let y = 1; y < H - 1; y++)
       for (let x = 1; x < W - 1; x++) {
@@ -740,39 +809,24 @@ export class World {
         seed++;
         if (t === Tile.Wall) this.addProp(th.wall, wx, wz, 2.8, 2.2, seed);
         else if (t === Tile.Rock) this.addProp(th.boulder, wx, wz, 0.9, 1.05, seed);
-        else if (t === Tile.Ice) {
-          const p = new THREE.BoxGeometry(1.02, 0.08, 1.02);
-          p.translate(wx, 0.03, wz);
-          ice.push(p);
-        }
-        else if (t === Tile.Water) {
-          const p = new THREE.PlaneGeometry(1, 1);
-          p.rotateX(-Math.PI / 2);
-          p.translate(wx, 0.02, wz);
-          // Shared UVs across the pool so ripples flow between tiles.
-          const uv = p.getAttribute("uv") as THREE.BufferAttribute;
-          for (let i = 0; i < uv.count; i++) uv.setXY(i, (x + uv.getX(i)) / W, (y + 1 - uv.getY(i)) / H);
-          water.push(p);
-          // A sunken rim so pools read as pools.
-          const lip = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshStandardMaterial({ color: "#1b2a30" }));
-          lip.position.set(wx, -0.04, wz);
-          g.add(lip);
-        }
       }
-    if (ice.length) {
-      // The local merge keeps positions and UVs only, so lit materials need normals again.
-      const iceGeo = mergeGeometries(ice);
-      iceGeo.computeVertexNormals();
+    for (const [kind, ice] of [[Tile.Water, 0], [Tile.Ice, 1]] as const) {
+      const mask = poolMask(b, kind);
+      if (!mask) continue;
+      const plane = new THREE.PlaneGeometry(W, H);
+      plane.rotateX(-Math.PI / 2);
       const m = new THREE.Mesh(
-        iceGeo,
-        new THREE.MeshStandardMaterial({ color: "#6cc8f4", emissive: "#2a8ad0", emissiveIntensity: 0.45, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.9 }),
+        plane,
+        new THREE.ShaderMaterial({
+          vertexShader: UV_VS,
+          fragmentShader: WATER_FS,
+          uniforms: { uTime: waterU, uMask: { value: mask }, uSize: { value: new THREE.Vector2(W, H) }, uIce: { value: ice } },
+          transparent: true,
+          depthWrite: false,
+        }),
       );
-      m.receiveShadow = true;
+      m.position.y = 0.025 + ice * 0.005;
       g.add(m);
-    }
-    if (water.length) {
-      const merged = mergeGeometries(water);
-      g.add(new THREE.Mesh(merged, waterMat));
     }
 
     // The brazier dais: stepped stone circles, the brazier model, fire, a pillar of light.
@@ -1228,26 +1282,4 @@ function jitter(geo: THREE.BufferGeometry, amount: number) {
     pos.setXYZ(i, pos.getX(i) + d[0], pos.getY(i) + d[1], pos.getZ(i) + d[2]);
   }
   geo.computeVertexNormals();
-}
-
-function mergeGeometries(geos: THREE.BufferGeometry[]) {
-  let n = 0;
-  for (const g of geos) n += g.getAttribute("position").count;
-  const pos = new Float32Array(n * 3);
-  const uv = new Float32Array(n * 2);
-  const idx: number[] = [];
-  let o = 0;
-  for (const g of geos) {
-    const p = g.getAttribute("position") as THREE.BufferAttribute;
-    const u = g.getAttribute("uv") as THREE.BufferAttribute;
-    pos.set(p.array as Float32Array, o * 3);
-    uv.set(u.array as Float32Array, o * 2);
-    for (const i of g.index!.array) idx.push(i + o);
-    o += p.count;
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  out.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
-  out.setIndex(idx);
-  return out;
 }
