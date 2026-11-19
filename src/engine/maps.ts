@@ -30,6 +30,8 @@ export interface ShrineDef {
   spawnBand?: [number, number];
   /** The shrine's own trick, if any. */
   gimmicks?: Gimmicks;
+  /** A share of wisps (0..1) that appear in a second, farther band instead. */
+  farSpawns?: { band: [number, number]; share: number };
 }
 
 export interface Gimmicks {
@@ -316,6 +318,9 @@ export interface Shrine {
   wispSpawns: Pt[][];
   /** Where wisps appear, shared by every guild. */
   spawnField: Pt[];
+  /** A farther-out field that a share of wisps appear in instead (empty for none). */
+  farField: Pt[];
+  farShare: number;
   starts: Pt[][];
   /** The archway rings round the brazier, innermost first. */
   rings: Ring[];
@@ -640,6 +645,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     blurb: "A jagged ice floe. Step on ice and you slide until something stops you or you're off it; let go of a wisp on ice and it skates on the same way. The brazier sits on a round sheet of ice.",
     isle: { radius: 13, squareness: 2.4, coves: 0.04, heads: 0.04, seed: 9, waves: [[10, 0.1, 0], [14, 0.06, 1]] },
     rings: [{ radius: 5, style: "open", ice: 4.6 }],
+    farSpawns: { band: [10, 14], share: 0.2 },
     rows: [
       "                                     ",
       "                                     ",
@@ -811,7 +817,7 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   const board = new Board(width, height, tiles);
   for (let dy = -1; dy <= 1; dy++)
     for (let dx = -1; dx <= 1; dx++) tiles[(board.center.y + dy) * width + board.center.x + dx] = Tile.Brazier;
-  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {} };
+  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0 };
 }
 
 /**

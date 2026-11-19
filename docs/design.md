@@ -136,6 +136,8 @@ was about 1 in 4 to 1 in 3. Three shrines try a different fix each:
 | Crystal Spire | 8 crystal mirrors out among the spawns at (7, 2), angled to send a wisp in through a gate: 77% of spawns can be banked with a mirror shot from somewhere | 40% | 71% |
 | Glacier | a round sheet of ice round the rim (radius 4.6; the court's corners stay dry). Let go of a wisp on it and it skates; step on it and so do you | - | - |
 
+Glacier also sends 1 wisp in 5 to a farther band (10 to 14 tiles out).
+
 ## Islands
 
 Thirteen shrines, each with its own arena shape (round glade, wide atoll, hourglass, six-point star,
