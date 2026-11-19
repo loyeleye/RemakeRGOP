@@ -9,7 +9,7 @@
 // So a staff touch shows up as wisp movement on the *next* tick, and a lamplighter who walks
 // into reach on one tick only touches the wisp on the tick after.
 
-import { Board, Mover, cheb, pt, samePt, sign, type Pt } from "./board.js";
+import { Board, Mover, Tile, cheb, pt, samePt, sign, type Pt } from "./board.js";
 import type { Shrine } from "./maps.js";
 
 export const TICK_MS = 600;
@@ -72,8 +72,12 @@ export interface Lamplighter {
   action: Action;
   path: Pt[];
   pathGoal: Pt | null;
+  /** The way this lamplighter last stepped: one of the eight directions, or (0,0) before the first step. */
+  facing: Pt;
   /** Moved on this tick. */
   moved: boolean;
+  /** Slid on ice this tick instead of acting. */
+  slid: boolean;
   /** The wisp this lamplighter is holding with the staff, for drawing the beam. */
   beam: number | null;
   /** Lost a tie for the current wisp: the staff does nothing until a fresh click. */
@@ -102,6 +106,8 @@ export interface GameSnapshot {
     mode: StaffMode;
     beam: number | null;
     slipped: boolean;
+    /** Sliding on ice this tick. */
+    slid: boolean;
     walkTo: Pt | null;
   }[];
   banks: BankEvent[];
@@ -211,7 +217,9 @@ export class Game {
         action: { kind: "idle" },
         path: [],
         pathGoal: null,
+        facing: pt(0, 0),
         moved: false,
+        slid: false,
         beam: null,
         slipped: false,
       });
@@ -312,6 +320,7 @@ export class Game {
     this.queued.delete(p.id);
     p.prev = p.pos;
     p.moved = false;
+    p.slid = false;
     if (cmd?.toggleRun) p.run = !p.run;
     if (cmd?.toggleMode) {
       p.mode = p.mode === "pull" ? "push" : "pull";
@@ -325,6 +334,18 @@ export class Game {
       p.slipped = false;
     }
     p.beam = null;
+
+    // Ice: start a tick on it and you slide a tile the way you face, and that's your tick.
+    // You keep sliding until you leave the ice or hit something; then your order carries on.
+    const f = p.facing;
+    if (this.board.tile(p.pos) === Tile.Ice && (f.x || f.y) && this.board.canStep(p.pos, f.x, f.y, Mover.Walker)) {
+      p.pos = pt(p.pos.x + f.x, p.pos.y + f.y);
+      p.moved = true;
+      p.slid = true;
+      p.path = [];
+      p.pathGoal = null;
+      return;
+    }
 
     switch (p.action.kind) {
       case "idle":
@@ -369,8 +390,12 @@ export class Game {
   private walk(p: Lamplighter) {
     const steps = p.run ? 2 : 1;
     for (let i = 0; i < steps && p.path.length > 0; i++) {
-      p.pos = p.path.shift()!;
+      const next = p.path.shift()!;
+      p.facing = pt(sign(next.x - p.pos.x), sign(next.y - p.pos.y));
+      p.pos = next;
       p.moved = true;
+      // Stepping onto ice ends the step: the slide takes over next tick.
+      if (this.board.tile(next) === Tile.Ice) break;
     }
   }
 
@@ -437,6 +462,7 @@ export class Game {
         mode: p.mode,
         beam: p.beam,
         slipped: p.slipped,
+        slid: p.slid,
         walkTo: p.action.kind === "walk" ? p.action.to : null,
       })),
       banks: this.banks,

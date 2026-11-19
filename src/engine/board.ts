@@ -23,6 +23,8 @@ export enum Tile {
   Brazier = 4,
   /** Past the island's edge: open sky. Nobody walks or floats out there, but sight and reach carry across. */
   Edge = 5,
+  /** Ice: open ground, but a lamplighter who starts a tick on it slides a tile the way they face. */
+  Ice = 6,
 }
 
 /** Who is moving: decides which tiles are passable. */

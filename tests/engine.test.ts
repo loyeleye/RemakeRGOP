@@ -211,3 +211,45 @@ describe("game", () => {
     expect(JSON.parse(a).tick).toBe(ROUND_TICKS);
   });
 });
+
+describe("ice", () => {
+  it("slides you the way you last stepped until you leave it", () => {
+    const shrine = openShrine();
+    const W = shrine.board.width;
+    for (const x of [6, 7, 8]) shrine.board.tiles[5 * W + x] = Tile.Ice;
+    const g = new Game(shrine, duo, 1);
+    const p = g.players[0]!;
+    p.pos = pt(4, 5);
+    p.run = false;
+    g.command(1, { action: { kind: "walk", to: pt(6, 5) } });
+    g.step(); // (5,5)
+    g.step(); // onto the ice at (6,5)
+    expect(p.pos).toEqual(pt(6, 5));
+    g.step();
+    expect(p.pos).toEqual(pt(7, 5));
+    expect(p.slid).toBe(true);
+    g.step();
+    expect(p.pos).toEqual(pt(8, 5));
+    g.step(); // off the ice at (9,5)
+    expect(p.pos).toEqual(pt(9, 5));
+    g.step(); // on plain floor and idle: stays put
+    expect(p.pos).toEqual(pt(9, 5));
+    expect(p.slid).toBe(false);
+  });
+
+  it("stops a slide at a wall", () => {
+    const shrine = openShrine();
+    const W = shrine.board.width;
+    shrine.board.tiles[5 * W + 6] = Tile.Ice;
+    shrine.board.tiles[5 * W + 7] = Tile.Wall;
+    const g = new Game(shrine, duo, 1);
+    const p = g.players[0]!;
+    p.pos = pt(5, 5);
+    p.run = false;
+    g.command(1, { action: { kind: "walk", to: pt(6, 5) } });
+    g.step();
+    g.step();
+    expect(p.pos).toEqual(pt(6, 5));
+    expect(p.slid).toBe(false);
+  });
+});
