@@ -2,7 +2,7 @@
 // It knows nothing about the transport: the Node server and the Cloudflare Durable Object
 // both hand it a `send` function per connection and feed it parsed messages.
 
-import { BOT_EASY, BOT_FAIR, botCommand, type BotStyle } from "../engine/bot.js";
+import { BOT_LEVELS, botCommand, type BotStyle } from "../engine/bot.js";
 import { COUNTDOWN_TICKS, Game, MAX_TEAMS, TICK_MS, type Action, type Guild } from "../engine/game.js";
 import { SHRINES, shrineById, shrineFor } from "../engine/maps.js";
 import { FLAMES, type ClientMsg, type Flame, type LobbyPlayer, type Phase, type RoomView, type ServerMsg } from "../engine/protocol.js";
@@ -160,7 +160,10 @@ export class Room {
           const bots = this.seats.filter((s) => s.bot && s.guild === g);
           const last = bots[bots.length - 1];
           if (last) this.seats = this.seats.filter((s) => s !== last);
-        } else this.addBot(g, msg.hard ? BOT_FAIR : BOT_EASY);
+        } else {
+          const level = msg.level && msg.level in BOT_LEVELS ? msg.level : msg.hard ? "hard" : "medium";
+          this.addBot(g, BOT_LEVELS[level]);
+        }
         return this.broadcastRoom();
       }
       case "start":

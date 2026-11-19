@@ -19,10 +19,26 @@ export interface BotStyle {
    * can be brought in from here. This is how good players score in the orb game.
    */
   taps?: boolean;
+  /** Pull along the 4 straight directions (wisp and bot share a row or column) whenever any straight pull helps. */
+  straightOnly?: boolean;
+  /**
+   * Imperfect judgment: [best, second best]. Each decision picks the best option with the
+   * first chance, the second best with the second, and otherwise has a lapse and plays like
+   * the Medium bot (no taps, best walking plan) for that decision.
+   */
+  pick?: [number, number];
 }
 
-export const BOT_EASY: BotStyle = { pushy: 0, sloppiness: 0.35 };
-export const BOT_FAIR: BotStyle = { pushy: 3, sloppiness: 0.1, taps: true };
+/** Easy: pulls only, along the 4 straight directions, and dawdles. Never pushes. */
+export const BOT_EASY: BotStyle = { pushy: 0, sloppiness: 0.3, straightOnly: true };
+/** Medium: walks to the best spot for its nearest wisp and holds it in; pushes rivals about to bank. */
+export const BOT_MEDIUM: BotStyle = { pushy: 3, sloppiness: 0.15 };
+/** Hard: taps to juggle wisps, but picks the best angle only half the time. */
+export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.05, taps: true, pick: [1 / 2, 1 / 3] };
+export const BOT_LEVELS = { easy: BOT_EASY, medium: BOT_MEDIUM, hard: BOT_HARD } as const;
+export type BotLevel = keyof typeof BOT_LEVELS;
+/** Kept for older callers: the old "sharper bot". */
+export const BOT_FAIR = BOT_HARD;
 
 export function botCommand(game: Game, id: number, style: BotStyle, rand: () => number = Math.random): Command | null {
   const me = game.players.find((p) => p.id === id);
@@ -42,8 +58,16 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
   }
 
   const fixMode = me.mode !== "pull";
-  if (style.taps && !me.moved && rand() >= style.sloppiness) {
-    const tap = pickTap(game, me);
+  // This decision's judgment: best, second best, or a lapse into Medium play.
+  let rank = 0;
+  let taps = !!style.taps;
+  if (style.pick) {
+    const r = rand();
+    if (r >= style.pick[0] + style.pick[1]) taps = false;
+    else if (r >= style.pick[0]) rank = 1;
+  }
+  if (taps && !me.moved && rand() >= style.sloppiness) {
+    const tap = pickTap(game, me, rank);
     if (tap !== null) {
       if (me.action.kind === "staff" && me.action.wisp === tap && !fixMode) return null;
       return { action: { kind: "staff", wisp: tap }, toggleMode: fixMode || undefined };
@@ -65,7 +89,7 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
     .sort((a, b) => (dist[a.pos.y * W + a.pos.x] ?? 0) - (dist[b.pos.y * W + b.pos.x] ?? 0))[0];
   if (!target) return fixMode ? { toggleMode: true, action: { kind: "idle" } } : null;
 
-  const spot = planSpot(game, me.id, me.pos, target);
+  const spot = planSpot(game, me.id, me.pos, target, rank, !!style.straightOnly);
   if (!spot) return { action: { kind: "staff", wisp: target.id }, toggleMode: fixMode || undefined };
   const atSpot = me.pos.x === spot.x && me.pos.y === spot.y;
   if (!atSpot) {
@@ -132,7 +156,7 @@ const plans = new WeakMap<Game, Map<number, Plan>>();
  * The tile to pull this wisp from: the one that gets it closest to banking soonest, counting
  * the walk there. Kept until the wisp moves.
  */
-function planSpot(game: Game, id: number, me: Pt, wisp: Wisp): Pt | null {
+function planSpot(game: Game, id: number, me: Pt, wisp: Wisp, rank = 0, straightOnly = false): Pt | null {
   const board = game.board;
   const W = board.width;
   let mine = plans.get(game);
@@ -157,8 +181,7 @@ function planSpot(game: Game, id: number, me: Pt, wisp: Wisp): Pt | null {
     }
   }
   const now = bank[at]!;
-  let best: Pt | null = null;
-  let bestCost = Infinity;
+  const options: { s: Pt; cost: number; end: number }[] = [];
   for (let dy = -PULL_REACH; dy <= PULL_REACH; dy++)
     for (let dx = -PULL_REACH; dx <= PULL_REACH; dx++) {
       const s = pt(wisp.pos.x + dx, wisp.pos.y + dy);
@@ -168,14 +191,17 @@ function planSpot(game: Game, id: number, me: Pt, wisp: Wisp): Pt | null {
       const { end, ticks } = simulatePull(board, s, wisp.pos);
       const left = bank[end.y * W + end.x]!;
       if (left >= now) continue;
-      const cost = wk + ticks + left * 2.5;
-      if (cost < bestCost) {
-        bestCost = cost;
-        best = s;
-      }
+      // Easy bots avoid angled pulls: they take one only when no straight pull helps.
+      const angled = straightOnly && dx !== 0 && dy !== 0 ? 1000 : 0;
+      options.push({ s, cost: wk + ticks + left * 2.5 + angled, end: end.y * W + end.x });
     }
-  mine.set(id, { wisp: wisp.id, at, spot: best });
-  return best;
+  options.sort((a, b) => a.cost - b.cost);
+  // The second best is the best plan that ends the wisp somewhere else, so it's a real choice.
+  const best = options[0];
+  const pickd = rank > 0 && best ? options.find((o) => o.end !== best.end) ?? best : best;
+  const spot = pickd ? pickd.s : null;
+  mine.set(id, { wisp: wisp.id, at, spot });
+  return spot;
 }
 
 /**
@@ -183,12 +209,11 @@ function planSpot(game: Game, id: number, me: Pt, wisp: Wisp): Pt | null {
  * a pull from here brings closer to banking and that is about to stop (a wisp still with 2
  * tiles to go can be left alone a tick). Prefers the one that banks soonest.
  */
-function pickTap(game: Game, me: Game["players"][number]): number | null {
+function pickTap(game: Game, me: Game["players"][number], rank = 0): number | null {
   const board = game.board;
   const W = board.width;
   const bank = bankDistances(board);
-  let best: number | null = null;
-  let bestScore = Infinity;
+  const ranked: { id: number; score: number }[] = [];
   let moving: number | null = null;
   for (const w of game.wisps) {
     if (w.guild !== me.guild || board.inBankZone(w.pos)) continue;
@@ -203,11 +228,9 @@ function pickTap(game: Game, me: Game["players"][number]): number | null {
       moving = w.id;
       continue;
     }
-    const score = left * 4 + ticks;
-    if (score < bestScore) {
-      bestScore = score;
-      best = w.id;
-    }
+    ranked.push({ id: w.id, score: left * 4 + ticks });
   }
+  ranked.sort((a, b) => a.score - b.score);
+  const best = (ranked[Math.min(rank, ranked.length - 1)] ?? null)?.id ?? null;
   return best ?? (moving !== null && me.action.kind === "staff" ? me.action.wisp : null);
 }

@@ -56,7 +56,20 @@ Sunwell Terrace 13 to 28). GOP does the same with about 200 fixed spawn tiles pe
 4 to 9 tiles out, which is why a GOP expert barely walks. The drawn `a`/`b` marks are kept as a
 fallback.
 
-The sharper bot (`BOT_FAIR`) **taps**: from where it stands it touches whichever of its wisps
+**Bot levels** (`BOT_LEVELS`; the host picks one in the lobby for new bots):
+
+- **Easy:** pull only, along the 4 straight directions whenever a straight pull helps, dawdles
+  often, never pushes.
+- **Medium:** walks to the best spot for its nearest wisp and holds it in; pushes a rival wisp
+  that's about to bank.
+- **Hard:** taps to juggle, but each decision takes the best angle 1/2 of the time, the second
+  best (one that leaves the wisp somewhere else) 1/3, and 1/6 of the time lapses into Medium play.
+
+Alone over a round, Easy banks about 8 to 12 on the regular islands, Medium 11 to 21, Hard 12 to
+25 (close to the perfect bot, because a second-best angle usually costs only a tick or two). All
+three bank 2 to 5 on Old Bastion and Sunwell Terrace.
+
+The perfect bot (taps, no mistakes) **taps**: from where it stands it touches whichever of its wisps
 is about to stop and would get closer to banking, so several stay moving, and it walks only
 when none can be brought in from there. Alone, over a round, it banks about 20 to 27 on the
 small open islands (Blossom Garden, Crystal Spire, Misty Stones, Moss Hollow, Castle Rise), 12

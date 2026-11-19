@@ -42,7 +42,7 @@ export type ClientMsg =
   | { t: "flame"; flame: Flame }
   | { t: "shrine"; shrine: string }
   | { t: "teams"; teams: number }
-  | { t: "bot"; guild: Guild; hard?: boolean; remove?: boolean }
+  | { t: "bot"; guild: Guild; level?: "easy" | "medium" | "hard"; hard?: boolean; remove?: boolean }
   | { t: "start" }
   | { t: "act"; action?: Action; toggleRun?: boolean; toggleMode?: boolean }
   | { t: "lobby" }

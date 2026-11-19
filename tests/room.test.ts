@@ -83,7 +83,7 @@ describe("room", () => {
     const a = client(room);
     a.send({ t: "hello", name: "Ada" });
     a.send({ t: "teams", teams: 4 });
-    for (const g of [1, 2, 3]) a.send({ t: "bot", guild: g, hard: true });
+    for (const g of [1, 2, 3]) a.send({ t: "bot", guild: g, level: "hard" });
     a.send({ t: "bot", guild: 4 }); // no such guild: ignored
     let view = a.last("room")!.room;
     expect(view.teams).toBe(4);

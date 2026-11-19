@@ -98,7 +98,12 @@ function connectPractice(name: string) {
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
   link.send({ t: "hello", name });
-  link.send({ t: "bot", guild: 1 });
+  link.send({ t: "bot", guild: 1, level: botLevel() });
+}
+
+function botLevel(): "easy" | "medium" | "hard" {
+  const v = $<HTMLSelectElement>("bot-level").value;
+  return v === "easy" || v === "hard" ? v : "medium";
 }
 
 function leave() {
@@ -396,11 +401,11 @@ $<HTMLSelectElement>("teams").onchange = (e) => {
   const n = Number((e.target as HTMLSelectElement).value);
   link?.send({ t: "teams", teams: n });
   // Practice: give each new rival guild a bot.
-  if (practice && room) for (let g = room.teams; g < n; g++) link?.send({ t: "bot", guild: g as Guild });
+  if (practice && room) for (let g = room.teams; g < n; g++) link?.send({ t: "bot", guild: g as Guild, level: botLevel() });
 };
 for (const g of [0, 1, 2, 3] as Guild[]) {
   $(`join-${g}`).onclick = () => link?.send({ t: "guild", guild: g });
-  $(`bot-${g}`).onclick = () => link?.send({ t: "bot", guild: g, hard: $<HTMLInputElement>("hard-bots").checked });
+  $(`bot-${g}`).onclick = () => link?.send({ t: "bot", guild: g, level: botLevel() });
   $(`unbot-${g}`).onclick = () => link?.send({ t: "bot", guild: g, remove: true });
 }
 $("again").onclick = () => link?.send({ t: "lobby" });
