@@ -160,42 +160,88 @@ export class Board {
    * `stopAdjacent`, the path ends on a tile next to `to` (used to approach a wisp).
    */
   walkPath(from: Pt, to: Pt, stopAdjacent = false): Pt[] {
+    // Dijkstra over ticks, knowing that a step onto ice turns into a slide: the step's far end
+    // is wherever the slide stops. Only the first steps matter, since a slide clears the path
+    // and it is planned again from where the slide ends.
     const W = this.width;
     const key = (p: Pt) => p.y * W + p.x;
     const parent = new Map<number, number>();
+    const entry = new Map<number, number>();
+    const cost = new Map<number, number>();
     parent.set(key(from), -1);
-    const queue: Pt[] = [from];
+    cost.set(key(from), 0);
+    let open: Pt[] = [from];
     let best = from;
     let bestD = dist2(from, to);
     const done = (p: Pt) => (stopAdjacent ? cheb(p, to) <= 1 && !samePt(p, to) : samePt(p, to));
     if (done(from)) return [];
     let found: Pt | null = null;
-    for (let qi = 0; qi < queue.length && !found; qi++) {
-      const cur = queue[qi]!;
+    const closed = new Set<number>();
+    while (open.length > 0 && !found) {
+      // The open tile with the lowest cost (the boards are small).
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (cost.get(key(open[i]!))! < cost.get(key(open[bi]!))!) bi = i;
+      const cur = open[bi]!;
+      open.splice(bi, 1);
+      const ck = key(cur);
+      if (closed.has(ck)) continue;
+      closed.add(ck);
+      if (done(cur)) {
+        found = cur;
+        break;
+      }
+      const dd = dist2(cur, to);
+      if (dd < bestD) {
+        bestD = dd;
+        best = cur;
+      }
       for (const d of DIRS) {
+        if (!this.canStep(cur, d.x, d.y, Mover.Walker)) continue;
         const nx = pt(cur.x + d.x, cur.y + d.y);
-        const k = key(nx);
-        if (parent.has(k) || !this.canStep(cur, d.x, d.y, Mover.Walker)) continue;
-        parent.set(k, key(cur));
-        queue.push(nx);
-        if (done(nx)) {
-          found = nx;
-          break;
+        let end = nx;
+        let c = 1;
+        if (this.tile(nx) === Tile.Ice && !done(nx)) {
+          end = this.slideEnd(nx, d);
+          c += cheb(nx, end);
         }
-        const dd = dist2(nx, to);
-        if (dd < bestD) {
-          bestD = dd;
-          best = nx;
-        }
+        const k = key(end);
+        const nc = cost.get(ck)! + c;
+        if (cost.has(k) && cost.get(k)! <= nc) continue;
+        cost.set(k, nc);
+        parent.set(k, ck);
+        entry.set(k, key(nx));
+        open.push(end);
       }
     }
     const end = found ?? best;
     const path: Pt[] = [];
     for (let k = key(end); k !== key(from); k = parent.get(k)!) {
-      path.push(pt(k % W, Math.floor(k / W)));
+      const e = entry.get(k)!;
+      // A slide's far end isn't walked to: only its first step onto the ice is.
+      if (e !== k) path.length = 0;
+      path.push(pt(e % W, Math.floor(e / W)));
     }
     return path.reverse();
   }
+
+  /** Where a walker who steps onto ice at p going d ends up: glancing off things like a wisp, until stopped or off the ice. */
+  slideEnd(p: Pt, d: Pt): Pt {
+    let cur = p, dx = d.x, dy = d.y;
+    for (let i = 0; i < 64 && this.tile(cur) === Tile.Ice; i++) {
+      let step: [number, number] | null = null;
+      if (this.canStep(cur, dx, dy, Mover.Walker)) step = [dx, dy];
+      else if (dx !== 0 && dy !== 0) {
+        const okX = this.canStep(cur, dx, 0, Mover.Walker), okY = this.canStep(cur, 0, dy, Mover.Walker);
+        if (okX && !okY) step = [dx, 0];
+        else if (okY && !okX) step = [0, dy];
+      }
+      if (!step) break;
+      [dx, dy] = step;
+      cur = pt(cur.x + dx, cur.y + dy);
+    }
+    return cur;
+  }
+
 }
 
 function dist2(a: Pt, b: Pt) {

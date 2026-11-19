@@ -152,11 +152,11 @@ export class Rng {
  * obstacle on the axis it has further to go; if both are as far and both are open it stops,
  * because picking one would favour one side of the island. Null means it stops dead.
  */
-export function slideStep(board: Board, from: Pt, dx: number, dy: number, ax: number, ay: number): [number, number] | null {
-  if (board.canStep(from, dx, dy, Mover.Wisp)) return [dx, dy];
+export function slideStep(board: Board, from: Pt, dx: number, dy: number, ax: number, ay: number, who = Mover.Wisp): [number, number] | null {
+  if (board.canStep(from, dx, dy, who)) return [dx, dy];
   if (dx === 0 || dy === 0) return null;
-  const okX = board.canStep(from, dx, 0, Mover.Wisp);
-  const okY = board.canStep(from, 0, dy, Mover.Wisp);
+  const okX = board.canStep(from, dx, 0, who);
+  const okY = board.canStep(from, 0, dy, who);
   if (okX && (!okY || ax > ay)) return [dx, 0];
   if (okY && (!okX || ay > ax)) return [0, dy];
   return null;
@@ -321,6 +321,8 @@ export class Game {
   // ---------------------------------------------------------------- wisps
 
   private stepWisp(w: Wisp) {
+    // Touched last tick: a staff is still on it, and a pull beats the ice.
+    const held = w.touched;
     w.touched = false;
     w.prev = w.pos;
     if (this.board.inBankZone(w.pos)) {
@@ -336,9 +338,11 @@ export class Game {
       }
       return;
     }
-    if (w.skate) {
-      // Skating on ice, or flying off a crystal: on it goes the same way until it stops, leaves
-      // the ice, or its crystal flight runs out.
+    if (held) w.glide = 0;
+    if (w.skate && !held) {
+      // Skating on ice with nobody pulling, or flying off a crystal: on it goes the same way
+      // until it stops, leaves the ice, or its crystal flight runs out.
+      w.target = null;
       const mv = wispMove(this.board, w.pos, w.skate.x, w.skate.y, 1, 1);
       if (!mv) {
         w.skate = null;
@@ -358,6 +362,7 @@ export class Game {
       w.target = null;
       return;
     }
+    w.skate = null;
     const mv = wispMove(this.board, w.pos, sign(w.target.x - w.pos.x), sign(w.target.y - w.pos.y), Math.abs(w.target.x - w.pos.x), Math.abs(w.target.y - w.pos.y));
     if (!mv) {
       w.target = null;
@@ -375,12 +380,8 @@ export class Game {
     const [dx, dy] = mv.step;
     w.pos = pt(w.pos.x + dx, w.pos.y + dy);
     if (samePt(w.pos, w.target)) w.target = null;
-    if (isSlick(this.board.tile(w.pos)) && !this.board.inBankZone(w.pos)) {
-      // Onto ice: it skates from here, and no staff can hold it.
-      w.skate = pt(dx, dy);
-      w.target = null;
-      this.letGo(w);
-    }
+    // On ice it keeps its way: the moment nobody is pulling it, it skates on.
+    if (isSlick(this.board.tile(w.pos)) && !this.board.inBankZone(w.pos)) w.skate = pt(dx, dy);
   }
 
   /** Every staff on this wisp lets go. */
@@ -428,11 +429,14 @@ export class Game {
     }
     p.beam = null;
 
-    // Ice: start a tick on it and you slide a tile the way you face, and that's your tick.
-    // You keep sliding until you leave the ice or hit something; then your order carries on.
+    // Ice: start a tick on it and you slide a tile the way you're going, and that's your tick:
+    // you've lost your footing. Like a wisp, you glance off what you hit and slide on until
+    // something stops you or you leave the ice; then your order carries on.
     const f = p.facing;
-    if (this.board.tile(p.pos) === Tile.Ice && (f.x || f.y) && this.board.canStep(p.pos, f.x, f.y, Mover.Walker)) {
-      p.pos = pt(p.pos.x + f.x, p.pos.y + f.y);
+    const slide = this.board.tile(p.pos) === Tile.Ice && (f.x || f.y) ? slideStep(this.board, p.pos, f.x, f.y, 1, 1, Mover.Walker) : null;
+    if (slide) {
+      p.facing = pt(slide[0], slide[1]);
+      p.pos = pt(p.pos.x + slide[0], p.pos.y + slide[1]);
       p.moved = true;
       p.slid = true;
       p.path = [];
@@ -494,7 +498,7 @@ export class Game {
 
   /** Pull works on your own guild's wisps; push works on any wisp. */
   canAffect(p: Lamplighter, w: Wisp) {
-    return !w.skate && (p.mode === "push" || w.guild === p.guild);
+    return p.mode === "push" || w.guild === p.guild;
   }
 
   inReach(p: Lamplighter, w: Wisp) {

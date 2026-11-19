@@ -41,8 +41,17 @@ describe("shrines", () => {
     for (const s of SHRINES) {
       for (const start of s.starts.flat()) {
         for (const spawn of s.wispSpawns.flat()) {
-          const path = s.board.walkPath(start, spawn, true);
-          const end = path.at(-1) ?? start;
+          // Walk it as a lamplighter would: re-planning after every slide across ice.
+          let end = start;
+          for (let leg = 0; leg < 40; leg++) {
+            const path = s.board.walkPath(end, spawn, true);
+            if (path.length === 0) break;
+            for (const step of path) {
+              const d = pt(Math.sign(step.x - end.x), Math.sign(step.y - end.y));
+              end = s.board.tile(step) === Tile.Ice ? s.board.slideEnd(step, d) : step;
+              if (s.board.tile(step) === Tile.Ice) break;
+            }
+          }
           expect(Math.max(Math.abs(end.x - spawn.x), Math.abs(end.y - spawn.y)), `${s.id}`).toBeLessThanOrEqual(1);
         }
       }
@@ -314,23 +323,51 @@ describe("game", () => {
     expect(g.wisps[0]!.skate).toBeNull();
   });
 
-  it("a wisp that reaches ice skates on until it leaves it, and nobody can grip it meanwhile", () => {
+  it("a pull beats the ice, and a wisp let go on ice skates on until it leaves it", () => {
     const shrine = openShrine([pt(6, 6)], [pt(20, 23)]);
-    for (let x = 7; x <= 10; x++) shrine.board.tiles[6 * 27 + x] = Tile.Rime;
-    // Pulled east from across the ice: one step onto it and it skates.
+    for (let x = 7; x <= 10; x++) shrine.board.tiles[6 * 27 + x] = Tile.Ice;
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(14, 6);
+    g.command(1, { action: { kind: "staff", wisp: 0 } });
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 6));
+    // Still held: it goes where it's pulled, here two tiles east, then stops being pulled.
+    g.command(1, { action: { kind: "idle" } });
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(8, 6));
+    // Let go: it skates on east and stops just off the end of the ice.
+    for (let i = 0; i < 5; i++) g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(11, 6));
+    expect(g.wisps[0]!.skate).toBeNull();
+    // Grab one that's skating and it comes your way instead.
     const h = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
     h.players[0]!.pos = pt(14, 6);
     h.command(1, { action: { kind: "staff", wisp: 0 } });
     h.step();
     h.step();
-    expect(h.wisps[0]!.pos).toEqual(pt(7, 6));
-    expect(h.wisps[0]!.skate).toEqual(pt(1, 0));
-    expect(h.players[0]!.action.kind).toBe("idle");
+    h.command(1, { action: { kind: "idle" } });
+    h.step();
+    h.step();
+    expect(h.wisps[0]!.pos).toEqual(pt(9, 6));
+    h.players[0]!.pos = pt(9, 12);
     h.command(1, { action: { kind: "staff", wisp: 0 } });
-    for (let i = 0; i < 4; i++) h.step();
-    // Off the end of the ice at (11, 6), where it stops.
-    expect(h.wisps[0]!.pos).toEqual(pt(11, 6));
-    expect(h.wisps[0]!.skate).toBeNull();
+    h.step();
+    h.step();
+    // It skates one more tile while your staff takes hold, then comes your way.
+    expect(h.wisps[0]!.pos).toEqual(pt(10, 7));
+  });
+
+  it("a lamplighter who steps onto ice slides on until something stops them or they're off it", () => {
+    const shrine = openShrine();
+    for (let x = 5; x <= 9; x++) shrine.board.tiles[13 * 27 + x] = Tile.Ice;
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(4, 13);
+    g.command(1, { action: { kind: "walk", to: pt(5, 13) } });
+    g.step();
+    expect(g.players[0]!.pos).toEqual(pt(5, 13));
+    for (let i = 0; i < 5; i++) g.step();
+    expect(g.players[0]!.pos).toEqual(pt(10, 13));
   });
 
   it("teammates pulling one wisp pull it toward the point between them", () => {

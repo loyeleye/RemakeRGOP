@@ -194,8 +194,8 @@ export interface Ring {
    * off one and slides in: most good angles are bank shots off a stone.
    */
   stones?: number;
-  /** Turn every open court tile this far from the centre (Chebyshev, inclusive) to rime: wisps skate on it, walkers don't. */
-  ice?: [number, number];
+  /** A round sheet of ice round the rim, out to this radius (the court's corners stay dry). */
+  ice?: number;
   /**
    * Crystals in the court, given in one eighth and copied to all eight symmetric places. A
    * crystal is a thin mirror on its tile's diagonal ("/" or "\\" as drawn, north up): it blocks
@@ -208,12 +208,9 @@ export interface Ring {
 export function courtFeatures(ring: Ring): Map<string, string> {
   const out = new Map<string, string>();
   if (ring.ice) {
-    const [lo, hi] = ring.ice;
-    for (let dy = -hi; dy <= hi; dy++)
-      for (let dx = -hi; dx <= hi; dx++) {
-        const d = Math.max(Math.abs(dx), Math.abs(dy));
-        if (d >= lo && d <= hi) out.set(`${dx},${dy}`, "%");
-      }
+    const r = ring.ice, R = Math.ceil(r);
+    for (let dy = -R; dy <= R; dy++)
+      for (let dx = -R; dx <= R; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) > 2 && Math.hypot(dx, dy) <= r) out.set(`${dx},${dy}`, "*");
   }
   if (ring.stones) for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) out.set(`${sx * ring.stones},${sy * ring.stones}`, "o");
   for (const c of ring.crystals ?? [])
@@ -246,7 +243,7 @@ export function ringNote(rings: Ring[]): string {
   if (rings.length > 1) return "Two rings of archways: in through a gate, round the court, in at a corner. Very hard to score.";
   if (!rings[0]) return "";
   const r = rings[0];
-  const extra = r.stones ? " Stones by the brazier turn wisps in off the corners." : r.crystals ? " Pull a wisp into a crystal mirror and it flies off at right angles, straight on." : r.ice ? " The brazier stands on rime: a wisp that reaches it skates straight on." : "";
+  const extra = r.stones ? " Stones by the brazier turn wisps in off the corners." : r.crystals ? " Pull a wisp into a crystal mirror and it flies off at right angles, straight on." : r.ice ? " The brazier stands on a round sheet of ice: let go of a wisp on it and it skates on; step on it and so do you." : "";
   return RING_NOTES[r.style] + extra;
 }
 
@@ -619,9 +616,9 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "glacier",
     name: "Glacier",
-    blurb: "A jagged ice floe. Ice slides you the way you're facing, and a wisp that hits ice skates until it leaves it: no staff can hold it. The brazier sits on a sheet of ice.",
+    blurb: "A jagged ice floe. Step on ice and you slide until something stops you or you're off it; let go of a wisp on ice and it skates on the same way. The brazier sits on a round sheet of ice.",
     isle: { radius: 13, squareness: 2.4, coves: 0.04, heads: 0.04, seed: 9, waves: [[10, 0.1, 0], [14, 0.06, 1]] },
-    rings: [{ radius: 5, style: "open", ice: [3, 4] }],
+    rings: [{ radius: 5, style: "open", ice: 4.6 }],
     rows: [
       "                                     ",
       "                                     ",

@@ -98,14 +98,14 @@ human are 42 to 44 on small altars; a human who learns the angles should beat th
 | Rime `%` | ✓ | skates | ✓ |
 | Crystal mirror `/` `\` | ✗ | turned | ✓ |
 
-**Ice.** A lamplighter who starts a tick on ice slides one tile the way they last stepped, and
-that slide is their whole tick. They keep sliding until they leave the ice or something blocks
-them, then their order carries on.
+**Ice.** A lamplighter who steps onto ice loses their footing: each tick they slide one tile the
+way they were going, glancing off things like a wisp, until something stops them or they're off
+the ice; then their order carries on. Paths plan for it: a step onto ice counts as the whole slide.
 
-**Skating (experimental).** A wisp that steps onto ice or rime skates: every tick it keeps going
-the way it last stepped, sliding off scenery like any wisp, until it leaves the ice or stops.
-Every staff on it lets go, and nobody can grip it until it stops. Rime is frosted ice that boots
-grip, so it only affects wisps.
+**Skating (experimental).** A pull beats the ice: while a staff is on a wisp it goes where it's
+pulled, ice or not. The tick nobody touches a wisp on ice, it skates on the way it last moved,
+glancing off scenery, until it leaves the ice or stops. Rime (unused for now) is frosted ice that
+boots grip, so it only affects wisps.
 
 **Crystal mirrors (experimental).** A thin mirror on its tile's diagonal. A wisp that would step
 into one is turned off the mirror (heading east into `\` turns south), takes its first step the
@@ -126,7 +126,7 @@ was about 1 in 4 to 1 in 3. Three shrines try a different fix each:
 |---|---|---|---|
 | Fairy Ring | toadstool deflectors on the court diagonals (3, 3), posts beside each gate | 59% | 100% |
 | Crystal Spire | 8 crystal mirrors out among the spawns at (7, 2), angled to send a wisp in through a gate: 77% of spawns can be banked with a mirror shot from somewhere | 40% | 71% |
-| Glacier | the whole court is rime, so a wisp entering it skates; aim it at the rim | all | 38% |
+| Glacier | a round sheet of ice round the rim (radius 4.6; the court's corners stay dry). Let go of a wisp on it and it skates; step on it and so do you | - | - |
 
 ## Islands
 

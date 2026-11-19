@@ -54,8 +54,7 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
   if (style.lapse && rand() < style.lapse) return botCommand(game, id, BOT_MEDIUM, rand);
   if (style.wait) return waited(game, id, style, rand);
   const c = game.board.center;
-  // Skating wisps can't be gripped, so leave them be until they stop.
-  const live = (w: Wisp) => !game.board.inBankZone(w.pos) && !w.skate;
+  const live = (w: Wisp) => !game.board.inBankZone(w.pos);
 
   // Shove a rival wisp that's about to be banked.
   if (style.pushy > 0) {
@@ -165,7 +164,7 @@ export function bankDistances(board: Board): Int16Array {
 /** Where the wisp ends up if pulled from `from` until it stops, and how many ticks it takes. */
 export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30): { end: Pt; ticks: number } {
   let w = start;
-  // Once it's turned by a crystal or skating on ice, the staff has let go: it just flies.
+  // Once it's turned by a crystal the staff has let go: it just flies.
   let skate: Pt | null = null;
   let glide = 0;
   for (let t = 1; t <= maxTicks; t++) {
@@ -185,11 +184,10 @@ export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30): 
       glide = CRYSTAL_FLIGHT;
     }
     w = pt(w.x + mv.step[0], w.y + mv.step[1]);
+    // Held all the way, a wisp on ice goes where it's pulled; only a crystal takes it away.
     if (skate) {
       if (glide > 0) glide--;
-      if (glide === 0 && !isSlick(board.tile(w))) return { end: w, ticks: t + 1 };
-    } else if (isSlick(board.tile(w)) && !board.inBankZone(w)) {
-      skate = pt(mv.step[0], mv.step[1]);
+      if (glide === 0) return { end: w, ticks: t + 1 };
     }
   }
   return { end: w, ticks: maxTicks };
@@ -274,7 +272,7 @@ function pickTap(game: Game, me: Game["players"][number], rank = 0): number | nu
   const ranked: { id: number; score: number }[] = [];
   let moving: number | null = null;
   for (const w of game.wisps) {
-    if (w.guild !== me.guild || board.inBankZone(w.pos) || w.skate) continue;
+    if (w.guild !== me.guild || board.inBankZone(w.pos)) continue;
     if (!game.inReach({ ...me, mode: "pull" }, w)) continue;
     const now = bank[w.pos.y * W + w.pos.x]!;
     const { end, ticks } = simulatePull(board, me.pos, w.pos);
