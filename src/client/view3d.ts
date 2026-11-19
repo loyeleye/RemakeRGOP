@@ -13,7 +13,8 @@ import { Tile, type Board } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, type GameSnapshot } from "../engine/game.js";
 import type { Shrine } from "../engine/maps.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
-import { makeCloud, makeIsland, makeTree, makeWaterfall } from "./islands.js";
+import { makeCloud, makeIsland, makeWaterfall } from "./islands.js";
+import { ambientParticles, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
 export const GUILD_COLORS = ["#ffcf5a", "#b07cff"] as const;
 export const GUILD_NAMES = ["Dawn", "Dusk"] as const;
@@ -203,8 +204,13 @@ function normalize(o: THREE.Object3D, upright = false) {
   return wrap;
 }
 
-function tex(path: string, repeat: number) {
-  const t = texLoader.load(path);
+function tex(path: string, repeat: number, fallback?: string) {
+  const t = texLoader.load(path, undefined, undefined, () => {
+    if (fallback) texLoader.load(fallback, (img) => {
+      t.image = img.image;
+      t.needsUpdate = true;
+    });
+  });
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat, repeat);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -223,26 +229,36 @@ void main() {
 const SKY_FS = /* glsl */ `
 varying vec3 vDir;
 uniform float uTime;
+uniform vec3 uZenith;
+uniform vec3 uSky;
+uniform vec3 uHaze;
+uniform vec3 uBelow;
+uniform float uStars;
+float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 void main() {
-  float h = vDir.y;
-  vec3 zenith = vec3(0.10, 0.36, 0.78);
-  vec3 sky = vec3(0.36, 0.62, 0.92);
-  vec3 haze = vec3(0.66, 0.79, 0.95);
-  vec3 col = mix(sky, zenith, smoothstep(0.1, 0.75, h));
-  col = mix(haze, col, smoothstep(-0.05, 0.22, h));
-  // Below the horizon: open blue sky beneath the cloud sea, deepening straight down.
-  vec3 below = mix(vec3(0.30, 0.52, 0.86), vec3(0.62, 0.76, 0.94), smoothstep(-0.9, -0.1, h));
+  vec3 d = normalize(vDir);
+  float h = d.y;
+  vec3 col = mix(uSky, uZenith, smoothstep(0.1, 0.75, h));
+  col = mix(uHaze, col, smoothstep(-0.05, 0.22, h));
+  // Below the horizon: open sky beneath the cloud sea, deepening straight down.
+  vec3 below = mix(uBelow, uHaze, smoothstep(-0.9, -0.1, h));
   col = mix(below, col, smoothstep(-0.25, -0.02, h));
-  // The sun.
+  // The sun (or, at night, a pale moon) and stars.
   vec3 sunDir = normalize(vec3(-0.5, 0.45, -0.75));
-  float d = max(0.0, dot(normalize(vDir), sunDir));
-  col += vec3(1.0, 0.92, 0.75) * (pow(d, 400.0) * 3.0 + pow(d, 12.0) * 0.35);
+  float s = max(0.0, dot(d, sunDir));
+  col += mix(vec3(1.0, 0.92, 0.75), vec3(0.75, 0.85, 1.0), uStars) * (pow(s, 400.0) * 3.0 + pow(s, 12.0) * mix(0.35, 0.12, uStars));
+  if (uStars > 0.0) {
+    vec3 cell = floor(d * 160.0);
+    float star = step(0.9965, hash(cell)) * smoothstep(-0.1, 0.3, h);
+    col += vec3(star) * uStars * (0.6 + 0.4 * sin(uTime * 2.0 + hash(cell + 1.0) * 40.0));
+  }
   gl_FragColor = vec4(col, 1.0);
 }`;
 
 const CLOUD_FS = /* glsl */ `
 varying vec2 vUv;
 uniform float uTime;
+uniform vec3 uTint;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -255,7 +271,7 @@ void main() {
   float n = fbm(p + fbm(p * 0.6));
   float r = length(vUv - 0.5) * 2.0;
   // Bright billowing tops, cool blue-grey in the hollows.
-  vec3 col = mix(vec3(0.62, 0.70, 0.86), vec3(1.0, 0.99, 0.97), smoothstep(0.35, 0.8, n));
+  vec3 col = mix(uTint * vec3(0.62, 0.70, 0.86), uTint, smoothstep(0.35, 0.8, n));
   float alpha = smoothstep(0.42, 0.68, n) * smoothstep(1.0, 0.4, r);
   gl_FragColor = vec4(col, alpha);
 }`;
@@ -422,9 +438,22 @@ export class World {
   private reach: THREE.LineLoop;
   private walkMark: THREE.Mesh;
   private brazierSlot = new THREE.Group();
-  private propSlots: { kind: ModelName; group: THREE.Group; seed: number }[] = [];
+  private propSlots: { kind: PropKind; group: THREE.Group; seed: number }[] = [];
   private low: boolean;
   private floaters: { obj: THREE.Object3D; y: number; phase: number; drift: number }[] = [];
+  private skyU = {
+    uTime: { value: 0 },
+    uZenith: { value: new THREE.Color() },
+    uSky: { value: new THREE.Color() },
+    uHaze: { value: new THREE.Color() },
+    uBelow: { value: new THREE.Color() },
+    uStars: { value: 0 },
+  };
+  private cloudTint = { value: new THREE.Color("#ffffff") };
+  private hemi = new THREE.HemisphereLight("#cfe2ff", "#5a6a50", 1.15);
+  private sun = new THREE.DirectionalLight("#fff1d6", 3.0);
+  private distant = new THREE.Group();
+  private theme: Theme = themeFor("");
 
   constructor(readonly canvas: HTMLCanvasElement, readonly cam: Camera) {
     this.low = cam.compact || (navigator.hardwareConcurrency ?? 8) <= 4;
@@ -438,11 +467,10 @@ export class World {
     this.scene.background = new THREE.Color("#8fb4e6");
 
     // Sky dome.
-    const skyU = { value: 0 };
-    this.timeUniforms.push(skyU);
+    this.timeUniforms.push(this.skyU.uTime);
     const sky = new THREE.Mesh(
       new THREE.SphereGeometry(200, 32, 16),
-      new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, uniforms: { uTime: skyU }, side: THREE.BackSide, depthWrite: false, fog: false }),
+      new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, uniforms: this.skyU, side: THREE.BackSide, depthWrite: false, fog: false }),
     );
     this.scene.add(sky);
 
@@ -451,18 +479,18 @@ export class World {
     this.timeUniforms.push(cloudU);
     const clouds = new THREE.Mesh(
       new THREE.PlaneGeometry(400, 400),
-      new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: CLOUD_FS, uniforms: { uTime: cloudU }, transparent: true, depthWrite: false, fog: false }),
+      new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: CLOUD_FS, uniforms: { uTime: cloudU, uTint: this.cloudTint }, transparent: true, depthWrite: false, fog: false }),
     );
     clouds.rotation.x = -Math.PI / 2;
     clouds.position.y = -18;
     this.scene.add(clouds);
 
-    // Distant sky islands, drifting, some with trees and falls.
-    this.buildDistantIslands();
+    // Distant sky islands are built with each shrine, in its palette.
+    this.scene.add(this.distant);
 
     // Light: cool moonlight, warm brazier.
-    this.scene.add(new THREE.HemisphereLight("#cfe2ff", "#5a6a50", 1.15));
-    const moon = new THREE.DirectionalLight("#fff1d6", 3.0);
+    this.scene.add(this.hemi);
+    const moon = this.sun;
     moon.position.set(-16, 26, -22);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
@@ -499,7 +527,30 @@ export class World {
     modelWaiters.push(() => this.refreshProps());
   }
 
-  private buildDistantIslands() {
+  /** Sky, fog, light and the distant islands for one island's theme. */
+  private applyTheme(th: Theme) {
+    this.theme = th;
+    const u = this.skyU;
+    u.uZenith.value.set(th.sky.zenith);
+    u.uSky.value.set(th.sky.sky);
+    u.uHaze.value.set(th.sky.haze);
+    u.uBelow.value.set(th.sky.below);
+    u.uStars.value = th.sky.stars;
+    (this.scene.fog as THREE.FogExp2).color.set(th.fog);
+    (this.scene.background as THREE.Color).set(th.sky.sky);
+    this.cloudTint.value.set(th.clouds);
+    this.hemi.color.set(th.hemi[0]);
+    this.hemi.groundColor.set(th.hemi[1]);
+    this.hemi.intensity = th.hemi[2];
+    this.sun.color.set(th.sun[0]);
+    this.sun.intensity = th.sun[1];
+    this.renderer.toneMappingExposure = th.exposure;
+    this.buildDistantIslands(th);
+  }
+
+  private buildDistantIslands(th: Theme) {
+    this.distant.clear();
+    this.floaters = [];
     const fallU = { value: 0 };
     this.timeUniforms.push(fallU);
     const n = this.low ? 7 : 11;
@@ -507,13 +558,13 @@ export class World {
       const a = (i / n) * Math.PI * 2 + Math.sin(i * 4.7) * 0.25;
       const r = 48 + ((i * 37) % 5) * 14;
       const size = 3 + ((i * 53) % 7) * 1.4;
-      const isl = makeIsland({ rx: size, rz: size * (0.7 + ((i * 17) % 5) * 0.08), depth: size * 2.4, squareness: 2.2, seed: i * 13 + 5, segments: 64, rings: 24, lobes: 0.5, ledge: i % 3 === 0 ? size * 0.3 : 0, spires: this.low ? 1 : 3 });
+      const isl = makeIsland({ rx: size, rz: size * (0.7 + ((i * 17) % 5) * 0.08), depth: size * 2.4, squareness: 2.2, seed: i * 13 + 5, segments: 64, rings: 24, lobes: 0.5, ledge: i % 3 === 0 ? size * 0.3 : 0, spires: this.low ? 1 : 3, grass: th.grass, soil: th.soil, rock: th.rock });
       const y = -6 + ((i * 29) % 9) * 2.2 - (r - 48) * 0.12;
       isl.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
       isl.rotation.y = i;
       const trees = 1 + (i % 3);
       for (let t = 0; t < trees; t++) {
-        const tree = makeTree(size * 0.45, i * 7 + t);
+        const tree = th.scatter(size * 0.45, i * 7 + t);
         const ta = t * 2.1 + i;
         tree.position.set(Math.cos(ta) * size * 0.45, 0, Math.sin(ta) * size * 0.35);
         isl.add(tree);
@@ -523,17 +574,17 @@ export class World {
         fall.position.set(0, -0.05, size * 0.7);
         isl.add(fall);
       }
-      this.scene.add(isl);
+      this.distant.add(isl);
       this.floaters.push({ obj: isl, y, phase: i * 1.3, drift: 0.4 + (i % 3) * 0.2 });
     }
     // Soft cloud puffs drifting between the islands.
     for (let i = 0; i < (this.low ? 10 : 18); i++) {
       const a = (i / 18) * Math.PI * 2 + i;
       const r = 30 + ((i * 41) % 60);
-      const c = makeCloud(16 + (i % 4) * 7, "#ffffff", 0.45);
+      const c = makeCloud(16 + (i % 4) * 7, th.clouds, th.sky.stars ? 0.25 : 0.45);
       const y = -10 + ((i * 23) % 10);
       c.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
-      this.scene.add(c);
+      this.distant.add(c);
       this.floaters.push({ obj: c, y, phase: i, drift: 0.2 });
     }
   }
@@ -568,6 +619,8 @@ export class World {
     const W = b.width;
     const H = b.height;
     const g = this.shrineGroup;
+    const th = themeFor(shrine.id);
+    this.applyTheme(th);
 
     // The coastline the rules use: tiles past it are open sky. Shrines without one are the
     // old walled rectangle, drawn as a rounded square.
@@ -582,7 +635,7 @@ export class World {
     const ring = (a: number, out: number) => ({ x: Math.cos(a) * (coast(a) + out), z: Math.sin(a) * (coast(a) + out) });
 
     // The plaza: flagstones laid right up to the island's edge.
-    const floorTex = tex(`textures/floor-${shrine.id}.webp`, 1 / 6);
+    const floorTex = tex(`textures/floor-${th.floor}.webp`, 1 / 6, `textures/floor-${shrine.id}.webp`);
     const floorShape = new THREE.Shape();
     for (let i = 0; i <= 256; i++) {
       const p = ring((i / 256) * Math.PI * 2, 0.35);
@@ -603,7 +656,7 @@ export class World {
     const island = makeIsland({
       rx: 1, rz: 1, depth: 24, squareness: 2, seed: W + H,
       radius: (a) => (coast(a) + 2.1) / 0.95,
-      ledge: 2.4, spires: this.low ? 3 : 6, grass: "#5f9446",
+      ledge: 2.4, spires: this.low ? 3 : 6, grass: th.grass, soil: th.soil, rock: th.rock,
       segments: this.low ? 128 : 220,
     });
     island.position.y = -0.03;
@@ -614,21 +667,19 @@ export class World {
     const tiers: [number, number, number][] = [[0.9, 0.24, -4.5], [2.6, 0.2, -6.5], [4.3, 0.17, -3.6]];
     const fallU = { value: 0 };
     this.timeUniforms.push(fallU);
+    const falls = th.particles !== "embers";
+    const tierList: { x: number; y: number; z: number; r: number; group: THREE.Group }[] = [];
     tiers.forEach(([a, size, ty], i) => {
       const e = edge(a);
       const r = Math.min(W, H) * size;
       const tier = makeIsland({
         rx: r, rz: r * 0.8, depth: 9 + i * 3, squareness: 2.6, seed: W * 7 + i,
-        lobes: 0.45, spires: this.low ? 1 : 2, grass: "#6a9c4c", segments: 72, rings: 28,
+        lobes: 0.45, spires: this.low ? 1 : 2, grass: th.grass, soil: th.soil, rock: th.rock, segments: 72, rings: 28,
       });
       tier.position.set(e.x * 1.02, ty, e.z * 1.02);
       g.add(tier);
-      for (let t = 0; t < 3; t++) {
-        const tree = makeTree(1.3 + ((t + i) % 3) * 0.45, i * 5 + t + W);
-        const ta = a + (t - 1) * 0.9;
-        tree.position.set(Math.cos(ta) * r * 0.45, 0, Math.sin(ta) * r * 0.35);
-        tier.add(tree);
-      }
+      tierList.push({ x: tier.position.x, y: ty, z: tier.position.z, r, group: tier });
+      if (!falls) return;
       // Each tier spills a waterfall off its outer edge.
       const te = (tier.userData.outline as typeof edge)(a);
       const fall = makeWaterfall(1.4, 20, fallU);
@@ -637,7 +688,7 @@ export class World {
       tier.add(fall);
     });
     // Waterfalls pour off the main plateau's terrace too.
-    for (const a of [Math.PI * 1.35, Math.PI * 0.05, Math.PI * 1.85]) {
+    for (const a of falls ? [Math.PI * 1.35, Math.PI * 0.05, Math.PI * 1.85] : []) {
       const e = edge(a);
       const fall = makeWaterfall(1.8, 24, fallU);
       fall.position.set(e.x * 1.15, -2.85, e.z * 1.15);
@@ -647,14 +698,11 @@ export class World {
       mist.position.set(e.x * 1.05, -22, e.z * 1.05);
       g.add(mist);
     }
-    // Trees on the far (north) verge, where they frame the view without hiding anyone.
-    for (let i = 0; i < 12; i++) {
-      const a = Math.PI * (1.08 + (i / 11) * 0.84);
-      const p = ring(a, 1.35 + (i % 2) * 0.3);
-      const tree = makeTree(1.4 + (i % 3) * 0.45, i + W);
-      tree.position.set(p.x, 0, p.z);
-      g.add(tree);
-    }
+    // The island's own set pieces, mostly on the far (north) verge where they frame the view
+    // without hiding anyone, and its drifting particles.
+    th.decorate({ group: g, ring, tiers: tierList, time: (u) => this.timeUniforms.push(u), low: this.low });
+    const amb = ambientParticles(th.particles, Math.max(W, H) * 0.65, this.low, (u) => this.timeUniforms.push(u));
+    if (amb) g.add(amb);
 
     // A low rounded parapet runs round the edge of the flagstones: the limit of play.
     const curbPts: THREE.Vector3[] = [];
@@ -671,7 +719,7 @@ export class World {
     // Four tall monoliths stand on the verge for scale.
     for (let k = 0; k < 4; k++) {
       const p = ring(Math.PI / 4 + (k * Math.PI) / 2, 1.2);
-      this.addProp("monolith", p.x, p.z, 4.2, 1.3, k);
+      this.addProp(th.wall, p.x, p.z, 4.2, 1.3, k);
     }
 
     // Tiles.
@@ -679,6 +727,7 @@ export class World {
     this.timeUniforms.push(waterU);
     const waterMat = new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: WATER_FS, uniforms: { uTime: waterU }, transparent: true });
     const water: THREE.BufferGeometry[] = [];
+    const ice: THREE.BufferGeometry[] = [];
     let seed = 1;
     for (let y = 1; y < H - 1; y++)
       for (let x = 1; x < W - 1; x++) {
@@ -686,8 +735,13 @@ export class World {
         const wx = this.worldX(b, x);
         const wz = this.worldZ(b, y);
         seed++;
-        if (t === Tile.Wall) this.addProp("monolith", wx, wz, 2.8, 2.2, seed);
-        else if (t === Tile.Rock) this.addProp("boulder", wx, wz, 0.9, 1.05, seed);
+        if (t === Tile.Wall) this.addProp(th.wall, wx, wz, 2.8, 2.2, seed);
+        else if (t === Tile.Rock) this.addProp(th.boulder, wx, wz, 0.9, 1.05, seed);
+        else if (t === Tile.Ice) {
+          const p = new THREE.BoxGeometry(1.02, 0.08, 1.02);
+          p.translate(wx, 0.03, wz);
+          ice.push(p);
+        }
         else if (t === Tile.Water) {
           const p = new THREE.PlaneGeometry(1, 1);
           p.rotateX(-Math.PI / 2);
@@ -702,6 +756,17 @@ export class World {
           g.add(lip);
         }
       }
+    if (ice.length) {
+      // The local merge keeps positions and UVs only, so lit materials need normals again.
+      const iceGeo = mergeGeometries(ice);
+      iceGeo.computeVertexNormals();
+      const m = new THREE.Mesh(
+        iceGeo,
+        new THREE.MeshStandardMaterial({ color: "#6cc8f4", emissive: "#2a8ad0", emissiveIntensity: 0.45, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.9 }),
+      );
+      m.receiveShadow = true;
+      g.add(m);
+    }
     if (water.length) {
       const merged = mergeGeometries(water);
       g.add(new THREE.Mesh(merged, waterMat));
@@ -773,7 +838,7 @@ export class World {
     g.add(rimFill);
   }
 
-  private addProp(kind: ModelName, x: number, z: number, height: number, footprint: number, seed: number) {
+  private addProp(kind: PropKind, x: number, z: number, height: number, footprint: number, seed: number) {
     const group = new THREE.Group();
     group.position.set(x, 0, z);
     group.userData = { height, footprint };
@@ -782,13 +847,28 @@ export class World {
     this.fillProp(kind, group, seed);
   }
 
-  private fillProp(kind: ModelName, group: THREE.Group, seed: number) {
+  private fillProp(kind: PropKind, group: THREE.Group, seed: number) {
     group.clear();
     const { height, footprint } = group.userData as { height: number; footprint: number };
     const rnd = (k: number) => fract(Math.sin(seed * 91.7 + k * 13.1) * 43758.5);
-    const model = models[kind];
+    const proc = makeTileProp(kind, height, seed);
+    if (proc) {
+      group.add(proc);
+      return;
+    }
+    const model = models[kind as ModelName];
     if (model) {
       const m = model.clone();
+      const tint = this.theme.tint;
+      if (tint)
+        m.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (mesh.isMesh) {
+            const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
+            mat.color.multiply(new THREE.Color(tint));
+            mesh.material = mat;
+          }
+        });
       const a = model.userData.aspect as { w: number; d: number };
       // Scale to the height, but never wider than the footprint.
       const sc = Math.min(height, footprint / Math.max(a.w, a.d, 0.01));

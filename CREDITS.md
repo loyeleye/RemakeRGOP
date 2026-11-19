@@ -7,7 +7,7 @@ subscription-only billing so no Spark was spent. Sources are in the project file
 | File | Model |
 |---|---|
 | models/dawn.glb, dusk.glb, brazier.glb, monolith.glb, boulder.glb | Concept art from z_image_turbo_bf16, then pixal3d_int8_i23d (image to 3D). Shrunk with `tools/models.sh` (512px WebP textures, meshopt). |
-| textures/floor-moss-hollow.webp, floor-tidepool-steps.webp, floor-ember-quarry.webp | krea2_turbo_fp8_scaled (seamless flagstones), resized with `tools/textures.py` |
+| textures/floor-*.webp (one per island, plus floor-volcano for Ember Quarry) | krea2_turbo_fp8_scaled (seamless floor textures), resized with `tools/textures.py` |
 | sprites/wall.png | krea2_turbo_fp8_scaled (seamless stone) |
 | sprites/brazier.png, sprites/wisp-dawn.png (logo and favicon) | z_image_turbo_bf16, background removed with birefnet_image_background_removal_fp16 |
 

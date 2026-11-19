@@ -39,6 +39,30 @@ you, so pulling from the near side parks the wisp just outside the rim.
 | Pool `~` | ✗ | ✓ | ✓ |
 | Brazier (3×3) | ✗ | ✓ | ✓ |
 | Open sky (past the island's edge) | ✗ | ✗ | ✓ |
+| Ice `*` | slides | ✓ | ✓ |
+
+**Ice.** A lamplighter who starts a tick on ice slides one tile the way they last stepped, and
+that slide is their whole tick. They keep sliding until they leave the ice or something blocks
+them, then their order carries on. Wisps float over ice as if it were floor.
+
+## Islands
+
+Ten shrines, each with its own island look (`src/client/themes.ts`): palette, sky, light, what
+its walls and boulders are drawn as, set pieces on the far verge and the lower tiers, and
+drifting particles.
+
+| Shrine | Island | Walls `#` | Boulders `o` | Set pieces | Particles |
+|---|---|---|---|---|---|
+| Moss Hollow | Grove | monoliths | boulders | trees, a pond tier | pollen |
+| Tidepool Steps | Lagoon | monoliths | boulders | palms, streams | |
+| Ember Quarry | Volcano | basalt monoliths | boulders | a volcano with lava runs, lava pools | embers |
+| Crystal Spire | Crystal | crystal clusters | small crystals | giant crystals | sparkles |
+| Cascade Falls | Cascade | monoliths | boulders | rock crags with waterfalls | mist |
+| Misty Stones | Misty | standing stones | standing stones | stone blocks in pools, blue mist | mist |
+| Blossom Garden | Blossom | monoliths | flower beds | giant flowers | petals |
+| Castle Rise | Castle | ramparts | boulders | a small castle, towers | |
+| Night Glade | Night | glowing trees | boulders | a giant glowing tree, glowing ponds | fireflies |
+| Glacier | Glacier | ice spires | ice rocks | ice peaks, ice patches you slide on | snow |
 
 Shrines are drawn as the northern half in ASCII (`src/engine/maps.ts`). The southern half is
 that drawing turned 180°, with Dawn and Dusk swapped, so neither guild gets the better side.
@@ -91,8 +115,8 @@ targeting works the same as it did in 2D.
 
 - **Story mode:** solo chapters on story-only shrines with their own twists (bank N wisps in T
   ticks, a wandering rival, moving pools). `bot.ts` is the starting point for opponents.
-- **More shrines:** new maps are data. Ideas: a shrine with two braziers, one with a narrow
-  wall maze.
+- **More shrines:** ten islands are in. New maps are data plus a theme. Ideas: a shrine with
+  two braziers, one with a narrow wall maze.
 - **Cosmetics:** lantern flames exist now (6 colours, visual only). Next: robe trims and staff
   heads as Sogni sprites.
 
