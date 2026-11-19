@@ -257,11 +257,11 @@ export const THEMES: Record<string, Theme> = {
     grass: "#3f9c78",
     soil: "#5a4060",
     rock: "#6a5a80",
-    sky: { zenith: "#170f48", sky: "#3a2f86", haze: "#a070c4", below: "#28286e", stars: 1 },
-    fog: "#3a2e78",
-    clouds: "#8a74c4",
-    hemi: ["#b8a0f0", "#2a2040", 0.85],
-    sun: ["#d8c8ff", 1.4],
+    sky: { zenith: "#040a2a", sky: "#0e215e", haze: "#2c4c92", below: "#071848", stars: 1.5 },
+    fog: "#13285c",
+    clouds: "#2e4c8e",
+    hemi: ["#8aa6f0", "#141c34", 0.8],
+    sun: ["#c4d4ff", 1.5],
     exposure: 1.3,
     wall: "column",
     boulder: "hydrangea",
@@ -296,10 +296,9 @@ export const THEMES: Record<string, Theme> = {
           add(t.group, makeMushroom(0.35, i * 9 + k), Math.cos(a) * t.r * 0.16, 0, Math.sin(a) * t.r * 0.16);
         }
       });
-      const moon = new THREE.Mesh(new THREE.SphereGeometry(14, 32, 16), new THREE.MeshBasicMaterial({ color: "#e6f4ff", fog: false }));
-      moon.position.set(-160, 200, -420);
-      d.group.add(moon);
       d.group.add(makeShootingStars(d.low ? 2 : 4));
+      d.group.add(makeStarfield(d.low ? 700 : 1600));
+      d.group.add(makeMoon());
     },
   },
   "castle-rise": {
@@ -802,6 +801,55 @@ function makeHyacinths(h: number, seed: number) {
       g.add(b);
     }
   }
+  return g;
+}
+
+/** Twinkling stars all round the island, so the backdrop reads as a starry night from any angle. */
+function makeStarfield(count: number) {
+  const pos = new Float32Array(count * 3);
+  const size = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = 70 + Math.random() * 300;
+    pos.set([Math.cos(a) * r, -15 + Math.pow(Math.random(), 1.5) * 170, Math.sin(a) * r], i * 3);
+    size[i] = Math.random();
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("twinkle", new THREE.BufferAttribute(size, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: `attribute float twinkle; uniform float uTime; varying float vA;
+      void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vA = 0.55 + 0.45 * sin(uTime * (1.5 + twinkle * 2.0) + twinkle * 50.0);
+        gl_PointSize = (2.0 + twinkle * 3.5) * (220.0 / -mv.z); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `varying float vA; void main() { vec2 c = gl_PointCoord - 0.5; float d = length(c);
+        gl_FragColor = vec4(vec3(0.9, 0.95, 1.0), vA * smoothstep(0.5, 0.0, d)); }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false;
+  pts.onBeforeRender = () => (mat.uniforms.uTime!.value = performance.now() / 1000);
+  return pts;
+}
+
+/** A big full moon low in the north-west sky with a soft halo. */
+function makeMoon() {
+  const g = new THREE.Group();
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(16, 32, 16), new THREE.MeshBasicMaterial({ color: "#eef6ff", fog: false }));
+  const halo = new THREE.Mesh(new THREE.CircleGeometry(48, 48), new THREE.ShaderMaterial({
+    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `varying vec2 vUv; void main() { float d = length(vUv - 0.5) * 2.0; gl_FragColor = vec4(0.7, 0.82, 1.0, 0.35 * pow(max(0.0, 1.0 - d), 2.0)); }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: false,
+  }));
+  g.add(halo, moon);
+  g.position.set(-110, 34, -250);
+  halo.lookAt(new THREE.Vector3(110, 0, 250));
   return g;
 }
 

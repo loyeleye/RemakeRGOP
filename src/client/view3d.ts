@@ -273,7 +273,10 @@ void main() {
   // The sun (or, at night, a pale moon) and stars.
   vec3 sunDir = normalize(vec3(-0.5, 0.45, -0.75));
   float s = max(0.0, dot(d, sunDir));
-  col += mix(vec3(1.0, 0.92, 0.75), vec3(0.75, 0.85, 1.0), uStars) * (pow(s, 400.0) * 3.0 + pow(s, 12.0) * mix(0.35, 0.12, uStars));
+  float night = min(uStars, 1.0);
+  // By day a hot sun; by night a full moon with a soft halo.
+  float disc = mix(pow(s, 400.0) * 3.0, smoothstep(0.9986, 0.9991, s) * 1.7 + pow(s, 90.0) * 0.4, night);
+  col += mix(vec3(1.0, 0.92, 0.75), vec3(0.8, 0.88, 1.0), night) * (disc + pow(s, 12.0) * mix(0.35, 0.12, night));
   if (uStars > 0.0) {
     vec3 cell = floor(d * 160.0);
     float star = step(0.9965, hash(cell)) * smoothstep(-0.1, 0.3, h);
