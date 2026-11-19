@@ -1,7 +1,8 @@
 # Lanternfall
 
 Two lamplighter guilds, **Dawn** and **Dusk**, steer drifting wisps into a shrine's brazier with
-lodestone staffs that pull or push. Every 0.6 s is one tick, and a round lasts 200 ticks (about
+lodestone staffs that pull or push. The shrine is a floating stone plaza above a sea of cloud
+at dusk, rendered in 3D with Three.js and lit by the brazier's fire and the wisps' own glow. Every 0.6 s is one tick, and a round lasts 200 ticks (about
 2 minutes). You can play 1v1 up to 4v4 in a browser on a phone or a computer, and fill empty
 seats with bots.
 
@@ -48,8 +49,9 @@ setup locally.
 | `src/server/room.ts` | One room (lobby, countdown, round, results), independent of the transport. |
 | `src/server/node.ts` | Node server: static files plus `ws`. |
 | `cloudflare/worker.ts` | Worker plus the `RoomObject` Durable Object. |
-| `src/client/` | Canvas client: camera, touch input, HUD and lobby. |
-| `public/sprites/` | Sprites generated with Sogni (see [CREDITS.md](CREDITS.md)). |
+| `src/client/view3d.ts` | The 3D renderer (Three.js): tilted camera, sky, cloud sea, floating plaza, firelight, bloom and the models. |
+| `src/client/main.ts` | Lobby, HUD, touch and mouse input, and the frame loop. |
+| `public/models/`, `public/textures/` | 3D models and floor textures generated with Sogni (see [CREDITS.md](CREDITS.md)). `tools/models.sh` and `tools/textures.py` rebuild them from the raw renders. |
 | `tests/` | Vitest: engine rules, shrines, room flow, and bot rounds on every shrine. |
 | `tools/smoke.cjs` | Playwright smoke test: a desktop player and a phone player in one room. |
 

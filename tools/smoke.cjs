@@ -16,7 +16,7 @@ async function pullNearestOwn(page) {
 }
 
 (async () => {
-  const b = await chromium.launch();
+  const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const errors = [];
   const host = await b.newPage({ viewport: { width: 1280, height: 860 } });
   host.on("pageerror", (e) => errors.push("desktop: " + e.message));

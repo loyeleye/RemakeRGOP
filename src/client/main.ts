@@ -5,7 +5,7 @@ import { ROUND_TICKS, TICK_MS, type Action, type GameSnapshot, type Guild } from
 import { SHRINES, shrineById } from "../engine/maps.js";
 import { FLAMES, FLAME_COLORS, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
-import { Camera, GUILD_COLORS, GUILD_NAMES, draw, drawMinimap, loadSprites, type DrawState } from "./view.js";
+import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -213,8 +213,10 @@ function toast(msg: string) {
 // ------------------------------------------------------------------ input
 
 const canvas = $<HTMLCanvasElement>("board");
-const g = canvas.getContext("2d")!;
+const overlay = $<HTMLCanvasElement>("overlay");
+const g = overlay.getContext("2d")!;
 const cam = new Camera();
+let world: World | null = null;
 let hoverWisp: number | null = null;
 let minimapRect = { x: 0, y: 0, w: 0, h: 0 };
 
@@ -417,11 +419,12 @@ function resize() {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   cam.w = window.innerWidth;
   cam.h = window.innerHeight;
-  canvas.width = Math.round(cam.w * dpr);
-  canvas.height = Math.round(cam.h * dpr);
-  canvas.style.width = `${cam.w}px`;
-  canvas.style.height = `${cam.h}px`;
+  overlay.width = Math.round(cam.w * dpr);
+  overlay.height = Math.round(cam.h * dpr);
+  overlay.style.width = canvas.style.width = `${cam.w}px`;
+  overlay.style.height = canvas.style.height = `${cam.h}px`;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  world?.resize(cam.w, cam.h, dpr);
   cam.scale = 0; // re-fit on next frame
 }
 window.addEventListener("resize", resize);
@@ -431,6 +434,11 @@ function frame(now: number) {
   requestAnimationFrame(frame);
   if (!room || room.phase === "lobby" || !snap) return;
   const shrine = shrineById(room.shrine);
+  if (!world) {
+    world = new World(canvas, cam);
+    world.resize(cam.w, cam.h, window.devicePixelRatio || 1);
+  }
+  cam.board = shrine.board;
   if (cam.scale === 0) {
     if (cam.compact) cam.phoneZoom();
     else cam.fitBoard(shrine.board);
@@ -445,13 +453,14 @@ function frame(now: number) {
       cam.cy += (ty - cam.cy) * 0.2;
     } else {
       cam.cx = shrine.board.width / 2;
-      cam.cy = shrine.board.height / 2 + 1;
+      cam.cy = shrine.board.height / 2 + 0.5;
     }
   }
   cam.clamp(shrine.board);
   const flames = new Map<number, Flame>(room.players.map((p) => [p.id, p.flame]));
   const st: DrawState = { shrine, prev: prevSnap, snap, t, me, flames, hoverWisp, now };
-  draw(g, cam, st);
+  world.render(st);
+  drawOverlay(g, cam, st);
   if (cam.compact) {
     const w = Math.min(120, cam.w * 0.3);
     minimapRect = { x: cam.w - w - 10, y: 64, w, h: w };
@@ -460,7 +469,7 @@ function frame(now: number) {
 }
 requestAnimationFrame(frame);
 
-loadSprites();
+loadModels();
 render();
 
 const urlCode = new URLSearchParams(location.search).get("room");

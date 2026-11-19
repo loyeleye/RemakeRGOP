@@ -54,6 +54,18 @@ New shrines are new drawings.
 - Reconnecting: each seat has a token kept in `sessionStorage`. Reloading mid-round takes the
   same seat back.
 
+## Look
+
+The shrine is a floating island of flagstones at dusk. Below it is a sea of cloud warmed by
+the brazier, and above it a starry sky with a faint aurora. The brazier sits on a stepped dais
+and sends a pillar of light up into the sky. Wisps are glowing orbs that cast their own light.
+Lamplighters, the brazier, the obelisks (shrine walls) and the boulders are Sogni Pixal3D
+models. Everything else is shaders. Bloom and ACES tone mapping give the glow. Phones and
+low-core devices drop antialiasing and shadows and render bloom at half resolution.
+
+The camera looks down at 56°. Taps are picked by casting a ray onto the ground plane, so touch
+targeting works the same as it did in 2D.
+
 ## Phones
 
 - Below 640 px on the short side, the camera follows you at about 13 tiles across. You can

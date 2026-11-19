@@ -48,6 +48,7 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 
 #play { position: fixed; inset: 0; }
 #board { position: absolute; inset: 0; touch-action: none; display: block; }
+#overlay { position: absolute; inset: 0; pointer-events: none; }
 .hud { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px; padding: max(8px, env(safe-area-inset-top)) 10px 8px; background: linear-gradient(#000a, #0000); pointer-events: none; }
 .hud > * { pointer-events: auto; }
 .score { font-size: 26px; font-weight: 800; min-width: 44px; text-align: center; text-shadow: 0 0 12px currentColor; }
