@@ -59,3 +59,10 @@ setup locally.
 npm test          # engine + room tests
 npm run typecheck
 ```
+
+## Great Orb Project knowledge base
+
+The research behind the rules lives in [docs/gop-knowledge-base.md](docs/gop-knowledge-base.md):
+the original minigame's full ruleset, tick engine, altar maps and angle atlas. It is a fan reference
+for study only. Its map data describes Jagex's arenas, so nothing from it goes into Lanternfall's
+shrines.
