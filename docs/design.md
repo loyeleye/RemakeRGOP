@@ -88,7 +88,9 @@ bot gets about 30.
   guild starts (split along whichever axis its partner is further out on).
   From its half it pulls in wisps on its partner's side, over the rim. A wisp on its own side
   that's out of its partner's reach it pulls in until the partner can reach it, so the partner
-  never has to leave their half. If its partner (a person, say) settles on its half, it swaps.
+  never has to leave their half. If its partner lingers (5 ticks) somewhere that calls for a
+  different split, on its half, or clearly out to the north or south when they're splitting
+  east-west (or the other way round), it adapts and takes the half opposite them.
   On the big shrines (Old Bastion, Sunwell Terrace), where wisps appear far out, it uses home
   squares and fetching instead. A Hard bot teamed with a person never lapses out of teamwork,
   and it never goes after a wisp a teammate is pulling.

@@ -614,13 +614,18 @@ export function halfCommand(game: Game, me: Game["players"][number], mate: Game[
     all.set(me.id, half);
   }
   const along = (p: Pt) => (half!.axis === "x" ? p.x - c.x : p.y - c.y);
-  // If my partner settles on my half, they've picked it: I take the other.
-  if (along(mate.pos) * half.side >= 2) {
-    if (++half.crowded >= 5) {
-      const axis = Math.abs(mdx) >= Math.abs(mdy) ? "x" : "y";
-      const m = axis === "x" ? mdx : mdy;
-      all.set(me.id, (half = { axis, side: m > 0 ? -1 : 1, crowded: 0 }));
-    }
+  // If my partner lingers somewhere that calls for a different split (on my half, or out to
+  // the north or south when we split east-west, or the other way round), I adapt: I take
+  // the half opposite them along whichever axis they're further out on.
+  // Moving about their own half (into its corners, say) doesn't count: to change the axis
+  // they have to be clearly further out on the other one.
+  const cur = half.axis === "x" ? mdx : mdy, other = half.axis === "x" ? mdy : mdx;
+  const swapAxis = Math.abs(other) >= Math.abs(cur) + 2;
+  const wantAxis: "x" | "y" = swapAxis ? (half.axis === "x" ? "y" : "x") : half.axis;
+  const m = swapAxis ? other : cur;
+  const wantSide = m > 0 ? -1 : 1;
+  if (Math.abs(m) >= 2 && (wantAxis !== half.axis || wantSide !== half.side)) {
+    if (++half.crowded >= 5) all.set(me.id, (half = { axis: wantAxis, side: wantSide, crowded: 0 }));
   } else half.crowded = 0;
   const mine = (p: Pt) => along(p) * half!.side >= 1;
   const theirs = (p: Pt) => along(p) * half!.side <= -1;
