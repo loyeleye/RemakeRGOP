@@ -121,7 +121,7 @@ drifting particles.
 | Castle Rise | Castle | ramparts | boulders | a small castle, towers | |
 | Night Glade | Night | glowing trees | boulders | a giant glowing tree, glowing ponds | fireflies |
 | Glacier | Glacier | ice spires | ice rocks | ice peaks, ice patches you slide on | snow |
-| Fairy Ring | Fairy Ring | giant toadstools | mushroom clusters | toadstools on the verge and every tier, pink haze | fireflies |
+| Fairy Ring | Fairy (moonlit) | pink columns with star lanterns | glowing hydrangeas | glittering blossom trees, mushroom lamps, hyacinths, the moon, shooting stars; star lanterns crown the archways | sparkles |
 | Old Bastion | Bastion (big) | ramparts | boulders | towers and broken ramparts, sunset | pollen |
 | Sunwell Terrace | Sunwell (big) | monoliths | boulders | palms, stone blocks, golden sky | sparkles |
 

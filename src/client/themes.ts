@@ -8,7 +8,7 @@ import { makeCloud, makeTree, makeWaterfall, noise3 } from "./islands.js";
 
 export type Particles = "pollen" | "embers" | "sparkles" | "mist" | "petals" | "fireflies" | "snow" | null;
 /** What a wall tile (#) or a boulder tile (o) is drawn as. "monolith" and "boulder" are the Sogni models. */
-export type PropKind = "monolith" | "boulder" | "crystal" | "icespire" | "rampart" | "glowtree" | "flowerbed" | "standing" | "icerock" | "smallcrystal" | "toadstool" | "mushrooms";
+export type PropKind = "monolith" | "boulder" | "crystal" | "icespire" | "rampart" | "glowtree" | "flowerbed" | "standing" | "icerock" | "smallcrystal" | "toadstool" | "mushrooms" | "column" | "hydrangea";
 
 export interface Theme {
   name: string;
@@ -27,6 +27,10 @@ export interface Theme {
   particles: Particles;
   /** Tint for the plain wall/boulder models, if the island wants them darker or paler. */
   tint?: string;
+  /** Colour of the archway stone, if not the island's rock lightened. */
+  arch?: string;
+  /** Something that glows on top of the pillars at the ends of each archway run. */
+  crown?: (seed: number) => THREE.Object3D;
   /** A small thing to dot the distant islands with. */
   scatter: (size: number, seed: number) => THREE.Object3D;
   decorate: (d: DecorContext) => void;
@@ -250,29 +254,52 @@ export const THEMES: Record<string, Theme> = {
   "fairy-ring": {
     name: "Fairy Ring",
     floor: "fairy-ring",
-    grass: "#7cc456",
-    soil: "#7a5238",
-    rock: "#8a7a8e",
-    sky: { zenith: "#3d5fc4", sky: "#8aa6ea", haze: "#f6d2e6", below: "#9a8ee0", stars: 0 },
-    fog: "#e6cfe8",
-    clouds: "#fff4fa",
-    hemi: ["#fff0f6", "#5a6a48", 1.2],
-    sun: ["#ffe8d0", 2.8],
-    exposure: 1.05,
-    wall: "toadstool",
-    boulder: "mushrooms",
-    particles: "fireflies",
-    scatter: (size, seed) => makeMushroom(size * 0.9, seed),
+    grass: "#3f9c78",
+    soil: "#5a4060",
+    rock: "#6a5a80",
+    sky: { zenith: "#170f48", sky: "#3a2f86", haze: "#a070c4", below: "#28286e", stars: 1 },
+    fog: "#3a2e78",
+    clouds: "#8a74c4",
+    hemi: ["#b8a0f0", "#2a2040", 0.85],
+    sun: ["#d8c8ff", 1.4],
+    exposure: 1.3,
+    wall: "column",
+    boulder: "hydrangea",
+    arch: "#f2c8dc",
+    crown: (seed) => makeStarLantern(STAR_COLOURS[seed % STAR_COLOURS.length]!, 0.42, seed),
+    particles: "sparkles",
+    scatter: (size, seed) => (seed % 3 === 0 ? makeMushroomLamp(size * 0.9, seed) : seed % 3 === 1 ? makeBlossomTree(size * 1.1, seed) : makeHydrangea(size * 0.5, seed)),
     decorate(d) {
-      // Giant toadstools round the verge, and a cluster on every lower tier.
-      for (let i = 0; i < 9; i++) {
-        const p = d.ring(Math.PI * (1.05 + (i / 8) * 0.9), 1.4 + (i % 2) * 0.5);
-        add(d.group, makeMushroom(2.4 + (i % 3) * 1.3, i + 3), p.x, 0, p.z);
+      // A moonlit fairy garden: glittering blossom trees, glowing hydrangeas, hyacinths and
+      // mushroom lamps round the verge, star lanterns on pink columns, shooting stars overhead.
+      for (let i = 0; i < 13; i++) {
+        const p = d.ring(Math.PI * (1.03 + (i / 12) * 0.94), 1.3 + (i % 2) * 0.7);
+        const kind = i % 4;
+        if (kind === 0) add(d.group, makeBlossomTree(4.5 + (i % 3), i, d.low), p.x, 0, p.z);
+        else if (kind === 1) add(d.group, makeHydrangea(1.2, i), p.x, 0, p.z);
+        else if (kind === 2) add(d.group, makeMushroomLamp(2.6 + (i % 2), i), p.x, 0, p.z);
+        else add(d.group, makeHyacinths(1.1, i), p.x, 0, p.z);
       }
-      add(d.group, makeMushroom(8, 77), d.ring(NORTH, 4).x, 0, d.ring(NORTH, 4).z);
+      for (const k of [-1, 1]) {
+        const q = d.ring(NORTH + k * 0.22, 2.2);
+        add(d.group, makeColumn(4.2, 40 + k), q.x, 0, q.z);
+      }
+      const n = d.ring(NORTH, 5.5);
+      add(d.group, makeBlossomTree(10, 77, d.low), n.x, 0, n.z);
       d.tiers.forEach((t, i) => {
-        for (let k = 0; k < 4; k++) add(t.group, makeMushroom(1.4 + k * 0.6, i * 5 + k), Math.cos(k * 1.7 + i) * t.r * 0.35, 0, Math.sin(k * 1.7 + i) * t.r * 0.35);
+        add(t.group, makeBlossomTree(4 + i * 0.6, i * 5 + 1, d.low), t.r * 0.3, 0, -t.r * 0.25);
+        add(t.group, makeMushroomLamp(1.8, i + 11), -t.r * 0.35, 0, t.r * 0.1);
+        add(t.group, makeHydrangea(1, i + 3), 0, 0, t.r * 0.35);
+        add(t.group, makeHyacinths(0.9, i + 4), -t.r * 0.1, 0, -t.r * 0.35);
+        for (let k = 0; k < 9; k++) {
+          const a = (k / 9) * Math.PI * 2;
+          add(t.group, makeMushroom(0.35, i * 9 + k), Math.cos(a) * t.r * 0.16, 0, Math.sin(a) * t.r * 0.16);
+        }
       });
+      const moon = new THREE.Mesh(new THREE.SphereGeometry(14, 32, 16), new THREE.MeshBasicMaterial({ color: "#e6f4ff", fog: false }));
+      moon.position.set(-160, 200, -420);
+      d.group.add(moon);
+      d.group.add(makeShootingStars(d.low ? 2 : 4));
     },
   },
   "castle-rise": {
@@ -455,6 +482,10 @@ export function makeTileProp(kind: PropKind, height: number, seed: number): THRE
       return makeFlowerbed(seed);
     case "standing":
       return makeStoneBlock(1.2 + rnd(seed, 1) * 0.5, seed);
+    case "column":
+      return makeColumn(height, seed);
+    case "hydrangea":
+      return makeHydrangea(0.9, seed);
     case "toadstool":
       return makeMushroom(height * 0.95, seed, true);
     case "mushrooms": {
@@ -721,6 +752,202 @@ function makeMushroom(h: number, seed: number, pillar = false) {
     g.add(s);
   }
   return g;
+}
+
+/** A slender glowing mushroom lamp: tall pale stalk, small conical orange cap with spots. */
+function makeMushroomLamp(h: number, seed: number) {
+  const g = new THREE.Group();
+  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.035, h * 0.06, h * 0.85, 12), stalkMat);
+  stalk.position.y = h * 0.42;
+  g.add(stalk);
+  const warm = seed % 2 === 0;
+  const glow = new THREE.MeshStandardMaterial({ color: warm ? "#ffb050" : "#fff4ec", emissive: warm ? "#ff8a20" : "#ffe6d8", emissiveIntensity: warm ? 1.6 : 1.1, roughness: 0.5 });
+  const capGeo = new THREE.SphereGeometry(h * 0.2, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+  capGeo.scale(1, 1.25, 1);
+  const cap = new THREE.Mesh(capGeo, glow);
+  cap.position.y = h * 0.82;
+  g.add(cap);
+  const spotGeo = new THREE.SphereGeometry(h * 0.025, 8, 6);
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + rnd(seed, i);
+    const el = 0.35 + (i % 2) * 0.4;
+    const sp = new THREE.Mesh(spotGeo, spotMat);
+    sp.position.set(Math.cos(a) * Math.cos(el) * h * 0.2, h * 0.82 + Math.sin(el) * h * 0.25, Math.sin(a) * Math.cos(el) * h * 0.2);
+    g.add(sp);
+  }
+  return g;
+}
+
+const hyacinthPink = new THREE.MeshStandardMaterial({ color: "#ffb0d0", emissive: "#ff70b0", emissiveIntensity: 0.9, roughness: 0.6 });
+const hyacinthBlue = new THREE.MeshStandardMaterial({ color: "#a8c8ff", emissive: "#6a9aff", emissiveIntensity: 1.1, roughness: 0.6 });
+const hyacinthStem = new THREE.MeshStandardMaterial({ color: "#3a9a4a", roughness: 0.8 });
+
+/** A clump of glowing pink hyacinth spikes. */
+function makeHyacinths(h: number, seed: number) {
+  const g = new THREE.Group();
+  const hyacinthMat = seed % 2 ? hyacinthBlue : hyacinthPink;
+  const bud = new THREE.SphereGeometry(h * 0.06, 8, 6);
+  for (let k = 0; k < 4; k++) {
+    const a = k * 1.9 + seed;
+    const x = Math.cos(a) * h * 0.25 * (k ? 1 : 0), z = Math.sin(a) * h * 0.25 * (k ? 1 : 0);
+    const hk = h * (0.8 + rnd(seed, k) * 0.4);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.025, h * 0.03, hk * 0.5, 6), hyacinthStem);
+    stem.position.set(x, hk * 0.25, z);
+    g.add(stem);
+    for (let i = 0; i < 18; i++) {
+      const b = new THREE.Mesh(bud, hyacinthMat);
+      const t = i / 18;
+      const r = h * 0.1 * (1 - t * 0.6);
+      b.position.set(x + Math.cos(i * 2.4) * r, hk * (0.45 + t * 0.5), z + Math.sin(i * 2.4) * r);
+      g.add(b);
+    }
+  }
+  return g;
+}
+
+/**
+ * Shooting stars in the sky beyond the island: each streaks down at a slant for about a second,
+ * then waits a few seconds and falls somewhere else. They animate themselves each frame.
+ */
+function makeShootingStars(count: number) {
+  const g = new THREE.Group();
+  const up = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < count; i++) {
+    const tailMat = new THREE.MeshBasicMaterial({ color: "#cfe6ff", transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+    const headMat = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+    // The cone's wide end is the head; it tapers to nothing along the tail.
+    const tailGeo = new THREE.CylinderGeometry(1.8, 0, 1, 10, 1, true);
+    tailGeo.translate(0, -0.5, 0);
+    const tail = new THREE.Mesh(tailGeo, tailMat);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(2.6, 12, 8), headMat);
+    head.add(tail);
+    head.frustumCulled = tail.frustumCulled = false;
+    g.add(head);
+    let start = performance.now() + 800 + i * 1700;
+    let dur = 1000;
+    const from = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    const pick = () => {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      from.set((Math.random() - 0.5) * 420, 50 + Math.random() * 90, -150 - Math.random() * 150);
+      dir.set(side * (0.6 + Math.random() * 0.5), -0.55 - Math.random() * 0.35, 0.15).normalize();
+      dur = 700 + Math.random() * 700;
+      tail.quaternion.setFromUnitVectors(up, dir.clone().negate());
+    };
+    pick();
+    head.onBeforeRender = () => {
+      const now = performance.now();
+      let t = (now - start) / dur;
+      if (t > 1) {
+        start = now + 1500 + Math.random() * 4500;
+        pick();
+        t = -1;
+      }
+      const on = t >= 0 ? Math.sin(Math.min(1, t) * Math.PI) : 0;
+      head.position.copy(from).addScaledVector(dir, Math.max(0, t) * 170);
+      tail.scale.set(1, 20 + 50 * on, 1);
+      tailMat.opacity = 0.9 * on;
+      headMat.opacity = on;
+    };
+  }
+  return g;
+}
+
+const STAR_COLOURS = ["#ffd27a", "#ff9ad0", "#b8a8ff", "#9ae0ff", "#fff4fa"];
+
+/** A glowing many-pointed star lantern, `r` across. */
+function makeStarLantern(colour: string, r: number, seed: number) {
+  const mat = new THREE.MeshStandardMaterial({ color: colour, emissive: colour, emissiveIntensity: 2.2, roughness: 0.4 });
+  const g = new THREE.Group();
+  const a = new THREE.Mesh(new THREE.OctahedronGeometry(r), mat);
+  const b = new THREE.Mesh(new THREE.OctahedronGeometry(r * 0.9), mat);
+  b.rotation.set(Math.PI / 4, Math.PI / 4, 0);
+  const c = new THREE.Mesh(new THREE.OctahedronGeometry(r * 0.8), mat);
+  c.rotation.set(0, Math.PI / 4, Math.PI / 4);
+  g.add(a, b, c);
+  g.rotation.y = seed;
+  return g;
+}
+
+const columnMat = new THREE.MeshStandardMaterial({ color: "#f4d2e2", roughness: 0.55 });
+const vineMat = new THREE.MeshStandardMaterial({ color: "#2e5a3a", roughness: 0.8 });
+
+/** A fluted pink marble column wound with a vine, a star lantern on top. */
+function makeColumn(h: number, seed: number) {
+  const g = new THREE.Group();
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.075, h * 0.085, h * 0.86, 16), columnMat);
+  shaft.position.y = h * 0.47;
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.12, h * 0.13, h * 0.06, 16), columnMat);
+  base.position.y = h * 0.03;
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.13, h * 0.09, h * 0.06, 16), columnMat);
+  top.position.y = h * 0.92;
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i <= 40; i++) {
+    const t = i / 40;
+    pts.push(new THREE.Vector3(Math.cos(t * 14 + seed) * h * 0.088, h * (0.05 + t * 0.85), Math.sin(t * 14 + seed) * h * 0.088));
+  }
+  const vine = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, h * 0.012, 5), vineMat);
+  g.add(shaft, base, top, vine);
+  const star = makeStarLantern(STAR_COLOURS[seed % STAR_COLOURS.length]!, h * 0.11, seed);
+  star.position.y = h * 1.05;
+  g.add(star);
+  return shadows(g);
+}
+
+const blossomMats = ["#ffb6d2", "#ffc8e0", "#f8a0c8"].map((c) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.18, roughness: 0.7 }));
+
+/** A pink blossom tree with a twinkling cloud of glitter in its crown. */
+function makeBlossomTree(size: number, seed: number, low = false) {
+  const g = new THREE.Group();
+  const lean = (rnd(seed, 1) - 0.5) * size * 0.2;
+  const trunk = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(-lean * 0.4, size * 0.3, 0), new THREE.Vector3(lean, size * 0.6, lean * 0.3)]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(trunk, 12, size * 0.06, 8), darkBark));
+  const n = 7 + Math.floor(rnd(seed, 2) * 4);
+  for (let i = 0; i < n; i++) {
+    const r = size * (0.2 + rnd(seed, 10 + i) * 0.12);
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), blossomMats[i % blossomMats.length]!);
+    const a = (i / n) * Math.PI * 2 + rnd(seed, 30 + i);
+    const d = size * (0.12 + rnd(seed, 40 + i) * 0.22);
+    m.position.set(lean + Math.cos(a) * d, size * (0.7 + rnd(seed, 20 + i) * 0.3), lean * 0.3 + Math.sin(a) * d);
+    g.add(m);
+  }
+  // Glitter: points scattered over the crown that twinkle.
+  const count = low ? 30 : 70;
+  const pos = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const a = rnd(seed, 100 + i) * Math.PI * 2, e = rnd(seed, 200 + i) * Math.PI, r = size * (0.3 + rnd(seed, 300 + i) * 0.22);
+    pos.set([lean + Math.cos(a) * Math.sin(e) * r, size * 0.82 + Math.cos(e) * r * 0.7, Math.sin(a) * Math.sin(e) * r], i * 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({ color: "#fff4fc", size: Math.max(0.12, size * 0.035), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  const pts = new THREE.Points(geo, mat);
+  pts.onBeforeRender = () => {
+    mat.opacity = 0.55 + 0.45 * Math.sin(performance.now() / 260 + seed);
+  };
+  g.add(pts);
+  return shadows(g);
+}
+
+const leafBush = new THREE.MeshStandardMaterial({ color: "#2f7a4a", roughness: 0.85 });
+const hydrangeaMats = ["#8ab4ff", "#b08aff", "#d89aff", "#7ad0ff"].map((c) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.55, roughness: 0.6 }));
+
+/** A leafy bush crowned with glowing hydrangea heads. */
+function makeHydrangea(h: number, seed: number) {
+  const g = new THREE.Group();
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + seed;
+    const m = new THREE.Mesh(new THREE.SphereGeometry(h * 0.38, 16, 12), leafBush);
+    m.position.set(Math.cos(a) * h * 0.25, h * 0.35, Math.sin(a) * h * 0.25);
+    g.add(m);
+  }
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + rnd(seed, i);
+    const f = new THREE.Mesh(new THREE.IcosahedronGeometry(h * 0.2, 1), hydrangeaMats[(seed + i) % hydrangeaMats.length]!);
+    f.position.set(Math.cos(a) * h * 0.32, h * (0.6 + rnd(seed, 10 + i) * 0.2), Math.sin(a) * h * 0.32);
+    g.add(f);
+  }
+  return shadows(g);
 }
 
 function makeFlowerbed(seed: number) {

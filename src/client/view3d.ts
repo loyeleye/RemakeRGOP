@@ -984,7 +984,7 @@ export class World {
     const g = new THREE.Group();
     const R = ring.radius;
     const cx = this.worldX(b, b.center.x), cz = this.worldZ(b, b.center.y);
-    const stone = new THREE.MeshStandardMaterial({ map: wallTex, color: new THREE.Color(th.rock).lerp(new THREE.Color("#f2ebde"), 0.6), roughness: 0.8 });
+    const stone = new THREE.MeshStandardMaterial({ map: wallTex, color: th.arch ? new THREE.Color(th.arch) : new THREE.Color(th.rock).lerp(new THREE.Color("#f2ebde"), 0.6), roughness: 0.8 });
     const rune = new THREE.MeshStandardMaterial({ color: "#ffd9a0", emissive: "#ff9a3a", emissiveIntensity: 1.6 });
     const H = 1.7;
     const walls = new Set(ringWalls(ring).map((p) => `${p.x},${p.y}`));
@@ -1012,7 +1012,11 @@ export class World {
       const cap = add(new THREE.Mesh(capGeo, stone));
       cap.position.set(px, h + 0.09, pz);
       cap.scale.set(w, 1, w);
-      if (lone) {
+      if (th.crown && near <= 1) {
+        const c = th.crown(x * 7 + y * 3 + 50);
+        c.position.set(px, h + 0.55, pz);
+        g.add(c);
+      } else if (lone) {
         const r = add(new THREE.Mesh(new THREE.OctahedronGeometry(0.22), rune));
         r.position.set(px, h + 0.45, pz);
         r.castShadow = false;
