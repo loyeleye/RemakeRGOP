@@ -490,7 +490,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     name: "Cascade Falls",
     blurb: "A long island cut by two streams. Wisps float over; you need the fords. The streams run clockwise round the island, carrying a loose wisp a tile a tick.",
     isle: { radius: 12.5, squareness: 2.8, coves: 0.1, heads: 0.08, seed: 2, stretch: [0.8, 1.3] },
-    rings: [{ radius: 5, style: "posts" }],
+    rings: [{ radius: 5, style: "open" }],
     gimmicks: { current: "swirl" },
     rows: [
       "                                     ",
@@ -750,7 +750,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
         { a: 4, ta: 0.92, b: 0, tb: 0.42, bend: 3, width: 1.3, clutter: 1.2 },
       ],
     },
-    rings: [{ radius: 5, style: "open" }, { radius: 9, style: "open" }],
+    rings: [{ radius: 5, style: "posts" }, { radius: 9, style: "open" }],
     spawnBand: [16, 90],
     rows: [
       "                                   ",
