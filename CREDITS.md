@@ -10,6 +10,7 @@ subscription-only billing so no Spark was spent. Sources are in the project file
 | textures/floor-*.webp (one per island, plus floor-volcano for Ember Quarry; floor-fairy-ring added later the same day) | krea2_turbo_fp8_scaled (seamless floor textures), resized with `tools/textures.py` |
 | sprites/wall.png | krea2_turbo_fp8_scaled (seamless stone) |
 | ui/*.webp (phone stick and buttons) | z_image_turbo_bf16, cropped to a circle with an alpha mask |
+| sky/fairy-pano.webp (night sky panorama), sky/fairy-sea.webp (moonlit cloud sea) for Fairy Ring | z_image_turbo_bf16 (pano) and krea2_turbo_fp8_scaled (sea), subscription billing; edges crossfaded so they tile, resized to WebP |
 | sprites/brazier.png, sprites/wisp-dawn.png (logo and favicon) | z_image_turbo_bf16, background removed with birefnet_image_background_removal_fp16 |
 
 The sky, cloud sea, fire, embers, light pillar, water and wisps are drawn in code with shaders.
