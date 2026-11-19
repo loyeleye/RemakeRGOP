@@ -19,6 +19,10 @@ export interface ShrineDef {
    * tile outside this outline becomes open sky. Without it the shrine is the plain rectangle.
    */
   isle?: IsleShape;
+  /** Drawing-to-play scale (default MAP_SCALE). Tests use 1. */
+  scale?: number;
+  /** The archway ring (default RING); null for none. */
+  ring?: Ring | null;
 }
 
 export interface IsleShape {
@@ -42,13 +46,30 @@ export interface IsleShape {
   waves?: [number, number, number][];
 }
 
+/** How much bigger the played island is than its drawing. */
+export const MAP_SCALE = 1.5;
+
+export interface Ring {
+  /** Chebyshev distance of the pillars from the centre tile. */
+  radius: number;
+  /** Half-width of each gap: a gap is the tiles within this of an axis. */
+  gapHalf: number;
+}
+
+export const RING: Ring = { radius: 5, gapHalf: 1 };
+
 export interface Shrine {
   id: string;
   name: string;
   blurb: string;
   board: Board;
-  wispSpawns: [Pt[], Pt[]];
-  starts: [Pt[], Pt[]];
+  /** Teams this layout seats: 2, or up to 4 on a four-way island. */
+  teams: number;
+  /** Per team. */
+  wispSpawns: Pt[][];
+  starts: Pt[][];
+  /** The archway ring round the brazier: pillars at this Chebyshev radius, gaps on the axes. */
+  ring: Ring | null;
   /** Radius of the island's edge (in tiles from the centre) at angle a, where a = atan2(dy, dx). */
   outline: ((a: number) => number) | null;
 }
@@ -374,29 +395,100 @@ export function mirrorRows(half: string[]): string[] {
 }
 
 export function buildShrine(def: ShrineDef): Shrine {
-  let rows = mirrorRows(def.rows);
-  if (def.isle) rows = carveIsle(rows, def.isle);
+  let rows = scaleRows(mirrorRows(def.rows), def.scale ?? MAP_SCALE);
+  const isle = scaledIsle(def);
+  if (isle) rows = carveIsle(rows, isle);
+  const ring = ringOf(def);
+  if (ring) rows = addRing(rows, ring);
+  return finish(def, rows, 2, isle ? (a) => isleRadius(isle, a) : null);
+}
+
+const SPAWN_TEAM: Record<string, number> = { a: 0, b: 1, c: 2, d: 3 };
+const START_TEAM: Record<string, number> = { "1": 0, "2": 1, "3": 2, "4": 3 };
+
+function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: number) => number) | null): Shrine {
   const height = rows.length;
   const width = rows[0]!.length;
   const tiles: Tile[] = [];
-  const wispSpawns: [Pt[], Pt[]] = [[], []];
-  const starts: [Pt[], Pt[]] = [[], []];
+  const wispSpawns: Pt[][] = Array.from({ length: teams }, () => []);
+  const starts: Pt[][] = Array.from({ length: teams }, () => []);
   rows.forEach((row, y) => {
     if (row.length !== width) throw new Error(`${def.id}: row ${y} is ${row.length} wide, expected ${width}`);
     [...row].forEach((ch, x) => {
       tiles.push(TILE_OF[ch] ?? Tile.Floor);
-      if (ch === "a") wispSpawns[0].push(pt(x, y));
-      if (ch === "b") wispSpawns[1].push(pt(x, y));
-      if (ch === "1") starts[0].push(pt(x, y));
-      if (ch === "2") starts[1].push(pt(x, y));
+      const sp = SPAWN_TEAM[ch], st = START_TEAM[ch];
+      if (sp !== undefined && sp < teams) wispSpawns[sp]!.push(pt(x, y));
+      if (st !== undefined && st < teams) starts[st]!.push(pt(x, y));
     });
   });
   // The brazier is always a 3x3 block at the centre, whatever the ASCII shows.
   const board = new Board(width, height, tiles);
   for (let dy = -1; dy <= 1; dy++)
     for (let dx = -1; dx <= 1; dx++) tiles[(board.center.y + dy) * width + board.center.x + dx] = Tile.Brazier;
-  const isle = def.isle;
-  return { id: def.id, name: def.name, blurb: def.blurb, board, wispSpawns, starts, outline: isle ? (a) => isleRadius(isle, a) : null };
+  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, starts, ring: ringOf(def), outline };
+}
+
+function scaledIsle(def: ShrineDef): IsleShape | undefined {
+  return def.isle && { ...def.isle, radius: def.isle.radius * (def.scale ?? MAP_SCALE) };
+}
+
+const ringOf = (def: ShrineDef) => (def.ring === undefined ? RING : def.ring);
+
+/** Rounds half away from zero, so a layout scaled about its centre stays point-symmetric. */
+const sround = (v: number) => Math.sign(v) * Math.round(Math.abs(v));
+
+/**
+ * Blows a drawing up about its centre tile. Pools, ice, walls and open sky grow with it; spawns,
+ * starts and boulders stay single tiles, at their scaled spots.
+ */
+export function scaleRows(rows: string[], f: number): string[] {
+  const H0 = rows.length, W0 = rows[0]!.length;
+  const cx0 = Math.floor(W0 / 2), cy0 = Math.floor(H0 / 2);
+  const hx = sround(cx0 * f), hy = sround(cy0 * f);
+  const out: string[] = [];
+  for (let y = -hy; y <= hy; y++) {
+    let r = "";
+    for (let x = -hx; x <= hx; x++) {
+      const sx = sround(x / f), sy = sround(y / f);
+      const ch = rows[cy0 + sy]?.[cx0 + sx] ?? " ";
+      const point = "ab12o".includes(ch);
+      r += point ? (sround(sx * f) === x && sround(sy * f) === y ? ch : ".") : ch === "B" ? "." : ch;
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+/**
+ * The archway ring: a square of pillars round the brazier, with a gap on each axis. Pillars
+ * block walking, wisps and sight, so a wisp has to come in through a gap. The lanes inside and
+ * just outside the ring, and the gaps' approaches, are cleared.
+ */
+export function addRing(rows: string[], ring: Ring): string[] {
+  const H = rows.length, W = rows[0]!.length;
+  const cx = Math.floor(W / 2), cy = Math.floor(H / 2);
+  const g = rows.map((r) => [...r]);
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const dx = x - cx, dy = y - cy;
+      const d = Math.max(Math.abs(dx), Math.abs(dy));
+      if (d > ring.radius + 1 || g[y]![x] === " ") continue;
+      const gap = Math.min(Math.abs(dx), Math.abs(dy)) <= ring.gapHalf;
+      const ch = g[y]![x]!;
+      if ("abcd1234".includes(ch)) {
+        // A spawn or start this close in moves out along its ray, past the ring.
+        for (let k = ring.radius + 2; ; k++) {
+          const nx = cx + sround((dx * k) / d), ny = cy + sround((dy * k) / d);
+          if (!g[ny]?.[nx] || g[ny]![nx] === " ") throw new Error(`no room past the ring for (${x},${y})`);
+          if (g[ny]![nx] === ".") {
+            g[ny]![nx] = ch;
+            break;
+          }
+        }
+      }
+      g[y]![x] = d === ring.radius && !gap ? "#" : d <= 1 ? "B" : ".";
+    }
+  return g.map((r) => r.join(""));
 }
 
 /**
@@ -428,8 +520,10 @@ function carveIsle(rows: string[], isle: IsleShape): string[] {
     for (let x = 0; x < W; x++) {
       const dx = x - cx, dy = y - cy;
       const rim = x === 0 || y === 0 || x === W - 1 || y === H - 1;
-      if (!rim && Math.hypot(dx, dy) <= isleRadius(isle, Math.atan2(dy, dx)) - 0.5) continue;
-      if ("ab12".includes(g[y]![x]!)) throw new Error(`island edge cuts off a spawn or start at (${x},${y})`);
+      const inside = Math.hypot(dx, dy) - isleRadius(isle, Math.atan2(dy, dx));
+      // A spawn or start right on the shore is kept (the scaled layout can round onto it).
+      if (!rim && (inside <= -0.5 || (inside <= 0.5 && "abcd1234".includes(g[y]![x]!)))) continue;
+      if ("abcd1234".includes(g[y]![x]!)) throw new Error(`island edge cuts off a spawn or start at (${x},${y}) d=${(Math.hypot(dx, dy) - isleRadius(isle, Math.atan2(dy, dx))).toFixed(2)}`);
       g[y]![x] = " ";
     }
   // Crop to the land plus a ring of sky, keeping the brazier dead centre.
@@ -443,8 +537,118 @@ function carveIsle(rows: string[], isle: IsleShape): string[] {
   return g.slice(cy - ey - 1, cy + ey + 2).map((r) => r.slice(cx - ex - 1, cx + ex + 2).join(""));
 }
 
-export const SHRINES: Shrine[] = SHRINE_DEFS.map(buildShrine);
+/**
+ * The four-way version of an island, for 3 or 4 teams. One quarter of the two-team layout
+ * (west of the centre column, from the brazier row up) is turned 90 degrees three times, so
+ * all four sides are the same. The coastline is the wider of the shape and the shape turned a
+ * quarter, which is the same from all four sides.
+ */
+export function buildFourWay(def: ShrineDef): Shrine {
+  // Use the first quarter (turning the source a quarter at a time) that holds two spawns.
+  let err: unknown;
+  for (let turn = 0; turn < 4; turn++) {
+    try {
+      return fourWayFrom(def, turn);
+    } catch (e) {
+      err = e;
+    }
+  }
+  throw err;
+}
+
+function fourWayFrom(def: ShrineDef, turn: number): Shrine {
+  const src = scaleRows(mirrorRows(def.rows), def.scale ?? MAP_SCALE);
+  const H0 = src.length, W0 = src[0]!.length;
+  const scx = Math.floor(W0 / 2), scy = Math.floor(H0 / 2);
+  const isle = scaledIsle(def);
+  const outline = isle ? (a: number) => Math.max(isleRadius(isle, a), isleRadius(isle, a + Math.PI / 2)) : null;
+  let half = Math.max(scx, scy);
+  if (outline)
+    for (let i = 0; i < 360; i++) {
+      const a = (i / 360) * Math.PI * 2, r = outline(a);
+      half = Math.max(half, Math.ceil(Math.max(Math.abs(Math.cos(a) * r), Math.abs(Math.sin(a) * r)) + 1.5));
+    }
+  const S = half * 2 + 1;
+  // Quarter D: dx <= -1, dy <= 0. Turn k maps (dx, dy) -> (-dy, dx) k times.
+  const quarter = (qx: number, qy: number) => {
+    let dx = qx, dy = qy;
+    for (let k = 0; k < turn; k++) [dx, dy] = [-dy, dx];
+    const x = scx + dx, y = scy + dy;
+    if (x < 0 || y < 0 || x >= W0 || y >= H0) return ".";
+    let ch = src[y]![x]!;
+    const border = x === 0 || y === 0 || x === W0 - 1 || y === H0 - 1;
+    if (ch === " " || (border && ch === "#")) ch = ".";
+    if (ch in SPAWN_TEAM) return "a";
+    if (ch in START_TEAM) return "1";
+    return ch;
+  };
+  const g: string[][] = Array.from({ length: S }, () => Array<string>(S).fill("."));
+  for (let dy = -half; dy <= 0; dy++)
+    for (let dx = -half; dx <= -1; dx++) {
+      let ch = quarter(dx, dy);
+      let x = dx, y = dy;
+      for (let k = 0; k < 4; k++) {
+        const out = ch === "a" ? "abcd"[k]! : ch === "1" ? "1234"[k]! : ch;
+        g[half + y]![half + x] = out;
+        [x, y] = [-y, x];
+      }
+    }
+  g[half]![half] = "B";
+  const rows = g.map((r) => r.join(""));
+  let carved = isle && outline ? carveFolded(rows, outline) : rows;
+  const ring = ringOf(def);
+  if (ring) carved = addRing(carved, ring);
+  const s = finish(def, carved, 4, outline);
+  for (let t = 0; t < 4; t++) {
+    if (s.wispSpawns[t]!.length < 2) throw new Error(`${def.id} four-way: team ${t} has ${s.wispSpawns[t]!.length} wisp spawns`);
+    if (s.starts[t]!.length < 1) throw new Error(`${def.id} four-way: team ${t} has no start`);
+  }
+  return s;
+}
+
+/** Marks every tile outside the outline as open sky, then crops to the land plus a ring of sky. */
+function carveFolded(rows: string[], outline: (a: number) => number): string[] {
+  const S = rows.length, c = Math.floor(S / 2);
+  const g = rows.map((r) => [...r]);
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      const dx = x - c, dy = y - c;
+      const rim = x === 0 || y === 0 || x === S - 1 || y === S - 1;
+      const inside = Math.hypot(dx, dy) - outline(Math.atan2(dy, dx));
+      if (!rim && (inside <= -0.5 || (inside <= 0.5 && "abcd1234".includes(g[y]![x]!)))) continue;
+      if ("abcd1234".includes(g[y]![x]!)) throw new Error(`four-way island edge cuts off a spawn or start at (${x},${y})`);
+      g[y]![x] = " ";
+    }
+  let e = 0;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (g[y]![x] !== " ") e = Math.max(e, Math.abs(x - c), Math.abs(y - c));
+  return g.slice(c - e - 1, c + e + 2).map((r) => r.slice(c - e - 1, c + e + 2).join(""));
+}
+
+export const SHRINES: Shrine[] = SHRINE_DEFS.map((d) => {
+  try {
+    return buildShrine(d);
+  } catch (e) {
+    throw new Error(`${d.id}: ${(e as Error).message}`);
+  }
+});
+const FOUR_WAY = new Map<string, Shrine>();
 
 export function shrineById(id: string): Shrine {
   return SHRINES.find((s) => s.id === id) ?? SHRINES[0]!;
+}
+
+/**
+ * The layout for a round with this many teams: the usual island for 2, the four-way island for
+ * 3 or 4 (with 3, one side stays empty). Same id either way, so the look and theme match.
+ */
+export function shrineFor(id: string, teams: number): Shrine {
+  const base = shrineById(id);
+  if (teams <= 2) return base;
+  let four = FOUR_WAY.get(base.id);
+  if (!four) {
+    four = buildFourWay(SHRINE_DEFS.find((d) => d.id === base.id)!);
+    FOUR_WAY.set(base.id, four);
+  }
+  if (teams >= 4) return four;
+  return { ...four, teams, wispSpawns: four.wispSpawns.slice(0, teams), starts: four.starts.slice(0, teams) };
 }

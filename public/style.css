@@ -5,6 +5,8 @@
   --muted: #a9a2b8;
   --dawn: #ffcf5a;
   --dusk: #b07cff;
+  --tide: #4fd6ff;
+  --grove: #6fe07a;
   --accent: #ff9a3a;
   color-scheme: dark;
 }
@@ -36,8 +38,11 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 .guilds { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .guild { background: var(--panel); border-radius: 14px; padding: 10px 12px; border-top: 4px solid; display: flex; flex-direction: column; gap: 8px; min-height: 160px; }
 .guild.dawn { border-color: var(--dawn); } .guild.dusk { border-color: var(--dusk); }
+.guild.tide { border-color: var(--tide); } .guild.grove { border-color: var(--grove); }
 .guild h2 { margin: 0; font-size: 18px; }
 .guild.dawn h2 { color: var(--dawn); } .guild.dusk h2 { color: var(--dusk); }
+.guild.tide h2 { color: var(--tide); } .guild.grove h2 { color: var(--grove); }
+.guild[hidden] { display: none; }
 .guild ul { list-style: none; padding: 0; margin: 0; flex: 1; font-size: 14px; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 .guild li.away { opacity: 0.5; }
 .flame-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 6px currentColor; }
@@ -53,6 +58,8 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 .hud > * { pointer-events: auto; }
 .score { font-size: 26px; font-weight: 800; min-width: 44px; text-align: center; text-shadow: 0 0 12px currentColor; }
 .score.dawn { color: var(--dawn); } .score.dusk { color: var(--dusk); }
+.score.tide { color: var(--tide); } .score.grove { color: var(--grove); }
+.score[hidden] { display: none; }
 .score.pop { animation: pop 0.6s; }
 @keyframes pop { 30% { transform: scale(1.6); } }
 .ticks { flex: 1; text-align: center; font-variant-numeric: tabular-nums; color: var(--ink); font-size: 14px; }

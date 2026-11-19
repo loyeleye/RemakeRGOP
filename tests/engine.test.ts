@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { Board, Mover, Tile, pt } from "../src/engine/board.js";
 import { Game, ROUND_TICKS, flingOffset, type JoinSpec } from "../src/engine/game.js";
-import { SHRINES, SHRINE_DEFS, mirrorRows, buildShrine, type Shrine } from "../src/engine/maps.js";
+import { RING, SHRINES, SHRINE_DEFS, mirrorRows, buildShrine, shrineFor, type Shrine } from "../src/engine/maps.js";
 
 /** An empty 27x27 shrine with the given wisp spawns. */
 function openShrine(dawnSpawns = [pt(13, 3)], duskSpawns = [pt(13, 23)]): Shrine {
   const rows = Array.from({ length: 27 }, (_, y) =>
     y === 0 || y === 26 ? "#".repeat(27) : "#" + ".".repeat(25) + "#",
   );
-  const shrine = buildShrine({ id: "t", name: "t", blurb: "", rows: rows.slice(0, 14) });
+  const shrine = buildShrine({ id: "t", name: "t", blurb: "", rows: rows.slice(0, 14), scale: 1, ring: null });
   shrine.wispSpawns = [dawnSpawns, duskSpawns];
   shrine.starts = [[pt(3, 13)], [pt(23, 13)]];
   return shrine;
@@ -38,8 +38,8 @@ describe("shrines", () => {
 
   it("let every start reach every spawn's neighbourhood", () => {
     for (const s of SHRINES) {
-      for (const start of [...s.starts[0], ...s.starts[1]]) {
-        for (const spawn of [...s.wispSpawns[0], ...s.wispSpawns[1]]) {
+      for (const start of s.starts.flat()) {
+        for (const spawn of s.wispSpawns.flat()) {
           const path = s.board.walkPath(start, spawn, true);
           const end = path.at(-1) ?? start;
           expect(Math.max(Math.abs(end.x - spawn.x), Math.abs(end.y - spawn.y)), `${s.id}`).toBeLessThanOrEqual(1);
@@ -55,6 +55,46 @@ describe("shrines", () => {
       for (let y = 0; y < b.height; y++)
         for (let x = 0; x < b.width; x++)
           expect(b.tile(pt(x, y)) === Tile.Edge, `${s.id} (${x},${y})`).toBe(b.tile(pt(b.width - 1 - x, b.height - 1 - y)) === Tile.Edge);
+    }
+  });
+
+  it("play point-symmetric too, after scaling up and adding the archways", () => {
+    for (const s of SHRINES) {
+      const b = s.board;
+      for (let y = 0; y < b.height; y++)
+        for (let x = 0; x < b.width; x++) expect(b.tile(pt(x, y)), `${s.id} (${x},${y})`).toBe(b.tile(pt(b.width - 1 - x, b.height - 1 - y)));
+      const flip = (p: { x: number; y: number }) => `${b.width - 1 - p.x},${b.height - 1 - p.y}`;
+      expect(s.wispSpawns[1]!.map(flip).sort(), s.id).toEqual(s.wispSpawns[0]!.map((p) => `${p.x},${p.y}`).sort());
+    }
+  });
+
+  it("have four-way versions that are the same from all four sides", () => {
+    for (const s of SHRINES) {
+      const f = shrineFor(s.id, 4);
+      const b = f.board;
+      expect(b.width, s.id).toBe(b.height);
+      const N = b.width - 1;
+      // Turning a quarter: (x, y) -> (N - y, x) on screen, and guild k's tiles become guild k+1's.
+      const turn = (p: { x: number; y: number }) => `${N - p.y},${p.x}`;
+      for (let y = 0; y <= N; y++)
+        for (let x = 0; x <= N; x++) expect(b.tile(pt(N - y, x)), `${s.id} (${x},${y})`).toBe(b.tile(pt(x, y)));
+      for (let k = 0; k < 4; k++) {
+        const next = (k + 1) % 4;
+        expect(f.wispSpawns[k]!.map(turn).sort(), `${s.id} guild ${k}`).toEqual(f.wispSpawns[next]!.map((p) => `${p.x},${p.y}`).sort());
+        expect(f.starts[k]!.map(turn).sort()).toEqual(f.starts[next]!.map((p) => `${p.x},${p.y}`).sort());
+      }
+      expect(shrineFor(s.id, 3).wispSpawns).toHaveLength(3);
+    }
+  });
+
+  it("ring the brazier with archways: pillars that block, four gaps you can walk through", () => {
+    for (const s of [...SHRINES, ...SHRINES.map((x) => shrineFor(x.id, 4))]) {
+      const b = s.board, c = b.center, R = RING.radius;
+      for (let d = -R; d <= R; d++) {
+        const gap = Math.abs(d) <= RING.gapHalf;
+        for (const p of [pt(c.x + d, c.y - R), pt(c.x + d, c.y + R), pt(c.x - R, c.y + d), pt(c.x + R, c.y + d)])
+          expect(b.tile(p), `${s.id} ${s.teams} (${p.x},${p.y})`).toBe(gap ? Tile.Floor : Tile.Wall);
+      }
     }
   });
 

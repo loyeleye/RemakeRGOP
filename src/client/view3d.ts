@@ -10,14 +10,14 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { Tile, type Board } from "../engine/board.js";
-import { PULL_REACH, PUSH_REACH, type GameSnapshot } from "../engine/game.js";
+import { PULL_REACH, PUSH_REACH, type GameSnapshot, type Guild } from "../engine/game.js";
 import type { Shrine } from "../engine/maps.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeIsland, makeWaterfall } from "./islands.js";
 import { ambientParticles, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
-export const GUILD_COLORS = ["#ffcf5a", "#b07cff"] as const;
-export const GUILD_NAMES = ["Dawn", "Dusk"] as const;
+export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff", "#6fe07a"];
+export const GUILD_NAMES: readonly string[] = ["Dawn", "Dusk", "Tide", "Grove"];
 
 const PITCH = THREE.MathUtils.degToRad(56);
 const FOV = 38;
@@ -481,7 +481,7 @@ interface PlayerRig {
   lantern: THREE.Sprite;
   beam: THREE.Mesh;
   facing: number;
-  guild: 0 | 1;
+  guild: Guild;
 }
 
 interface WispRig {
@@ -679,7 +679,7 @@ export class World {
   // -------------------------------------------------------------- the static shrine
 
   private buildShrine(shrine: Shrine) {
-    this.shrineId = shrine.id;
+    this.shrineId = shrine.id + "~" + shrine.teams;
     this.shrineGroup.clear();
     this.propSlots = [];
     for (const r of this.players.values()) this.scene.remove(r.root);
@@ -807,6 +807,8 @@ export class World {
         const wx = this.worldX(b, x);
         const wz = this.worldZ(b, y);
         seed++;
+        const onRing = !!shrine.ring && Math.max(Math.abs(x - b.center.x), Math.abs(y - b.center.y)) === shrine.ring.radius;
+        if (t === Tile.Wall && onRing) continue;
         if (t === Tile.Wall) this.addProp(th.wall, wx, wz, 2.8, 2.2, seed);
         else if (t === Tile.Rock) this.addProp(th.boulder, wx, wz, 0.9, 1.05, seed);
       }
@@ -828,6 +830,8 @@ export class World {
       m.position.y = 0.025 + ice * 0.005;
       g.add(m);
     }
+
+    if (shrine.ring) g.add(this.makeArches(b, shrine.ring, th, wallTex));
 
     // The brazier dais: stepped stone circles, the brazier model, fire, a pillar of light.
     const c = b.center;
@@ -893,6 +897,69 @@ export class World {
     rimFill.rotation.x = -Math.PI / 2;
     rimFill.position.set(cx, 0.025, cz);
     g.add(rimFill);
+  }
+
+  /**
+   * The archway ring round the brazier: a square colonnade of pillars joined by lintels, with
+   * an open arch over each gap. Matches the ring of wall tiles in the engine.
+   */
+  private makeArches(b: Board, ring: NonNullable<Shrine["ring"]>, th: Theme, wallTex: THREE.Texture) {
+    const g = new THREE.Group();
+    const R = ring.radius, gh = ring.gapHalf;
+    const cx = this.worldX(b, b.center.x), cz = this.worldZ(b, b.center.y);
+    const stone = new THREE.MeshStandardMaterial({ map: wallTex, color: new THREE.Color(th.rock).lerp(new THREE.Color("#f2ebde"), 0.6), roughness: 0.8 });
+    const rune = new THREE.MeshStandardMaterial({ color: "#ffd9a0", emissive: "#ff9a3a", emissiveIntensity: 1.6 });
+    const H = 1.7;
+    const pillarGeo = new THREE.BoxGeometry(0.62, H, 0.62);
+    const capGeo = new THREE.BoxGeometry(0.82, 0.18, 0.82);
+    const baseGeo = new THREE.BoxGeometry(0.8, 0.2, 0.8);
+    const add = (m: THREE.Mesh) => {
+      m.castShadow = m.receiveShadow = true;
+      g.add(m);
+      return m;
+    };
+    const pillar = (x: number, z: number, big = false) => {
+      const p = add(new THREE.Mesh(pillarGeo, stone));
+      p.position.set(x, H / 2, z);
+      if (big) p.scale.set(1.25, 1.15, 1.25);
+      add(new THREE.Mesh(baseGeo, stone)).position.set(x, 0.1, z);
+      add(new THREE.Mesh(capGeo, stone)).position.set(x, H * (big ? 1.15 : 1) + 0.09, z);
+    };
+    // Each side: unit vector along the side (u) and outward (n).
+    const sides: [number, number, number, number][] = [
+      [1, 0, 0, -1],
+      [0, 1, 1, 0],
+      [-1, 0, 0, 1],
+      [0, -1, -1, 0],
+    ];
+    for (const [ux, uz, nx, nz] of sides) {
+      const at = (t: number) => [cx + nx * R + ux * t, cz + nz * R + uz * t] as const;
+      // Pillars on every wall tile of this side except the shared corner at +R.
+      for (let t = -R; t < R; t++) {
+        if (Math.abs(t) <= gh) continue;
+        const [x, z] = at(t);
+        pillar(x, z, Math.abs(t) === R);
+      }
+      // Lintels along each run of pillars.
+      for (const sgn of [-1, 1]) {
+        const a = sgn * (gh + 1), e = sgn * R;
+        const [x0, z0] = at((a + e) / 2);
+        const len = Math.abs(e - a) + 0.7;
+        const lintel = add(new THREE.Mesh(new THREE.BoxGeometry(ux ? len : 0.5, 0.3, uz ? len : 0.5), stone));
+        lintel.position.set(x0, H + 0.3, z0);
+      }
+      // The arch over the gap, springing from the two pillars beside it.
+      const span = gh + 1;
+      const arch = add(new THREE.Mesh(new THREE.TorusGeometry(span, 0.28, 10, 28, Math.PI), stone));
+      const [ax, az] = at(0);
+      arch.position.set(ax, H + 0.18, az);
+      arch.scale.set(1, 0.55, 1.6);
+      arch.rotation.y = ux ? 0 : Math.PI / 2;
+      const key = add(new THREE.Mesh(new THREE.OctahedronGeometry(0.2), rune));
+      key.position.set(ax, H + 0.18 + span * 0.55, az);
+      key.castShadow = false;
+    }
+    return g;
   }
 
   private addProp(kind: PropKind, x: number, z: number, height: number, footprint: number, seed: number) {
@@ -983,7 +1050,7 @@ export class World {
 
   // -------------------------------------------------------------- players and wisps
 
-  private makePlayer(guild: 0 | 1, flame: string): PlayerRig {
+  private makePlayer(guild: Guild, flame: string): PlayerRig {
     const root = new THREE.Group();
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.36, 0.46, 40),
@@ -1015,7 +1082,8 @@ export class World {
   }
 
   private dressPlayer(rig: PlayerRig) {
-    const kind: ModelName = rig.guild === 0 ? "dawn" : "dusk";
+    // Tide wears Dusk's robe and Grove wears Dawn's, recoloured below.
+    const kind: ModelName = rig.guild === 0 || rig.guild === 3 ? "dawn" : "dusk";
     if (rig.body && (rig.body.userData.real || !models[kind])) return;
     if (rig.body) rig.root.remove(rig.body);
     const model = models[kind];
@@ -1024,12 +1092,30 @@ export class World {
       body = model.clone();
       body.scale.multiplyScalar(1.8);
       body.userData.real = true;
+      if (rig.guild >= 2) {
+        // Re-dye the borrowed robe in this guild's colour.
+        const dye = new THREE.Color(GUILD_COLORS[rig.guild]);
+        body.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          const mats = (Array.isArray(m.material) ? m.material : [m.material]).map((mt) => {
+            const c = mt.clone() as THREE.MeshStandardMaterial;
+            if (c.color) {
+              const hsl = { h: 0, s: 0, l: 0 };
+              c.color.getHSL(hsl);
+              if (hsl.s > 0.15) c.color.lerp(dye.clone().multiplyScalar(Math.max(0.35, hsl.l * 1.6)), 0.75);
+            }
+            return c;
+          });
+          m.material = Array.isArray(m.material) ? mats : mats[0]!;
+        });
+      }
     } else {
       // Stand-in: a robed cone with a hood.
       body = new THREE.Group();
-      const robe = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.3, 16), new THREE.MeshStandardMaterial({ color: GUILD_COLORS[rig.guild], roughness: 0.7 }));
+      const robe = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.3, 16), new THREE.MeshStandardMaterial({ color: GUILD_COLORS[rig.guild]!, roughness: 0.7 }));
       robe.position.y = 0.65;
-      const hood = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), new THREE.MeshStandardMaterial({ color: rig.guild === 0 ? "#c79a3a" : "#4a2a7a" }));
+      const hood = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), new THREE.MeshStandardMaterial({ color: ["#c79a3a", "#4a2a7a", "#1f6f8a", "#2f7a3a"][rig.guild]! }));
       hood.position.y = 1.3;
       for (const m of [robe, hood]) m.castShadow = true;
       body.add(robe, hood);
@@ -1039,8 +1125,8 @@ export class World {
     rig.root.add(body);
   }
 
-  private makeWisp(guild: 0 | 1): WispRig {
-    const col = GUILD_COLORS[guild];
+  private makeWisp(guild: Guild): WispRig {
+    const col = GUILD_COLORS[guild]!;
     const root = new THREE.Group();
     const core = new THREE.Mesh(
       new THREE.SphereGeometry(0.24, 24, 16),
@@ -1063,7 +1149,7 @@ export class World {
 
   render(st: DrawState) {
     const b = st.shrine.board;
-    if (st.shrine.id !== this.shrineId) this.buildShrine(st.shrine);
+    if (st.shrine.id + "~" + st.shrine.teams !== this.shrineId) this.buildShrine(st.shrine);
     this.cam.update();
     const time = st.now / 1000;
     for (const u of this.timeUniforms) u.value = time;
@@ -1207,7 +1293,7 @@ export function drawOverlay(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     g.fillStyle = "rgba(10,6,18,0.55)";
     roundRect(g, p.x - tw / 2, p.y - fs - 4, tw, fs + 8, 6);
     g.fill();
-    g.fillStyle = GUILD_COLORS[pl.guild];
+    g.fillStyle = GUILD_COLORS[pl.guild]!;
     g.fillText(label, p.x, p.y);
   }
 }
@@ -1228,13 +1314,13 @@ export function drawMinimap(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
       g.fillRect(rect.x + x * k, rect.y + y * k, Math.ceil(k), Math.ceil(k));
     }
   for (const w of st.snap.wisps) {
-    g.fillStyle = GUILD_COLORS[w.guild];
+    g.fillStyle = GUILD_COLORS[w.guild]!;
     g.beginPath();
     g.arc(rect.x + (w.x + 0.5) * k, rect.y + (w.y + 0.5) * k, Math.max(2, k * 0.7), 0, Math.PI * 2);
     g.fill();
   }
   for (const p of st.snap.players) {
-    g.fillStyle = p.id === st.me ? "#fff" : GUILD_COLORS[p.guild];
+    g.fillStyle = p.id === st.me ? "#fff" : GUILD_COLORS[p.guild]!;
     g.fillRect(rect.x + p.x * k, rect.y + p.y * k, Math.max(2, k), Math.max(2, k));
   }
   // Where the camera looks.

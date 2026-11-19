@@ -23,7 +23,9 @@ export const WISPS_PER_GUILD = 2;
 /** Ticks a wisp sits on the rim before it's banked. */
 export const BANK_TICKS = 2;
 
-export type Guild = 0 | 1; // 0 = Dawn, 1 = Dusk
+/** 0 = Dawn, 1 = Dusk, 2 = Tide, 3 = Grove. Two-team rounds use only Dawn and Dusk. */
+export type Guild = 0 | 1 | 2 | 3;
+export const MAX_TEAMS = 4;
 export type StaffMode = "pull" | "push";
 
 export type Action =
@@ -92,7 +94,8 @@ export interface BankEvent {
 
 export interface GameSnapshot {
   tick: number;
-  scores: [number, number];
+  /** One score per team in the round. */
+  scores: number[];
   wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null }[];
   players: {
     id: number;
@@ -164,7 +167,7 @@ export interface JoinSpec {
 export class Game {
   readonly board: Board;
   tick = 0;
-  scores: [number, number] = [0, 0];
+  scores: number[];
   wisps: Wisp[] = [];
   players: Lamplighter[] = [];
   banks: BankEvent[] = [];
@@ -179,8 +182,9 @@ export class Game {
   ) {
     this.board = shrine.board;
     this.rng = new Rng(seed);
+    this.scores = Array<number>(this.teams).fill(0);
     const used = new Set<string>();
-    for (let g = 0 as Guild; g <= 1; g = (g + 1) as Guild) {
+    for (let g = 0 as Guild; g < this.teams; g = (g + 1) as Guild) {
       for (let i = 0; i < wispsPerGuild; i++) {
         const w: Wisp = {
           id: this.wisps.length,
@@ -196,15 +200,15 @@ export class Game {
         this.placeWisp(w, used);
         this.wisps.push(w);
       }
-      if (g === 1) break;
     }
-    const seen: [number, number] = [0, 0];
+    const seen = [0, 0, 0, 0];
     roster.forEach((r, order) => {
       const starts = shrine.starts[r.guild];
-      const base = starts[seen[r.guild] % starts.length]!;
+      if (!starts) throw new Error(`guild ${r.guild} has no seat on this shrine (${this.teams} teams)`);
+      const base = starts[seen[r.guild]! % starts.length]!;
       // Spread team-mates out around their start tiles.
-      const spot = this.nearestFree(base, Math.floor(seen[r.guild] / starts.length));
-      seen[r.guild]++;
+      const spot = this.nearestFree(base, Math.floor(seen[r.guild]! / starts.length));
+      seen[r.guild]!++;
       this.players.push({
         id: r.id,
         order,
@@ -224,6 +228,11 @@ export class Game {
         slipped: false,
       });
     });
+  }
+
+  /** Teams in this round: as many as the shrine has spawn sets (2 or, on a four-way island, up to 4). */
+  get teams() {
+    return this.shrine.teams;
   }
 
   get finished() {
@@ -274,7 +283,7 @@ export class Game {
         }
       }
       if (w.rimTicks >= BANK_TICKS) {
-        this.scores[w.guild]++;
+        this.scores[w.guild]!++;
         this.banks.push({ tick: this.tick, wisp: w.id, guild: w.guild });
         this.placeWisp(w, new Set(this.wisps.filter((o) => o !== w).map((o) => key(o.pos))));
         w.prev = w.pos;
@@ -301,7 +310,7 @@ export class Game {
   }
 
   private placeWisp(w: Wisp, taken: Set<string>) {
-    const spawns = this.shrine.wispSpawns[w.guild];
+    const spawns = this.shrine.wispSpawns[w.guild]!;
     const free = spawns.filter((s) => !taken.has(key(s)));
     const pool = free.length > 0 ? free : spawns;
     w.pos = pool[this.rng.int(pool.length)]!;
@@ -439,7 +448,7 @@ export class Game {
   snapshot(): GameSnapshot {
     return {
       tick: this.tick,
-      scores: [this.scores[0], this.scores[1]],
+      scores: [...this.scores],
       wisps: this.wisps.map((w) => ({
         id: w.id,
         guild: w.guild,

@@ -1,9 +1,9 @@
 # Lanternfall
 
-Two lamplighter guilds, **Dawn** and **Dusk**, steer drifting wisps into a shrine's brazier with
+Up to four lamplighter guilds, **Dawn**, **Dusk**, **Tide** and **Grove**, steer drifting wisps into a shrine's brazier with
 lodestone staffs that pull or push. The shrine is a floating stone plaza above a sea of cloud
 at dusk, rendered in 3D with Three.js and lit by the brazier's fire and the wisps' own glow. Every 0.6 s is one tick, and a round lasts 200 ticks (about
-2 minutes). You can play 1v1 up to 4v4 in a browser on a phone or a computer, and fill empty
+2 minutes). You can play with 2, 3 or 4 guilds of up to 4 each in a browser on a phone or a computer, and fill empty
 seats with bots.
 
 The game is original. Its tick-based engine is inspired by the rules of RuneScape's Great Orb

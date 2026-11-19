@@ -1,11 +1,12 @@
-// A simple lamplighter bot: stands on the brazier rim across from a wisp and pulls it over
-// the rim (a pull stops one tile short of you, so pulling from the near side would park the
-// wisp just outside); a far wisp is first pulled closer from the near side. With `pushy`
+// A simple lamplighter bot. For its nearest wisp it tries every tile it could pull from,
+// plays the pull forward (a pull stops one tile short of you, and the archway pillars stop
+// wisps and sight), and walks to the tile that brings the wisp closest to banking soonest.
+// Usually that's two pulls: up to a gap in the archways, then through it from across the brazier. With `pushy`
 // set it also shoves rival wisps that get close to the rim.
 // Used for practice rivals, tests and (later) story-mode opponents.
 
-import { Mover, cheb, pt, type Pt } from "./board.js";
-import type { Command, Game, Wisp } from "./game.js";
+import { Board, DIRS, Mover, cheb, pt, type Pt } from "./board.js";
+import { PULL_REACH, flingOffset, type Command, type Game, type Wisp } from "./game.js";
 
 export interface BotStyle {
   /** Push rival wisps within this many tiles of the brazier rim (0 = never). */
@@ -43,38 +44,126 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
   }
   if (rand() < style.sloppiness) return fixMode ? { toggleMode: true } : null;
 
+  const dist = bankDistances(game.board);
+  const W = game.board.width;
   const target = game.wisps
     .filter((w) => w.guild === me.guild && live(w))
-    .sort((a, b) => cheb(a.pos, c) - cheb(b.pos, c))[0];
+    .sort((a, b) => (dist[a.pos.y * W + a.pos.x] ?? 0) - (dist[b.pos.y * W + b.pos.x] ?? 0))[0];
   if (!target) return fixMode ? { toggleMode: true, action: { kind: "idle" } } : null;
 
-  // Across the brazier if the wisp will be in reach from there, else the near side.
-  const far = cheb(target.pos, c) + 2 <= 10;
-  const spot = rimSpot(game, far ? pt(2 * c.x - target.pos.x, 2 * c.y - target.pos.y) : target.pos);
-  const atSpot = spot && me.pos.x === spot.x && me.pos.y === spot.y;
-  if (spot && !atSpot && me.action.kind !== "walk") {
+  const spot = planSpot(game, me.id, me.pos, target);
+  if (!spot) return { action: { kind: "staff", wisp: target.id }, toggleMode: fixMode || undefined };
+  const atSpot = me.pos.x === spot.x && me.pos.y === spot.y;
+  if (!atSpot) {
+    if (me.action.kind === "walk" && me.action.to.x === spot.x && me.action.to.y === spot.y) return fixMode ? { toggleMode: true } : null;
     return { action: { kind: "walk", to: spot }, toggleMode: fixMode || undefined };
   }
-  if (spot && !atSpot) return fixMode ? { toggleMode: true } : null;
   return { action: { kind: "staff", wisp: target.id }, toggleMode: fixMode || undefined };
 }
 
-/** The walkable tile 2 from the brazier centre that faces `toward` best. */
-function rimSpot(game: Game, toward: Pt): Pt | null {
-  const c = game.board.center;
-  let best: Pt | null = null;
-  let bestD = Infinity;
-  for (let dy = -2; dy <= 2; dy++)
-    for (let dx = -2; dx <= 2; dx++) {
-      if (Math.max(Math.abs(dx), Math.abs(dy)) !== 2) continue;
-      const p = pt(c.x + dx, c.y + dy);
-      if (!game.board.passable(p, Mover.Walker)) continue;
-      const d = (p.x - toward.x) ** 2 + (p.y - toward.y) ** 2;
-      if (d < bestD) {
-        bestD = d;
-        best = p;
+const UNREACHABLE = 0x7fff;
+const bankCache = new WeakMap<Board, Int16Array>();
+
+/** For each tile, how many wisp steps it is from the brazier rim (going round the archways). */
+export function bankDistances(board: Board): Int16Array {
+  const cached = bankCache.get(board);
+  if (cached) return cached;
+  const W = board.width, H = board.height;
+  const d = new Int16Array(W * H).fill(UNREACHABLE);
+  const q: Pt[] = [];
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++)
+      if (board.inBankZone(pt(x, y))) {
+        d[y * W + x] = 0;
+        q.push(pt(x, y));
       }
+  for (let i = 0; i < q.length; i++) {
+    const p = q[i]!;
+    for (const dir of DIRS) {
+      const n = pt(p.x + dir.x, p.y + dir.y);
+      if (!board.inside(n) || d[n.y * W + n.x]! !== UNREACHABLE) continue;
+      // A wisp at n could step onto p.
+      if (!board.canStep(n, -dir.x, -dir.y, Mover.Wisp)) continue;
+      d[n.y * W + n.x] = d[p.y * W + p.x]! + 1;
+      q.push(n);
     }
-  return best;
+  }
+  bankCache.set(board, d);
+  return d;
 }
 
+/** Where the wisp ends up if pulled from `from` until it stops, and how many ticks it takes. */
+export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30): { end: Pt; ticks: number } {
+  let w = start;
+  for (let t = 1; t <= maxTicks; t++) {
+    if (board.inBankZone(w)) return { end: w, ticks: t };
+    if (cheb(from, w) > PULL_REACH || !board.canSee(from, w)) return { end: w, ticks: t };
+    const off = flingOffset(from, w, "pull");
+    if (!off.x && !off.y) return { end: w, ticks: t };
+    let dx = Math.sign(off.x), dy = Math.sign(off.y);
+    if (!board.canStep(w, dx, dy, Mover.Wisp)) {
+      if (dx !== 0 && board.canStep(w, dx, 0, Mover.Wisp)) dy = 0;
+      else if (dy !== 0 && board.canStep(w, 0, dy, Mover.Wisp)) dx = 0;
+      else return { end: w, ticks: t };
+    }
+    w = pt(w.x + dx, w.y + dy);
+  }
+  return { end: w, ticks: maxTicks };
+}
+
+interface Plan {
+  wisp: number;
+  at: number;
+  spot: Pt | null;
+}
+const plans = new WeakMap<Game, Map<number, Plan>>();
+
+/**
+ * The tile to pull this wisp from: the one that gets it closest to banking soonest, counting
+ * the walk there. Kept until the wisp moves.
+ */
+function planSpot(game: Game, id: number, me: Pt, wisp: Wisp): Pt | null {
+  const board = game.board;
+  const W = board.width;
+  let mine = plans.get(game);
+  if (!mine) plans.set(game, (mine = new Map()));
+  const at = wisp.pos.y * W + wisp.pos.x;
+  const old = mine.get(id);
+  if (old && old.wisp === wisp.id && old.at === at) return old.spot;
+
+  const bank = bankDistances(board);
+  // Walking distance from me to every tile.
+  const walk = new Int16Array(W * board.height).fill(UNREACHABLE);
+  walk[me.y * W + me.x] = 0;
+  const q: Pt[] = [me];
+  for (let i = 0; i < q.length; i++) {
+    const p = q[i]!;
+    for (const d of DIRS) {
+      if (!board.canStep(p, d.x, d.y, Mover.Walker)) continue;
+      const n = pt(p.x + d.x, p.y + d.y);
+      if (walk[n.y * W + n.x]! !== UNREACHABLE) continue;
+      walk[n.y * W + n.x] = walk[p.y * W + p.x]! + 1;
+      q.push(n);
+    }
+  }
+  const now = bank[at]!;
+  let best: Pt | null = null;
+  let bestCost = Infinity;
+  for (let dy = -PULL_REACH; dy <= PULL_REACH; dy++)
+    for (let dx = -PULL_REACH; dx <= PULL_REACH; dx++) {
+      const s = pt(wisp.pos.x + dx, wisp.pos.y + dy);
+      if (!board.inside(s) || (dx === 0 && dy === 0)) continue;
+      const wk = walk[s.y * W + s.x]!;
+      if (wk === UNREACHABLE || !board.canSee(s, wisp.pos)) continue;
+      const { end, ticks } = simulatePull(board, s, wisp.pos);
+      const left = bank[end.y * W + end.x]!;
+      if (left >= now) continue;
+      const cost = wk + ticks + left * 2.5;
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = s;
+      }
+    }
+  mine.set(id, { wisp: wisp.id, at, spot: best });
+  return best;
+}

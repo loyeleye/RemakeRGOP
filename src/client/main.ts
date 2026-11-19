@@ -2,7 +2,7 @@
 
 import type { Pt } from "../engine/board.js";
 import { ROUND_TICKS, TICK_MS, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
-import { SHRINES, shrineById } from "../engine/maps.js";
+import { SHRINES, shrineById, shrineFor } from "../engine/maps.js";
 import { FLAMES, FLAME_COLORS, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
@@ -131,7 +131,8 @@ function renderLobby() {
   const host = room.host === me;
   $("room-code").textContent = practice ? "Practice" : room.code;
   $("share").hidden = practice;
-  for (const g of [0, 1] as Guild[]) {
+  for (const g of [0, 1, 2, 3] as Guild[]) {
+    document.getElementById(`team-${g}`)?.toggleAttribute("hidden", g >= room.teams);
     const ul = $(`guild-${g}`);
     ul.replaceChildren(
       ...room.players
@@ -159,6 +160,9 @@ function renderLobby() {
       return b;
     }),
   );
+  const teams = $<HTMLSelectElement>("teams");
+  teams.disabled = !host;
+  teams.value = String(room.teams);
   const sel = $<HTMLSelectElement>("shrine");
   sel.disabled = !host;
   sel.value = room.shrine;
@@ -170,20 +174,27 @@ function renderLobby() {
 
 function renderResults() {
   if (!room?.lastScores) return;
-  const [d, k] = room.lastScores;
+  const scores = room.lastScores;
   const mine = room.players.find((p) => p.id === me)?.guild;
-  const winner = d === k ? null : d > k ? 0 : 1;
+  const top = Math.max(...scores);
+  const leaders = scores.flatMap((s, g) => (s === top ? [g] : []));
+  const winner = leaders.length === 1 ? leaders[0]! : null;
   $("result-title").textContent =
-    winner === null ? "A tie at the brazier" : `${GUILD_NAMES[winner]} wins` + (practice ? "" : mine === winner ? " — well lit!" : "");
-  $("result-score").innerHTML = `<b style="color:${GUILD_COLORS[0]}">${d}</b> – <b style="color:${GUILD_COLORS[1]}">${k}</b>`;
+    winner === null
+      ? scores.length === 2 ? "A tie at the brazier" : `A tie: ${leaders.map((g) => GUILD_NAMES[g]).join(" and ")}`
+      : `${GUILD_NAMES[winner]} wins` + (practice ? "" : mine === winner ? " — well lit!" : "");
+  $("result-score").innerHTML = scores.map((s, g) => `<b style="color:${GUILD_COLORS[g]}">${s}</b>`).join(" – ");
   $("again").hidden = room.host !== me;
 }
 
 function renderHud() {
   if (!room) return;
   const s = snap;
-  $("score-0").textContent = String(s?.scores[0] ?? 0);
-  $("score-1").textContent = String(s?.scores[1] ?? 0);
+  for (let g = 0; g < 4; g++) {
+    const el = $(`score-${g}`);
+    el.hidden = g >= room.teams;
+    el.textContent = String(s?.scores[g] ?? 0);
+  }
   const left = s ? ROUND_TICKS - s.tick : ROUND_TICKS;
   $("ticks").textContent = room.phase === "countdown" ? `Starts in ${room.countdown}` : `${left} ticks · ${fmtTime((left * tickMs) / 1000)}`;
   const p = s?.players.find((q) => q.id === me);
@@ -246,7 +257,7 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
   }
   if (best) return { action: { kind: "staff", wisp: best.id }, wisp: best.id };
   const tile: Pt = { x: Math.floor(t.x), y: Math.floor(t.y) };
-  const board = shrineById(room.shrine).board;
+  const board = shrineFor(room.shrine, room.teams).board;
   if (!board.inside(tile)) return null;
   // A tap on a wall or pool still walks as close to it as the path allows.
   return { action: { kind: "walk", to: tile }, wisp: null };
@@ -300,7 +311,7 @@ const endPointer = (e: PointerEvent) => {
   // Mini-map tap: pan there.
   const r = minimapRect;
   if (cam.compact && x >= r.x && y >= r.y && x <= r.x + r.w && y <= r.y + r.h && room) {
-    const b = shrineById(room.shrine).board;
+    const b = shrineFor(room.shrine, room.teams).board;
     cam.cx = ((x - r.x) / r.w) * b.width;
     cam.cy = ((y - r.y) / r.h) * b.height;
     cam.follow = false;
@@ -379,10 +390,15 @@ $("join-form").onsubmit = (e) => {
   connectOnline(code, playerName());
 };
 $("practice").onclick = () => connectPractice(playerName());
-$("join-0").onclick = () => link?.send({ t: "guild", guild: 0 });
-$("join-1").onclick = () => link?.send({ t: "guild", guild: 1 });
 $("start").onclick = () => link?.send({ t: "start" });
-for (const g of [0, 1] as Guild[]) {
+$<HTMLSelectElement>("teams").onchange = (e) => {
+  const n = Number((e.target as HTMLSelectElement).value);
+  link?.send({ t: "teams", teams: n });
+  // Practice: give each new rival guild a bot.
+  if (practice && room) for (let g = room.teams; g < n; g++) link?.send({ t: "bot", guild: g as Guild });
+};
+for (const g of [0, 1, 2, 3] as Guild[]) {
+  $(`join-${g}`).onclick = () => link?.send({ t: "guild", guild: g });
   $(`bot-${g}`).onclick = () => link?.send({ t: "bot", guild: g, hard: $<HTMLInputElement>("hard-bots").checked });
   $(`unbot-${g}`).onclick = () => link?.send({ t: "bot", guild: g, remove: true });
 }
@@ -433,7 +449,7 @@ resize();
 function frame(now: number) {
   requestAnimationFrame(frame);
   if (!room || room.phase === "lobby" || !snap) return;
-  const shrine = shrineById(room.shrine);
+  const shrine = shrineFor(room.shrine, room.teams);
   if (!world) {
     world = new World(canvas, cam);
     world.resize(cam.w, cam.h, window.devicePixelRatio || 1);

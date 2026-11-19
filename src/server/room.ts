@@ -3,8 +3,8 @@
 // both hand it a `send` function per connection and feed it parsed messages.
 
 import { BOT_EASY, BOT_FAIR, botCommand, type BotStyle } from "../engine/bot.js";
-import { COUNTDOWN_TICKS, Game, TICK_MS, type Action, type Guild } from "../engine/game.js";
-import { SHRINES, shrineById } from "../engine/maps.js";
+import { COUNTDOWN_TICKS, Game, MAX_TEAMS, TICK_MS, type Action, type Guild } from "../engine/game.js";
+import { SHRINES, shrineById, shrineFor } from "../engine/maps.js";
 import { FLAMES, type ClientMsg, type Flame, type LobbyPlayer, type Phase, type RoomView, type ServerMsg } from "../engine/protocol.js";
 
 export const MAX_PER_GUILD = 4;
@@ -38,7 +38,8 @@ export class Room {
   private countdown = 0;
   private game: Game | null = null;
   private stop: (() => void) | null = null;
-  private lastScores: [number, number] | null = null;
+  private teams = 2;
+  private lastScores: number[] | null = null;
 
   constructor(
     readonly code: string,
@@ -96,11 +97,11 @@ export class Room {
         return null;
       }
       const counts = this.guildCounts();
-      if (counts[0] >= MAX_PER_GUILD && counts[1] >= MAX_PER_GUILD) {
-        send({ t: "error", message: "This room is full (4 per guild)." });
+      const guild = this.smallestGuild();
+      if (counts[guild]! >= MAX_PER_GUILD) {
+        send({ t: "error", message: `This room is full (${MAX_PER_GUILD} per guild).` });
         return null;
       }
-      const guild: Guild = counts[0] <= counts[1] ? 0 : 1;
       seat = {
         id: this.nextId++,
         name: name || `Lamplighter ${this.nextId - 1}`,
@@ -123,8 +124,8 @@ export class Room {
   private handle(seat: Seat, msg: ClientMsg) {
     switch (msg.t) {
       case "guild":
-        if (this.phase !== "lobby" || (msg.guild !== 0 && msg.guild !== 1)) return;
-        if (this.guildCounts()[msg.guild] >= MAX_PER_GUILD && seat.guild !== msg.guild) return;
+        if (this.phase !== "lobby" || !this.validGuild(msg.guild)) return;
+        if (this.guildCounts()[msg.guild]! >= MAX_PER_GUILD && seat.guild !== msg.guild) return;
         seat.guild = msg.guild;
         return this.broadcastRoom();
       case "flame":
@@ -135,9 +136,26 @@ export class Room {
         if (seat.id !== this.host || this.phase !== "lobby") return;
         this.shrine = shrineById(String(msg.shrine)).id;
         return this.broadcastRoom();
+      case "teams": {
+        if (seat.id !== this.host || this.phase !== "lobby") return;
+        const n = Number(msg.teams);
+        if (!Number.isInteger(n) || n < 2 || n > MAX_TEAMS) return;
+        this.teams = n;
+        // Anyone on a team that's gone moves to the smallest team left (bots that don't fit go).
+        for (const s of [...this.seats]) {
+          if (s.guild < n) continue;
+          const g = this.smallestGuild();
+          if (this.guildCounts()[g]! >= MAX_PER_GUILD) {
+            if (s.bot) this.seats = this.seats.filter((o) => o !== s);
+            else s.guild = g;
+          } else s.guild = g;
+        }
+        return this.broadcastRoom();
+      }
       case "bot": {
         if (seat.id !== this.host || this.phase !== "lobby") return;
-        const g = msg.guild === 1 ? 1 : 0;
+        if (!this.validGuild(msg.guild)) return;
+        const g = msg.guild;
         if (msg.remove) {
           const bots = this.seats.filter((s) => s.bot && s.guild === g);
           const last = bots[bots.length - 1];
@@ -165,7 +183,7 @@ export class Room {
 
   /** Adds a computer lamplighter to a guild, if there's room. */
   addBot(guild: Guild, style: BotStyle) {
-    if (this.guildCounts()[guild] >= MAX_PER_GUILD) return;
+    if (!this.validGuild(guild) || this.guildCounts()[guild]! >= MAX_PER_GUILD) return;
     const id = this.nextId++;
     this.seats.push({
       id,
@@ -183,7 +201,7 @@ export class Room {
     const connected = this.seats.filter((s) => s.connected);
     if (connected.length === 0) return;
     this.game = new Game(
-      shrineById(this.shrine),
+      shrineFor(this.shrine, this.teams),
       connected.map((s) => ({ id: s.id, guild: s.guild, name: s.name })),
       this.seed(),
     );
@@ -236,6 +254,7 @@ export class Room {
       phase: this.phase,
       host: this.host,
       shrine: this.shrine,
+      teams: this.teams,
       players: this.seats.map(({ id, name, guild, flame, connected, bot }) => ({ id, name, guild, flame, connected, bot: !!bot })),
       countdown: this.countdown,
       lastScores: this.lastScores,
@@ -252,10 +271,19 @@ export class Room {
     if (!live.some((s) => s.id === this.host)) this.host = live[0]?.id ?? null;
   }
 
-  private guildCounts(): [number, number] {
-    const c: [number, number] = [0, 0];
-    for (const s of this.seats) c[s.guild]++;
+  private guildCounts(): number[] {
+    const c = Array<number>(this.teams).fill(0);
+    for (const s of this.seats) if (s.guild < this.teams) c[s.guild]!++;
     return c;
+  }
+
+  private smallestGuild(): Guild {
+    const c = this.guildCounts();
+    return c.indexOf(Math.min(...c)) as Guild;
+  }
+
+  private validGuild(g: unknown): g is Guild {
+    return Number.isInteger(g) && (g as number) >= 0 && (g as number) < this.teams;
   }
 }
 

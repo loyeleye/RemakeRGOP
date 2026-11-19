@@ -12,7 +12,7 @@
   <main id="home" class="panel">
     <img class="logo" src="sprites/brazier.png" alt="" />
     <h1>Lanternfall</h1>
-    <p class="tag">Two lamplighter guilds. One shrine brazier. Pull your wisps in, push theirs away.</p>
+    <p class="tag">Up to four lamplighter guilds. One shrine brazier. Pull your wisps in, push theirs away.</p>
     <label class="field">Your name <input id="name" maxlength="16" autocomplete="nickname" placeholder="Lamplighter" /></label>
     <button id="create" class="big">Create a room</button>
     <form id="join-form" class="row">
@@ -52,8 +52,21 @@
         <button id="join-1" class="small">Join Dusk</button>
         <div class="row host-only"><button id="bot-1" class="ghost small grow">+ Bot</button><button id="unbot-1" class="ghost small" aria-label="Remove a bot">−</button></div>
       </section>
+      <section class="guild tide" id="team-2" hidden>
+        <h2>Tide</h2>
+        <ul id="guild-2"></ul>
+        <button id="join-2" class="small">Join Tide</button>
+        <div class="row host-only"><button id="bot-2" class="ghost small grow">+ Bot</button><button id="unbot-2" class="ghost small" aria-label="Remove a bot">−</button></div>
+      </section>
+      <section class="guild grove" id="team-3" hidden>
+        <h2>Grove</h2>
+        <ul id="guild-3"></ul>
+        <button id="join-3" class="small">Join Grove</button>
+        <div class="row host-only"><button id="bot-3" class="ghost small grow">+ Bot</button><button id="unbot-3" class="ghost small" aria-label="Remove a bot">−</button></div>
+      </section>
     </div>
     <div class="field">Lantern flame <div id="flames" class="flames"></div></div>
+    <label class="field">Guilds <select id="teams"><option value="2">2 guilds</option><option value="3">3 guilds</option><option value="4">4 guilds</option></select></label>
     <label class="field">Shrine <select id="shrine"></select></label>
     <label class="check host-only"><input type="checkbox" id="hard-bots" /> Sharper bots (they push your wisps away)</label>
     <p id="shrine-blurb" class="blurb"></p>
@@ -67,7 +80,9 @@
     <header class="hud">
       <button id="leave2" class="ghost small" aria-label="Leave">✕</button>
       <span class="score dawn" id="score-0">0</span>
+      <span class="score tide" id="score-2" hidden>0</span>
       <span id="ticks" class="ticks"></span>
+      <span class="score grove" id="score-3" hidden>0</span>
       <span class="score dusk" id="score-1">0</span>
       <button id="recenter" class="ghost small" aria-label="Centre on me">◎</button>
     </header>

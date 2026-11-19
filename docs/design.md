@@ -29,6 +29,12 @@ Pull works only on your own guild's wisps. Push works on any wisp. The usual pla
 on the rim across from a wisp and pull it over the brazier. A pull stops one tile short of
 you, so pulling from the near side parks the wisp just outside the rim.
 
+A square ring of archways stands 5 tiles out from the brazier centre on every shrine, with a
+3-tile gap on each axis. The pillars block walking, wisps and sight, so a wisp has to come in
+through a gap: usually one pull to line it up with a gap, then one from across the brazier to
+bring it through. A pusher standing in a gap is a real defence. The perfect-aim bot banks about
+6 to 10 wisps a round alone (it banked 9 to 24 before the archways and bigger islands).
+
 ## Tiles
 
 | Tile | Walk | Wisp | Sight |
@@ -68,7 +74,16 @@ drifting particles.
 
 Shrines are drawn as the northern half in ASCII (`src/engine/maps.ts`). The southern half is
 that drawing turned 180°, with Dawn and Dusk swapped, so neither guild gets the better side.
-New shrines are new drawings.
+New shrines are new drawings. The drawing is scaled up 1.5x when the shrine is built (`MAP_SCALE`):
+pools, ice and walls grow, while spawns, starts and boulders stay single tiles at their scaled
+spots. Then the archway ring is added; any spawn or start inside it moves out along its ray.
+
+**Three or four guilds** play on the shrine's four-way version (`shrineFor(id, teams)`). One
+quarter of the two-guild layout (west of the centre column, from the brazier row up) is turned
+90° three times, and Dawn's spawns and start in it become Dusk's, Tide's and Grove's in turn.
+If that quarter has fewer than two spawns, the source is turned a quarter first. The coastline
+is the wider of the shape and the shape turned 90°, so it is the same from all four sides. With
+three guilds one side stays empty.
 
 Each shrine is an island. Its `isle` setting gives a coastline: a radius per angle built from
 a base superellipse (stretched and turned as needed), big even "waves" that make the shape
@@ -81,9 +96,13 @@ exactly where you can go.
 
 ## Multiplayer
 
+- The host picks 2, 3 or 4 guilds in the lobby (`{t: "teams"}`), up to 4 lamplighters each.
+  New players join the smallest guild. Dropping to fewer guilds moves people off the guilds
+  that went; bots that don't fit leave. The room view carries `teams`, and `lastScores` has one
+  score per guild. Tide reuses Dusk's robe and Grove reuses Dawn's, re-dyed.
 - The server is authoritative. Clients send commands (`act`) whenever they like. The room
   applies the latest command per player on each tick and broadcasts a full snapshot. A snapshot
-  is small: at most 8 players and 4 wisps. Clients draw each move between the previous and
+  is small: at most 16 players and 8 wisps. Clients draw each move between the previous and
   current positions over the tick.
 - The room (`src/server/room.ts`) doesn't depend on the transport. Node + `ws` runs it locally.
   Cloudflare runs one Durable Object per room code. The browser runs it for Practice.
