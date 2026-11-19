@@ -338,6 +338,68 @@ export const THEMES: Record<string, Theme> = {
       d.tiers.forEach((t, i) => add(t.group, makeCrystals(3 + i, "#c8f0ff", i * 13, true), 0, 0, 0));
     },
   },
+  "old-bastion": {
+    name: "Bastion",
+    floor: "castle-rise",
+    grass: "#8a9a4a",
+    soil: "#8a5a3a",
+    rock: "#9a7a5a",
+    sky: { zenith: "#2a3f8a", sky: "#d98a5a", haze: "#f2c08a", below: "#7a5a8a", stars: 0 },
+    fog: "#e0a87a",
+    clouds: "#ffe2c8",
+    hemi: ["#ffe0c0", "#5a4a50", 1.1],
+    sun: ["#ffc080", 2.8],
+    exposure: 1,
+    wall: "rampart",
+    boulder: "boulder",
+    particles: "pollen",
+    scatter: (size, seed) => (seed % 3 ? makeTower(size * 0.3, seed) : makeStoneBlock(size * 0.5, seed)),
+    decorate(d) {
+      for (let i = 0; i < 6; i++) {
+        const a = Math.PI * (1.08 + (i / 5) * 0.84);
+        const p = d.ring(a, 1.6);
+        add(d.group, makeTower(1.1 + (i % 2) * 0.4, i), p.x, 0, p.z);
+      }
+      for (let i = 0; i < 14; i++) {
+        const p = d.ring((i / 14) * Math.PI * 2 + 0.2, 1);
+        add(d.group, makeRampart(i + 7), p.x, 0, p.z);
+      }
+      d.tiers.forEach((t, i) => {
+        add(t.group, makeTower(0.9, i + 3), 0, 0, 0);
+        for (let k = 0; k < 3; k++) add(t.group, makeStoneBlock(0.7 + k * 0.3, i * 5 + k), Math.cos(k * 2.1) * t.r * 0.4, 0, Math.sin(k * 2.1) * t.r * 0.4);
+      });
+    },
+  },
+  "sunwell-terrace": {
+    name: "Sunwell",
+    floor: "tidepool-steps",
+    grass: "#c8b860",
+    soil: "#c08a50",
+    rock: "#d8b888",
+    sky: { zenith: "#3a62c8", sky: "#8ab8f0", haze: "#fbe6b8", below: "#7a90d8", stars: 0 },
+    fog: "#f0dcb0",
+    clouds: "#fff6e0",
+    hemi: ["#fff4dc", "#8a7a50", 1.25],
+    sun: ["#fff0c8", 3.2],
+    exposure: 1.02,
+    wall: "monolith",
+    boulder: "boulder",
+    particles: "sparkles",
+    tint: "#f0dcc0",
+    scatter: (size, seed) => (seed % 2 ? makePalm(size * 1.3, seed) : makeStoneBlock(size * 0.5, seed)),
+    decorate(d) {
+      for (let i = 0; i < 10; i++) {
+        const a = Math.PI * (1.04 + (i / 9) * 0.92);
+        const p = d.ring(a, 1.3 + (i % 2) * 0.6);
+        if (i % 3 === 0) add(d.group, makeStoneBlock(1.6, i), p.x, 0, p.z);
+        else add(d.group, makePalm(2.4 + (i % 3) * 0.5, i), p.x, 0, p.z);
+      }
+      d.tiers.forEach((t, i) => {
+        pond(t.group, t.r * 0.5, "#4fc0e8");
+        add(t.group, makePalm(2.2, i + 9), t.r * 0.4, 0, -t.r * 0.2);
+      });
+    },
+  },
 };
 
 export function themeFor(id: string): Theme {

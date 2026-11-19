@@ -2,7 +2,7 @@
 
 import type { Pt } from "../engine/board.js";
 import { ROUND_TICKS, TICK_MS, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
-import { SHRINES, shrineById, shrineFor } from "../engine/maps.js";
+import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
 import { FLAMES, FLAME_COLORS, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
@@ -166,7 +166,8 @@ function renderLobby() {
   const sel = $<HTMLSelectElement>("shrine");
   sel.disabled = !host;
   sel.value = room.shrine;
-  $("shrine-blurb").textContent = shrineById(room.shrine).blurb;
+  const picked = shrineById(room.shrine);
+  $("shrine-blurb").textContent = `${picked.blurb} ${ringNote(picked.rings)}`;
   $("start").hidden = !host;
   document.querySelectorAll<HTMLElement>(".host-only").forEach((el) => (el.hidden = !host));
   $("wait-host").hidden = host;

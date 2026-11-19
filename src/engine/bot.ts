@@ -6,7 +6,7 @@
 // Used for practice rivals, tests and (later) story-mode opponents.
 
 import { Board, DIRS, Mover, cheb, pt, type Pt } from "./board.js";
-import { PULL_REACH, flingOffset, type Command, type Game, type Wisp } from "./game.js";
+import { PULL_REACH, flingOffset, slideStep, type Command, type Game, type Wisp } from "./game.js";
 
 export interface BotStyle {
   /** Push rival wisps within this many tiles of the brazier rim (0 = never). */
@@ -40,7 +40,8 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
   // walking into reach of it.
   if (me.action.kind === "staff" && !fixMode) {
     const w = game.wisps[me.action.wisp];
-    if (w && w.guild === me.guild && live(w) && !me.slipped && (w.target || me.beam !== w.id)) return null;
+    const stuck = me.beam === w?.id && w && w.prev.x === w.pos.x && w.prev.y === w.pos.y;
+    if (w && w.guild === me.guild && live(w) && !me.slipped && !stuck && (w.target || me.beam !== w.id)) return null;
   }
   if (rand() < style.sloppiness) return fixMode ? { toggleMode: true } : null;
 
@@ -100,13 +101,9 @@ export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30): 
     if (cheb(from, w) > PULL_REACH || !board.canSee(from, w)) return { end: w, ticks: t };
     const off = flingOffset(from, w, "pull");
     if (!off.x && !off.y) return { end: w, ticks: t };
-    let dx = Math.sign(off.x), dy = Math.sign(off.y);
-    if (!board.canStep(w, dx, dy, Mover.Wisp)) {
-      if (dx !== 0 && board.canStep(w, dx, 0, Mover.Wisp)) dy = 0;
-      else if (dy !== 0 && board.canStep(w, 0, dy, Mover.Wisp)) dx = 0;
-      else return { end: w, ticks: t };
-    }
-    w = pt(w.x + dx, w.y + dy);
+    const step = slideStep(board, w, Math.sign(off.x), Math.sign(off.y), Math.abs(off.x), Math.abs(off.y));
+    if (!step) return { end: w, ticks: t };
+    w = pt(w.x + step[0], w.y + step[1]);
   }
   return { end: w, ticks: maxTicks };
 }

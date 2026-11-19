@@ -29,11 +29,24 @@ Pull works only on your own guild's wisps. Push works on any wisp. The usual pla
 on the rim across from a wisp and pull it over the brazier. A pull stops one tile short of
 you, so pulling from the near side parks the wisp just outside the rim.
 
-A square ring of archways stands 5 tiles out from the brazier centre on every shrine, with a
-3-tile gap on each axis. The pillars block walking, wisps and sight, so a wisp has to come in
-through a gap: usually one pull to line it up with a gap, then one from across the brazier to
-bring it through. A pusher standing in a gap is a real defence. The perfect-aim bot banks about
-6 to 10 wisps a round alone (it banked 9 to 24 before the archways and bigger islands).
+Every brazier stands inside a square ring of archways (`rings` on each shrine, `ringWalls` in
+`maps.ts`). Pillars block walking, wisps and sight, so a wisp has to come in through a gap. Each
+style is drawn along one side and turned 90° for the others, so it is fair to 2 or 4 guilds:
+
+| Style | Layout | Plays | Islands |
+|---|---|---|---|
+| gates | pillars all round, a 3-wide gate mid-side | tight | Old Bastion (radius 6) |
+| open | gates plus open corners | loose | Crystal Spire, Blossom Garden |
+| diagonals | mid-sides walled, corners open | medium | Tidepool Steps, Cascade Falls |
+| pillared | open, with a lone pillar on each corner | medium | Misty Stones, Castle Rise |
+| pinwheel | gates pushed off centre, the same way round | medium, no straight shot across | Ember Quarry, Night Glade |
+| colonnade | a pillar on every other tile | loose, many narrow ways in | Moss Hollow, Glacier |
+| two rings | outer gates (radius 9), inner diagonals (radius 5) | very tight | Sunwell Terrace |
+
+A blocked wisp slides along the obstacle on the axis it still has further to go; if that's a tie
+it stops, so no direction is favoured on four-guild islands. The perfect-aim bot banks, alone in
+a round: about 4 on Sunwell Terrace, 5 on Old Bastion and Misty Stones, 7 to 9 on most islands,
+and 10 on Moss Hollow (it banked 9 to 24 before the archways and bigger islands).
 
 ## Tiles
 
@@ -53,8 +66,9 @@ them, then their order carries on. Wisps float over ice as if it were floor.
 
 ## Islands
 
-Ten shrines, each with its own arena shape (round glade, wide atoll, hourglass, six-point star,
-long strip, cross, four-petal clover, bastioned square, diagonal ridge, jagged floe) and a
+Twelve shrines, each with its own arena shape (round glade, wide atoll, hourglass, six-point star,
+long strip, cross, four-petal clover, bastioned square, diagonal ridge, jagged floe, and two big
+low-scoring ones: a ruined fortress and a terrace with two rings of arches) and a
 layout drawn for that shape, plus its own island look (`src/client/themes.ts`): palette, sky, light, what
 its walls and boulders are drawn as, set pieces on the far verge and the lower tiers, and
 drifting particles.
@@ -71,6 +85,8 @@ drifting particles.
 | Castle Rise | Castle | ramparts | boulders | a small castle, towers | |
 | Night Glade | Night | glowing trees | boulders | a giant glowing tree, glowing ponds | fireflies |
 | Glacier | Glacier | ice spires | ice rocks | ice peaks, ice patches you slide on | snow |
+| Old Bastion | Bastion (big) | ramparts | boulders | towers and broken ramparts, sunset | pollen |
+| Sunwell Terrace | Sunwell (big) | monoliths | boulders | palms, stone blocks, golden sky | sparkles |
 
 Shrines are drawn as the northern half in ASCII (`src/engine/maps.ts`). The southern half is
 that drawing turned 180°, with Dawn and Dusk swapped, so neither guild gets the better side.
@@ -137,7 +153,7 @@ targeting works the same as it did in 2D.
 
 - **Story mode:** solo chapters on story-only shrines with their own twists (bank N wisps in T
   ticks, a wandering rival, moving pools). `bot.ts` is the starting point for opponents.
-- **More shrines:** ten islands are in. New maps are data plus a theme. Ideas: a shrine with
+- **More shrines:** twelve islands are in. New maps are data plus a theme. Ideas: a shrine with
   two braziers, one with a narrow wall maze.
 - **Cosmetics:** lantern flames exist now (6 colours, visual only). Next: robe trims and staff
   heads as Sogni sprites.

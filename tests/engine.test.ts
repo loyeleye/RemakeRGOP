@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { Board, Mover, Tile, pt } from "../src/engine/board.js";
 import { Game, ROUND_TICKS, flingOffset, type JoinSpec } from "../src/engine/game.js";
-import { RING, SHRINES, SHRINE_DEFS, mirrorRows, buildShrine, shrineFor, type Shrine } from "../src/engine/maps.js";
+import { SHRINES, ringWalls, SHRINE_DEFS, mirrorRows, buildShrine, shrineFor, type Shrine } from "../src/engine/maps.js";
 
 /** An empty 27x27 shrine with the given wisp spawns. */
 function openShrine(dawnSpawns = [pt(13, 3)], duskSpawns = [pt(13, 23)]): Shrine {
   const rows = Array.from({ length: 27 }, (_, y) =>
     y === 0 || y === 26 ? "#".repeat(27) : "#" + ".".repeat(25) + "#",
   );
-  const shrine = buildShrine({ id: "t", name: "t", blurb: "", rows: rows.slice(0, 14), scale: 1, ring: null });
+  const shrine = buildShrine({ id: "t", name: "t", blurb: "", rows: rows.slice(0, 14), scale: 1, rings: [] });
   shrine.wispSpawns = [dawnSpawns, duskSpawns];
   shrine.starts = [[pt(3, 13)], [pt(23, 13)]];
   return shrine;
@@ -87,13 +87,27 @@ describe("shrines", () => {
     }
   });
 
-  it("ring the brazier with archways: pillars that block, four gaps you can walk through", () => {
+  it("ring the brazier with archways: pillars where the style says, walkable gaps between", () => {
     for (const s of [...SHRINES, ...SHRINES.map((x) => shrineFor(x.id, 4))]) {
-      const b = s.board, c = b.center, R = RING.radius;
-      for (let d = -R; d <= R; d++) {
-        const gap = Math.abs(d) <= RING.gapHalf;
-        for (const p of [pt(c.x + d, c.y - R), pt(c.x + d, c.y + R), pt(c.x - R, c.y + d), pt(c.x + R, c.y + d)])
-          expect(b.tile(p), `${s.id} ${s.teams} (${p.x},${p.y})`).toBe(gap ? Tile.Floor : Tile.Wall);
+      const b = s.board, c = b.center;
+      expect(s.rings.length, s.id).toBeGreaterThan(0);
+      const walls = new Set(s.rings.flatMap(ringWalls).map((p) => `${p.x},${p.y}`));
+      for (const r of s.rings)
+        for (let dy = -r.radius; dy <= r.radius; dy++)
+          for (let dx = -r.radius; dx <= r.radius; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r.radius) continue;
+            const t = b.tile(pt(c.x + dx, c.y + dy));
+            expect(t, `${s.id} ${s.teams} (${dx},${dy})`).toBe(walls.has(`${dx},${dy}`) ? Tile.Wall : Tile.Floor);
+          }
+    }
+  });
+
+  it("archway styles are the same turned a quarter", () => {
+    for (const style of ["gates", "open", "diagonals", "pillared", "pinwheel", "colonnade"] as const) {
+      const w = new Set(ringWalls({ radius: 6, style }).map((p) => `${p.x},${p.y}`));
+      for (const k of w) {
+        const [x, y] = k.split(",").map(Number) as [number, number];
+        expect(w.has(`${-y},${x}`), `${style} ${k}`).toBe(true);
       }
     }
   });

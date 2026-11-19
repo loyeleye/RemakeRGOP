@@ -136,6 +136,22 @@ export class Rng {
  * tiles along the line from the lamplighter, snapped to one of 16 compass directions by
  * how steep the line is. A pull never sends a wisp past the tile in front of the puller.
  */
+/**
+ * The step a wisp takes toward a target (dx, dy are -1, 0 or 1; ax, ay how far it still has
+ * to go on each axis). If the straight or diagonal step is blocked it slides along the
+ * obstacle on the axis it has further to go; if both are as far and both are open it stops,
+ * because picking one would favour one side of the island. Null means it stops dead.
+ */
+export function slideStep(board: Board, from: Pt, dx: number, dy: number, ax: number, ay: number): [number, number] | null {
+  if (board.canStep(from, dx, dy, Mover.Wisp)) return [dx, dy];
+  if (dx === 0 || dy === 0) return null;
+  const okX = board.canStep(from, dx, 0, Mover.Wisp);
+  const okY = board.canStep(from, 0, dy, Mover.Wisp);
+  if (okX && (!okY || ax > ay)) return [dx, 0];
+  if (okY && (!okX || ay > ax)) return [0, dy];
+  return null;
+}
+
 export function flingOffset(from: Pt, wisp: Pt, mode: StaffMode): Pt {
   // Direction from wisp toward the lamplighter.
   const dx = from.x - wisp.x;
@@ -296,15 +312,12 @@ export class Game {
     }
     let dx = sign(w.target.x - w.pos.x);
     let dy = sign(w.target.y - w.pos.y);
-    if (!this.board.canStep(w.pos, dx, dy, Mover.Wisp)) {
-      // Slide along whatever blocked it, x first, then y; otherwise it stops dead.
-      if (dx !== 0 && this.board.canStep(w.pos, dx, 0, Mover.Wisp)) dy = 0;
-      else if (dy !== 0 && this.board.canStep(w.pos, 0, dy, Mover.Wisp)) dx = 0;
-      else {
-        w.target = null;
-        return;
-      }
+    const slid = slideStep(this.board, w.pos, dx, dy, Math.abs(w.target.x - w.pos.x), Math.abs(w.target.y - w.pos.y));
+    if (!slid) {
+      w.target = null;
+      return;
     }
+    [dx, dy] = slid;
     w.pos = pt(w.pos.x + dx, w.pos.y + dy);
     if (samePt(w.pos, w.target)) w.target = null;
   }

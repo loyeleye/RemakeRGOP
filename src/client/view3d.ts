@@ -11,7 +11,7 @@ import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { Tile, type Board } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, type GameSnapshot, type Guild } from "../engine/game.js";
-import type { Shrine } from "../engine/maps.js";
+import { ringWalls, type Ring, type Shrine } from "../engine/maps.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeIsland, makeWaterfall } from "./islands.js";
 import { ambientParticles, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
@@ -801,14 +801,14 @@ export class World {
     const waterU = { value: 0 };
     this.timeUniforms.push(waterU);
     let seed = 1;
+    const ringSet = new Set(shrine.rings.flatMap(ringWalls).map((p) => `${p.x},${p.y}`));
     for (let y = 1; y < H - 1; y++)
       for (let x = 1; x < W - 1; x++) {
         const t = b.tiles[y * W + x];
         const wx = this.worldX(b, x);
         const wz = this.worldZ(b, y);
         seed++;
-        const onRing = !!shrine.ring && Math.max(Math.abs(x - b.center.x), Math.abs(y - b.center.y)) === shrine.ring.radius;
-        if (t === Tile.Wall && onRing) continue;
+        if (t === Tile.Wall && ringSet.has(`${x - b.center.x},${y - b.center.y}`)) continue;
         if (t === Tile.Wall) this.addProp(th.wall, wx, wz, 2.8, 2.2, seed);
         else if (t === Tile.Rock) this.addProp(th.boulder, wx, wz, 0.9, 1.05, seed);
       }
@@ -831,7 +831,7 @@ export class World {
       g.add(m);
     }
 
-    if (shrine.ring) g.add(this.makeArches(b, shrine.ring, th, wallTex));
+    for (const r of shrine.rings) g.add(this.makeArches(b, r, th, wallTex));
 
     // The brazier dais: stepped stone circles, the brazier model, fire, a pillar of light.
     const c = b.center;
@@ -900,64 +900,82 @@ export class World {
   }
 
   /**
-   * The archway ring round the brazier: a square colonnade of pillars joined by lintels, with
-   * an open arch over each gap. Matches the ring of wall tiles in the engine.
+   * One ring of archways round the brazier, drawn from the same pillar tiles the engine uses:
+   * a pillar on each, a lintel joining neighbours along a side, and an arch over every gap of
+   * 1 to 3 tiles between two pillars. A pillar standing alone is drawn taller, as an obelisk.
    */
-  private makeArches(b: Board, ring: NonNullable<Shrine["ring"]>, th: Theme, wallTex: THREE.Texture) {
+  private makeArches(b: Board, ring: Ring, th: Theme, wallTex: THREE.Texture) {
     const g = new THREE.Group();
-    const R = ring.radius, gh = ring.gapHalf;
+    const R = ring.radius;
     const cx = this.worldX(b, b.center.x), cz = this.worldZ(b, b.center.y);
     const stone = new THREE.MeshStandardMaterial({ map: wallTex, color: new THREE.Color(th.rock).lerp(new THREE.Color("#f2ebde"), 0.6), roughness: 0.8 });
     const rune = new THREE.MeshStandardMaterial({ color: "#ffd9a0", emissive: "#ff9a3a", emissiveIntensity: 1.6 });
     const H = 1.7;
-    const pillarGeo = new THREE.BoxGeometry(0.62, H, 0.62);
-    const capGeo = new THREE.BoxGeometry(0.82, 0.18, 0.82);
-    const baseGeo = new THREE.BoxGeometry(0.8, 0.2, 0.8);
+    const walls = new Set(ringWalls(ring).map((p) => `${p.x},${p.y}`));
+    const isWall = (x: number, y: number) => walls.has(`${x},${y}`);
     const add = (m: THREE.Mesh) => {
       m.castShadow = m.receiveShadow = true;
       g.add(m);
       return m;
     };
-    const pillar = (x: number, z: number, big = false) => {
+    const pillarGeo = new THREE.BoxGeometry(0.62, 1, 0.62);
+    const capGeo = new THREE.BoxGeometry(0.82, 0.18, 0.82);
+    const baseGeo = new THREE.BoxGeometry(0.8, 0.2, 0.8);
+    for (const key of walls) {
+      const [x, y] = key.split(",").map(Number) as [number, number];
+      let near = 0;
+      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) if (isWall(x + ox, y + oy)) near++;
+      const lone = near === 0;
+      const h = lone ? H * 1.5 : Math.abs(x) === R && Math.abs(y) === R ? H * 1.15 : H;
+      const w = lone ? 1.2 : 1;
+      const px = cx + x, pz = cz + y;
       const p = add(new THREE.Mesh(pillarGeo, stone));
-      p.position.set(x, H / 2, z);
-      if (big) p.scale.set(1.25, 1.15, 1.25);
-      add(new THREE.Mesh(baseGeo, stone)).position.set(x, 0.1, z);
-      add(new THREE.Mesh(capGeo, stone)).position.set(x, H * (big ? 1.15 : 1) + 0.09, z);
-    };
-    // Each side: unit vector along the side (u) and outward (n).
-    const sides: [number, number, number, number][] = [
-      [1, 0, 0, -1],
-      [0, 1, 1, 0],
-      [-1, 0, 0, 1],
-      [0, -1, -1, 0],
-    ];
-    for (const [ux, uz, nx, nz] of sides) {
-      const at = (t: number) => [cx + nx * R + ux * t, cz + nz * R + uz * t] as const;
-      // Pillars on every wall tile of this side except the shared corner at +R.
-      for (let t = -R; t < R; t++) {
-        if (Math.abs(t) <= gh) continue;
-        const [x, z] = at(t);
-        pillar(x, z, Math.abs(t) === R);
+      p.scale.set(w, h, w);
+      p.position.set(px, h / 2, pz);
+      add(new THREE.Mesh(baseGeo, stone)).position.set(px, 0.1, pz);
+      const cap = add(new THREE.Mesh(capGeo, stone));
+      cap.position.set(px, h + 0.09, pz);
+      cap.scale.set(w, 1, w);
+      if (lone) {
+        const r = add(new THREE.Mesh(new THREE.OctahedronGeometry(0.22), rune));
+        r.position.set(px, h + 0.45, pz);
+        r.castShadow = false;
       }
-      // Lintels along each run of pillars.
-      for (const sgn of [-1, 1]) {
-        const a = sgn * (gh + 1), e = sgn * R;
-        const [x0, z0] = at((a + e) / 2);
-        const len = Math.abs(e - a) + 0.7;
-        const lintel = add(new THREE.Mesh(new THREE.BoxGeometry(ux ? len : 0.5, 0.3, uz ? len : 0.5), stone));
-        lintel.position.set(x0, H + 0.3, z0);
+    }
+    // Walk each side: lintels between neighbouring pillars, arches over short gaps.
+    for (let k = 0; k < 4; k++) {
+      const turn = (t: number): [number, number] => {
+        let x = t, y = -R;
+        for (let i = 0; i < k; i++) [x, y] = [-y, x];
+        return [x, y];
+      };
+      let last: number | null = null;
+      for (let t = -R; t <= R; t++) {
+        const [x, y] = turn(t);
+        if (!isWall(x, y)) continue;
+        if (last !== null) {
+          const gap = t - last - 1;
+          const [x0, y0] = turn(last);
+          const mx = cx + (x0 + x) / 2, mz = cz + (y0 + y) / 2;
+          const along = x0 !== x;
+          if (gap === 0) {
+            const lintel = add(new THREE.Mesh(new THREE.BoxGeometry(along ? 1.7 : 0.5, 0.3, along ? 0.5 : 1.7), stone));
+            lintel.position.set(mx, H + 0.3, mz);
+          } else if (gap <= 3) {
+            const span = (gap + 1) / 2;
+            const arch = add(new THREE.Mesh(new THREE.TorusGeometry(span, 0.26, 10, 28, Math.PI), stone));
+            arch.position.set(mx, H + 0.18, mz);
+            arch.scale.set(1, Math.min(1, 1.1 / span + 0.2), 1.6);
+            arch.rotation.y = along ? 0 : Math.PI / 2;
+            if (gap >= 2) {
+              const key = add(new THREE.Mesh(new THREE.OctahedronGeometry(0.2), rune));
+              key.position.set(mx, H + 0.18 + span * arch.scale.y, mz);
+              key.castShadow = false;
+            }
+          }
+        }
+        last = t;
       }
-      // The arch over the gap, springing from the two pillars beside it.
-      const span = gh + 1;
-      const arch = add(new THREE.Mesh(new THREE.TorusGeometry(span, 0.28, 10, 28, Math.PI), stone));
-      const [ax, az] = at(0);
-      arch.position.set(ax, H + 0.18, az);
-      arch.scale.set(1, 0.55, 1.6);
-      arch.rotation.y = ux ? 0 : Math.PI / 2;
-      const key = add(new THREE.Mesh(new THREE.OctahedronGeometry(0.2), rune));
-      key.position.set(ax, H + 0.18 + span * 0.55, az);
-      key.castShadow = false;
     }
     return g;
   }
