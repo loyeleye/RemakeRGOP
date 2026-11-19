@@ -72,6 +72,18 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 .final { font-size: 48px; margin: 0; }
 #toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: #000d; padding: 10px 16px; border-radius: 10px; max-width: 90vw; text-align: center; z-index: 9; }
 @media (min-width: 700px) { .thumb { width: 96px; height: 60px; border-radius: 14px; } }
+/* Touch pad: a walking stick on the left, staff buttons on the right. */
+.thumbs { align-items: flex-end; }
+.touch .desk-only, body:not(.touch) .touch-only { display: none; }
+.pad { display: grid; grid-template-columns: auto auto; gap: 10px; align-items: end; justify-items: end; pointer-events: none; }
+.pad > * { pointer-events: auto; }
+.touch .thumb { width: 64px; height: 64px; border-radius: 50%; font-size: 14px; }
+.touch .thumb.staff { width: 92px; height: 92px; font-size: 17px; font-weight: 700; border-color: var(--dawn); color: var(--dawn); }
+.touch .thumb.staff.push { border-color: #ff7070; color: #ff8a8a; }
+.touch .thumb.staff.far { opacity: 0.6; }
+.stick { pointer-events: auto; position: relative; width: 132px; height: 132px; border-radius: 50%; background: #221f2e99; border: 2px solid #ffffff33; backdrop-filter: blur(4px); touch-action: none; }
+.stick .knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: #ffffff33; border: 2px solid #ffffff88; transition: transform 0.08s; }
+.stick.held .knob { transition: none; background: #ffffff55; }
 .grow { flex: 1; }
 .check { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 14px; }
 .check input { width: auto; min-height: 0; }

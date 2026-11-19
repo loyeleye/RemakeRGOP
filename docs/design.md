@@ -190,7 +190,12 @@ targeting works the same as it did in 2D.
   pinch to zoom, drag to look around, double-tap or ◎ to return, and tap the mini-map to jump.
 - A tap within 1.3 tiles of a wisp counts as a tap on that wisp. Wisps your staff can affect
   right now win ties.
-- Pull/Push and Run/Walk are thumb buttons.
+- On touch screens a pad replaces the old thumb buttons, so you can play without tapping the
+  map: a stick on the left walks you in 8 directions (let go to stop), and on the right a big
+  Staff button works the ringed wisp, Next picks another, and Pull/Push and Run/Walk toggle.
+  The ringed wisp is the nearest you can work in the current mode until you pick one.
+  Tapping the map still works.
+- On a computer: scroll or + / − to zoom, drag or arrow keys to look around, C to come back.
 
 ## Roadmap (agreed with Ladi: core first, these as follow-up PRs)
 

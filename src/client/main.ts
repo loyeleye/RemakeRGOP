@@ -1,7 +1,7 @@
 // Lanternfall client: home screen, lobby, and the round itself.
 
 import type { Pt } from "../engine/board.js";
-import { ROUND_TICKS, TICK_MS, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
+import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
 import { FLAMES, FLAME_COLORS, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
@@ -210,7 +210,12 @@ function renderHud() {
   const p = s?.players.find((q) => q.id === me);
   $("mode").textContent = p?.mode === "push" ? "Push" : "Pull";
   $("mode").classList.toggle("push", p?.mode === "push");
-  $("run").textContent = p?.run === false ? "Walk" : "Run";
+  $("run").textContent = $("run2").textContent = p?.run === false ? "Walk" : "Run";
+  const staff = $("staff");
+  staff.textContent = p?.mode === "push" ? "Push" : "Pull";
+  staff.classList.toggle("push", p?.mode === "push");
+  $("mode").textContent = p?.mode === "push" ? "→ Pull" : "→ Push";
+  if (!document.body.classList.contains("touch")) $("mode").textContent = p?.mode === "push" ? "Push" : "Pull";
 }
 
 const fmtTime = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -372,6 +377,98 @@ window.addEventListener("keydown", (e) => {
 
 $("mode").onclick = () => act({ toggleMode: true });
 $("run").onclick = () => act({ toggleRun: true });
+$("run2").onclick = () => act({ toggleRun: true });
+
+// ------------------------------------------------------------------ touch pad
+// A stick to walk and buttons to work the staff, so you can play without tapping the map.
+
+const touchQuery = window.matchMedia("(pointer: coarse)");
+const setTouch = () => document.body.classList.toggle("touch", touchQuery.matches);
+touchQuery.addEventListener?.("change", setTouch);
+setTouch();
+
+/** The wisp the pad's Staff button works on. */
+let padWisp: number | null = null;
+
+/** Wisps your staff can work in the current mode, nearest first. */
+function padChoices() {
+  const p = snap?.players.find((q) => q.id === me);
+  if (!snap || !p) return [];
+  const rivals = snap.wisps.some((w) => w.guild !== p.guild);
+  return snap.wisps
+    .filter((w) => w.rim === 0 && (p.mode === "push" ? !rivals || w.guild !== p.guild : w.guild === p.guild))
+    .map((w) => ({ id: w.id, d: Math.max(Math.abs(w.x - p.x), Math.abs(w.y - p.y)) }))
+    .sort((a, b) => a.d - b.d);
+}
+
+/** Keeps the pad's wisp valid: if it's gone or the wrong kind, take the nearest one. */
+function padTarget(): number | null {
+  const c = padChoices();
+  if (!c.some((w) => w.id === padWisp)) padWisp = c[0]?.id ?? null;
+  return padWisp;
+}
+
+$("next").onclick = () => {
+  const c = padChoices();
+  if (!c.length) return;
+  const i = c.findIndex((w) => w.id === padWisp);
+  padWisp = c[(i + 1) % c.length]!.id;
+};
+$("staff").onclick = () => {
+  const w = padTarget();
+  if (w !== null) act({ action: { kind: "staff", wisp: w } });
+};
+
+const stick = $("stick");
+const knob = stick.querySelector<HTMLElement>(".knob")!;
+let stickDir: [number, number] | null = null;
+let stickTimer = 0;
+const stickWalk = () => {
+  const p = snap?.players.find((q) => q.id === me);
+  if (!p || !stickDir || !room) return;
+  const b = shrineFor(room.shrine, room.teams).board;
+  const to = { x: Math.max(0, Math.min(b.width - 1, p.x + stickDir[0] * 3)), y: Math.max(0, Math.min(b.height - 1, p.y + stickDir[1] * 3)) };
+  act({ action: { kind: "walk", to } });
+};
+const stickMove = (e: PointerEvent) => {
+  const r = stick.getBoundingClientRect();
+  let dx = e.clientX - (r.left + r.width / 2);
+  let dy = e.clientY - (r.top + r.height / 2);
+  const max = r.width / 2 - 20;
+  const len = Math.hypot(dx, dy);
+  if (len > max) [dx, dy] = [(dx / len) * max, (dy / len) * max];
+  knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  if (len < 14) return void (stickDir = null);
+  // Snap to the 8 directions you can step in.
+  const a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
+  const dir: [number, number] = [Math.round(Math.cos((a * Math.PI) / 4)), Math.round(Math.sin((a * Math.PI) / 4))];
+  const changed = !stickDir || stickDir[0] !== dir[0] || stickDir[1] !== dir[1];
+  stickDir = dir;
+  if (changed) stickWalk();
+};
+stick.addEventListener("pointerdown", (e) => {
+  stick.setPointerCapture(e.pointerId);
+  stick.classList.add("held");
+  cam.follow = true;
+  stickMove(e);
+  clearInterval(stickTimer);
+  stickTimer = window.setInterval(stickWalk, 200);
+});
+stick.addEventListener("pointermove", (e) => {
+  if (stick.classList.contains("held")) stickMove(e);
+});
+const stickEnd = () => {
+  if (!stick.classList.contains("held")) return;
+  stick.classList.remove("held");
+  knob.style.transform = "";
+  clearInterval(stickTimer);
+  const p = snap?.players.find((q) => q.id === me);
+  // Let go and you stop where you are.
+  if (stickDir && p) act({ action: { kind: "walk", to: { x: p.x, y: p.y } } });
+  stickDir = null;
+};
+stick.addEventListener("pointerup", stickEnd);
+stick.addEventListener("pointercancel", stickEnd);
 $("recenter").onclick = () => {
   cam.follow = true;
   if (cam.compact) cam.phoneZoom();
@@ -495,9 +592,32 @@ function frame(now: number) {
   }
   cam.clamp(shrine.board);
   const flames = new Map<number, Flame>(room.players.map((p) => [p.id, p.flame]));
-  const st: DrawState = { shrine, prev: prevSnap, snap, t, me, flames, hoverWisp, now };
+  const lit = document.body.classList.contains("touch") ? padTarget() : hoverWisp;
+  if (document.body.classList.contains("touch")) {
+    const p = snap.players.find((q) => q.id === me);
+    const w = snap.wisps.find((q) => q.id === lit);
+    const reach = p?.mode === "push" ? PUSH_REACH : PULL_REACH;
+    $("staff").classList.toggle("far", !p || !w || Math.max(Math.abs(w.x - p.x), Math.abs(w.y - p.y)) > reach);
+  }
+  const st: DrawState = { shrine, prev: prevSnap, snap, t, me, flames, hoverWisp: lit, now };
   world.render(st);
   drawOverlay(g, cam, st);
+  // On touch, ring the wisp the Staff button will work on.
+  const lw = lit !== null && document.body.classList.contains("touch") ? snap.wisps.find((q) => q.id === lit) : null;
+  if (lw) {
+    const x = lw.px + (lw.x - lw.px) * t + 0.5, y = lw.py + (lw.y - lw.py) * t + 0.5;
+    const c = cam.toScreen(x, y, 0.75);
+    const r = Math.max(16, cam.scale * 0.8);
+    g.save();
+    g.strokeStyle = mine?.mode === "push" ? "#ff8a8a" : "#ffffffcc";
+    g.lineWidth = 2.5;
+    g.setLineDash([6, 5]);
+    g.lineDashOffset = -now / 60;
+    g.beginPath();
+    g.arc(c.x, c.y, r, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+  }
   if (cam.compact) {
     const w = Math.min(120, cam.w * 0.3);
     minimapRect = { x: cam.w - w - 10, y: 64, w, h: w };

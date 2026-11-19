@@ -88,8 +88,14 @@
       <button id="recenter" class="ghost small" aria-label="Centre on me">◎</button>
     </header>
     <div class="thumbs">
-      <button id="run" class="thumb">Run</button>
-      <button id="mode" class="thumb">Pull</button>
+      <div id="stick" class="stick touch-only" aria-label="Walk"><div class="knob"></div></div>
+      <button id="run" class="thumb desk-only">Run</button>
+      <div class="pad">
+        <button id="run2" class="thumb touch-only">Run</button>
+        <button id="mode" class="thumb">Pull</button>
+        <button id="next" class="thumb touch-only" aria-label="Next wisp">Next</button>
+        <button id="staff" class="thumb staff touch-only">Staff</button>
+      </div>
     </div>
     <div id="results" class="panel overlay" hidden>
       <h2 id="result-title"></h2>
