@@ -10,6 +10,7 @@ function openShrine(dawnSpawns = [pt(13, 3)], duskSpawns = [pt(13, 23)]): Shrine
   );
   const shrine = buildShrine({ id: "t", name: "t", blurb: "", rows: rows.slice(0, 14), scale: 1, rings: [] });
   shrine.wispSpawns = [dawnSpawns, duskSpawns];
+  shrine.spawnField = [];
   shrine.starts = [[pt(3, 13)], [pt(23, 13)]];
   return shrine;
 }
@@ -109,6 +110,15 @@ describe("shrines", () => {
         const [x, y] = k.split(",").map(Number) as [number, number];
         expect(w.has(`${-y},${x}`), `${style} ${k}`).toBe(true);
       }
+    }
+  });
+
+  it("spawn wisps from a shared field that's the same turned 180 degrees", () => {
+    for (const s of SHRINES) {
+      const b = s.board;
+      expect(s.spawnField.length, s.id).toBeGreaterThan(20);
+      const set = new Set(s.spawnField.map((p) => `${p.x},${p.y}`));
+      for (const p of s.spawnField) expect(set.has(`${b.width - 1 - p.x},${b.height - 1 - p.y}`), s.id).toBe(true);
     }
   });
 

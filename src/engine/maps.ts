@@ -7,7 +7,7 @@
 //   B  brazier      a  Dawn wisp spawn b  Dusk wisp spawn
 //   1  Dawn start   2  Dusk start
 
-import { Board, Tile, pt, type Pt } from "./board.js";
+import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
 
 export interface ShrineDef {
   id: string;
@@ -23,7 +23,15 @@ export interface ShrineDef {
   scale?: number;
   /** The archway rings round the brazier, innermost first (default [RING]). */
   rings?: Ring[];
+  /**
+   * Where wisps appear: every floor tile this far from the centre (Euclidean, in played
+   * tiles), shared by all guilds and picked at random. Default SPAWN_BAND.
+   */
+  spawnBand?: [number, number];
 }
+
+/** Default spawn band: from just past the archways to a couple of pulls out. */
+export const SPAWN_BAND: [number, number] = [6, 10];
 
 export interface IsleShape {
   /** Radius along the axes, in tiles from the centre. */
@@ -136,8 +144,10 @@ export interface Shrine {
   board: Board;
   /** Teams this layout seats: 2, or up to 4 on a four-way island. */
   teams: number;
-  /** Per team. */
+  /** Per team: the drawn spawn marks (kept for the map's look and as a fallback). */
   wispSpawns: Pt[][];
+  /** Where wisps appear, shared by every guild. */
+  spawnField: Pt[];
   starts: Pt[][];
   /** The archway rings round the brazier, innermost first. */
   rings: Ring[];
@@ -449,8 +459,9 @@ export const SHRINE_DEFS: ShrineDef[] = [
     id: "old-bastion",
     name: "Old Bastion",
     blurb: "A huge ruined fortress. Broken walls everywhere and a tight gatehouse round the brazier: every wisp is hard won.",
-    isle: {radius: 21, squareness: 3.2, coves: 0.06, heads: 0.05, seed: 4, waves: [[4, 0.06, Math.PI]]},
-    rings: [{radius: 6, style: "gates"}],
+    isle: { radius: 21, squareness: 3.2, coves: 0.06, heads: 0.05, seed: 4, waves: [[4, 0.06, Math.PI]] },
+    rings: [{ radius: 6, style: "gates" }],
+    spawnBand: [14, 30],
     rows: [
       "                                                         ",
       "                                                         ",
@@ -487,8 +498,9 @@ export const SHRINE_DEFS: ShrineDef[] = [
     id: "sunwell-terrace",
     name: "Sunwell Terrace",
     blurb: "A vast terrace with two rings of arches. In through a side gate, round the inner court, and in at a corner.",
-    isle: {radius: 19, squareness: 2.3, coves: 0.08, heads: 0.06, seed: 12, waves: [[4, 0.12, 0]]},
-    rings: [{radius: 5, style: "diagonals"}, {radius: 9, style: "gates"}],
+    isle: { radius: 19, squareness: 2.3, coves: 0.08, heads: 0.06, seed: 12, waves: [[4, 0.12, 0]] },
+    rings: [{ radius: 5, style: "diagonals" }, { radius: 9, style: "gates" }],
+    spawnBand: [13, 28],
     rows: [
       "                                                 ",
       "                                                 ",
@@ -577,7 +589,40 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   const board = new Board(width, height, tiles);
   for (let dy = -1; dy <= 1; dy++)
     for (let dx = -1; dx <= 1; dx++) tiles[(board.center.y + dy) * width + board.center.x + dx] = Tile.Brazier;
-  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, starts, rings: ringsOf(def), outline };
+  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline };
+}
+
+/**
+ * The floor tiles in the band that a wisp could be pulled from into the brazier zone. The
+ * board is symmetric, so the field is too, and every guild draws from the same field.
+ */
+export function spawnField(board: Board, [lo, hi]: [number, number]): Pt[] {
+  const W = board.width, H = board.height, c = board.center;
+  // Tiles a wisp can travel from to reach the zone.
+  const ok = new Uint8Array(W * H);
+  const q: Pt[] = [];
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++)
+      if (board.inBankZone(pt(x, y))) {
+        ok[y * W + x] = 1;
+        q.push(pt(x, y));
+      }
+  for (let i = 0; i < q.length; i++) {
+    const p = q[i]!;
+    for (const d of DIRS) {
+      const n = pt(p.x + d.x, p.y + d.y);
+      if (!board.inside(n) || ok[n.y * W + n.x] || !board.canStep(n, -d.x, -d.y, Mover.Wisp)) continue;
+      ok[n.y * W + n.x] = 1;
+      q.push(n);
+    }
+  }
+  const out: Pt[] = [];
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const r = Math.hypot(x - c.x, y - c.y);
+      if (r >= lo && r <= hi && ok[y * W + x] && board.tile(pt(x, y)) === Tile.Floor) out.push(pt(x, y));
+    }
+  return out;
 }
 
 function scaledIsle(def: ShrineDef): IsleShape | undefined {

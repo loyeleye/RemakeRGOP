@@ -13,10 +13,16 @@ export interface BotStyle {
   pushy: number;
   /** Chance per decision to dawdle for a tick (keeps easy bots beatable). */
   sloppiness: number;
+  /**
+   * Juggle: tap whichever of its wisps needs a nudge from where it stands (a one-tick touch
+   * sends a wisp 2 tiles, so tapping in turn keeps several moving), and only walk when none
+   * can be brought in from here. This is how good players score in the orb game.
+   */
+  taps?: boolean;
 }
 
 export const BOT_EASY: BotStyle = { pushy: 0, sloppiness: 0.35 };
-export const BOT_FAIR: BotStyle = { pushy: 3, sloppiness: 0.1 };
+export const BOT_FAIR: BotStyle = { pushy: 3, sloppiness: 0.1, taps: true };
 
 export function botCommand(game: Game, id: number, style: BotStyle, rand: () => number = Math.random): Command | null {
   const me = game.players.find((p) => p.id === id);
@@ -36,6 +42,13 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
   }
 
   const fixMode = me.mode !== "pull";
+  if (style.taps && !me.moved && rand() >= style.sloppiness) {
+    const tap = pickTap(game, me);
+    if (tap !== null) {
+      if (me.action.kind === "staff" && me.action.wisp === tap && !fixMode) return null;
+      return { action: { kind: "staff", wisp: tap }, toggleMode: fixMode || undefined };
+    }
+  }
   // Keep holding a wisp we're already pulling while it's in flight, or while we're still
   // walking into reach of it.
   if (me.action.kind === "staff" && !fixMode) {
@@ -163,4 +176,38 @@ function planSpot(game: Game, id: number, me: Pt, wisp: Wisp): Pt | null {
     }
   mine.set(id, { wisp: wisp.id, at, spot: best });
   return best;
+}
+
+/**
+ * The wisp to touch this tick without moving, or null if none is worth it from here: one that
+ * a pull from here brings closer to banking and that is about to stop (a wisp still with 2
+ * tiles to go can be left alone a tick). Prefers the one that banks soonest.
+ */
+function pickTap(game: Game, me: Game["players"][number]): number | null {
+  const board = game.board;
+  const W = board.width;
+  const bank = bankDistances(board);
+  let best: number | null = null;
+  let bestScore = Infinity;
+  let moving: number | null = null;
+  for (const w of game.wisps) {
+    if (w.guild !== me.guild || board.inBankZone(w.pos)) continue;
+    if (!game.inReach({ ...me, mode: "pull" }, w)) continue;
+    const now = bank[w.pos.y * W + w.pos.x]!;
+    const { end, ticks } = simulatePull(board, me.pos, w.pos);
+    const left = bank[end.y * W + end.x]!;
+    if (left >= now) continue;
+    const stalled = w.prev.x === w.pos.x && w.prev.y === w.pos.y;
+    const needs = !w.target || cheb(w.pos, w.target) <= 1 || (stalled && w.holder === me.id);
+    if (!needs) {
+      moving = w.id;
+      continue;
+    }
+    const score = left * 4 + ticks;
+    if (score < bestScore) {
+      bestScore = score;
+      best = w.id;
+    }
+  }
+  return best ?? (moving !== null && me.action.kind === "staff" ? me.action.wisp : null);
 }

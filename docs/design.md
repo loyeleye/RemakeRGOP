@@ -5,9 +5,10 @@
 Everything happens in `Game.step()`, once per 600 ms tick, in this order:
 
 1. **Wisps move.** Each wisp with a target steps one tile toward it (diagonals allowed, no corner
-   cutting). If the diagonal is blocked it slides along x, then y. Otherwise it stops. A wisp on
+   cutting). If the diagonal is blocked it slides along the axis it still has further to go
+   (a tie stops it). Otherwise it stops. A wisp on
    the **rim** (within 2 tiles of the brazier centre) stops. After 1 tick there, staffs on it let
-   go. After 2 ticks it is **banked** for its guild and respawns at a random spawn of that guild.
+   go. After 2 ticks it is **banked** for its guild and respawns on a random tile of the shrine's **spawn field**.
 2. **Lamplighters act**, in join order, on the latest command each one sent during the tick:
    - **Walk:** follow a shortest 8-way path, 1 tile per tick, or 2 when running.
    - **Staff on a wisp:** if the wisp is in reach (Chebyshev ≤ 10 for pull, ≤ 8 for push, with
@@ -44,9 +45,23 @@ style is drawn along one side and turned 90° for the others, so it is fair to 2
 | two rings | outer gates (radius 9), inner diagonals (radius 5) | very tight | Sunwell Terrace |
 
 A blocked wisp slides along the obstacle on the axis it still has further to go; if that's a tie
-it stops, so no direction is favoured on four-guild islands. The perfect-aim bot banks, alone in
-a round: about 4 on Sunwell Terrace, 5 on Old Bastion and Misty Stones, 7 to 9 on most islands,
-and 10 on Moss Hollow (it banked 9 to 24 before the archways and bigger islands).
+it stops, so no direction is favoured on four-guild islands.
+
+## Scoring rate (tuned toward the Great Orb Project)
+
+Each guild has **3 wisps** (`WISPS_PER_GUILD`), like GOP's 3 orbs per colour. Wisps appear on a
+**spawn field** shared by every guild: every floor tile a set distance from the brazier centre
+that a wisp could be pulled in from (`spawnBand`, default 6 to 10 tiles; Old Bastion 14 to 30,
+Sunwell Terrace 13 to 28). GOP does the same with about 200 fixed spawn tiles per altar, many
+4 to 9 tiles out, which is why a GOP expert barely walks. The drawn `a`/`b` marks are kept as a
+fallback.
+
+The sharper bot (`BOT_FAIR`) **taps**: from where it stands it touches whichever of its wisps
+is about to stop and would get closer to banking, so several stay moving, and it walks only
+when none can be brought in from there. Alone, over a round, it banks about 20 to 27 on the
+small open islands (Blossom Garden, Crystal Spire, Misty Stones, Moss Hollow, Castle Rise), 12
+to 21 on the rest, and 4 to 6 on Old Bastion and Sunwell Terrace. GOP records for a solo
+human are 42 to 44 on small altars; a human who learns the angles should beat the bot.
 
 ## Tiles
 

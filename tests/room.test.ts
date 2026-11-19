@@ -115,8 +115,19 @@ describe("room", () => {
   });
 });
 
+const BIG = ["old-bastion", "sunwell-terrace"];
+
 describe("the bot banks wisps on every shrine", () => {
   const solo = { pushy: 0, sloppiness: 0 };
+  it("a tapping bot juggles wisps: scores at least 15 on Blossom Garden alone", () => {
+    const g = new Game(SHRINES.find((s) => s.id === "blossom-garden")!, [{ id: 1, guild: 0, name: "A" }], 3);
+    for (let t = 0; t < ROUND_TICKS; t++) {
+      const cmd = botCommand(g, 1, { ...solo, taps: true });
+      if (cmd) g.command(1, cmd);
+      g.step();
+    }
+    expect(g.scores[0]).toBeGreaterThanOrEqual(15);
+  });
   for (const shrine of SHRINES) {
     it(`${shrine.name}: banks alone round the archways, but not too fast`, () => {
       const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 3);
@@ -126,7 +137,8 @@ describe("the bot banks wisps on every shrine", () => {
         g.step();
       }
       expect(g.scores[0]).toBeGreaterThanOrEqual(3);
-      expect(g.scores[0]).toBeLessThanOrEqual(11);
+      // The big islands are the low-scoring ones.
+      expect(g.scores[0]).toBeLessThanOrEqual(BIG.includes(shrine.id) ? 8 : 30);
     });
     it(`${shrine.name}: every guild scores in a four-guild round`, () => {
       const four = shrineFor(shrine.id, 4);

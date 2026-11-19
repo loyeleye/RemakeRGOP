@@ -19,7 +19,7 @@ export const COUNTDOWN_TICKS = 5;
 export const PULL_REACH = 10;
 /** Pushing reaches less far than pulling. */
 export const PUSH_REACH = 8;
-export const WISPS_PER_GUILD = 2;
+export const WISPS_PER_GUILD = 3;
 /** Ticks a wisp sits on the rim before it's banked. */
 export const BANK_TICKS = 2;
 
@@ -323,7 +323,7 @@ export class Game {
   }
 
   private placeWisp(w: Wisp, taken: Set<string>) {
-    const spawns = this.shrine.wispSpawns[w.guild]!;
+    const spawns = this.shrine.spawnField.length > 0 ? this.shrine.spawnField : this.shrine.wispSpawns[w.guild]!;
     const free = spawns.filter((s) => !taken.has(key(s)));
     const pool = free.length > 0 ? free : spawns;
     w.pos = pool[this.rng.int(pool.length)]!;
