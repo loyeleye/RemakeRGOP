@@ -1,7 +1,7 @@
 // Lanternfall client: home screen, lobby, and the round itself.
 
 import type { Pt } from "../engine/board.js";
-import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
+import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
 import { FLAMES, FLAME_COLORS, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
@@ -206,7 +206,9 @@ function renderHud() {
     el.textContent = String(s?.scores[g] ?? 0);
   }
   const left = s ? ROUND_TICKS - s.tick : ROUND_TICKS;
-  $("ticks").textContent = room.phase === "countdown" ? `Starts in ${room.countdown}` : `${left} ticks · ${fmtTime((left * tickMs) / 1000)}`;
+  const tide = shrineFor(room.shrine, room.teams).gimmicks.tide;
+  const tideNote = tide && s && room.phase !== "countdown" ? ` · tide ${tideIn(s.tick + 1, tide) ? "in" : "out"} (${tide - ((s.tick + 1) % tide)})` : "";
+  $("ticks").textContent = room.phase === "countdown" ? `Starts in ${room.countdown}` : `${left} ticks · ${fmtTime((left * tickMs) / 1000)}${tideNote}`;
   const p = s?.players.find((q) => q.id === me);
   $("mode").textContent = p?.mode === "push" ? "Push" : "Pull";
   $("mode").classList.toggle("push", p?.mode === "push");

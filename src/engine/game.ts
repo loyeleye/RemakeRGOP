@@ -21,6 +21,13 @@ export const PULL_REACH = 10;
 export const TEAM_PULL = true;
 /** How many tiles a wisp turned by a crystal flies straight on before it stops. */
 export const CRYSTAL_FLIGHT = 8;
+/** How far a wisp flies on out of a moon pond. */
+export const PONDS_FLIGHT = 3;
+
+/** Is the tide coming in on this tick (it turns every `period` ticks, starting in)? */
+export function tideIn(tick: number, period: number) {
+  return Math.floor(tick / period) % 2 === 0;
+}
 /** Pushing reaches less far than pulling. */
 export const PUSH_REACH = 8;
 export const WISPS_PER_GUILD = 3;
@@ -339,6 +346,36 @@ export class Game {
       return;
     }
     if (held) w.glide = 0;
+    this.moveWisp(w, held);
+    // Petal beds hurry a moving wisp: a second step this tick.
+    if (this.board.tile(w.pos) === Tile.Bloom && !samePt(w.pos, w.prev) && (w.target || w.skate) && !this.board.inBankZone(w.pos)) this.moveWisp(w, held);
+  }
+
+  /** One tile of a wisp's travel this tick: its pull, its skate or crystal flight, or the tide. */
+  private moveWisp(w: Wisp, held: boolean) {
+    const from = w.pos;
+    this.moveOnce(w, held);
+    if (!samePt(from, w.pos)) this.afterStep(w, from);
+  }
+
+  /** Shrine tricks that act when a wisp lands on a tile. */
+  private afterStep(w: Wisp, from: Pt) {
+    const g = this.shrine.gimmicks;
+    if (g.ponds && this.board.tile(w.pos) === Tile.Water && this.board.tile(from) !== Tile.Water) {
+      // Into a moon pond: out of its twin across the brazier, flying on the same way.
+      const c = this.board.center;
+      const twin = pt(2 * c.x - w.pos.x, 2 * c.y - w.pos.y);
+      if (this.board.tile(twin) === Tile.Water) {
+        w.skate = pt(sign(w.pos.x - from.x), sign(w.pos.y - from.y));
+        w.glide = PONDS_FLIGHT;
+        w.target = null;
+        w.pos = twin;
+        this.letGo(w);
+      }
+    }
+  }
+
+  private moveOnce(w: Wisp, held: boolean) {
     if (w.skate && !held) {
       // Skating on ice with nobody pulling, or flying off a crystal: on it goes the same way
       // until it stops, leaves the ice, or its crystal flight runs out.
@@ -360,6 +397,15 @@ export class Game {
     }
     if (!w.target || samePt(w.target, w.pos)) {
       w.target = null;
+      // Loose on a pool when the tide runs: it drifts a tile in or out.
+      const tide = this.shrine.gimmicks.tide;
+      if (tide && !held && this.board.tile(w.pos) === Tile.Water) {
+        const c = this.board.center;
+        const dir = tideIn(this.tick, tide) ? 1 : -1;
+        const tx = dir * sign(c.x - w.pos.x), ty = dir * sign(c.y - w.pos.y);
+        const mv = (tx || ty) && wispMove(this.board, w.pos, tx, ty, Math.abs(c.x - w.pos.x), Math.abs(c.y - w.pos.y));
+        if (mv && !mv.bounce) w.pos = pt(w.pos.x + mv.step[0], w.pos.y + mv.step[1]);
+      }
       return;
     }
     w.skate = null;

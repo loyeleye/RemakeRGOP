@@ -370,6 +370,51 @@ describe("game", () => {
     expect(g.players[0]!.pos).toEqual(pt(10, 13));
   });
 
+  it("a wisp crossing a petal bed moves two tiles a tick", () => {
+    const shrine = openShrine([pt(6, 6)], [pt(20, 23)]);
+    for (let x = 7; x <= 12; x++) shrine.board.tiles[6 * 27 + x] = Tile.Bloom;
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(16, 6);
+    g.command(1, { action: { kind: "staff", wisp: 0 } });
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(8, 6));
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(10, 6));
+  });
+
+  it("the tide carries a loose wisp on a pool in, then out", () => {
+    const shrine = openShrine([pt(6, 13)], [pt(20, 23)]);
+    for (let x = 4; x <= 9; x++) shrine.board.tiles[13 * 27 + x] = Tile.Water;
+    shrine.gimmicks = { tide: 3 };
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(2, 2);
+    g.step(); // tick 1 (in): toward the brazier at (13, 13)
+    g.step(); // tick 2 (in)
+    expect(g.wisps[0]!.pos).toEqual(pt(8, 13));
+    g.step(); // tick 3 (out)
+    g.step(); // tick 4 (out)
+    expect(g.wisps[0]!.pos).toEqual(pt(6, 13));
+  });
+
+  it("a wisp flying into a moon pond comes out of its twin across the brazier", () => {
+    const shrine = openShrine([pt(6, 6)], [pt(20, 23)]);
+    shrine.board.tiles[6 * 27 + 8] = Tile.Water;
+    shrine.board.tiles[20 * 27 + 18] = Tile.Water;
+    shrine.gimmicks = { ponds: true };
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(12, 6);
+    g.command(1, { action: { kind: "staff", wisp: 0 } });
+    g.step();
+    g.step();
+    g.step();
+    // Into the pond at (8, 6), out of (18, 20) still heading east, and let go.
+    expect(g.wisps[0]!.pos).toEqual(pt(18, 20));
+    expect(g.players[0]!.action.kind).toBe("idle");
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(19, 20));
+  });
+
   it("teammates pulling one wisp pull it toward the point between them", () => {
     const roster: JoinSpec[] = [
       { id: 1, guild: 0, name: "A" },

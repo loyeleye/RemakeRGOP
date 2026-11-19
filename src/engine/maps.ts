@@ -28,6 +28,18 @@ export interface ShrineDef {
    * tiles), shared by all guilds and picked at random. Default SPAWN_BAND.
    */
   spawnBand?: [number, number];
+  /** The shrine's own trick, if any. */
+  gimmicks?: Gimmicks;
+}
+
+export interface Gimmicks {
+  /**
+   * The tide turns every this many ticks: while it comes in, a loose wisp on a pool drifts a
+   * tile a tick toward the brazier; while it goes out, away from it.
+   */
+  tide?: number;
+  /** Pools are linked moon ponds: a wisp flying into one comes out of its mirror image across the brazier. */
+  ponds?: boolean;
 }
 
 /** Default spawn band: from just past the archways to a couple of pulls out. */
@@ -202,6 +214,8 @@ export interface Ring {
    * walking and wisps but not sight, and a wisp that flies into it is turned off the mirror.
    */
   crystals?: { x: number; y: number; o: "/" | "\\" }[];
+  /** Other tiles (by map character), given in one eighth and copied to all eight symmetric places. */
+  marks?: { x: number; y: number; c: string }[];
 }
 
 /** Every court feature of a ring as offset -> map character. */
@@ -213,6 +227,9 @@ export function courtFeatures(ring: Ring): Map<string, string> {
       for (let dx = -R; dx <= R; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) > 2 && Math.hypot(dx, dy) <= r) out.set(`${dx},${dy}`, "*");
   }
   if (ring.stones) for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) out.set(`${sx * ring.stones},${sy * ring.stones}`, "o");
+  for (const m of ring.marks ?? [])
+    for (const [x, y] of [[m.x, m.y], [m.y, m.x]] as const)
+      for (const sx of [1, -1]) for (const sy of [1, -1]) out.set(`${x * sx},${y * sy}`, m.c);
   for (const c of ring.crystals ?? [])
     for (const swap of [false, true])
       for (const sx of [1, -1])
@@ -308,6 +325,7 @@ export interface Shrine {
   coast: ((dx: number, dy: number) => number) | null;
   /** True when the island has arms, so its outline isn't one radius per angle. */
   arms: boolean;
+  gimmicks: Gimmicks;
   /** The island's shape in played tiles (scaled), or null. */
   isle: IsleShape | null;
 }
@@ -363,9 +381,10 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "tidepool-steps",
     name: "Tidepool Steps",
-    blurb: "A wide lagoon atoll dotted with pools. Wisps drift over; you can't wade.",
+    blurb: "A wide lagoon atoll dotted with pools. Wisps drift over; you can't wade. The tide turns every 20 ticks: a loose wisp on a pool drifts in toward the brazier, then out again.",
     isle: { radius: 12.5, squareness: 2.4, coves: 0.14, heads: 0.08, seed: 11, stretch: [1.35, 0.8] },
     rings: [{ radius: 5, style: "diagonals" }],
+    gimmicks: { tide: 20 },
     rows: [
       "                                     ",
       "                                     ",
@@ -503,9 +522,10 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "blossom-garden",
     name: "Blossom Garden",
-    blurb: "A four-petal flower. Flower beds you can reach across but not walk through.",
+    blurb: "A four-petal flower. Flower beds you can reach across but not walk through, and petal paths that hurry a wisp along at 2 tiles a tick.",
     isle: { radius: 12, squareness: 2, coves: 0.05, heads: 0.05, seed: 5, waves: [[4, 0.32, Math.PI]] },
-    rings: [{ radius: 5, style: "open" }],
+    rings: [{ radius: 5, style: "open", marks: [{ x: 6, y: 0, c: "+" }, { x: 7, y: 0, c: "+" }, { x: 8, y: 0, c: "+" }, { x: 6, y: 6, c: "+" }, { x: 7, y: 7, c: "+" }] }],
+    gimmicks: {},
     rows: [
       "                                     ",
       "                                     ",
@@ -588,9 +608,10 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "night-glade",
     name: "Night Glade",
-    blurb: "A long moonlit ridge lying across the sky. Old trees and a glowing pond.",
+    blurb: "A long moonlit ridge lying across the sky. Old trees and two linked moon ponds: a wisp that flies into one comes out of the other, still going the same way.",
     isle: { radius: 14, squareness: 2.3, coves: 0.08, heads: 0.06, seed: 7, stretch: [1.3, 0.62], turn: -Math.PI / 6 },
     rings: [{ radius: 5, style: "pinwheel" }],
+    gimmicks: { ponds: true },
     rows: [
       "                                     ",
       "                                     ",
@@ -736,6 +757,7 @@ const TILE_OF: Record<string, Tile> = {
   "~": Tile.Water,
   B: Tile.Brazier,
   "%": Tile.Rime,
+  "+": Tile.Bloom,
   "/": Tile.CrystalA,
   "\\": Tile.CrystalB,
 };
@@ -789,7 +811,7 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   const board = new Board(width, height, tiles);
   for (let dy = -1; dy <= 1; dy++)
     for (let dx = -1; dx <= 1; dx++) tiles[(board.center.y + dy) * width + board.center.x + dx] = Tile.Brazier;
-  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null };
+  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {} };
 }
 
 /**

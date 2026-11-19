@@ -116,6 +116,14 @@ rim); every staff on it lets go.
 the average of their positions, at the normal speed. A teammate who loses reach or sight walks to
 get it back as usual, and drops out of the average until they touch it again.
 
+## Shrine gimmicks (experimental)
+
+| Shrine | Gimmick |
+|---|---|
+| Tidepool Steps | The tide turns every 20 ticks (the HUD shows which way and how long). While it comes in, a loose wisp on a pool drifts a tile a tick toward the brazier; while it goes out, away. |
+| Blossom Garden | Petal paths (`+`) out from each gate and corner: a wisp crossing one moves 2 tiles a tick. |
+| Night Glade | Linked moon ponds: a wisp that flies into one comes out of its twin across the brazier, still heading the same way, flies 3 tiles on and is let go. |
+
 ## Glancing angles (experimental)
 
 In the Great Orb Project about 3 in 4 scoring pulls from a home square bounce off scenery on the

@@ -33,6 +33,8 @@ export enum Tile {
   CrystalB = 8,
   /** Rime: frosted ice that boots grip, so lamplighters walk it like floor, but wisps skate on it as on ice. */
   Rime = 9,
+  /** Petal bed: open ground that hurries a wisp along: one crossing it moves 2 tiles a tick. */
+  Bloom = 10,
 }
 
 /** Do wisps skate on this tile? */

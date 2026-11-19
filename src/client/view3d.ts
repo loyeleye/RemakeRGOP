@@ -480,6 +480,26 @@ function makeMirror(x: number, z: number, slash: boolean, colour: string): THREE
   return g;
 }
 
+/** A petal bed: a soft pink patch scattered with petals, flat on the floor. */
+function makePetals(x: number, z: number, seed: number): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(x, 0.03, z);
+  const rnd = (k: number) => fract(Math.sin(seed * 51.3 + k * 17.7) * 43758.5);
+  const bed = new THREE.Mesh(new THREE.CircleGeometry(0.62, 18), new THREE.MeshStandardMaterial({ color: "#f7b6d2", emissive: "#f48fbf", emissiveIntensity: 0.25, roughness: 0.9, transparent: true, opacity: 0.85 }));
+  bed.rotation.x = -Math.PI / 2;
+  g.add(bed);
+  const petal = new THREE.CircleGeometry(0.09, 5);
+  const mat = new THREE.MeshStandardMaterial({ color: "#fff0f6", emissive: "#ffd1e6", emissiveIntensity: 0.3 });
+  for (let i = 0; i < 9; i++) {
+    const p = new THREE.Mesh(petal, mat);
+    p.rotation.x = -Math.PI / 2;
+    p.rotation.z = rnd(i) * 6.28;
+    p.position.set((rnd(i + 20) - 0.5) * 1.0, 0.01, (rnd(i + 40) - 0.5) * 1.0);
+    g.add(p);
+  }
+  return g;
+}
+
 function poolMask(b: Board, kind: Tile): THREE.Texture | null {
   const PX = 16;
   const c = document.createElement("canvas");
@@ -915,7 +935,8 @@ export class World {
           // Deflector stones inside the archways can have their own look.
           const court = Math.max(Math.abs(x - b.center.x), Math.abs(y - b.center.y)) <= 4;
           this.addProp(court && th.deflector ? th.deflector : th.boulder, wx, wz, court && th.deflector ? 1.3 : 0.9, 1.05, seed);
-        } else if (t === Tile.CrystalA || t === Tile.CrystalB) this.shrineGroup.add(makeMirror(wx, wz, t === Tile.CrystalA, th.crystal ?? "#e6c8ff"));
+        } else if (t === Tile.Bloom) this.shrineGroup.add(makePetals(wx, wz, seed));
+        else if (t === Tile.CrystalA || t === Tile.CrystalB) this.shrineGroup.add(makeMirror(wx, wz, t === Tile.CrystalA, th.crystal ?? "#e6c8ff"));
       }
     for (const [kind, ice] of [[Tile.Water, 0], [Tile.Ice, 1]] as const) {
       const mask = poolMask(b, kind);

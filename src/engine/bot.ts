@@ -6,7 +6,8 @@
 // Used for practice rivals, tests and (later) story-mode opponents.
 
 import { Board, DIRS, Mover, Tile, cheb, isSlick, pt, samePt, type Pt } from "./board.js";
-import { CRYSTAL_FLIGHT, PULL_REACH, flingOffset, wispMove, type Command, type Game, type Wisp } from "./game.js";
+import type { Gimmicks } from "./maps.js";
+import { CRYSTAL_FLIGHT, PONDS_FLIGHT, PULL_REACH, flingOffset, wispMove, type Command, type Game, type Wisp } from "./game.js";
 
 export interface BotStyle {
   /** Push rival wisps within this many tiles of the brazier rim (0 = never). */
@@ -162,32 +163,53 @@ export function bankDistances(board: Board): Int16Array {
 }
 
 /** Where the wisp ends up if pulled from `from` until it stops, and how many ticks it takes. */
-export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30): { end: Pt; ticks: number } {
+export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30, gimmicks: Gimmicks = {}): { end: Pt; ticks: number } {
   let w = start;
-  // Once it's turned by a crystal the staff has let go: it just flies.
+  // Once it's turned by a crystal or out of a moon pond, the staff has let go: it just flies.
   let skate: Pt | null = null;
   let glide = 0;
+  const c = board.center;
   for (let t = 1; t <= maxTicks; t++) {
     if (board.inBankZone(w)) return { end: w, ticks: t };
-    let dx: number, dy: number, ax: number, ay: number;
-    if (skate) [dx, dy, ax, ay] = [skate.x, skate.y, 1, 1];
-    else {
+    let target: Pt | null = null;
+    if (!skate) {
       if (cheb(from, w) > PULL_REACH || !board.canSee(from, w)) return { end: w, ticks: t };
       const off = flingOffset(from, w, "pull");
       if (!off.x && !off.y) return { end: w, ticks: t };
-      [dx, dy, ax, ay] = [Math.sign(off.x), Math.sign(off.y), Math.abs(off.x), Math.abs(off.y)];
+      target = pt(w.x + off.x, w.y + off.y);
     }
-    const mv = wispMove(board, w, dx, dy, ax, ay);
-    if (!mv) return { end: w, ticks: t };
-    if (mv.bounce) {
-      skate = mv.bounce;
-      glide = CRYSTAL_FLIGHT;
-    }
-    w = pt(w.x + mv.step[0], w.y + mv.step[1]);
-    // Held all the way, a wisp on ice goes where it's pulled; only a crystal takes it away.
-    if (skate) {
-      if (glide > 0) glide--;
-      if (glide === 0) return { end: w, ticks: t + 1 };
+    // One step, or two on a petal bed.
+    for (let k = 0; k < 2; k++) {
+      let dx: number, dy: number, ax: number, ay: number;
+      if (skate) [dx, dy, ax, ay] = [skate.x, skate.y, 1, 1];
+      else if (target && !samePt(target, w)) [dx, dy, ax, ay] = [Math.sign(target.x - w.x), Math.sign(target.y - w.y), Math.abs(target.x - w.x), Math.abs(target.y - w.y)];
+      else break;
+      const mv = wispMove(board, w, dx, dy, ax, ay);
+      if (!mv) {
+        if (skate) return { end: w, ticks: t };
+        break;
+      }
+      if (mv.bounce) {
+        skate = mv.bounce;
+        glide = CRYSTAL_FLIGHT;
+        target = null;
+      }
+      const prev = w;
+      w = pt(w.x + mv.step[0], w.y + mv.step[1]);
+      if (gimmicks.ponds && board.tile(w) === Tile.Water && board.tile(prev) !== Tile.Water) {
+        const twin = pt(2 * c.x - w.x, 2 * c.y - w.y);
+        if (board.tile(twin) === Tile.Water) {
+          skate = pt(mv.step[0], mv.step[1]);
+          glide = PONDS_FLIGHT + 1;
+          target = null;
+          w = twin;
+        }
+      }
+      if (skate) {
+        if (glide > 0) glide--;
+        if (glide === 0) return { end: w, ticks: t + 1 };
+      }
+      if (board.inBankZone(w) || board.tile(w) !== Tile.Bloom) break;
     }
   }
   return { end: w, ticks: maxTicks };
@@ -238,7 +260,7 @@ function planSpot(game: Game, id: number, me: Pt, wisp: Wisp, rank = 0, straight
       const wk = walk[s.y * W + s.x]!;
       // Nobody can stand still on ice to pull from it.
       if (wk === UNREACHABLE || board.tile(s) === Tile.Ice || !board.canSee(s, wisp.pos)) continue;
-      const { end, ticks } = simulatePull(board, s, wisp.pos);
+      const { end, ticks } = simulatePull(board, s, wisp.pos, 30, game.shrine.gimmicks);
       const left = bank[end.y * W + end.x]!;
       if (left >= now) {
         // No better: but a wisp wedged where nothing brings it closer has to be moved out first.
@@ -275,7 +297,7 @@ function pickTap(game: Game, me: Game["players"][number], rank = 0): number | nu
     if (w.guild !== me.guild || board.inBankZone(w.pos)) continue;
     if (!game.inReach({ ...me, mode: "pull" }, w)) continue;
     const now = bank[w.pos.y * W + w.pos.x]!;
-    const { end, ticks } = simulatePull(board, me.pos, w.pos);
+    const { end, ticks } = simulatePull(board, me.pos, w.pos, 30, game.shrine.gimmicks);
     const left = bank[end.y * W + end.x]!;
     if (left >= now) continue;
     const stalled = w.prev.x === w.pos.x && w.prev.y === w.pos.y;
