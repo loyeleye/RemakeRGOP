@@ -1,4 +1,4 @@
-// The shrines. Only the northern half is drawn (rows 0-12, plus the west half of the
+// The shrines. Each is an island with its own coastline. Only the northern half is drawn (plus the west half of the
 // brazier row up to the centre tile); the south half is that drawing turned 180 degrees
 // with Dawn and Dusk swapped, so neither guild ever gets the better side.
 //
@@ -26,11 +26,20 @@ export interface IsleShape {
   radius: number;
   /** 2 = round, higher = squarer. */
   squareness: number;
-  /** How deep the coves bite in, as a fraction of the radius. */
+  /** How deep the small coves bite in, as a fraction of the radius. */
   coves: number;
-  /** How far the headlands push out. */
+  /** How far the small headlands push out. */
   heads: number;
   seed: number;
+  /** Stretch along x and y before turning: an oval, a long strip. */
+  stretch?: [number, number];
+  /** Turn the whole shape (radians, clockwise on screen). */
+  turn?: number;
+  /**
+   * Big shape-defining waves: [k, amount, phase]. k must be even so the shape is the same
+   * turned 180 degrees. k=2 pinches into an hourglass, 4 makes a clover or a cross, 6 a star.
+   */
+  waves?: [number, number, number][];
 }
 
 export interface Shrine {
@@ -44,243 +53,294 @@ export interface Shrine {
   outline: ((a: number) => number) | null;
 }
 
-/** Margin of tiles added around the drawing so headlands have room. */
-const MARGIN = 3;
-
 /**
  * The edge of an island at angle a. Built only from even harmonics, so it's the same turned
  * 180 degrees: both guilds always get the same coastline.
  */
 export function isleRadius(s: IsleShape, a: number) {
-  const c = Math.cos(a), sn = Math.sin(a);
+  const t = a - (s.turn ?? 0);
+  const [sx, sy] = s.stretch ?? [1, 1];
+  const c = Math.cos(t) / sx, sn = Math.sin(t) / sy;
   const n = s.squareness;
   const base = s.radius / Math.pow(Math.pow(Math.abs(c), n) + Math.pow(Math.abs(sn), n), 1 / n);
+  let shape = 1;
+  for (const [k, amt, ph] of s.waves ?? []) shape += amt * Math.cos(k * t + ph);
   const ph = (k: number) => ((Math.sin(s.seed * 12.9898 + k * 78.233) * 43758.5453) % 1) * Math.PI * 2;
-  // A wobble in [-1, 1]: a few low even harmonics with seeded phases.
-  const w = (Math.cos(2 * a + ph(1)) * 0.25 + Math.cos(4 * a + ph(2)) * 0.45 + Math.cos(6 * a + ph(3)) * 0.3);
+  // A small wobble in [-1, 1]: a few even harmonics with seeded phases.
+  const w = Math.cos(2 * a + ph(1)) * 0.2 + Math.cos(6 * a + ph(2)) * 0.45 + Math.cos(10 * a + ph(3)) * 0.35;
   const k = w < 0 ? 1 + w * s.coves : 1 + w * s.heads;
-  return base * k;
+  return base * Math.max(0.2, shape) * k;
 }
 
 export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "moss-hollow",
     name: "Moss Hollow",
-    blurb: "An open glade. A few boulders, long sight lines.",
-    isle: { radius: 14, squareness: 2.6, coves: 0.16, heads: 0.12, seed: 7 },
+    blurb: "A round glade. A few boulders, a pond, long sight lines.",
+    isle: { radius: 13.5, squareness: 2.2, coves: 0.12, heads: 0.1, seed: 7 },
     rows: [
-      "###########################",
-      "#.........................#",
-      "#..a.........o.........b..#",
-      "#.........................#",
-      "#.....o.............o.....#",
-      "#.........................#",
-      "#..........~~~~~..........#",
-      "#.......o...........o.....#",
-      "#.........................#",
-      "#....a.................b..#",
-      "#.........................#",
-      "#..1.....#.......#.....2..#",
-      "#.............B...........#",
-      "#.o.........BB",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "              ........               ",
+      "             .....o....              ",
+      "            ............             ",
+      "           .................         ",
+      "         .....................       ",
+      "       .....o...~~~~~...o.....       ",
+      "      ....a.....~~~~~.....b...       ",
+      "      ........................       ",
+      "      .....#..a.......b..#....       ",
+      "      .....................o..       ",
+      "      ...o.....................      ",
+      "      ........o................      ",
+      "      ..1...................2..      ",
+      "      .............",
     ],
   },
   {
     id: "tidepool-steps",
     name: "Tidepool Steps",
-    blurb: "Pools you can't wade but wisps drift across. Plan your walk.",
-    isle: { radius: 14, squareness: 3, coves: 0.14, heads: 0.1, seed: 6 },
+    blurb: "A wide lagoon atoll dotted with pools. Wisps drift over; you can't wade.",
+    isle: { radius: 12.5, squareness: 2.4, coves: 0.14, heads: 0.08, seed: 11, stretch: [1.35, 0.8] },
     rows: [
-      "###########################",
-      "#.........................#",
-      "#.a.......~~~~~.........b.#",
-      "#.........~~~~~...........#",
-      "#...~~~...........~~~.....#",
-      "#...~~~....o...o..~~~.....#",
-      "#.........................#",
-      "#..o.......~~~~~.......o..#",
-      "#..........~~~~~..........#",
-      "#.~~~...a.........b...~~~.#",
-      "#.~~~.................~~~.#",
-      "#..1..........~........2..#",
-      "#.......~.....B...........#",
-      "#.......~...BB",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "          .........  .....           ",
+      "         ..................          ",
+      "        .......~~.......b.....       ",
+      "       ..o...a.......~~........      ",
+      "    ......~~......o..~~.........     ",
+      "  ....a...~~...............~~.b..    ",
+      "  ...~~.................o..~~....    ",
+      " ....~~.....~~.................~~.   ",
+      "  ..1...........................2..  ",
+      "  .................",
     ],
   },
   {
     id: "ember-quarry",
     name: "Ember Quarry",
-    blurb: "Cut-stone walls break sight. Corners matter.",
-    isle: { radius: 14, squareness: 3.4, coves: 0.14, heads: 0.12, seed: 7 },
+    blurb: "Two halves of a broken mountain, joined only at the brazier. Basalt pillars break sight.",
+    isle: { radius: 13, squareness: 2.6, coves: 0.1, heads: 0.08, seed: 7, turn: Math.PI / 4, waves: [[2, 0.42, 0]] },
     rows: [
-      "###########################",
-      "#.........................#",
-      "#..a........#..........b..#",
-      "#...........#.............#",
-      "#....####.........####....#",
-      "#.......#....o....#.......#",
-      "#.......#.........#.......#",
-      "#..o..........a...........#",
-      "#.........##...##.........#",
-      "#.....b...................#",
-      "#..####...............##..#",
-      "#..1..........o........2..#",
-      "#.........#...B...#.......#",
-      "#.o.........BB",
+      "                                     ",
+      "                                     ",
+      "           ....                      ",
+      "          .......                    ",
+      "         .........                   ",
+      "        ............                 ",
+      "      .#...#...b....                 ",
+      "    .................                ",
+      "   ...a..........o...                ",
+      "  .......o...#........               ",
+      "  ...#................               ",
+      "  ....................               ",
+      "   ...1.....a.........               ",
+      "   ......#..............             ",
+      "   .......................           ",
+      "    ....b.............#....          ",
+      "    ....................2....        ",
+      "     ..........................      ",
+      "     ..............",
     ],
   },
   {
     id: "crystal-spire",
     name: "Crystal Spire",
-    blurb: "Crystal clusters block sight. Find the gaps between them.",
-    isle: { radius: 14, squareness: 2.6, coves: 0.18, heads: 0.12, seed: 9 },
+    blurb: "A six-pointed star. Crystal clusters guard the points; sight runs down the arms.",
+    isle: { radius: 12.2, squareness: 2, coves: 0.06, heads: 0.06, seed: 9, waves: [[6, 0.3, 0]] },
     rows: [
-      "###########################",
-      "#.........................#",
-      "#..a.......##.........b...#",
-      "#..........###............#",
-      "#....##...........##......#",
-      "#....###..........###.....#",
-      "#.........................#",
-      "#.........o.....o.........#",
-      "#..##..............##.....#",
-      "#..##...a.......b..##.....#",
-      "#.........................#",
-      "#..1......##.....##....2..#",
-      "#.........................#",
-      "#.o.........BB",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "           ...          ..           ",
+      "          .....       .....          ",
+      "          ....a.     ......          ",
+      "          .......   .....b.          ",
+      "          .......   .......          ",
+      "          ...##.........##.          ",
+      "           ................          ",
+      "           .......o.......           ",
+      "           ...............           ",
+      "           ....o.....o....           ",
+      "        ..................b..        ",
+      "     ....#.................#....     ",
+      "    ..1....a..................2..    ",
+      "   ................",
     ],
   },
   {
     id: "cascade-falls",
     name: "Cascade Falls",
-    blurb: "Streams split the island. Wisps float over; you need the fords.",
-    isle: { radius: 14, squareness: 3, coves: 0.14, heads: 0.12, seed: 2 },
+    blurb: "A long island cut by two streams. Wisps float over; you need the fords.",
+    isle: { radius: 12.5, squareness: 2.8, coves: 0.1, heads: 0.08, seed: 2, stretch: [0.8, 1.3] },
     rows: [
-      "###########################",
-      "#.........................#",
-      "#..a.....~~.........b.....#",
-      "#........~~...............#",
-      "#........~~.....o.........#",
-      "#.....o..~~...........~~..#",
-      "#........~~...........~~..#",
-      "#.....................~~..#",
-      "#........~~...o.......~~..#",
-      "#....a...~~.........b.~~..#",
-      "#........~~...............#",
-      "#..1.....~~............2..#",
-      "#.............B...........#",
-      "#.o.........BB",
+      "                                     ",
+      "                                     ",
+      "                 ......              ",
+      "                ........             ",
+      "            ..~~...b....             ",
+      "           ...~~.........            ",
+      "           ...~~......~~.            ",
+      "          ....~~......~~.b           ",
+      "          ..a.~~......~~...          ",
+      "          ....~~..o...~~...          ",
+      "         .............~~...          ",
+      "         ...................         ",
+      "         ...o.~~.........o..         ",
+      "         .....~~..a.........         ",
+      "         .....~~......~~....         ",
+      "         .....~~......~~....         ",
+      "          ............~~....         ",
+      "          .1..............2.         ",
+      "          .........",
     ],
   },
   {
     id: "misty-stones",
     name: "Misty Stones",
-    blurb: "Standing stones in still pools. Reach over them, walk round them.",
-    isle: { radius: 14, squareness: 2.6, coves: 0.12, heads: 0.1, seed: 5 },
+    blurb: "A cross of four causeways. Standing stones in still pools; reach over them, walk round.",
+    isle: { radius: 11.5, squareness: 2.6, coves: 0.05, heads: 0.05, seed: 5, waves: [[4, 0.42, 0]] },
     rows: [
-      "###########################",
-      "#.........................#",
-      "#..a.........~.........b..#",
-      "#..........~~o~~..........#",
-      "#....~o~.....~.....~o~....#",
-      "#.....~...........~.......#",
-      "#.........................#",
-      "#...~o~....~o~....~o~.....#",
-      "#....~......~......~......#",
-      "#.....a.............b.....#",
-      "#.........................#",
-      "#..1..~o~.........~o~..2..#",
-      "#......~.....B.....~......#",
-      "#.o.........BB",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                .....                ",
+      "               a.....b               ",
+      "               .......               ",
+      "              ...~o~...              ",
+      "              .........              ",
+      "              .........              ",
+      "              .........              ",
+      "              ...~o~...              ",
+      "              .........              ",
+      "              .........              ",
+      "              .........              ",
+      "      ..~...................~.       ",
+      "    ....o...................o...     ",
+      "   ..............................    ",
+      "   ...a.......................b2..   ",
+      "   ..1.............",
     ],
   },
   {
     id: "blossom-garden",
     name: "Blossom Garden",
-    blurb: "Flower beds you can reach across but not walk through.",
-    isle: { radius: 14, squareness: 3, coves: 0.16, heads: 0.12, seed: 5 },
+    blurb: "A four-petal flower. Flower beds you can reach across but not walk through.",
+    isle: { radius: 12, squareness: 2, coves: 0.05, heads: 0.05, seed: 5, waves: [[4, 0.32, Math.PI]] },
     rows: [
-      "###########################",
-      "#.........................#",
-      "#..a..................b...#",
-      "#.......ooo.....ooo.......#",
-      "#.......o.........o.......#",
-      "#.........................#",
-      "#....o.......ooo.......o..#",
-      "#....o.................o..#",
-      "#.........................#",
-      "#.....a..oo.......oo.b....#",
-      "#.........................#",
-      "#..1....o.........o....2..#",
-      "#.............B...........#",
-      "#.o.........BB",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "        .....           ....         ",
+      "       .....1..       ...2....       ",
+      "      ..a........    .......b..      ",
+      "      ....oo......  .....oo....      ",
+      "      ....o...............o....      ",
+      "       ........a..o..b........       ",
+      "       .......................       ",
+      "        ......o.......o......        ",
+      "         ...................         ",
+      "          .................          ",
+      "          ................           ",
+      "           ........",
     ],
   },
   {
     id: "castle-rise",
     name: "Castle Rise",
-    blurb: "Old ramparts with gateways. Sight lines run through the gates.",
-    isle: { radius: 14, squareness: 3.4, coves: 0.12, heads: 0.1, seed: 3 },
+    blurb: "A walled square with corner bastions. Sight lines run through the gates.",
+    isle: { radius: 12, squareness: 7, coves: 0.03, heads: 0.03, seed: 3, waves: [[4, 0.13, Math.PI]] },
     rows: [
-      "###########################",
-      "#.........................#",
-      "#..a..................b...#",
-      "#.........................#",
-      "#....######.....######....#",
-      "#.........#.....#.........#",
-      "#.........................#",
-      "#..o...a............b..o..#",
-      "#.........................#",
-      "#...####...........####...#",
-      "#......#...........#......#",
-      "#..1...................2..#",
-      "#.............B...........#",
-      "#.o.........BB",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "      ......            ......       ",
+      "      ..a......      .......b..      ",
+      "      ............ ............      ",
+      "      ....######.....######....      ",
+      "      ....#...............#....      ",
+      "      ....#...............#....      ",
+      "       ...#..a....o....b..#....      ",
+      "       .......................       ",
+      "        ......................       ",
+      "        .....................        ",
+      "        .1...o.........o....2        ",
+      "         ....................        ",
+      "         ..........",
     ],
   },
   {
     id: "night-glade",
     name: "Night Glade",
-    blurb: "A moonlit pond and old trees. Wisps glide across the water.",
-    isle: { radius: 14, squareness: 2.6, coves: 0.14, heads: 0.12, seed: 7 },
+    blurb: "A long moonlit ridge lying across the sky. Old trees and a glowing pond.",
+    isle: { radius: 14, squareness: 2.3, coves: 0.08, heads: 0.06, seed: 7, stretch: [1.3, 0.62], turn: -Math.PI / 6 },
     rows: [
-      "###########################",
-      "#.........................#",
-      "#..a..................b...#",
-      "#.........................#",
-      "#.....##.........##.......#",
-      "#.....##..~~~~~..##.......#",
-      "#.........~~~~~...........#",
-      "#..........~~~............#",
-      "#...o...............o.....#",
-      "#.....a.............b.....#",
-      "#.........................#",
-      "#..1......#.....#......2..#",
-      "#.............B...........#",
-      "#.o.........BB",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                         ........    ",
+      "                   .......a.......   ",
+      "                  ................   ",
+      "                ...........##...b.   ",
+      "               ...................   ",
+      "             ..........~~~....o...   ",
+      "          .............~~~.....2..   ",
+      "         ...........#.............   ",
+      "        .......a.......b..........   ",
+      "        .........................    ",
+      "      ...1..#...................     ",
+      "     ..............",
     ],
   },
   {
     id: "glacier",
     name: "Glacier",
-    blurb: "Ice patches slide you the way you're facing. Ice spires block sight.",
-    isle: { radius: 14, squareness: 3, coves: 0.16, heads: 0.12, seed: 9 },
+    blurb: "A jagged ice floe. Ice patches slide you the way you're facing; ice spires block sight.",
+    isle: { radius: 13, squareness: 2.4, coves: 0.04, heads: 0.04, seed: 9, waves: [[10, 0.1, 0], [14, 0.06, 1]] },
     rows: [
-      "###########################",
-      "#.........................#",
-      "#..a......***.........b...#",
-      "#.........***.............#",
-      "#....#.........#..........#",
-      "#....##..***..##...***....#",
-      "#........***.......***....#",
-      "#..***..........***.......#",
-      "#..***...a.....b***.......#",
-      "#.........................#",
-      "#.....##.....***....##....#",
-      "#..1....................2.#",
-      "#.............B...........#",
-      "#.o.........BB",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "                                     ",
+      "             ..                      ",
+      "             ...    ...              ",
+      "             ...#  ....              ",
+      "             ..... .....             ",
+      "             .......***...           ",
+      "       .............***....  .       ",
+      "       ..a..***............b...      ",
+      "       .....***a.....b.........      ",
+      "      ....#............***#....      ",
+      "       .........**.....***....       ",
+      "       ..**..................        ",
+      "       ..**...........#.....         ",
+      "       ...................**...      ",
+      "      .......#............**..2..    ",
+      "    ..1............",
     ],
   },
 ];
@@ -346,6 +406,13 @@ export function buildShrine(def: ShrineDef): Shrine {
  */
 function carveIsle(rows: string[], isle: IsleShape): string[] {
   const H0 = rows.length, W0 = rows[0]!.length;
+  let reach = 0;
+  for (let i = 0; i < 360; i++) {
+    const a = (i / 360) * Math.PI * 2;
+    const r = isleRadius(isle, a);
+    reach = Math.max(reach, Math.abs(Math.cos(a) * r), Math.abs(Math.sin(a) * r));
+  }
+  const MARGIN = Math.max(0, Math.ceil(reach + 1.5 - (Math.min(W0, H0) - 1) / 2));
   const W = W0 + MARGIN * 2, H = H0 + MARGIN * 2;
   const g: string[][] = Array.from({ length: H }, (_, y) =>
     Array.from({ length: W }, (_, x) => {
@@ -365,7 +432,15 @@ function carveIsle(rows: string[], isle: IsleShape): string[] {
       if ("ab12".includes(g[y]![x]!)) throw new Error(`island edge cuts off a spawn or start at (${x},${y})`);
       g[y]![x] = " ";
     }
-  return g.map((r) => r.join(""));
+  // Crop to the land plus a ring of sky, keeping the brazier dead centre.
+  let ex = 0, ey = 0;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++)
+      if (g[y]![x] !== " ") {
+        ex = Math.max(ex, Math.abs(x - cx));
+        ey = Math.max(ey, Math.abs(y - cy));
+      }
+  return g.slice(cy - ey - 1, cy + ey + 2).map((r) => r.slice(cx - ex - 1, cx + ex + 2).join(""));
 }
 
 export const SHRINES: Shrine[] = SHRINE_DEFS.map(buildShrine);

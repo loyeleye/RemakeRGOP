@@ -669,7 +669,10 @@ export class World {
     this.timeUniforms.push(fallU);
     const falls = th.particles !== "embers";
     const tierList: { x: number; y: number; z: number; r: number; group: THREE.Group }[] = [];
-    tiers.forEach(([a, size, ty], i) => {
+    // Each island turns its tiers a different way so no two look alike.
+    const spin = [...shrine.id].reduce((h, ch) => h + ch.charCodeAt(0), 0) * 0.37;
+    tiers.forEach(([a0, size, ty], i) => {
+      const a = a0 + spin;
       const e = edge(a);
       const r = Math.min(W, H) * size;
       const tier = makeIsland({

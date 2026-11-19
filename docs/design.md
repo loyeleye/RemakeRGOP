@@ -47,7 +47,9 @@ them, then their order carries on. Wisps float over ice as if it were floor.
 
 ## Islands
 
-Ten shrines, each with its own island look (`src/client/themes.ts`): palette, sky, light, what
+Ten shrines, each with its own arena shape (round glade, wide atoll, hourglass, six-point star,
+long strip, cross, four-petal clover, bastioned square, diagonal ridge, jagged floe) and a
+layout drawn for that shape, plus its own island look (`src/client/themes.ts`): palette, sky, light, what
 its walls and boulders are drawn as, set pieces on the far verge and the lower tiers, and
 drifting particles.
 
@@ -69,8 +71,9 @@ that drawing turned 180°, with Dawn and Dusk swapped, so neither guild gets the
 New shrines are new drawings.
 
 Each shrine is an island. Its `isle` setting gives a coastline: a radius per angle built from
-a squarish base plus coves and headlands. The drawing's outer wall is dropped, the grid gets
-a 3-tile margin, and every tile whose centre falls outside the coastline becomes open sky.
+a base superellipse (stretched and turned as needed), big even "waves" that make the shape
+(k=2 an hourglass, 4 a cross or clover, 6 a star), and small coves and headlands. Every tile whose centre falls outside the coastline becomes open
+sky, and the grid is cropped to the land plus one ring of sky.
 The coastline uses only even harmonics, so it is identical turned 180°. A coastline that
 would cut off a spawn or start is rejected when the shrine is built. The renderer lays the
 flagstones, the parapet and the island mesh along the same coastline, so what you see is
