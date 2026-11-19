@@ -145,7 +145,7 @@ a wisp in is a run of small route choices:
 - **Forks:** where an arm splits, one branch is the short way but cluttered with boulders, short
   walls and ice (`clutter`), and the other is longer and clear. A wisp on the cluttered branch
   needs angled pulls round the obstacles; on the clear one it needs more pulls.
-- **Bridges:** three links join neighbouring arms near their far ends, so a far wisp can be
+- **Bridges:** four links join neighbouring arms near their far ends, so a far wisp can be
   brought round through a neighbouring arm, or a teammate can cut across to meet it.
 - Loops leave holes of open sky inside the island; the renderer traces them from the same
   coastline and draws a curb round each.

@@ -629,6 +629,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
         { a: 0, ta: 0.78, b: 1, tb: 0.85, bend: 3, width: 1.3, clutter: 1.4 },
         { a: 2, ta: 0.7, b: 3, tb: 0.75, bend: -3, width: 1.3, clutter: 1.4 },
         { a: 3, ta: 0.95, b: 4, tb: 0.8, bend: 2, width: 1.2, clutter: 1 },
+        { a: 4, ta: 0.92, b: 0, tb: 0.42, bend: 3, width: 1.3, clutter: 1.2 },
       ],
     },
     rings: [{ radius: 5, style: "diagonals" }, { radius: 9, style: "gates" }],
