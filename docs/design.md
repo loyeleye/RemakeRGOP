@@ -94,11 +94,38 @@ human are 42 to 44 on small altars; a human who learns the angles should beat th
 | Pool `~` | ✗ | ✓ | ✓ |
 | Brazier (3×3) | ✗ | ✓ | ✓ |
 | Open sky (past the island's edge) | ✗ | ✗ | ✓ |
-| Ice `*` | slides | ✓ | ✓ |
+| Ice `*` | slides | skates | ✓ |
+| Rime `%` | ✓ | skates | ✓ |
+| Crystal mirror `/` `\` | ✗ | turned | ✓ |
 
 **Ice.** A lamplighter who starts a tick on ice slides one tile the way they last stepped, and
 that slide is their whole tick. They keep sliding until they leave the ice or something blocks
-them, then their order carries on. Wisps float over ice as if it were floor.
+them, then their order carries on.
+
+**Skating (experimental).** A wisp that steps onto ice or rime skates: every tick it keeps going
+the way it last stepped, sliding off scenery like any wisp, until it leaves the ice or stops.
+Every staff on it lets go, and nobody can grip it until it stops. Rime is frosted ice that boots
+grip, so it only affects wisps.
+
+**Crystal mirrors (experimental).** A thin mirror on its tile's diagonal. A wisp that would step
+into one is turned off the mirror (heading east into `\` turns south), takes its first step the
+new way, and is flung 2 tiles; every staff on it lets go.
+
+**Team pull (experimental).** When teammates pull the same wisp on the same tick, it heads for
+the average of their positions, at the normal speed. A teammate who loses reach or sight walks to
+get it back as usual, and drops out of the average until they touch it again.
+
+## Glancing angles (experimental)
+
+In the Great Orb Project about 3 in 4 scoring pulls from a home square bounce off scenery on the
+way in (Air, Fire, Body and Water measured with `tools/gop_engine.py`); on our open archways it
+was about 1 in 4 to 1 in 3. Three shrines try a different fix each:
+
+| Shrine | Mechanic | Shots that glance | Home-square coverage |
+|---|---|---|---|
+| Fairy Ring | toadstool deflectors on the court diagonals (3, 3), posts beside each gate | 59% | 100% |
+| Crystal Spire | 8 crystal mirrors flanking the gates at (3, 1); 44% of shots bounce off one | 51% | 82% |
+| Glacier | the whole court is rime, so a wisp entering it skates; aim it at the rim | all | 38% |
 
 ## Islands
 

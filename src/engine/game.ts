@@ -9,7 +9,7 @@
 // So a staff touch shows up as wisp movement on the *next* tick, and a lamplighter who walks
 // into reach on one tick only touches the wisp on the tick after.
 
-import { Board, Mover, Tile, cheb, pt, samePt, sign, type Pt } from "./board.js";
+import { Board, Mover, Tile, cheb, isCrystal, isSlick, pt, samePt, sign, type Pt } from "./board.js";
 import type { Shrine } from "./maps.js";
 
 export const TICK_MS = 600;
@@ -17,6 +17,8 @@ export const ROUND_TICKS = 200;
 export const COUNTDOWN_TICKS = 5;
 /** How far a staff reaches when pulling (Chebyshev tiles, with line of sight). */
 export const PULL_REACH = 10;
+/** Experimental: teammates pulling one wisp on the same tick pull it toward the point between them. */
+export const TEAM_PULL = true;
 /** Pushing reaches less far than pulling. */
 export const PUSH_REACH = 8;
 export const WISPS_PER_GUILD = 3;
@@ -59,6 +61,10 @@ export interface Wisp {
   holder: number | null;
   grip: Grip;
   touched: boolean;
+  /** Skating across ice: the way it keeps sliding each tick. No staff can grip it meanwhile. */
+  skate: Pt | null;
+  /** Teammates pulling it together this tick (the midpoint of all of them is what it heads for). */
+  pullers: number[];
 }
 
 export interface Lamplighter {
@@ -152,6 +158,29 @@ export function slideStep(board: Board, from: Pt, dx: number, dy: number, ax: nu
   return null;
 }
 
+/** The way a crystal mirror turns a wisp heading (dx, dy). y grows south, so "/" runs from SW to NE. */
+export function reflect(t: Tile, dx: number, dy: number): [number, number] {
+  return t === Tile.CrystalA ? [-dy, -dx] : [dy, dx];
+}
+
+/**
+ * One wisp step toward a target, with the shrine's tricks: a wisp flying into a crystal is
+ * turned off its mirror and flung two tiles the new way (`bounce` is the new heading and it
+ * takes its first step that way this tick). Otherwise it is slideStep. Null: it stops.
+ */
+export function wispMove(board: Board, from: Pt, dx: number, dy: number, ax: number, ay: number): { step: [number, number]; bounce: Pt | null } | null {
+  const hit = board.tile(pt(from.x + dx, from.y + dy));
+  if (isCrystal(hit)) {
+    const [rx, ry] = reflect(hit, dx, dy);
+    if (rx !== dx || ry !== dy) {
+      const s = slideStep(board, from, rx, ry, Math.abs(rx), Math.abs(ry));
+      return s ? { step: s, bounce: pt(rx, ry) } : null;
+    }
+  }
+  const s = slideStep(board, from, dx, dy, ax, ay);
+  return s ? { step: s, bounce: null } : null;
+}
+
 export function flingOffset(from: Pt, wisp: Pt, mode: StaffMode): Pt {
   // Direction from wisp toward the lamplighter.
   const dx = from.x - wisp.x;
@@ -212,6 +241,8 @@ export class Game {
           holder: null,
           grip: Grip.Free,
           touched: false,
+          skate: null,
+          pullers: [],
         };
         this.placeWisp(w, used);
         this.wisps.push(w);
@@ -274,6 +305,7 @@ export class Game {
     if (this.finished) return;
     this.tick++;
     this.banks = [];
+    for (const w of this.wisps) w.pullers = [];
     for (const w of this.wisps) this.stepWisp(w);
     for (const p of this.players) this.stepPlayer(p);
     for (const w of this.wisps) {
@@ -289,15 +321,8 @@ export class Game {
     if (this.board.inBankZone(w.pos)) {
       w.target = null;
       w.rimTicks++;
-      if (w.rimTicks >= 1) {
-        // Nobody can keep tugging a wisp that's already on the rim.
-        for (const p of this.players) {
-          if (p.action.kind === "staff" && p.action.wisp === w.id) {
-            p.action = { kind: "idle" };
-            p.beam = null;
-          }
-        }
-      }
+      // Nobody can keep tugging a wisp that's already on the rim.
+      if (w.rimTicks >= 1) this.letGo(w);
       if (w.rimTicks >= BANK_TICKS) {
         this.scores[w.guild]!++;
         this.banks.push({ tick: this.tick, wisp: w.id, guild: w.guild });
@@ -306,20 +331,51 @@ export class Game {
       }
       return;
     }
+    if (w.skate) {
+      // Skating on ice: on it goes the same way until it leaves the ice or stops.
+      const mv = wispMove(this.board, w.pos, w.skate.x, w.skate.y, 1, 1);
+      if (!mv) {
+        w.skate = null;
+        return;
+      }
+      if (mv.bounce) w.skate = mv.bounce;
+      w.pos = pt(w.pos.x + mv.step[0], w.pos.y + mv.step[1]);
+      if (!isSlick(this.board.tile(w.pos))) w.skate = null;
+      return;
+    }
     if (!w.target || samePt(w.target, w.pos)) {
       w.target = null;
       return;
     }
-    let dx = sign(w.target.x - w.pos.x);
-    let dy = sign(w.target.y - w.pos.y);
-    const slid = slideStep(this.board, w.pos, dx, dy, Math.abs(w.target.x - w.pos.x), Math.abs(w.target.y - w.pos.y));
-    if (!slid) {
+    const mv = wispMove(this.board, w.pos, sign(w.target.x - w.pos.x), sign(w.target.y - w.pos.y), Math.abs(w.target.x - w.pos.x), Math.abs(w.target.y - w.pos.y));
+    if (!mv) {
       w.target = null;
       return;
     }
-    [dx, dy] = slid;
+    if (mv.bounce) {
+      // Off a crystal: flung two tiles the new way, and out of every staff's grip.
+      w.target = pt(w.pos.x + 2 * mv.bounce.x, w.pos.y + 2 * mv.bounce.y);
+      this.letGo(w);
+    }
+    const [dx, dy] = mv.step;
     w.pos = pt(w.pos.x + dx, w.pos.y + dy);
     if (samePt(w.pos, w.target)) w.target = null;
+    if (isSlick(this.board.tile(w.pos)) && !this.board.inBankZone(w.pos)) {
+      // Onto ice: it skates from here, and no staff can hold it.
+      w.skate = pt(dx, dy);
+      w.target = null;
+      this.letGo(w);
+    }
+  }
+
+  /** Every staff on this wisp lets go. */
+  private letGo(w: Wisp) {
+    for (const p of this.players) {
+      if (p.action.kind === "staff" && p.action.wisp === w.id) {
+        p.action = { kind: "idle" };
+        p.beam = null;
+      }
+    }
   }
 
   private placeWisp(w: Wisp, taken: Set<string>) {
@@ -423,7 +479,7 @@ export class Game {
 
   /** Pull works on your own guild's wisps; push works on any wisp. */
   canAffect(p: Lamplighter, w: Wisp) {
-    return p.mode === "push" || w.guild === p.guild;
+    return !w.skate && (p.mode === "push" || w.guild === p.guild);
   }
 
   inReach(p: Lamplighter, w: Wisp) {
@@ -434,6 +490,22 @@ export class Game {
 
   private touch(p: Lamplighter, w: Wisp, fresh: boolean) {
     if (fresh) p.slipped = false;
+    // Pulling together: a teammate already pulled this wisp this tick, so it heads for the
+    // point between all of them instead.
+    if (TEAM_PULL && p.mode === "pull" && w.touched && w.pullers.length > 0 && !w.pullers.includes(p.id)) {
+      p.slipped = false;
+      p.beam = w.id;
+      w.pullers.push(p.id);
+      const pullers = w.pullers.map((id) => this.players.find((q) => q.id === id)!);
+      const mx = pullers.reduce((a, q) => a + q.pos.x, 0) / pullers.length;
+      const my = pullers.reduce((a, q) => a + q.pos.y, 0) / pullers.length;
+      const base = w.pos;
+      // Round the midpoint toward the wisp, so it never aims past where they meet.
+      const mid = pt(base.x + Math.trunc(mx - base.x), base.y + Math.trunc(my - base.y));
+      const off = samePt(mid, base) ? pt(0, 0) : flingOffset(mid, base, "pull");
+      w.target = off.x === 0 && off.y === 0 ? null : pt(base.x + off.x, base.y + off.y);
+      return;
+    }
     if (!p.slipped && this.loses(p, w)) p.slipped = true;
     p.beam = w.id;
     if (p.slipped) return;
@@ -443,6 +515,7 @@ export class Game {
     w.holder = p.id;
     w.grip = Grip.Held;
     w.touched = true;
+    w.pullers = p.mode === "pull" ? [p.id] : [];
   }
 
   /**

@@ -180,13 +180,52 @@ export const MAP_SCALE = 1.5;
  *              so no gap lines up with the one across the brazier
  *   colonnade  a pillar on every other tile: lots of 1-wide gaps, but a wisp can't cut
  *              diagonally between two pillars
+ *   posts      one post each side of a narrow middle gate; everything else open
  */
-export type RingStyle = "gates" | "open" | "diagonals" | "pillared" | "pinwheel" | "colonnade";
+export type RingStyle = "gates" | "open" | "diagonals" | "pillared" | "pinwheel" | "colonnade" | "posts";
 
 export interface Ring {
   /** Chebyshev distance of the pillars from the centre tile. */
   radius: number;
   style: RingStyle;
+  /**
+   * Deflector stones on the four diagonals at this distance from the centre, inside the ring.
+   * They stop wisps and walkers but not sight, so a wisp flung at a corner of the rim glances
+   * off one and slides in: most good angles are bank shots off a stone.
+   */
+  stones?: number;
+  /** Turn every open court tile this far from the centre (Chebyshev, inclusive) to rime: wisps skate on it, walkers don't. */
+  ice?: [number, number];
+  /**
+   * Crystals in the court, given in one eighth and copied to all eight symmetric places. A
+   * crystal is a thin mirror on its tile's diagonal ("/" or "\\" as drawn, north up): it blocks
+   * walking and wisps but not sight, and a wisp that flies into it is turned off the mirror.
+   */
+  crystals?: { x: number; y: number; o: "/" | "\\" }[];
+}
+
+/** Every court feature of a ring as offset -> map character. */
+export function courtFeatures(ring: Ring): Map<string, string> {
+  const out = new Map<string, string>();
+  if (ring.ice) {
+    const [lo, hi] = ring.ice;
+    for (let dy = -hi; dy <= hi; dy++)
+      for (let dx = -hi; dx <= hi; dx++) {
+        const d = Math.max(Math.abs(dx), Math.abs(dy));
+        if (d >= lo && d <= hi) out.set(`${dx},${dy}`, "%");
+      }
+  }
+  if (ring.stones) for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) out.set(`${sx * ring.stones},${sy * ring.stones}`, "o");
+  for (const c of ring.crystals ?? [])
+    for (const swap of [false, true])
+      for (const sx of [1, -1])
+        for (const sy of [1, -1]) {
+          const x = (swap ? c.y : c.x) * sx, y = (swap ? c.x : c.y) * sy;
+          // A mirror flipped on one axis turns into the other diagonal; swapping x and y keeps it.
+          const o = sx * sy < 0 ? (c.o === "/" ? "\\" : "/") : c.o;
+          out.set(`${x},${y}`, o);
+        }
+  return out;
 }
 
 export const RING: Ring = { radius: 5, style: "gates" };
@@ -199,12 +238,16 @@ export const RING_NOTES: Record<RingStyle, string> = {
   pillared: "Archways: open corners, but a pillar stops straight diagonal shots.",
   pinwheel: "Archways: every gate is off-centre, so nothing lines up across the brazier.",
   colonnade: "Archways: a pillar on every other tile. Lots of narrow ways in.",
+  posts: "Archways: a post each side of every gate, wide open corners.",
 };
 
 /** The lobby line for a shrine's archways (outer ring first when there are two). */
 export function ringNote(rings: Ring[]): string {
   if (rings.length > 1) return "Two rings of archways: in through a gate, round the court, in at a corner. Very hard to score.";
-  return rings[0] ? RING_NOTES[rings[0].style] : "";
+  if (!rings[0]) return "";
+  const r = rings[0];
+  const extra = r.stones ? " Stones by the brazier turn wisps in off the corners." : r.crystals ? " Crystal mirrors by the gates turn a wisp that flies into them." : r.ice ? " The brazier stands on rime: a wisp that reaches it skates straight on." : "";
+  return RING_NOTES[r.style] + extra;
 }
 
 /** Is tile t along a side (t from -R to R, centre 0) a pillar? */
@@ -223,6 +266,8 @@ function ringPillar(style: RingStyle, R: number, t: number): boolean {
       return t < 1 || t > 3;
     case "colonnade":
       return a >= 2 && a % 2 === 0;
+    case "posts":
+      return a === 1;
   }
 }
 
@@ -377,9 +422,9 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "crystal-spire",
     name: "Crystal Spire",
-    blurb: "A six-pointed star. Crystal clusters guard the points; sight runs down the arms.",
+    blurb: "A six-pointed star. Crystal clusters guard the points; sight runs down the arms. Crystal mirrors round the brazier send a wisp off at right angles.",
     isle: { radius: 12.2, squareness: 2, coves: 0.06, heads: 0.06, seed: 9, waves: [[6, 0.3, 0]] },
-    rings: [{ radius: 5, style: "open" }],
+    rings: [{ radius: 5, style: "posts", crystals: [{ x: 3, y: 1, o: "\\" }] }],
     rows: [
       "                                     ",
       "                                     ",
@@ -491,7 +536,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     name: "Fairy Ring",
     blurb: "A small glade inside a ring of giant toadstools. Wisps appear close and the gates line up: the place to learn your angles and chase records.",
     isle: { radius: 12, squareness: 2, coves: 0.04, heads: 0.04, seed: 21 },
-    rings: [{ radius: 5, style: "open" }],
+    rings: [{ radius: 5, style: "posts", stones: 3 }],
     spawnBand: [6, 8],
     rows: [
       "                                     ",
@@ -574,9 +619,9 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "glacier",
     name: "Glacier",
-    blurb: "A jagged ice floe. Ice patches slide you the way you're facing; ice spires block sight.",
+    blurb: "A jagged ice floe. Ice slides you the way you're facing, and a wisp that hits ice skates until it leaves it: no staff can hold it. The brazier sits on a sheet of ice.",
     isle: { radius: 13, squareness: 2.4, coves: 0.04, heads: 0.04, seed: 9, waves: [[10, 0.1, 0], [14, 0.06, 1]] },
-    rings: [{ radius: 5, style: "colonnade" }],
+    rings: [{ radius: 5, style: "open", ice: [3, 4] }],
     rows: [
       "                                     ",
       "                                     ",
@@ -586,16 +631,16 @@ export const SHRINE_DEFS: ShrineDef[] = [
       "             ...    ...              ",
       "             ...#  ....              ",
       "             ..... .....             ",
-      "             .......***...           ",
-      "       .............***....  .       ",
-      "       ..a..***............b...      ",
+      "             .......****..           ",
+      "       .............****...  .       ",
+      "       ..a..****....****...b...      ",
       "       .....***a.....b.........      ",
-      "      ....#............***#....      ",
-      "       .........**.....***....       ",
-      "       ..**..................        ",
-      "       ..**...........#.....         ",
-      "       ...................**...      ",
-      "      .......#............**..2..    ",
+      "      ....#.****.......***#....      ",
+      "       .........***....****...       ",
+      "       ..***....***....****..        ",
+      "       ..***..........#.....         ",
+      "       ..***..............***..      ",
+      "      .......#............***.2..    ",
       "    ..1............",
     ],
   },
@@ -693,6 +738,9 @@ const TILE_OF: Record<string, Tile> = {
   o: Tile.Rock,
   "~": Tile.Water,
   B: Tile.Brazier,
+  "%": Tile.Rime,
+  "/": Tile.CrystalA,
+  "\\": Tile.CrystalB,
 };
 
 const SWAP: Record<string, string> = { a: "b", b: "a", "1": "2", "2": "1" };
@@ -836,6 +884,7 @@ export function addRings(rows: string[], rings: Ring[]): string[] {
   const g = rows.map((r) => [...r]);
   const walls = new Set(rings.flatMap(ringWalls).map((p) => `${p.x},${p.y}`));
   const outer = Math.max(...rings.map((r) => r.radius));
+  const court = new Map(rings.flatMap((r) => [...courtFeatures(r)]));
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const dx = x - cx, dy = y - cy;
@@ -852,7 +901,7 @@ export function addRings(rows: string[], rings: Ring[]): string[] {
           }
         }
       }
-      g[y]![x] = walls.has(`${dx},${dy}`) ? "#" : d <= 1 ? "B" : ".";
+      g[y]![x] = walls.has(`${dx},${dy}`) ? "#" : d > 2 && court.has(`${dx},${dy}`) ? court.get(`${dx},${dy}`)! : d <= 1 ? "B" : ".";
     }
   return g.map((r) => r.join(""));
 }

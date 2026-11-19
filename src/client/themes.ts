@@ -27,6 +27,10 @@ export interface Theme {
   particles: Particles;
   /** Tint for the plain wall/boulder models, if the island wants them darker or paler. */
   tint?: string;
+  /** What deflector stones inside the archways look like, if not the island's boulders. */
+  deflector?: PropKind;
+  /** Colour of crystal mirrors. */
+  crystal?: string;
   /** Colour of the archway stone, if not the island's rock lightened. */
   arch?: string;
   /** Something that glows on top of the pillars at the ends of each archway run. */
@@ -265,6 +269,7 @@ export const THEMES: Record<string, Theme> = {
     exposure: 1.3,
     wall: "column",
     boulder: "hydrangea",
+    deflector: "toadstool",
     arch: "#f2c8dc",
     crown: (seed) => makeStarLantern(STAR_COLOURS[seed % STAR_COLOURS.length]!, 0.42, seed),
     particles: "sparkles",

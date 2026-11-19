@@ -5,8 +5,8 @@
 // set it also shoves rival wisps that get close to the rim.
 // Used for practice rivals, tests and (later) story-mode opponents.
 
-import { Board, DIRS, Mover, cheb, pt, type Pt } from "./board.js";
-import { PULL_REACH, flingOffset, slideStep, type Command, type Game, type Wisp } from "./game.js";
+import { Board, DIRS, Mover, Tile, cheb, isSlick, pt, samePt, type Pt } from "./board.js";
+import { PULL_REACH, flingOffset, wispMove, type Command, type Game, type Wisp } from "./game.js";
 
 export interface BotStyle {
   /** Push rival wisps within this many tiles of the brazier rim (0 = never). */
@@ -54,7 +54,8 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
   if (style.lapse && rand() < style.lapse) return botCommand(game, id, BOT_MEDIUM, rand);
   if (style.wait) return waited(game, id, style, rand);
   const c = game.board.center;
-  const live = (w: Wisp) => !game.board.inBankZone(w.pos);
+  // Skating wisps can't be gripped, so leave them be until they stop.
+  const live = (w: Wisp) => !game.board.inBankZone(w.pos) && !w.skate;
 
   // Shove a rival wisp that's about to be banked.
   if (style.pushy > 0) {
@@ -155,6 +156,8 @@ export function bankDistances(board: Board): Int16Array {
       q.push(n);
     }
   }
+  // A wisp can't rest on ice, it skates on: count ending there as well short of banking.
+  for (let i = 0; i < W * H; i++) if (isSlick(board.tiles[i]!) && d[i]! > 0 && d[i]! < UNREACHABLE) d[i] = d[i]! + 6;
   bankCache.set(board, d);
   return d;
 }
@@ -162,14 +165,35 @@ export function bankDistances(board: Board): Int16Array {
 /** Where the wisp ends up if pulled from `from` until it stops, and how many ticks it takes. */
 export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30): { end: Pt; ticks: number } {
   let w = start;
+  // Once it's flung off a crystal or skating on ice, the staff has let go: it just flies.
+  let target: Pt | null = null;
+  let skate: Pt | null = null;
   for (let t = 1; t <= maxTicks; t++) {
     if (board.inBankZone(w)) return { end: w, ticks: t };
-    if (cheb(from, w) > PULL_REACH || !board.canSee(from, w)) return { end: w, ticks: t };
-    const off = flingOffset(from, w, "pull");
-    if (!off.x && !off.y) return { end: w, ticks: t };
-    const step = slideStep(board, w, Math.sign(off.x), Math.sign(off.y), Math.abs(off.x), Math.abs(off.y));
-    if (!step) return { end: w, ticks: t };
-    w = pt(w.x + step[0], w.y + step[1]);
+    let dx: number, dy: number, ax: number, ay: number;
+    if (skate) [dx, dy, ax, ay] = [skate.x, skate.y, 1, 1];
+    else if (target) {
+      if (samePt(target, w)) return { end: w, ticks: t };
+      [dx, dy, ax, ay] = [Math.sign(target.x - w.x), Math.sign(target.y - w.y), Math.abs(target.x - w.x), Math.abs(target.y - w.y)];
+    } else {
+      if (cheb(from, w) > PULL_REACH || !board.canSee(from, w)) return { end: w, ticks: t };
+      const off = flingOffset(from, w, "pull");
+      if (!off.x && !off.y) return { end: w, ticks: t };
+      [dx, dy, ax, ay] = [Math.sign(off.x), Math.sign(off.y), Math.abs(off.x), Math.abs(off.y)];
+    }
+    const mv = wispMove(board, w, dx, dy, ax, ay);
+    if (!mv) return { end: w, ticks: t };
+    if (mv.bounce) {
+      if (skate) skate = mv.bounce;
+      else target = pt(w.x + 2 * mv.bounce.x, w.y + 2 * mv.bounce.y);
+    }
+    w = pt(w.x + mv.step[0], w.y + mv.step[1]);
+    if (skate) {
+      if (!isSlick(board.tile(w))) return { end: w, ticks: t + 1 };
+    } else if (isSlick(board.tile(w)) && !board.inBankZone(w)) {
+      skate = pt(mv.step[0], mv.step[1]);
+      target = null;
+    }
   }
   return { end: w, ticks: maxTicks };
 }
@@ -211,19 +235,27 @@ function planSpot(game: Game, id: number, me: Pt, wisp: Wisp, rank = 0, straight
   }
   const now = bank[at]!;
   const options: { s: Pt; cost: number; end: number }[] = [];
+  const stuckOptions: { s: Pt; cost: number; end: number }[] = [];
   for (let dy = -PULL_REACH; dy <= PULL_REACH; dy++)
     for (let dx = -PULL_REACH; dx <= PULL_REACH; dx++) {
       const s = pt(wisp.pos.x + dx, wisp.pos.y + dy);
       if (!board.inside(s) || (dx === 0 && dy === 0)) continue;
       const wk = walk[s.y * W + s.x]!;
-      if (wk === UNREACHABLE || !board.canSee(s, wisp.pos)) continue;
+      // Nobody can stand still on ice to pull from it.
+      if (wk === UNREACHABLE || board.tile(s) === Tile.Ice || !board.canSee(s, wisp.pos)) continue;
       const { end, ticks } = simulatePull(board, s, wisp.pos);
       const left = bank[end.y * W + end.x]!;
-      if (left >= now) continue;
+      if (left >= now) {
+        // No better: but a wisp wedged where nothing brings it closer has to be moved out first.
+        if (samePt(end, wisp.pos) || left >= UNREACHABLE) continue;
+        stuckOptions.push({ s, cost: wk + ticks + left * 2.5 + 50, end: end.y * W + end.x });
+        continue;
+      }
       // Easy bots avoid angled pulls: they take one only when no straight pull helps.
       const angled = straightOnly && dx !== 0 && dy !== 0 ? 1000 : 0;
       options.push({ s, cost: wk + ticks + left * 2.5 + angled, end: end.y * W + end.x });
     }
+  if (options.length === 0) options.push(...stuckOptions);
   options.sort((a, b) => a.cost - b.cost);
   // The second best is the best plan that ends the wisp somewhere else, so it's a real choice.
   const best = options[0];
@@ -245,7 +277,7 @@ function pickTap(game: Game, me: Game["players"][number], rank = 0): number | nu
   const ranked: { id: number; score: number }[] = [];
   let moving: number | null = null;
   for (const w of game.wisps) {
-    if (w.guild !== me.guild || board.inBankZone(w.pos)) continue;
+    if (w.guild !== me.guild || board.inBankZone(w.pos) || w.skate) continue;
     if (!game.inReach({ ...me, mode: "pull" }, w)) continue;
     const now = bank[w.pos.y * W + w.pos.x]!;
     const { end, ticks } = simulatePull(board, me.pos, w.pos);

@@ -25,7 +25,21 @@ export enum Tile {
   Edge = 5,
   /** Ice: open ground, but a lamplighter who starts a tick on it slides a tile the way they face. */
   Ice = 6,
+  /**
+   * Crystal mirrors, drawn "/" (A) and "\\" (B) with north up: they block walking and wisps but
+   * not sight, and a wisp flying into one is turned off the mirror (see wispMove).
+   */
+  CrystalA = 7,
+  CrystalB = 8,
+  /** Rime: frosted ice that boots grip, so lamplighters walk it like floor, but wisps skate on it as on ice. */
+  Rime = 9,
 }
+
+/** Do wisps skate on this tile? */
+export const isSlick = (t: Tile) => t === Tile.Ice || t === Tile.Rime;
+
+/** Is this tile a crystal mirror? */
+export const isCrystal = (t: Tile) => t === Tile.CrystalA || t === Tile.CrystalB;
 
 /** Who is moving: decides which tiles are passable. */
 export enum Mover {
@@ -66,6 +80,8 @@ export class Board {
         return false;
       case Tile.Rock:
       case Tile.Edge:
+      case Tile.CrystalA:
+      case Tile.CrystalB:
         return who === Mover.Sight;
       case Tile.Water:
       case Tile.Brazier:

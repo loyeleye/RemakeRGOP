@@ -457,6 +457,29 @@ const GLOW = glowTexture();
  * A soft mask of every tile of one kind: a disc on each tile, blurred, so neighbouring tiles
  * melt into one rounded pool. The water shader thresholds it into a natural outline.
  */
+/**
+ * A crystal mirror: a tall thin glowing slab standing on its tile's diagonal, "/" (SW to NE)
+ * or "\\" (NW to SE) as the map draws it, so you can read which way it turns a wisp.
+ */
+function makeMirror(x: number, z: number, slash: boolean, colour: string): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.rotation.y = slash ? Math.PI / 4 : -Math.PI / 4;
+  const slab = new THREE.Mesh(
+    new THREE.BoxGeometry(1.3, 1.5, 0.14),
+    new THREE.MeshStandardMaterial({ color: colour, emissive: colour, emissiveIntensity: 0.45, roughness: 0.3, metalness: 0 }),
+  );
+  slab.position.y = 0.85;
+  g.add(slab);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.08, 0.2), new THREE.MeshBasicMaterial({ color: "#ffffff" }));
+  edge.position.y = 1.62;
+  g.add(edge);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.18, 6), new THREE.MeshStandardMaterial({ color: "#6a5a80", roughness: 0.8 }));
+  base.position.y = 0.09;
+  g.add(base);
+  return g;
+}
+
 function poolMask(b: Board, kind: Tile): THREE.Texture | null {
   const PX = 16;
   const c = document.createElement("canvas");
@@ -469,14 +492,16 @@ function poolMask(b: Board, kind: Tile): THREE.Texture | null {
   let any = false;
   for (let y = 0; y < b.height; y++)
     for (let x = 0; x < b.width; x++) {
-      if (b.tiles[y * b.width + x] !== kind) continue;
+      // Rime paints as ice.
+      const same = (t: Tile | undefined) => t === kind || (kind === Tile.Ice && t === Tile.Rime);
+      if (!same(b.tiles[y * b.width + x])) continue;
       any = true;
       g.beginPath();
       g.arc((x + 0.5) * PX, (y + 0.5) * PX, PX * 0.6, 0, Math.PI * 2);
       g.fill();
       // Join to the right and below so pools are one body, not beads.
-      if (b.tiles[y * b.width + x + 1] === kind && x + 1 < b.width) g.fillRect((x + 0.5) * PX, (y + 0.5) * PX - PX * 0.45, PX, PX * 0.9);
-      if (y + 1 < b.height && b.tiles[(y + 1) * b.width + x] === kind) g.fillRect((x + 0.5) * PX - PX * 0.45, (y + 0.5) * PX, PX * 0.9, PX);
+      if (same(b.tiles[y * b.width + x + 1]) && x + 1 < b.width) g.fillRect((x + 0.5) * PX, (y + 0.5) * PX - PX * 0.45, PX, PX * 0.9);
+      if (y + 1 < b.height && same(b.tiles[(y + 1) * b.width + x])) g.fillRect((x + 0.5) * PX - PX * 0.45, (y + 0.5) * PX, PX * 0.9, PX);
     }
   if (!any) return null;
   const out = document.createElement("canvas");
@@ -886,7 +911,11 @@ export class World {
         seed++;
         if (t === Tile.Wall && ringSet.has(`${x - b.center.x},${y - b.center.y}`)) continue;
         if (t === Tile.Wall) this.addProp(th.wall, wx, wz, 2.8, 2.2, seed);
-        else if (t === Tile.Rock) this.addProp(th.boulder, wx, wz, 0.9, 1.05, seed);
+        else if (t === Tile.Rock) {
+          // Deflector stones inside the archways can have their own look.
+          const court = Math.max(Math.abs(x - b.center.x), Math.abs(y - b.center.y)) <= 4;
+          this.addProp(court && th.deflector ? th.deflector : th.boulder, wx, wz, court && th.deflector ? 1.3 : 0.9, 1.05, seed);
+        } else if (t === Tile.CrystalA || t === Tile.CrystalB) this.shrineGroup.add(makeMirror(wx, wz, t === Tile.CrystalA, th.crystal ?? "#e6c8ff"));
       }
     for (const [kind, ice] of [[Tile.Water, 0], [Tile.Ice, 1]] as const) {
       const mask = poolMask(b, kind);
@@ -1408,7 +1437,7 @@ export function drawMinimap(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     for (let x = 0; x < b.width; x++) {
       const t = b.tiles[y * b.width + x];
       if (t === Tile.Edge) continue;
-      g.fillStyle = t === Tile.Wall ? "#4a4a55" : t === Tile.Water ? "#3f9fa8" : t === Tile.Rock ? "#888" : t === Tile.Brazier ? "#ff9a3a" : "#3b3346";
+      g.fillStyle = t === Tile.Wall ? "#4a4a55" : t === Tile.Water ? "#3f9fa8" : t === Tile.Rock ? "#888" : t === Tile.CrystalA || t === Tile.CrystalB ? "#e6c8ff" : t === Tile.Rime ? "#cfe8f4" : t === Tile.Brazier ? "#ff9a3a" : "#3b3346";
       g.fillRect(rect.x + x * k, rect.y + y * k, Math.ceil(k), Math.ceil(k));
     }
   for (const w of st.snap.wisps) {

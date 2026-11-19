@@ -78,7 +78,12 @@ describe("shrines", () => {
       // Turning a quarter: (x, y) -> (N - y, x) on screen, and guild k's tiles become guild k+1's.
       const turn = (p: { x: number; y: number }) => `${N - p.y},${p.x}`;
       for (let y = 0; y <= N; y++)
-        for (let x = 0; x <= N; x++) expect(b.tile(pt(N - y, x)), `${s.id} (${x},${y})`).toBe(b.tile(pt(x, y)));
+        for (let x = 0; x <= N; x++) {
+          // A crystal mirror turned a quarter lies along the other diagonal.
+          const t = b.tile(pt(x, y));
+          const turned = t === Tile.CrystalA ? Tile.CrystalB : t === Tile.CrystalB ? Tile.CrystalA : t;
+          expect(b.tile(pt(N - y, x)), `${s.id} (${x},${y})`).toBe(turned);
+        }
       for (let k = 0; k < 4; k++) {
         const next = (k + 1) % 4;
         expect(f.wispSpawns[k]!.map(turn).sort(), `${s.id} guild ${k}`).toEqual(f.wispSpawns[next]!.map((p) => `${p.x},${p.y}`).sort());
@@ -104,7 +109,7 @@ describe("shrines", () => {
   });
 
   it("archway styles are the same turned a quarter", () => {
-    for (const style of ["gates", "open", "diagonals", "pillared", "pinwheel", "colonnade"] as const) {
+    for (const style of ["gates", "open", "diagonals", "pillared", "pinwheel", "colonnade", "posts"] as const) {
       const w = new Set(ringWalls({ radius: 6, style }).map((p) => `${p.x},${p.y}`));
       for (const k of w) {
         const [x, y] = k.split(",").map(Number) as [number, number];
@@ -275,11 +280,12 @@ describe("game", () => {
   it("a wisp in flight can't be taken by a second lamplighter", () => {
     const roster: JoinSpec[] = [
       { id: 1, guild: 0, name: "A" },
-      { id: 2, guild: 0, name: "C" },
+      { id: 2, guild: 1, name: "C" },
     ];
     const g = new Game(openShrine([pt(13, 6)], [pt(20, 23)]), roster, 1, 1);
     g.players[0]!.pos = pt(13, 9);
     g.players[1]!.pos = pt(13, 2);
+    g.players[1]!.mode = "push";
     g.command(1, { action: { kind: "staff", wisp: 0 } });
     g.step();
     expect(g.wisps[0]!.holder).toBe(1);
@@ -287,6 +293,71 @@ describe("game", () => {
     g.step();
     expect(g.players[1]!.slipped).toBe(true);
     expect(g.wisps[0]!.holder).toBe(1);
+  });
+
+  it("a wisp flung into a crystal is turned off its mirror and let go", () => {
+    const shrine = openShrine([pt(6, 6)], [pt(20, 23)]);
+    // A "\\" mirror two tiles east of the wisp: heading east, it turns south.
+    shrine.board.tiles[6 * 27 + 8] = Tile.CrystalB;
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(12, 6);
+    g.command(1, { action: { kind: "staff", wisp: 0 } });
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 6));
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 7));
+    expect(g.players[0]!.action.kind).toBe("idle");
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 8));
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 8));
+  });
+
+  it("a wisp that reaches ice skates on until it leaves it, and nobody can grip it meanwhile", () => {
+    const shrine = openShrine([pt(6, 6)], [pt(20, 23)]);
+    for (let x = 7; x <= 10; x++) shrine.board.tiles[6 * 27 + x] = Tile.Rime;
+    // Pulled east from across the ice: one step onto it and it skates.
+    const h = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    h.players[0]!.pos = pt(14, 6);
+    h.command(1, { action: { kind: "staff", wisp: 0 } });
+    h.step();
+    h.step();
+    expect(h.wisps[0]!.pos).toEqual(pt(7, 6));
+    expect(h.wisps[0]!.skate).toEqual(pt(1, 0));
+    expect(h.players[0]!.action.kind).toBe("idle");
+    h.command(1, { action: { kind: "staff", wisp: 0 } });
+    for (let i = 0; i < 4; i++) h.step();
+    // Off the end of the ice at (11, 6), where it stops.
+    expect(h.wisps[0]!.pos).toEqual(pt(11, 6));
+    expect(h.wisps[0]!.skate).toBeNull();
+  });
+
+  it("teammates pulling one wisp pull it toward the point between them", () => {
+    const roster: JoinSpec[] = [
+      { id: 1, guild: 0, name: "A" },
+      { id: 2, guild: 0, name: "C" },
+    ];
+    const g = new Game(openShrine([pt(13, 6)], [pt(20, 23)]), roster, 1, 1);
+    // One due south, one due east of it: alone each would pull it straight; together it goes
+    // diagonally toward the point between them.
+    g.players[0]!.pos = pt(13, 12);
+    g.players[1]!.pos = pt(19, 6);
+    g.command(1, { action: { kind: "staff", wisp: 0 } });
+    g.command(2, { action: { kind: "staff", wisp: 0 } });
+    g.step();
+    expect(g.wisps[0]!.target).toEqual(pt(15, 8));
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(14, 7));
+    // Opposite sides: a tug of war, and it stays put.
+    const h = new Game(openShrine([pt(13, 6)], [pt(20, 23)]), roster, 1, 1);
+    h.players[0]!.pos = pt(13, 10);
+    h.players[1]!.pos = pt(13, 2);
+    h.command(1, { action: { kind: "staff", wisp: 0 } });
+    h.command(2, { action: { kind: "staff", wisp: 0 } });
+    h.step();
+    h.step();
+    expect(h.wisps[0]!.pos).toEqual(pt(13, 6));
   });
 
   it("is deterministic and ends after the round", () => {
