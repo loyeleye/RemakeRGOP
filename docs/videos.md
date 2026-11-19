@@ -1,9 +1,9 @@
 # Video index
 
-Most GOP angle guides are **silent** (music only), so their content is not in this knowledge base as
-text. Of 29 videos checked on 19 November 2026, only 4 had any speech. This index lets someone go
-through them frame by frame later and add their angles to the maps (see
-[11](11-open-questions.md#how-to-resolve-them)). "Speech" says whether a transcript exists.
+Most GOP angle guides are **silent** (music only). Of 29 videos checked on 19 November 2026, only 4
+had any speech. "Speech" says whether a transcript exists. All 20 angle guides below, plus the
+Nature record solo, have since been read frame by frame. Their angles and captions are in
+[video-angles/](video-angles/README.md).
 
 ## Angle guides by altar
 

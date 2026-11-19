@@ -36,7 +36,8 @@ videos quoted are AnroyRS (`svnoU6JmD-s`), DailyRsFix (`Wc6AOOjYoLQ`), HowToPlay
   refused automated requests.
 * Sal's RuneScape Forum GOP thread: refused.
 * RS Wiki image files (GOP screenshots): the image server returned errors.
-* Every silent angle video (see [videos.md](videos.md)).
+* ~~Every silent angle video~~: since read frame by frame on a member's own computer, by
+  downloading each video and extracting frames ([video-angles/](video-angles/README.md)).
 
 ## Licence status of reused material
 

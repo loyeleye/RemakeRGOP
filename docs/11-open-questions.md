@@ -30,8 +30,9 @@ there is no good answer yet.
 
 ## Open questions (nobody documents these)
 
-1. **Chaos and Nature maps.** They are not in the emulator data and not described in text. They
-   need capturing from the live game or the videos.
+1. **Chaos and Nature maps.** They are not in the emulator data. Nature now has a layout
+   description from video ([07](07-altars-and-maps.md#nature-altar-8-members)), but no tile grid or
+   spawn list. Chaos is still unknown: none of the 20 angle guides shows it.
 2. **Barrier mechanics in detail:** how long a barrier lasts, the enemy break chance, any cooldown,
    and the exact rule for "an orb already being moved ignores it".
 3. **Essence formula rounding:** is it floor(other / 2)?
@@ -43,6 +44,16 @@ there is no good answer yet.
 8. **The 6 repel-trick variations** in Wrestling Science's videos are visual only. The emulator's
    glitch-repel tests capture some of them, but no text names all six.
 9. **Pre-2009 (RuneTek 4) line of sight**, "symmetrically rotational", for historical accuracy.
+10. **Mind scenery vs tiles.** The video guides show a round altar, a dolmen to the south and an
+    irregular stone ring. The emulator's tile data has the shared pillars and corner rocks. Which
+    tiles really block on Mind? One reader also saw orbs stop at the altar's edge without
+    scoring, which hints that Mind's scoring zone may be smaller than 5 × 5.
+11. **"Holding will not work well" on Air.** Everheather's West guide says a plain hold from W
+    home on an orb at (1,±5) or (1,±6) works poorly, and recommends tapping with OAO instead. The
+    engine's `hold()` scores those in 7 ticks. Either tapping is simply faster, or the live game
+    differs from the emulator here.
+12. **Arch lintels.** On Nature, two clicks suggest that orbs pass under the lintel at (±4,0). The
+    emulator treats the gap as open floor, and no video shows an orb going through cleanly.
 
 ## How to resolve them
 
@@ -50,5 +61,6 @@ there is no good answer yet.
   live footage tick by tick.
 * For maps: the emulator's custom-altar editor writes the same JSON-style grid format as
   [data/](../data/README.md).
-* For video-only knowledge: take screenshots of the key frames in [videos.md](videos.md) and
-  transcribe tile positions with the coordinate system in [06](06-angles-and-geometry.md).
+* For video-only knowledge: all 20 angle guides have now been read frame by frame
+  ([video-angles/](video-angles/README.md)). Most tile positions there are estimates. Re-reading
+  the low-confidence rows with a top-down camera, or in the emulator, would firm them up.

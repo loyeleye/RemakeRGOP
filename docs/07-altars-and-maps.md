@@ -44,6 +44,11 @@ Mind guide calls Mind "a large altar with lots of angles". The spawn distances c
 * Known glitch: Mind can have 4 or 5 orbs of each colour at once instead of 3 (RS Wiki).
 * Upstream test: "Mind scoring trick at (−13,−5)".
 * Theoretical solo maximum 48 (RS Wiki trivia).
+* **Looks different from its tile map.** In the video guides the altar is round, with a
+  table-shaped dolmen directly south and an irregular ring of standing stones 3–6 tiles out. There
+  are also walled pens 8–17 tiles out that hold orbs. The emulator's tile data still has the shared
+  pillars and corner rocks. Most likely the scenery is decorative, but this is unconfirmed
+  ([video-angles/mind.md](video-angles/mind.md), [11](11-open-questions.md)).
 
 ## Water (altar 3)
 
@@ -86,6 +91,17 @@ Mind guide calls Mind "a large altar with lots of angles". The spawn distances c
 
 * Not in the emulator data and not described in text. Best recorded solo score: 42 (ThePuu4,
   2026).
+* **Layout from video (inferred, medium confidence).** This comes from frames of ThePuu4's
+  42-point solo; details are in [video-angles/nature.md](video-angles/nature.md#nature-arena-layout).
+  * The inner ring is the same as the shared layout: arch legs at (±1,±4) and (±4,±1), one-tile
+    gaps under the lintels, and small corner rocks at (±3,±3).
+  * A floating white exit portal sits just north of the north arch, at about (−1..0, 5..6).
+  * A walkable dirt path rings the altar 7–9 tiles out. It is scenery, not an obstacle.
+  * Boulder clusters (north-west and west) and rings of trees start 10–12 tiles out. One small
+    pond lies far to the north-north-east, at about (6..10, 17..20).
+  * Orbs appear 4–9 tiles out with no visible fixed spawn spot, and drift into the trees.
+  * North was read from the compass. If that reading is wrong, the portal, pond and trees mirror
+    through the centre; the ring is symmetric, so it would not change.
 
 ## How to add Chaos and Nature
 

@@ -22,6 +22,7 @@ someone building a remake has every rule in one place.
 | 09 | [Strategy](docs/09-strategy.md) | Beginner to advanced, team play, defence, records |
 | 10 | [History and trivia](docs/10-history-and-trivia.md) | Dated update history, community, trivia |
 | 11 | [Contradictions and open questions](docs/11-open-questions.md) | Where sources disagree and what nobody has documented |
+| | [Angles from the video guides](docs/video-angles/README.md) | 315 angles and every caption, read frame by frame from 20 silent guides |
 | | [Glossary](docs/glossary.md) · [Sources](docs/sources.md) · [Video index](docs/videos.md) | |
 
 ## Maps and angle atlas
@@ -58,9 +59,10 @@ Python 3.9+ and the standard library only. To re-extract the map data from upstr
 
 ## Known gaps
 
-* The members altars **Chaos** and **Nature** have no map data anywhere in text or the emulator.
-* Most angle-guide videos are silent, so their specific angles are indexed in
-  [docs/videos.md](docs/videos.md) but not transcribed.
+* The members altars **Chaos** and **Nature** have no tile data. Nature has a layout description
+  from video; Chaos has nothing.
+* The angles read from the silent videos ([docs/video-angles/](docs/video-angles/README.md)) are
+  mostly estimates. Only 13 Air rows and the puzzle start positions are exact.
 * Barrier timing, activity-bar drain rates and essence rounding are undocumented.
 
 ## Licence note
