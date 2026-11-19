@@ -305,7 +305,7 @@ canvas.addEventListener("pointermove", (e) => {
     return;
   }
   if (Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > 12) dragged = true;
-  if (dragged && cam.compact) {
+  if (dragged) {
     cam.follow = false;
     cam.cx -= dx / cam.scale;
     cam.cy -= dy / cam.scale;
@@ -346,7 +346,6 @@ canvas.addEventListener(
   (e) => {
     e.preventDefault();
     cam.scale *= Math.exp(-e.deltaY / 400);
-    cam.follow = cam.follow || !cam.compact;
   },
   { passive: false },
 );
@@ -359,7 +358,14 @@ window.addEventListener("keydown", (e) => {
   else if (k === "r") act({ toggleRun: true });
   else if (k === " " || k === "s") act({ action: { kind: "idle" } });
   else if (k === "c") cam.follow = true;
-  else return;
+  else if (k.startsWith("arrow")) {
+    const step = 120 / Math.max(1, cam.scale);
+    cam.follow = false;
+    if (k === "arrowleft") cam.cx -= step;
+    else if (k === "arrowright") cam.cx += step;
+    else if (k === "arrowup") cam.cy -= step;
+    else cam.cy += step;
+  } else return;
   e.preventDefault();
 });
 
@@ -476,7 +482,7 @@ function frame(now: number) {
   const t = Math.min(1, (now - snapAt) / tickMs);
   const mine = snap.players.find((p) => p.id === me);
   if (cam.follow && mine) {
-    if (cam.compact) {
+    if (cam.compact || cam.zoomedIn) {
       const tx = mine.px + (mine.x - mine.px) * t + 0.5;
       const ty = mine.py + (mine.y - mine.py) * t + 0.5;
       cam.cx += (tx - cam.cx) * 0.2;

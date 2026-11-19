@@ -66,6 +66,11 @@ export class Camera {
     this.scale = this.fitScale(board);
   }
 
+  /** Closer than the whole-board view, so the camera should track the player. */
+  get zoomedIn() {
+    return !!this.board && this.scale > this.fitScale(this.board) * 1.05;
+  }
+
   private fitScale(board: Board) {
     return Math.min(this.w / (board.width + 6), this.h / ((board.height + 4) * 0.95));
   }
