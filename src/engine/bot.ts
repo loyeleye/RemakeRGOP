@@ -27,19 +27,22 @@ export interface BotStyle {
    * the Medium bot (no taps, best walking plan) for that decision.
    */
   pick?: [number, number];
-  /** Chance per decision to lapse and play like the Easy bot for that decision. */
-  easyLapse?: number;
+  /** Chance per decision to lapse and play like the Medium bot for that decision. */
+  lapse?: number;
+  /** Before each new move, stand still for a random number of ticks in this range. */
+  wait?: [number, number];
 }
 
-/** Easy: pulls only, along the 4 straight directions, and dawdles. Never pushes. */
-export const BOT_EASY: BotStyle = { pushy: 0, sloppiness: 0.3, straightOnly: true };
-/** Medium: Hard's play, but half its decisions are Easy ones. */
-export const BOT_MEDIUM: BotStyle = { pushy: 3, sloppiness: 0.15, easyLapse: 1 / 2 };
+/** Easy: Medium's straight pulls, but it stops to think for 3 to 12 ticks before each new move. */
+export const BOT_EASY: BotStyle = { pushy: 0, sloppiness: 0.3, straightOnly: true, wait: [3, 12] };
+/** Medium: pulls only, along the 4 straight directions, and dawdles. Never pushes. */
+export const BOT_MEDIUM: BotStyle = { pushy: 0, sloppiness: 0.3, straightOnly: true };
 /**
- * Hard: Medium without the Easy lapses. It never taps: juggling wisps with taps is left as
- * the trick a human can learn to beat it.
+ * Hard: walks to the best spot for its nearest wisp and holds it in, and pushes rivals about
+ * to bank, but half its decisions are Medium ones. It never taps: juggling wisps with taps is
+ * left as the trick a human can learn to beat it.
  */
-export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.15 };
+export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.15, lapse: 1 / 2 };
 export const BOT_LEVELS = { easy: BOT_EASY, medium: BOT_MEDIUM, hard: BOT_HARD } as const;
 export type BotLevel = keyof typeof BOT_LEVELS;
 /** Kept for older callers: the old "sharper bot". */
@@ -48,7 +51,8 @@ export const BOT_FAIR = BOT_HARD;
 export function botCommand(game: Game, id: number, style: BotStyle, rand: () => number = Math.random): Command | null {
   const me = game.players.find((p) => p.id === id);
   if (!me) return null;
-  if (style.easyLapse && rand() < style.easyLapse) return botCommand(game, id, BOT_EASY, rand);
+  if (style.lapse && rand() < style.lapse) return botCommand(game, id, BOT_MEDIUM, rand);
+  if (style.wait) return waited(game, id, style, rand);
   const c = game.board.center;
   const live = (w: Wisp) => !game.board.inBankZone(w.pos);
 
@@ -103,6 +107,25 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
     return { action: { kind: "walk", to: spot }, toggleMode: fixMode || undefined };
   }
   return { action: { kind: "staff", wisp: target.id }, toggleMode: fixMode || undefined };
+}
+
+/** Per game, each slow bot's tick to act on (and the move it's thinking about). */
+const thinking = new WeakMap<Game, Map<number, { until: number; cmd: Command | null }>>();
+
+function waited(game: Game, id: number, style: BotStyle, rand: () => number): Command | null {
+  const [lo, hi] = style.wait!;
+  let all = thinking.get(game);
+  if (!all) thinking.set(game, (all = new Map()));
+  const t = all.get(id);
+  if (t) {
+    if (game.tick < t.until) return null;
+    all.delete(id);
+    return t.cmd;
+  }
+  const cmd = botCommand(game, id, { ...style, wait: undefined }, rand);
+  if (!cmd) return null;
+  all.set(id, { until: game.tick + lo + Math.floor(rand() * (hi - lo + 1)), cmd });
+  return null;
 }
 
 const UNREACHABLE = 0x7fff;

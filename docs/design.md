@@ -58,14 +58,17 @@ fallback.
 
 **Bot levels** (`BOT_LEVELS`; the host picks one in the lobby for new bots):
 
-- **Easy:** pull only, along the 4 straight directions whenever a straight pull helps, dawdles
-  often, never pushes.
-- **Medium:** plays like Hard for half its decisions and like Easy for the other half.
-- **Hard:** walks to the best spot for its nearest wisp and holds it in; pushes a rival wisp
-  that's about to bank. It never taps: juggling several wisps with taps is a human-only trick.
+- **Easy:** plays like Medium, but stops to think for a random 3 to 12 ticks before each new
+  move.
+- **Medium:** pulls only, along the 4 straight directions whenever a straight pull helps,
+  dawdles often, never pushes.
+- **Hard:** walks to the best spot for its nearest wisp and holds it in, and pushes a rival wisp
+  that's about to bank, but half its decisions are Medium ones. It never taps: juggling
+  several wisps with taps is a human-only trick.
 
-Alone over a round, Easy banks about 8 to 12 on the regular islands, Medium 9 to 16, Hard 11 to
-21. All three bank 2 to 5 on Old Bastion and Sunwell Terrace. A human who taps can beat Hard.
+Alone over a round, Easy banks about 2 to 5 on the regular islands, Medium 7 to 12, Hard 9 to
+16. On Old Bastion and Sunwell Terrace, Easy banks about 1 and the others 2 to 5. A human who
+taps can beat Hard.
 
 The perfect bot (taps, no mistakes) **taps**: from where it stands it touches whichever of its wisps
 is about to stop and would get closer to banking, so several stay moving, and it walks only
