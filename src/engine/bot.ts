@@ -33,10 +33,13 @@ export interface BotStyle {
 
 /** Easy: pulls only, along the 4 straight directions, and dawdles. Never pushes. */
 export const BOT_EASY: BotStyle = { pushy: 0, sloppiness: 0.3, straightOnly: true };
-/** Medium: walks to the best spot for its nearest wisp and holds it in; pushes rivals about to bank. Half its decisions are Easy ones. */
+/** Medium: Hard's play, but half its decisions are Easy ones. */
 export const BOT_MEDIUM: BotStyle = { pushy: 3, sloppiness: 0.15, easyLapse: 1 / 2 };
-/** Hard: taps to juggle wisps, but picks the best angle only half the time. */
-export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.05, taps: true, pick: [1 / 2, 1 / 6] };
+/**
+ * Hard: Medium without the Easy lapses. It never taps: juggling wisps with taps is left as
+ * the trick a human can learn to beat it.
+ */
+export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.15 };
 export const BOT_LEVELS = { easy: BOT_EASY, medium: BOT_MEDIUM, hard: BOT_HARD } as const;
 export type BotLevel = keyof typeof BOT_LEVELS;
 /** Kept for older callers: the old "sharper bot". */
