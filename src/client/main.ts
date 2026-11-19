@@ -112,7 +112,11 @@ function leave() {
   l?.close();
   room = null;
   snap = prevSnap = null;
-  history.replaceState(null, "", location.pathname);
+  try {
+    history.replaceState(null, "", location.pathname);
+  } catch {
+    /* sandboxed page */
+  }
   render();
 }
 
@@ -369,7 +373,11 @@ $("recenter").onclick = () => {
 // ------------------------------------------------------------------ home + lobby wiring
 
 const nameInput = $<HTMLInputElement>("name");
-nameInput.value = localStorage.getItem("lf-name") ?? "";
+try {
+  nameInput.value = localStorage.getItem("lf-name") ?? "";
+} catch {
+  /* storage blocked */
+}
 const playerName = () => {
   const n = nameInput.value.trim().slice(0, 16);
   try {
