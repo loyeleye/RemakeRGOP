@@ -194,7 +194,6 @@ export const MAP_SCALE = 1.5;
  *   gates      pillars all round, one 3-wide arch in the middle of each side (tightest)
  *   open       the corners are open too: arches in the middle, open diagonals (loosest)
  *   diagonals  the middle of each side is walled up; only the open corners let wisps in
- *   wickets    a one-tile gate in the middle of each wall, open corners
  *   pillared   like open, but a lone pillar stands on each corner, so nothing comes in
  *              straight down a diagonal
  *   pinwheel   pillars all round, with each side's gap pushed off centre the same way round,
@@ -203,7 +202,7 @@ export const MAP_SCALE = 1.5;
  *              diagonally between two pillars
  *   posts      one post each side of a narrow middle gate; everything else open
  */
-export type RingStyle = "gates" | "open" | "diagonals" | "pillared" | "pinwheel" | "colonnade" | "posts" | "wickets";
+export type RingStyle = "gates" | "open" | "diagonals" | "pillared" | "pinwheel" | "colonnade" | "posts";
 
 export interface Ring {
   /** Chebyshev distance of the pillars from the centre tile. */
@@ -272,7 +271,6 @@ export const RING_NOTES: Record<RingStyle, string> = {
   pinwheel: "Archways: every gate is off-centre, so nothing lines up across the brazier.",
   colonnade: "Archways: a pillar on every other tile. Lots of narrow ways in.",
   posts: "Archways: a post each side of every gate, wide open corners.",
-  wickets: "Archways: open corners, and a narrow wicket gate in the middle of each wall.",
 };
 
 /** The lobby line for a shrine's archways (outer ring first when there are two). */
@@ -302,8 +300,6 @@ function ringPillar(style: RingStyle, R: number, t: number): boolean {
       return a >= 2 && a % 2 === 0;
     case "posts":
       return a === 1;
-    case "wickets":
-      return a >= 1 && a <= R - 2;
   }
 }
 
@@ -408,7 +404,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     name: "Tidepool Steps",
     blurb: "A wide lagoon atoll with big tide pools on the way in. Wisps drift over; you can't wade. The tide turns every 20 ticks: a loose wisp on a pool drifts in toward the brazier, then out again.",
     isle: { radius: 12.5, squareness: 2.4, coves: 0.14, heads: 0.08, seed: 11, stretch: [1.35, 0.8] },
-    rings: [{ radius: 5, style: "wickets" }],
+    rings: [{ radius: 5, style: "open" }],
     gimmicks: { tide: 20 },
     rows: [
       "                                     ",
@@ -754,7 +750,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
         { a: 4, ta: 0.92, b: 0, tb: 0.42, bend: 3, width: 1.3, clutter: 1.2 },
       ],
     },
-    rings: [{ radius: 5, style: "wickets" }, { radius: 9, style: "gates" }],
+    rings: [{ radius: 5, style: "open" }, { radius: 9, style: "open" }],
     spawnBand: [16, 90],
     rows: [
       "                                   ",

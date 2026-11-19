@@ -119,7 +119,7 @@ describe("shrines", () => {
   });
 
   it("archway styles are the same turned a quarter", () => {
-    for (const style of ["gates", "open", "diagonals", "pillared", "pinwheel", "colonnade", "posts", "wickets"] as const) {
+    for (const style of ["gates", "open", "diagonals", "pillared", "pinwheel", "colonnade", "posts"] as const) {
       const w = new Set(ringWalls({ radius: 6, style }).map((p) => `${p.x},${p.y}`));
       for (const k of w) {
         const [x, y] = k.split(",").map(Number) as [number, number];
