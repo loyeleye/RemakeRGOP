@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Board, Mover, Tile, pt } from "../src/engine/board.js";
 import { Game, ROUND_TICKS, flingOffset, type JoinSpec } from "../src/engine/game.js";
-import { BOT_HARD, botCommand } from "../src/engine/bot.js";
+import { BOT_HARD, botCommand, homeSquares, simulatePull } from "../src/engine/bot.js";
 import { SHRINES, ringWalls, SHRINE_DEFS, mirrorRows, buildShrine, shrineFor, type Shrine } from "../src/engine/maps.js";
 
 /** An empty 27x27 shrine with the given wisp spawns. */
@@ -644,5 +644,33 @@ describe("co-op hard bots", () => {
 
   it("bank more as a pair than two hard bots each playing alone (with their teamwork lapses off)", () => {
     expect(teamScore(true)).toBeGreaterThan(teamScore(false) * 1.3);
+  });
+
+  it("feed a person holding a home square", () => {
+    const score = (coop: boolean) => {
+      let seedR = 11;
+      const rand = () => (seedR = (seedR * 16807) % 2147483647) / 2147483647;
+      let total = 0;
+      for (let seed = 1; seed <= 3; seed++) {
+        const g = new Game(shrineFor("fairy-ring", 2), [{ id: 1, guild: 0, name: "me" }, { id: 2, guild: 0, name: "bot" }], seed);
+        const home = homeSquares(g, 1)[0]!;
+        for (let t = 0; t < ROUND_TICKS; t++) {
+          // The person walks to the square and pulls in whatever they can bank from it.
+          const me = g.players[0]!;
+          if (me.pos.x !== home.x || me.pos.y !== home.y) {
+            if (me.action.kind !== "walk") g.command(1, { action: { kind: "walk", to: home } });
+          } else if (!(me.action.kind === "staff" && g.wisps[me.action.wisp]!.target)) {
+            const w = g.wisps.find((w) => w.guild === 0 && !g.board.inBankZone(w.pos) && g.inReach(me, w) && g.board.inBankZone(simulatePull(g.board, me.pos, w.pos).end));
+            if (w) g.command(1, { action: { kind: "staff", wisp: w.id } });
+          }
+          const c = botCommand(g, 2, { ...BOT_HARD, coop, coopLapse: 0 }, rand);
+          if (c) g.command(2, c);
+          g.step();
+        }
+        total += g.scores[0]!;
+      }
+      return total;
+    };
+    expect(score(true)).toBeGreaterThan(score(false) * 1.2);
   });
 });

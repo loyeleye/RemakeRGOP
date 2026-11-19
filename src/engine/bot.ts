@@ -339,7 +339,14 @@ interface Team {
   bots: number[];
   /** Home squares held by the first bots in `bots`: one per anchor. */
   homes: Pt[];
+  /** Where teammates who aren't co-op bots (people) are holding still by the court: fed like home squares. */
+  partners: Pt[];
+  /** How many people are on the team. */
+  people: number;
 }
+
+/** Per game, where each player was last seen and since which tick they've stood there. */
+const stillSince = new WeakMap<Game, Map<number, { x: number; y: number; since: number }>>();
 
 /** My guild's co-op team, or null if I'm the only co-op bot on it. */
 function coopTeam(game: Game, me: Game["players"][number]): Team | null {
@@ -347,10 +354,24 @@ function coopTeam(game: Game, me: Game["players"][number]): Team | null {
   if (!set) coopBots.set(game, (set = new Set()));
   set.add(me.id);
   const bots = game.players.filter((p) => p.guild === me.guild && set.has(p.id)).map((p) => p.id).sort((a, b) => a - b);
-  if (bots.length < 2) return null;
-  // Half the team (rounded up) hold home squares; the rest fetch.
-  const anchors = Math.ceil(bots.length / 2);
-  return { bots, homes: homeSquares(game, anchors) };
+  const people = game.players.filter((p) => p.guild === me.guild && !set.has(p.id));
+  if (bots.length + people.length < 2) return null;
+  // A person standing still in or by the court for a couple of ticks is holding a square:
+  // feed them. One who's off fetching is fed by a bot on a home square instead.
+  let still = stillSince.get(game);
+  if (!still) stillSince.set(game, (still = new Map()));
+  const c = game.board.center;
+  const ring = Math.max(...game.shrine.rings.map((r) => r.radius), 4);
+  const partners: Pt[] = [];
+  for (const p of people) {
+    const was = still.get(p.id);
+    if (!was || was.x !== p.pos.x || was.y !== p.pos.y) still.set(p.id, { x: p.pos.x, y: p.pos.y, since: game.tick });
+    else if (game.tick - was.since >= 2 && cheb(p.pos, c) <= ring + 3) partners.push(p.pos);
+  }
+  // Half the bots (rounded up) hold home squares and the rest fetch; with a person holding a
+  // square, rounded down, so a lone bot fetches for them.
+  const anchors = partners.length ? Math.floor(bots.length / 2) : Math.ceil(bots.length / 2);
+  return { bots, homes: anchors ? homeSquares(game, anchors) : [], partners, people: people.length };
 }
 
 const homeCache = new WeakMap<Game, Pt[]>();
@@ -442,7 +463,7 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
       // Nothing in reach: wait here if a fetcher is bringing one in or one is nearly in reach;
       // otherwise go and get one like anyone would.
       const incoming = game.wisps.some((w) => live(w) && claimed.has(w.id));
-      if (incoming && team.homes.length < team.bots.length) return fixMode ? { toggleMode: true } : me.action.kind === "idle" ? null : { action: { kind: "idle" } };
+      if (incoming && team.homes.length < team.bots.length + team.people) return fixMode ? { toggleMode: true } : me.action.kind === "idle" ? null : { action: { kind: "idle" } };
       return undefined;
     }
     // Off the square: finish the wisp I went for, then head back when there's work there.
@@ -460,7 +481,7 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
   }
   if (rand() < style.sloppiness) return fixMode ? { toggleMode: true } : null;
   // A wisp an anchor can already bank from its square is theirs.
-  const homes = team.homes.filter((h) => team.bots.some((id, i) => i < team.homes.length && samePt(game.players.find((p) => p.id === id)?.pos ?? pt(-1, -1), h)));
+  const homes = [...team.homes.filter((h) => team.bots.some((id, i) => i < team.homes.length && samePt(game.players.find((p) => p.id === id)?.pos ?? pt(-1, -1), h))), ...team.partners];
   const anchorHas = (w: Wisp) => homes.some((h) => cheb(h, w.pos) <= PULL_REACH && board.canSee(h, w.pos) && board.inBankZone(simulatePull(board, h, w.pos, 30, game.shrine.gimmicks).end));
   const targets = game.wisps.filter((w) => live(w) && !claimed.has(w.id) && !anchorHas(w));
   let mine = fetching.get(game);
