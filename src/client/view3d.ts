@@ -11,7 +11,8 @@ import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { Tile, type Board } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, type GameSnapshot, type Guild } from "../engine/game.js";
-import { ringWalls, type Ring, type Shrine } from "../engine/maps.js";
+import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js";
+import { contourLoop } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeIsland, makeWaterfall } from "./islands.js";
 import { ambientParticles, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
@@ -46,7 +47,7 @@ export class Camera {
   follow = true;
   w = 1;
   h = 1;
-  readonly three = new THREE.PerspectiveCamera(FOV, 1, 0.1, 400);
+  readonly three = new THREE.PerspectiveCamera(FOV, 1, 0.1, 1300);
   private ray = new THREE.Raycaster();
   private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   board: Board | null = null;
@@ -501,6 +502,7 @@ export class World {
   private bloom: UnrealBloomPass;
   private shrineGroup = new THREE.Group();
   private shrineId = "";
+  private distantPush = 0;
   private timeUniforms: { value: number }[] = [];
   private players = new Map<number, PlayerRig>();
   private wisps = new Map<number, WispRig>();
@@ -540,16 +542,19 @@ export class World {
     // Sky dome.
     this.timeUniforms.push(this.skyU.uTime);
     const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(200, 32, 16),
+      new THREE.SphereGeometry(600, 32, 16),
       new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, uniforms: this.skyU, side: THREE.BackSide, depthWrite: false, fog: false }),
     );
+    // The dome travels with the camera, so zooming out over a big island never reaches its edge.
+    sky.onBeforeRender = (_r, _s, cam) => sky.position.copy(cam.position);
+    sky.frustumCulled = false;
     this.scene.add(sky);
 
     // Sea of cloud far below.
     const cloudU = { value: 0 };
     this.timeUniforms.push(cloudU);
     const clouds = new THREE.Mesh(
-      new THREE.PlaneGeometry(400, 400),
+      new THREE.PlaneGeometry(1400, 1400),
       new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: CLOUD_FS, uniforms: { uTime: cloudU, uTint: this.cloudTint }, transparent: true, depthWrite: false, fog: false }),
     );
     clouds.rotation.x = -Math.PI / 2;
@@ -627,7 +632,7 @@ export class World {
     const n = this.low ? 7 : 11;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + Math.sin(i * 4.7) * 0.25;
-      const r = 48 + ((i * 37) % 5) * 14;
+      const r = 48 + ((i * 37) % 5) * 14 + this.distantPush;
       const size = 3 + ((i * 53) % 7) * 1.4;
       const isl = makeIsland({ rx: size, rz: size * (0.7 + ((i * 17) % 5) * 0.08), depth: size * 2.4, squareness: 2.2, seed: i * 13 + 5, segments: 64, rings: 24, lobes: 0.5, ledge: i % 3 === 0 ? size * 0.3 : 0, spires: this.low ? 1 : 3, grass: th.grass, soil: th.soil, rock: th.rock });
       const y = -6 + ((i * 29) % 9) * 2.2 - (r - 48) * 0.12;
@@ -691,6 +696,8 @@ export class World {
     const H = b.height;
     const g = this.shrineGroup;
     const th = themeFor(shrine.id);
+    // Keep the far islands clear of a big island's edge.
+    this.distantPush = Math.max(0, Math.max(W, H) / 2 - 28);
     this.applyTheme(th);
 
     // The coastline the rules use: tiles past it are open sky. Shrines without one are the
@@ -708,11 +715,18 @@ export class World {
     // The plaza: flagstones laid right up to the island's edge.
     const floorTex = tex(`textures/floor-${th.floor}.webp`, 1 / 6, `textures/floor-${shrine.id}.webp`);
     const floorShape = new THREE.Shape();
-    for (let i = 0; i <= 256; i++) {
-      const p = ring((i / 256) * Math.PI * 2, 0.35);
-      if (i === 0) floorShape.moveTo(p.x, -p.z);
-      else floorShape.lineTo(p.x, -p.z);
-    }
+    // Tentacle islands: trace the edge from the rules' own coast field instead of a radius.
+    const coastField = shrine.arms && shrine.coast ? shrine.coast : null;
+    const traced = (out: number) =>
+      contourLoop((x, y) => coastField!(x, y) - out, -W / 2 - 3, -H / 2 - 3, W / 2 + 3, H / 2 + 3, 0.5);
+    if (coastField) {
+      traced(0.35).forEach((p, i) => (i === 0 ? floorShape.moveTo(p.x, -p.y) : floorShape.lineTo(p.x, -p.y)));
+    } else
+      for (let i = 0; i <= 256; i++) {
+        const p = ring((i / 256) * Math.PI * 2, 0.35);
+        if (i === 0) floorShape.moveTo(p.x, -p.z);
+        else floorShape.lineTo(p.x, -p.z);
+      }
     const floor = new THREE.Mesh(
       new THREE.ShapeGeometry(floorShape, 1),
       new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.9, color: "#ffffff" }),
@@ -732,6 +746,21 @@ export class World {
     });
     island.position.y = -0.03;
     g.add(island);
+    // Each arm is a chain of overlapping plateaus that shrink toward the tip.
+    if (shrine.isle?.arms?.length) {
+      const pts = armSamples(shrine.isle);
+      const every = this.low ? 6 : 4;
+      pts.forEach((p, i) => {
+        if (i % every) return;
+        const r = p.w + 2.1;
+        const lobe = makeIsland({
+          rx: r, rz: r, depth: 6 + r * 2, squareness: 2, seed: i * 7 + 3, ledge: r * 0.25,
+          spires: i % (every * 3) === 0 ? 1 : 0, grass: th.grass, soil: th.soil, rock: th.rock, segments: 40, rings: 18,
+        });
+        lobe.position.set(p.x, -0.035 - (i % 7) * 0.002, p.y);
+        g.add(lobe);
+      });
+    }
     const edge = island.userData.outline as (a: number) => { x: number; z: number };
     // Lower tiers: smaller plateaus stepping down from the main one, so the whole thing reads as
     // one broken table of land rather than a single slab.
@@ -745,7 +774,8 @@ export class World {
     tiers.forEach(([a0, size, ty], i) => {
       const a = a0 + spin;
       const e = edge(a);
-      const r = Math.min(W, H) * size;
+      // Sized by the core, not the board: a tentacle island's board is mostly sky.
+      const r = (shrine.arms ? coast(0) + coast(Math.PI / 2) : Math.min(W, H)) * size;
       const tier = makeIsland({
         rx: r, rz: r * 0.8, depth: 9 + i * 3, squareness: 2.6, seed: W * 7 + i,
         lobes: 0.45, spires: this.low ? 1 : 2, grass: th.grass, soil: th.soil, rock: th.rock, segments: 72, rings: 28,
@@ -780,12 +810,14 @@ export class World {
 
     // A low rounded parapet runs round the edge of the flagstones: the limit of play.
     const curbPts: THREE.Vector3[] = [];
-    for (let i = 0; i < 240; i++) {
-      const p = ring((i / 240) * Math.PI * 2, 0.45);
-      curbPts.push(new THREE.Vector3(p.x, 0.12, p.z));
-    }
+    if (coastField) traced(0.45).forEach((p, i) => i % 2 === 0 && curbPts.push(new THREE.Vector3(p.x, 0.12, p.y)));
+    else
+      for (let i = 0; i < 240; i++) {
+        const p = ring((i / 240) * Math.PI * 2, 0.45);
+        curbPts.push(new THREE.Vector3(p.x, 0.12, p.z));
+      }
     const curb = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curbPts, true), 480, 0.26, 14, true),
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curbPts, true), Math.max(480, curbPts.length * 2), 0.26, 14, true),
       new THREE.MeshStandardMaterial({ map: wallTex, color: "#c9bda8", roughness: 0.85 }),
     );
     curb.castShadow = curb.receiveShadow = true;

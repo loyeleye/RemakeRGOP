@@ -52,6 +52,60 @@ export interface IsleShape {
    * turned 180 degrees. k=2 pinches into an hourglass, 4 makes a clover or a cross, 6 a star.
    */
   waves?: [number, number, number][];
+  /** Tentacle arms that curl out from the core. They needn't be symmetric. */
+  arms?: Arm[];
+}
+
+/**
+ * A curling arm of land. It starts inside the core at angle `from` and runs `length` tiles
+ * outward, turning `curl` radians as it goes (most of the turn near the tip), narrowing from
+ * width[0] to width[1] (half-widths, in tiles). `wiggle` adds a sideways wave.
+ */
+export interface Arm {
+  from: number;
+  length: number;
+  curl: number;
+  width: [number, number];
+  wiggle?: number;
+}
+
+const armCache = new WeakMap<IsleShape, { x: number; y: number; w: number }[]>();
+
+/** Points along every arm, half a tile apart, with the half-width there. */
+export function armSamples(s: IsleShape): { x: number; y: number; w: number }[] {
+  const hit = armCache.get(s);
+  if (hit) return hit;
+  const out: { x: number; y: number; w: number }[] = [];
+  for (const arm of s.arms ?? []) {
+    const r0 = isleRadius(s, arm.from) * 0.6;
+    const n = Math.ceil(arm.length * 2);
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const r = r0 + arm.length * t;
+      const th = arm.from + arm.curl * t * t + Math.sin(t * Math.PI * 3) * (arm.wiggle ?? 0) * t;
+      out.push({ x: Math.cos(th) * r, y: Math.sin(th) * r, w: arm.width[0] + (arm.width[1] - arm.width[0]) * t });
+    }
+  }
+  armCache.set(s, out);
+  return out;
+}
+
+/** How far outside the land (dx, dy) is, in tiles: negative on land. Core and arms together. */
+export function coastDepth(s: IsleShape, dx: number, dy: number, core = (a: number) => isleRadius(s, a)): number {
+  let d = Math.hypot(dx, dy) - core(Math.atan2(dy, dx));
+  for (const p of armSamples(s)) d = Math.min(d, Math.hypot(dx - p.x, dy - p.y) - p.w);
+  return d;
+}
+
+/** How far the land reaches from the centre along x or y. */
+function landReach(s: IsleShape, core = (a: number) => isleRadius(s, a)): number {
+  let reach = 0;
+  for (let i = 0; i < 360; i++) {
+    const a = (i / 360) * Math.PI * 2, r = core(a);
+    reach = Math.max(reach, Math.abs(Math.cos(a) * r), Math.abs(Math.sin(a) * r));
+  }
+  for (const p of armSamples(s)) reach = Math.max(reach, Math.abs(p.x) + p.w, Math.abs(p.y) + p.w);
+  return reach;
 }
 
 /** How much bigger the played island is than its drawing. */
@@ -153,6 +207,12 @@ export interface Shrine {
   rings: Ring[];
   /** Radius of the island's edge (in tiles from the centre) at angle a, where a = atan2(dy, dx). */
   outline: ((a: number) => number) | null;
+  /** Signed distance from the coast at (dx, dy) from the centre, negative on land; null for no island. */
+  coast: ((dx: number, dy: number) => number) | null;
+  /** True when the island has arms, so its outline isn't one radius per angle. */
+  arms: boolean;
+  /** The island's shape in played tiles (scaled), or null. */
+  isle: IsleShape | null;
 }
 
 /**
@@ -497,36 +557,39 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "sunwell-terrace",
     name: "Sunwell Terrace",
-    blurb: "A vast terrace with two rings of arches. In through a side gate, round the inner court, and in at a corner.",
-    isle: { radius: 19, squareness: 2.3, coves: 0.08, heads: 0.06, seed: 12, waves: [[4, 0.12, 0]] },
+    blurb: "A sprawling sky-kraken of a terrace: five long arms curl out from a double-ringed sunwell. Wisps appear far out on the arms; pass them in as a team.",
+    isle: {
+      radius: 13, squareness: 2.2, coves: 0.08, heads: 0.06, seed: 12, waves: [[4, 0.1, 0]],
+      // Five long tentacles, deliberately not symmetric.
+      arms: [
+        { from: 0.1, length: 50, curl: 0.9, width: [2.8, 1.4], wiggle: 0.12 },
+        { from: 1.35, length: 40, curl: 0.7, width: [2.5, 1.5], wiggle: 0.2 },
+        { from: 2.45, length: 54, curl: 1.0, width: [3, 1.4], wiggle: 0.1 },
+        { from: 3.75, length: 42, curl: 0.6, width: [2.6, 1.5], wiggle: 0.22 },
+        { from: 5.0, length: 46, curl: 0.8, width: [2.8, 1.4], wiggle: 0.14 },
+      ],
+    },
     rings: [{ radius: 5, style: "diagonals" }, { radius: 9, style: "gates" }],
-    spawnBand: [13, 28],
+    spawnBand: [16, 90],
     rows: [
-      "                                                 ",
-      "                                                 ",
-      "                                                 ",
-      "                     ....                        ",
-      "                   .......                       ",
-      "                  ..........                     ",
-      "                 .............                   ",
-      "                ................                 ",
-      "               ......~~~..........               ",
-      "               a.....~~~.........b.              ",
-      "              ...o.............o...              ",
-      "             ...........o...........             ",
-      "             ......a.........b......o            ",
-      "            .........................            ",
-      "           ...........................           ",
-      "          ~~............................         ",
-      "        .~~~.............................        ",
-      "      ..a~~~.#.....................#....b.       ",
-      "     ........#.....................#......       ",
-      "    .......................................      ",
-      "    ...................................o...      ",
-      "    .....o..................................     ",
-      "    ........................................     ",
-      "    ...1.................................2..     ",
-      "    .....................",
+      "                                   ",
+      "                                   ",
+      "                                   ",
+      "               ..                  ",
+      "              .....                ",
+      "             ........              ",
+      "            ............           ",
+      "           ......o.......          ",
+      "          ..a.......~~b..          ",
+      "         ...........~~....         ",
+      "         .o.............o..        ",
+      "        ~~....a.....b.......       ",
+      "      ..~~...................      ",
+      "    ...a...................b.      ",
+      "    ........................o.     ",
+      "    ..o.......................     ",
+      "    .1.......................2.    ",
+      "    ..............",
     ],
   },
 ];
@@ -564,13 +627,13 @@ export function buildShrine(def: ShrineDef): Shrine {
   const isle = scaledIsle(def);
   if (isle) rows = carveIsle(rows, isle);
   rows = addRings(rows, ringsOf(def));
-  return finish(def, rows, 2, isle ? (a) => isleRadius(isle, a) : null);
+  return finish(def, rows, 2, isle ? (a) => isleRadius(isle, a) : null, isle);
 }
 
 const SPAWN_TEAM: Record<string, number> = { a: 0, b: 1, c: 2, d: 3 };
 const START_TEAM: Record<string, number> = { "1": 0, "2": 1, "3": 2, "4": 3 };
 
-function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: number) => number) | null): Shrine {
+function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: number) => number) | null, isle?: IsleShape): Shrine {
   const height = rows.length;
   const width = rows[0]!.length;
   const tiles: Tile[] = [];
@@ -589,7 +652,7 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   const board = new Board(width, height, tiles);
   for (let dy = -1; dy <= 1; dy++)
     for (let dx = -1; dx <= 1; dx++) tiles[(board.center.y + dy) * width + board.center.x + dx] = Tile.Brazier;
-  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline };
+  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null };
 }
 
 /**
@@ -626,7 +689,14 @@ export function spawnField(board: Board, [lo, hi]: [number, number]): Pt[] {
 }
 
 function scaledIsle(def: ShrineDef): IsleShape | undefined {
-  return def.isle && { ...def.isle, radius: def.isle.radius * (def.scale ?? MAP_SCALE) };
+  const f = def.scale ?? MAP_SCALE;
+  return (
+    def.isle && {
+      ...def.isle,
+      radius: def.isle.radius * f,
+      arms: def.isle.arms?.map((a) => ({ ...a, length: a.length * f, width: [a.width[0] * f, a.width[1] * f] as [number, number] })),
+    }
+  );
 }
 
 const ringsOf = (def: ShrineDef) => def.rings ?? [RING];
@@ -696,12 +766,7 @@ export function addRings(rows: string[], rings: Ring[]): string[] {
  */
 function carveIsle(rows: string[], isle: IsleShape): string[] {
   const H0 = rows.length, W0 = rows[0]!.length;
-  let reach = 0;
-  for (let i = 0; i < 360; i++) {
-    const a = (i / 360) * Math.PI * 2;
-    const r = isleRadius(isle, a);
-    reach = Math.max(reach, Math.abs(Math.cos(a) * r), Math.abs(Math.sin(a) * r));
-  }
+  const reach = landReach(isle);
   const MARGIN = Math.max(0, Math.ceil(reach + 1.5 - (Math.min(W0, H0) - 1) / 2));
   const W = W0 + MARGIN * 2, H = H0 + MARGIN * 2;
   const g: string[][] = Array.from({ length: H }, (_, y) =>
@@ -710,7 +775,8 @@ function carveIsle(rows: string[], isle: IsleShape): string[] {
       if (ox < 0 || oy < 0 || ox >= W0 || oy >= H0) return ".";
       const ch = rows[oy]![ox]!;
       const border = ox === 0 || oy === 0 || ox === W0 - 1 || oy === H0 - 1;
-      return border && ch === "#" ? "." : ch;
+      // Sky in the drawing is redrawn by the coastline below.
+      return (border && ch === "#") || ch === " " ? "." : ch;
     }),
   );
   const cx = Math.floor(W / 2), cy = Math.floor(H / 2);
@@ -718,12 +784,14 @@ function carveIsle(rows: string[], isle: IsleShape): string[] {
     for (let x = 0; x < W; x++) {
       const dx = x - cx, dy = y - cy;
       const rim = x === 0 || y === 0 || x === W - 1 || y === H - 1;
-      const inside = Math.hypot(dx, dy) - isleRadius(isle, Math.atan2(dy, dx));
+      const inside = coastDepth(isle, dx, dy);
       // A spawn or start right on the shore is kept (the scaled layout can round onto it).
       if (!rim && (inside <= -0.5 || (inside <= 0.5 && "abcd1234".includes(g[y]![x]!)))) continue;
-      if ("abcd1234".includes(g[y]![x]!)) throw new Error(`island edge cuts off a spawn or start at (${x},${y}) d=${(Math.hypot(dx, dy) - isleRadius(isle, Math.atan2(dy, dx))).toFixed(2)}`);
+      if ("abcd1234".includes(g[y]![x]!)) throw new Error(`island edge cuts off a spawn or start at (${x},${y}) d=${inside.toFixed(2)}`);
       g[y]![x] = " ";
     }
+  if (isle.arms?.length) scatterArms(g, cx, cy, isle);
+  dropIslets(g, cx, cy);
   // Crop to the land plus a ring of sky, keeping the brazier dead centre.
   let ex = 0, ey = 0;
   for (let y = 0; y < H; y++)
@@ -761,11 +829,7 @@ function fourWayFrom(def: ShrineDef, turn: number): Shrine {
   const isle = scaledIsle(def);
   const outline = isle ? (a: number) => Math.max(isleRadius(isle, a), isleRadius(isle, a + Math.PI / 2)) : null;
   let half = Math.max(scx, scy);
-  if (outline)
-    for (let i = 0; i < 360; i++) {
-      const a = (i / 360) * Math.PI * 2, r = outline(a);
-      half = Math.max(half, Math.ceil(Math.max(Math.abs(Math.cos(a) * r), Math.abs(Math.sin(a) * r)) + 1.5));
-    }
+  if (isle && outline) half = Math.max(half, Math.ceil(landReach(isle, outline) + 1.5));
   const S = half * 2 + 1;
   // Quarter D: dx <= -1, dy <= 0. Turn k maps (dx, dy) -> (-dy, dx) k times.
   const quarter = (qx: number, qy: number) => {
@@ -793,9 +857,9 @@ function fourWayFrom(def: ShrineDef, turn: number): Shrine {
     }
   g[half]![half] = "B";
   const rows = g.map((r) => r.join(""));
-  let carved = isle && outline ? carveFolded(rows, outline) : rows;
+  let carved = isle && outline ? carveFolded(rows, (dx, dy) => coastDepth(isle, dx, dy, outline), isle) : rows;
   carved = addRings(carved, ringsOf(def));
-  const s = finish(def, carved, 4, outline);
+  const s = finish(def, carved, 4, outline, isle);
   for (let t = 0; t < 4; t++) {
     if (s.wispSpawns[t]!.length < 2) throw new Error(`${def.id} four-way: team ${t} has ${s.wispSpawns[t]!.length} wisp spawns`);
     if (s.starts[t]!.length < 1) throw new Error(`${def.id} four-way: team ${t} has no start`);
@@ -803,19 +867,75 @@ function fourWayFrom(def: ShrineDef, turn: number): Shrine {
   return s;
 }
 
+/**
+ * Clutter for the arms, past the core: boulders, short broken walls and ice slicks, placed by a
+ * hash of the tile so the same island always gets the same clutter. Never pools, which would
+ * cut an arm in two for walkers.
+ */
+function scatterArms(g: string[][], cx: number, cy: number, isle: IsleShape) {
+  const H = g.length, W = g[0]!.length;
+  const hash = (x: number, y: number, k: number) => {
+    const v = Math.sin(x * 127.1 + y * 311.7 + k * 74.7 + isle.seed * 17.3) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  const core = (dx: number, dy: number) => Math.hypot(dx, dy) - isleRadius(isle, Math.atan2(dy, dx));
+  const land = (x: number, y: number) => g[y]?.[x] === "." && core(x - cx, y - cy) > 1.5;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (!land(x, y)) continue;
+      const r = hash(x, y, 1);
+      if (r < 0.028) g[y]![x] = "o";
+      else if (r < 0.036) {
+        // A short wall, two or three tiles, along x or y.
+        const along = hash(x, y, 2) < 0.5;
+        const n = 2 + Math.floor(hash(x, y, 3) * 2);
+        for (let i = 0; i < n; i++) {
+          const tx = along ? x + i : x, ty = along ? y : y + i;
+          if (land(tx, ty)) g[ty]![tx] = "#";
+        }
+      } else if (r < 0.042) {
+        // An ice slick about two tiles across.
+        for (let j = -2; j <= 2; j++)
+          for (let i = -2; i <= 2; i++)
+            if (i * i + j * j <= 4 + hash(x + i, y + j, 4) * 2 && land(x + i, y + j)) g[y + j]![x + i] = "*";
+      }
+    }
+}
+
+/** Turns land that isn't joined to the centre (8-way, through anything but sky) into sky. */
+function dropIslets(g: string[][], cx: number, cy: number) {
+  const H = g.length, W = g[0]!.length;
+  const seen = new Uint8Array(W * H);
+  const q: [number, number][] = [[cx, cy]];
+  seen[cy * W + cx] = 1;
+  for (let i = 0; i < q.length; i++) {
+    const [x, y] = q[i]!;
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H || seen[ny * W + nx] || g[ny]![nx] === " ") continue;
+        seen[ny * W + nx] = 1;
+        q.push([nx, ny]);
+      }
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!seen[y * W + x] && g[y]![x] !== " ") g[y]![x] = " ";
+}
+
 /** Marks every tile outside the outline as open sky, then crops to the land plus a ring of sky. */
-function carveFolded(rows: string[], outline: (a: number) => number): string[] {
+function carveFolded(rows: string[], depth: (dx: number, dy: number) => number, isle?: IsleShape): string[] {
   const S = rows.length, c = Math.floor(S / 2);
   const g = rows.map((r) => [...r]);
   for (let y = 0; y < S; y++)
     for (let x = 0; x < S; x++) {
       const dx = x - c, dy = y - c;
       const rim = x === 0 || y === 0 || x === S - 1 || y === S - 1;
-      const inside = Math.hypot(dx, dy) - outline(Math.atan2(dy, dx));
+      const inside = depth(dx, dy);
       if (!rim && (inside <= -0.5 || (inside <= 0.5 && "abcd1234".includes(g[y]![x]!)))) continue;
       if ("abcd1234".includes(g[y]![x]!)) throw new Error(`four-way island edge cuts off a spawn or start at (${x},${y})`);
       g[y]![x] = " ";
     }
+  if (isle?.arms?.length) scatterArms(g, c, c, isle);
+  dropIslets(g, c, c);
   let e = 0;
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (g[y]![x] !== " ") e = Math.max(e, Math.abs(x - c), Math.abs(y - c));
   return g.slice(c - e - 1, c + e + 2).map((r) => r.slice(c - e - 1, c + e + 2).join(""));

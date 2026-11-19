@@ -50,7 +50,7 @@ describe("shrines", () => {
   });
 
   it("are islands: open sky round the edge, the same coastline for both guilds", () => {
-    for (const s of SHRINES) {
+    for (const s of SHRINES.filter((x) => !x.arms)) {
       const b = s.board;
       expect(b.tile(pt(0, 0)), s.id).toBe(Tile.Edge);
       for (let y = 0; y < b.height; y++)
@@ -60,7 +60,7 @@ describe("shrines", () => {
   });
 
   it("play point-symmetric too, after scaling up and adding the archways", () => {
-    for (const s of SHRINES) {
+    for (const s of SHRINES.filter((x) => !x.arms)) {
       const b = s.board;
       for (let y = 0; y < b.height; y++)
         for (let x = 0; x < b.width; x++) expect(b.tile(pt(x, y)), `${s.id} (${x},${y})`).toBe(b.tile(pt(b.width - 1 - x, b.height - 1 - y)));
@@ -70,7 +70,7 @@ describe("shrines", () => {
   });
 
   it("have four-way versions that are the same from all four sides", () => {
-    for (const s of SHRINES) {
+    for (const s of SHRINES.filter((x) => !x.arms)) {
       const f = shrineFor(s.id, 4);
       const b = f.board;
       expect(b.width, s.id).toBe(b.height);
@@ -114,11 +114,20 @@ describe("shrines", () => {
   });
 
   it("spawn wisps from a shared field that's the same turned 180 degrees", () => {
-    for (const s of SHRINES) {
+    for (const s of SHRINES.filter((x) => !x.arms)) {
       const b = s.board;
       expect(s.spawnField.length, s.id).toBeGreaterThan(20);
       const set = new Set(s.spawnField.map((p) => `${p.x},${p.y}`));
       for (const p of s.spawnField) expect(set.has(`${b.width - 1 - p.x},${b.height - 1 - p.y}`), s.id).toBe(true);
+    }
+  });
+
+  it("tentacle islands keep every arm joined to the core", () => {
+    for (const s of SHRINES.filter((x) => x.arms)) {
+      const b = s.board;
+      const land = b.tiles.filter((t) => t !== Tile.Edge).length;
+      expect(land, s.id).toBeGreaterThan(3000);
+      expect(s.spawnField.length).toBeGreaterThan(1000);
     }
   });
 

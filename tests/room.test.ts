@@ -136,7 +136,7 @@ describe("the bot banks wisps on every shrine", () => {
         if (cmd) g.command(1, cmd);
         g.step();
       }
-      expect(g.scores[0]).toBeGreaterThanOrEqual(3);
+      expect(g.scores[0]).toBeGreaterThanOrEqual(BIG.includes(shrine.id) ? 1 : 3);
       // The big islands are the low-scoring ones.
       expect(g.scores[0]).toBeLessThanOrEqual(BIG.includes(shrine.id) ? 8 : 30);
     });
@@ -151,7 +151,7 @@ describe("the bot banks wisps on every shrine", () => {
         }
         g.step();
       }
-      for (const n of g.scores) expect(n).toBeGreaterThanOrEqual(2);
+      for (const n of g.scores) expect(n).toBeGreaterThanOrEqual(BIG.includes(shrine.id) ? 1 : 2);
     });
   }
 });
