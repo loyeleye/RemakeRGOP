@@ -496,10 +496,12 @@ export class Game {
   private placeWisp(w: Wisp, taken: Set<string>) {
     // Some shrines send a share of wisps farther out.
     const far = this.shrine.farField?.length > 0 && this.rng.next() < this.shrine.farShare;
-    const spawns = far ? this.shrine.farField : this.shrine.spawnField.length > 0 ? this.shrine.spawnField : this.shrine.wispSpawns[w.guild]!;
+    // And some on pools, where the tide or the stream will take them.
+    const pool = !far && this.shrine.poolField?.length > 0 && this.rng.next() < this.shrine.poolShare;
+    const spawns = far ? this.shrine.farField : pool ? this.shrine.poolField : this.shrine.spawnField.length > 0 ? this.shrine.spawnField : this.shrine.wispSpawns[w.guild]!;
     const free = spawns.filter((s) => !taken.has(key(s)));
-    const pool = free.length > 0 ? free : spawns;
-    w.pos = pool[this.rng.int(pool.length)]!;
+    const from = free.length > 0 ? free : spawns;
+    w.pos = from[this.rng.int(from.length)]!;
     w.prev = w.pos;
     w.target = null;
     w.rimTicks = 0;

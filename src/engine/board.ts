@@ -39,6 +39,12 @@ export enum Tile {
   Vent = 11,
   /** Portcullis: a gate in the archways that is open or shut by the clock (shut, it's a wall). */
   Gate = 12,
+  /** Moss: soft ground that catches a wisp: one that moves onto it stops dead and the staff lets go. */
+  Moss = 13,
+  /** Pressure plate: stand on one and the shortcut gates on its side of the brazier open. */
+  Plate = 14,
+  /** Sun glyph: a wisp left resting on one is relayed along the way toward the brazier. */
+  Glyph = 15,
 }
 
 /** Do wisps skate on this tile? */
@@ -74,6 +80,38 @@ export class Board {
   /** Bumped whenever the tiles change during a round (portcullises), so caches know. */
   version = 0;
 
+  /** Mist: tiles that block sight (but not walking or wisps) this tick, or null for none. */
+  fog: Uint8Array | null = null;
+
+  /**
+   * How many wisp moves each tile is from the bank zone (-1 where a wisp can't get there).
+   * Used to lay sun glyphs and to send a relayed wisp the short way in.
+   */
+  bankFlow(): Int32Array {
+    const W = this.width, H = this.height;
+    const d = new Int32Array(W * H).fill(-1);
+    const q: Pt[] = [];
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const p = pt(x, y);
+        if (this.inBankZone(p) && this.passable(p, Mover.Wisp) && this.tile(p) !== Tile.Brazier) {
+          d[y * W + x] = 0;
+          q.push(p);
+        }
+      }
+    for (let i = 0; i < q.length; i++) {
+      const p = q[i]!;
+      for (const dir of DIRS) {
+        const n = pt(p.x + dir.x, p.y + dir.y);
+        if (!this.inside(n) || d[n.y * W + n.x] !== -1) continue;
+        if (!this.canStep(n, -dir.x, -dir.y, Mover.Wisp)) continue;
+        d[n.y * W + n.x] = d[p.y * W + p.x]! + 1;
+        q.push(n);
+      }
+    }
+    return d;
+  }
+
   inside(p: Pt) {
     return p.x >= 0 && p.y >= 0 && p.x < this.width && p.y < this.height;
   }
@@ -84,6 +122,7 @@ export class Board {
 
   passable(p: Pt, who: Mover): boolean {
     const t = this.tile(p);
+    if (who === Mover.Sight && this.fog && this.inside(p) && this.fog[p.y * this.width + p.x]) return false;
     switch (t) {
       case Tile.Wall:
         return false;

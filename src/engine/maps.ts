@@ -32,6 +32,8 @@ export interface ShrineDef {
   gimmicks?: Gimmicks;
   /** A share of wisps (0..1) that appear in a second, farther band instead. */
   farSpawns?: { band: [number, number]; share: number };
+  /** A share of wisps appear on pools in this band instead (of those not sent far out). */
+  poolSpawns?: { band: [number, number]; share: number };
 }
 
 export interface Gimmicks {
@@ -337,6 +339,9 @@ export interface Shrine {
   /** A farther-out field that a share of wisps appear in instead (empty for none). */
   farField: Pt[];
   farShare: number;
+  /** Pool tiles that a share of wisps appear on instead (empty for none). */
+  poolField: Pt[];
+  poolShare: number;
   starts: Pt[][];
   /** The archway rings round the brazier, innermost first. */
   rings: Ring[];
@@ -406,6 +411,8 @@ export const SHRINE_DEFS: ShrineDef[] = [
     isle: { radius: 12.5, squareness: 2.4, coves: 0.14, heads: 0.08, seed: 11, stretch: [1.35, 0.8] },
     rings: [{ radius: 5, style: "open" }],
     gimmicks: { tide: 20 },
+    farSpawns: { band: [11, 15], share: 1 / 3 },
+    poolSpawns: { band: [5, 15], share: 0.4 },
     rows: [
       "                                     ",
       "                                     ",
@@ -786,6 +793,8 @@ const TILE_OF: Record<string, Tile> = {
   "+": Tile.Bloom,
   "^": Tile.Vent,
   "=": Tile.Gate,
+  "&": Tile.Moss,
+  _: Tile.Plate,
   "/": Tile.CrystalA,
   "\\": Tile.CrystalB,
 };
@@ -839,14 +848,14 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   const board = new Board(width, height, tiles);
   for (let dy = -1; dy <= 1; dy++)
     for (let dx = -1; dx <= 1; dx++) tiles[(board.center.y + dy) * width + board.center.x + dx] = Tile.Brazier;
-  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0 };
+  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0, poolField: def.poolSpawns ? spawnField(board, def.poolSpawns.band, Tile.Water) : [], poolShare: def.poolSpawns?.share ?? 0 };
 }
 
 /**
  * The floor tiles in the band that a wisp could be pulled from into the brazier zone. The
  * board is symmetric, so the field is too, and every guild draws from the same field.
  */
-export function spawnField(board: Board, [lo, hi]: [number, number]): Pt[] {
+export function spawnField(board: Board, [lo, hi]: [number, number], kind: Tile = Tile.Floor): Pt[] {
   const W = board.width, H = board.height, c = board.center;
   // Tiles a wisp can travel from to reach the zone.
   const ok = new Uint8Array(W * H);
@@ -870,7 +879,7 @@ export function spawnField(board: Board, [lo, hi]: [number, number]): Pt[] {
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const r = Math.hypot(x - c.x, y - c.y);
-      if (r >= lo && r <= hi && ok[y * W + x] && board.tile(pt(x, y)) === Tile.Floor) out.push(pt(x, y));
+      if (r >= lo && r <= hi && ok[y * W + x] && board.tile(pt(x, y)) === kind) out.push(pt(x, y));
     }
   return out;
 }
