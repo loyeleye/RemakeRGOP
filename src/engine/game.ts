@@ -68,7 +68,7 @@ export const MIST_ORBIT = 9;
 export const MIST_RADIUS = 2.2;
 export const MIST_LAP = 150;
 /** Moss: taps it takes to break a tuft, how often it grows (ticks), and how much there can be. */
-export const MOSS_HP = 3;
+export const MOSS_HP = 2;
 export const MOSS_GROW = 6;
 export const MOSS_MAX = 64;
 /** Pushing reaches less far than pulling. */

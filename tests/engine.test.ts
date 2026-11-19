@@ -457,8 +457,7 @@ describe("game", () => {
     g.step();
     expect(g.wisps[0]!.pos).toEqual(pt(13, 5));
     expect(g.board.tile(pt(13, 6))).toBe(Tile.Moss);
-    // Three taps while it's held back tear the tuft away.
-    tap();
+    // Two taps while it's held back tear the tuft away.
     tap();
     expect(g.board.tile(pt(13, 6))).toBe(Tile.Moss);
     tap();
