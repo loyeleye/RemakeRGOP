@@ -19,6 +19,8 @@ export const COUNTDOWN_TICKS = 5;
 export const PULL_REACH = 10;
 /** Experimental: teammates pulling one wisp on the same tick pull it toward the point between them. */
 export const TEAM_PULL = true;
+/** How many tiles a wisp turned by a crystal flies straight on before it stops. */
+export const CRYSTAL_FLIGHT = 8;
 /** Pushing reaches less far than pulling. */
 export const PUSH_REACH = 8;
 export const WISPS_PER_GUILD = 3;
@@ -63,6 +65,8 @@ export interface Wisp {
   touched: boolean;
   /** Skating across ice: the way it keeps sliding each tick. No staff can grip it meanwhile. */
   skate: Pt | null;
+  /** Ticks left of a crystal's straight flight (it flies on whatever the ground until it runs out). */
+  glide: number;
   /** Teammates pulling it together this tick (the midpoint of all of them is what it heads for). */
   pullers: number[];
 }
@@ -165,7 +169,7 @@ export function reflect(t: Tile, dx: number, dy: number): [number, number] {
 
 /**
  * One wisp step toward a target, with the shrine's tricks: a wisp flying into a crystal is
- * turned off its mirror and flung two tiles the new way (`bounce` is the new heading and it
+ * turned off its mirror and flies straight on the new way (`bounce` is the new heading and it
  * takes its first step that way this tick). Otherwise it is slideStep. Null: it stops.
  */
 export function wispMove(board: Board, from: Pt, dx: number, dy: number, ax: number, ay: number): { step: [number, number]; bounce: Pt | null } | null {
@@ -242,6 +246,7 @@ export class Game {
           grip: Grip.Free,
           touched: false,
           skate: null,
+          glide: 0,
           pullers: [],
         };
         this.placeWisp(w, used);
@@ -332,15 +337,21 @@ export class Game {
       return;
     }
     if (w.skate) {
-      // Skating on ice: on it goes the same way until it leaves the ice or stops.
+      // Skating on ice, or flying off a crystal: on it goes the same way until it stops, leaves
+      // the ice, or its crystal flight runs out.
       const mv = wispMove(this.board, w.pos, w.skate.x, w.skate.y, 1, 1);
       if (!mv) {
         w.skate = null;
+        w.glide = 0;
         return;
       }
-      if (mv.bounce) w.skate = mv.bounce;
+      if (mv.bounce) {
+        w.skate = mv.bounce;
+        w.glide = CRYSTAL_FLIGHT;
+      }
       w.pos = pt(w.pos.x + mv.step[0], w.pos.y + mv.step[1]);
-      if (!isSlick(this.board.tile(w.pos))) w.skate = null;
+      if (w.glide > 0) w.glide--;
+      if (w.glide === 0 && !isSlick(this.board.tile(w.pos))) w.skate = null;
       return;
     }
     if (!w.target || samePt(w.target, w.pos)) {
@@ -353,9 +364,13 @@ export class Game {
       return;
     }
     if (mv.bounce) {
-      // Off a crystal: flung two tiles the new way, and out of every staff's grip.
-      w.target = pt(w.pos.x + 2 * mv.bounce.x, w.pos.y + 2 * mv.bounce.y);
+      // Off a crystal: it flies straight on the new way, out of every staff's grip.
+      w.target = null;
+      w.skate = mv.bounce;
+      w.glide = CRYSTAL_FLIGHT - 1;
       this.letGo(w);
+      w.pos = pt(w.pos.x + mv.step[0], w.pos.y + mv.step[1]);
+      return;
     }
     const [dx, dy] = mv.step;
     w.pos = pt(w.pos.x + dx, w.pos.y + dy);

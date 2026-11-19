@@ -295,7 +295,7 @@ describe("game", () => {
     expect(g.wisps[0]!.holder).toBe(1);
   });
 
-  it("a wisp flung into a crystal is turned off its mirror and let go", () => {
+  it("a wisp flung into a crystal is turned off its mirror and flies straight on", () => {
     const shrine = openShrine([pt(6, 6)], [pt(20, 23)]);
     // A "\\" mirror two tiles east of the wisp: heading east, it turns south.
     shrine.board.tiles[6 * 27 + 8] = Tile.CrystalB;
@@ -308,10 +308,10 @@ describe("game", () => {
     g.step();
     expect(g.wisps[0]!.pos).toEqual(pt(7, 7));
     expect(g.players[0]!.action.kind).toBe("idle");
-    g.step();
-    expect(g.wisps[0]!.pos).toEqual(pt(7, 8));
-    g.step();
-    expect(g.wisps[0]!.pos).toEqual(pt(7, 8));
+    // Eight tiles straight south in all, then it stops.
+    for (let i = 0; i < 10; i++) g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 14));
+    expect(g.wisps[0]!.skate).toBeNull();
   });
 
   it("a wisp that reaches ice skates on until it leaves it, and nobody can grip it meanwhile", () => {

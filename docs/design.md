@@ -109,7 +109,8 @@ grip, so it only affects wisps.
 
 **Crystal mirrors (experimental).** A thin mirror on its tile's diagonal. A wisp that would step
 into one is turned off the mirror (heading east into `\` turns south), takes its first step the
-new way, and is flung 2 tiles; every staff on it lets go.
+new way, and flies straight on for up to 8 tiles (or until something stops it or it reaches the
+rim); every staff on it lets go.
 
 **Team pull (experimental).** When teammates pull the same wisp on the same tick, it heads for
 the average of their positions, at the normal speed. A teammate who loses reach or sight walks to
@@ -124,7 +125,7 @@ was about 1 in 4 to 1 in 3. Three shrines try a different fix each:
 | Shrine | Mechanic | Shots that glance | Home-square coverage |
 |---|---|---|---|
 | Fairy Ring | toadstool deflectors on the court diagonals (3, 3), posts beside each gate | 59% | 100% |
-| Crystal Spire | 8 crystal mirrors flanking the gates at (3, 1); 44% of shots bounce off one | 51% | 82% |
+| Crystal Spire | 8 crystal mirrors out among the spawns at (7, 2), angled to send a wisp in through a gate: 77% of spawns can be banked with a mirror shot from somewhere | 40% | 71% |
 | Glacier | the whole court is rime, so a wisp entering it skates; aim it at the rim | all | 38% |
 
 ## Islands

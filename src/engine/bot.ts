@@ -6,7 +6,7 @@
 // Used for practice rivals, tests and (later) story-mode opponents.
 
 import { Board, DIRS, Mover, Tile, cheb, isSlick, pt, samePt, type Pt } from "./board.js";
-import { PULL_REACH, flingOffset, wispMove, type Command, type Game, type Wisp } from "./game.js";
+import { CRYSTAL_FLIGHT, PULL_REACH, flingOffset, wispMove, type Command, type Game, type Wisp } from "./game.js";
 
 export interface BotStyle {
   /** Push rival wisps within this many tiles of the brazier rim (0 = never). */
@@ -165,17 +165,14 @@ export function bankDistances(board: Board): Int16Array {
 /** Where the wisp ends up if pulled from `from` until it stops, and how many ticks it takes. */
 export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30): { end: Pt; ticks: number } {
   let w = start;
-  // Once it's flung off a crystal or skating on ice, the staff has let go: it just flies.
-  let target: Pt | null = null;
+  // Once it's turned by a crystal or skating on ice, the staff has let go: it just flies.
   let skate: Pt | null = null;
+  let glide = 0;
   for (let t = 1; t <= maxTicks; t++) {
     if (board.inBankZone(w)) return { end: w, ticks: t };
     let dx: number, dy: number, ax: number, ay: number;
     if (skate) [dx, dy, ax, ay] = [skate.x, skate.y, 1, 1];
-    else if (target) {
-      if (samePt(target, w)) return { end: w, ticks: t };
-      [dx, dy, ax, ay] = [Math.sign(target.x - w.x), Math.sign(target.y - w.y), Math.abs(target.x - w.x), Math.abs(target.y - w.y)];
-    } else {
+    else {
       if (cheb(from, w) > PULL_REACH || !board.canSee(from, w)) return { end: w, ticks: t };
       const off = flingOffset(from, w, "pull");
       if (!off.x && !off.y) return { end: w, ticks: t };
@@ -184,15 +181,15 @@ export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30): 
     const mv = wispMove(board, w, dx, dy, ax, ay);
     if (!mv) return { end: w, ticks: t };
     if (mv.bounce) {
-      if (skate) skate = mv.bounce;
-      else target = pt(w.x + 2 * mv.bounce.x, w.y + 2 * mv.bounce.y);
+      skate = mv.bounce;
+      glide = CRYSTAL_FLIGHT;
     }
     w = pt(w.x + mv.step[0], w.y + mv.step[1]);
     if (skate) {
-      if (!isSlick(board.tile(w))) return { end: w, ticks: t + 1 };
+      if (glide > 0) glide--;
+      if (glide === 0 && !isSlick(board.tile(w))) return { end: w, ticks: t + 1 };
     } else if (isSlick(board.tile(w)) && !board.inBankZone(w)) {
       skate = pt(mv.step[0], mv.step[1]);
-      target = null;
     }
   }
   return { end: w, ticks: maxTicks };

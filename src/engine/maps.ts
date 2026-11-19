@@ -246,7 +246,7 @@ export function ringNote(rings: Ring[]): string {
   if (rings.length > 1) return "Two rings of archways: in through a gate, round the court, in at a corner. Very hard to score.";
   if (!rings[0]) return "";
   const r = rings[0];
-  const extra = r.stones ? " Stones by the brazier turn wisps in off the corners." : r.crystals ? " Crystal mirrors by the gates turn a wisp that flies into them." : r.ice ? " The brazier stands on rime: a wisp that reaches it skates straight on." : "";
+  const extra = r.stones ? " Stones by the brazier turn wisps in off the corners." : r.crystals ? " Pull a wisp into a crystal mirror and it flies off at right angles, straight on." : r.ice ? " The brazier stands on rime: a wisp that reaches it skates straight on." : "";
   return RING_NOTES[r.style] + extra;
 }
 
@@ -422,9 +422,9 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "crystal-spire",
     name: "Crystal Spire",
-    blurb: "A six-pointed star. Crystal clusters guard the points; sight runs down the arms. Crystal mirrors round the brazier send a wisp off at right angles.",
+    blurb: "A six-pointed star. Crystal clusters guard the points; sight runs down the arms. Crystal mirrors out among the spawns turn a wisp at right angles and send it flying straight on.",
     isle: { radius: 12.2, squareness: 2, coves: 0.06, heads: 0.06, seed: 9, waves: [[6, 0.3, 0]] },
-    rings: [{ radius: 5, style: "posts", crystals: [{ x: 3, y: 1, o: "\\" }] }],
+    rings: [{ radius: 5, style: "open", crystals: [{ x: 7, y: 2, o: "/" }] }],
     rows: [
       "                                     ",
       "                                     ",
@@ -889,7 +889,13 @@ export function addRings(rows: string[], rings: Ring[]): string[] {
     for (let x = 0; x < W; x++) {
       const dx = x - cx, dy = y - cy;
       const d = Math.max(Math.abs(dx), Math.abs(dy));
-      if (d > outer + 1 || g[y]![x] === " ") continue;
+      if (g[y]![x] === " ") continue;
+      if (d > outer + 1) {
+        // Features out past the archways sit on whatever ground is there (spawns move aside).
+        const f = court.get(`${dx},${dy}`);
+        if (f && g[y]![x] !== "#") g[y]![x] = f;
+        continue;
+      }
       const ch = g[y]![x]!;
       if ("abcd1234".includes(ch)) {
         for (let k = outer + 2; ; k++) {
