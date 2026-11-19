@@ -273,10 +273,7 @@ void main() {
   // The sun (or, at night, a pale moon) and stars.
   vec3 sunDir = normalize(vec3(-0.5, 0.45, -0.75));
   float s = max(0.0, dot(d, sunDir));
-  float night = min(uStars, 1.0);
-  // By day a hot sun; by night a full moon with a soft halo.
-  float disc = mix(pow(s, 400.0) * 3.0, smoothstep(0.9986, 0.9991, s) * 1.7 + pow(s, 90.0) * 0.4, night);
-  col += mix(vec3(1.0, 0.92, 0.75), vec3(0.8, 0.88, 1.0), night) * (disc + pow(s, 12.0) * mix(0.35, 0.12, night));
+  col += mix(vec3(1.0, 0.92, 0.75), vec3(0.75, 0.85, 1.0), uStars) * (pow(s, 400.0) * 3.0 + pow(s, 12.0) * mix(0.35, 0.12, uStars));
   if (uStars > 0.0) {
     vec3 cell = floor(d * 160.0);
     float star = step(0.9965, hash(cell)) * smoothstep(-0.1, 0.3, h);
@@ -304,18 +301,6 @@ void main() {
   vec3 col = mix(uTint * vec3(0.62, 0.70, 0.86), uTint, smoothstep(0.35, 0.8, n));
   float alpha = smoothstep(0.42, 0.68, n) * smoothstep(1.0, 0.4, r);
   gl_FragColor = vec4(col, alpha);
-}`;
-
-const PAINTED_SEA_FS = /* glsl */ `
-varying vec2 vUv;
-uniform float uTime;
-uniform sampler2D uMap;
-void main() {
-  vec2 p = vUv * 7.0 + vec2(uTime * 0.004, uTime * 0.0025);
-  vec3 col = texture2D(uMap, p).rgb;
-  float r = length(vUv - 0.5) * 2.0;
-  // Fade out well before the edge so the panorama's own cloud sea carries on to the horizon.
-  gl_FragColor = vec4(col, smoothstep(0.85, 0.45, r));
 }`;
 
 const UV_VS = /* glsl */ `
@@ -564,18 +549,6 @@ export class World {
     uStars: { value: 0 },
   };
   private cloudTint = { value: new THREE.Color("#ffffff") };
-  private cloudSea: THREE.Mesh | null = null;
-  /** A painted backdrop (a sea of cloud tile and a sky panorama) for themes that have one. */
-  private painted = new THREE.Group();
-  private paintedSea = new THREE.ShaderMaterial({
-    vertexShader: UV_VS,
-    fragmentShader: PAINTED_SEA_FS,
-    uniforms: { uTime: { value: 0 }, uMap: { value: null as THREE.Texture | null } },
-    transparent: true,
-    depthWrite: false,
-    fog: false,
-  });
-  private paintedSky = new THREE.MeshBasicMaterial({ side: THREE.BackSide, depthWrite: false, fog: false });
   private hemi = new THREE.HemisphereLight("#cfe2ff", "#5a6a50", 1.15);
   private sun = new THREE.DirectionalLight("#fff1d6", 3.0);
   private distant = new THREE.Group();
@@ -613,23 +586,6 @@ export class World {
     clouds.rotation.x = -Math.PI / 2;
     clouds.position.y = -18;
     this.scene.add(clouds);
-    this.cloudSea = clouds;
-    sky.renderOrder = -2;
-
-    // The painted backdrop: a panorama on a band round the camera, and a painted cloud sea.
-    const PANO_R = 560, PANO_H = (Math.PI * PANO_R) / 2.46;
-    const pano = new THREE.Mesh(new THREE.CylinderGeometry(PANO_R, PANO_R, PANO_H, 96, 1, true), this.paintedSky);
-    pano.renderOrder = -1;
-    pano.frustumCulled = false;
-    // The painting's horizon sits 64% of the way down; keep it level with the eye.
-    pano.onBeforeRender = (_r, _s, cam) => pano.position.set(cam.position.x, cam.position.y + PANO_H * 0.14, cam.position.z);
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), this.paintedSea);
-    sea.rotation.x = -Math.PI / 2;
-    sea.position.y = -18;
-    this.timeUniforms.push(this.paintedSea.uniforms.uTime as { value: number });
-    this.painted.add(pano, sea);
-    this.painted.visible = false;
-    this.scene.add(this.painted);
 
     // Distant sky islands are built with each shrine, in its palette.
     this.scene.add(this.distant);
@@ -685,21 +641,6 @@ export class World {
     (this.scene.fog as THREE.FogExp2).color.set(th.fog);
     (this.scene.background as THREE.Color).set(th.sky.sky);
     this.cloudTint.value.set(th.clouds);
-    const bd = th.backdrop;
-    this.painted.visible = !!bd;
-    if (this.cloudSea) this.cloudSea.visible = !bd;
-    if (bd) {
-      const sea = texLoader.load(bd.sea);
-      sea.wrapS = sea.wrapT = THREE.RepeatWrapping;
-      sea.colorSpace = THREE.SRGBColorSpace;
-      this.paintedSea.uniforms.uMap!.value = sea;
-      const sky = texLoader.load(bd.pano);
-      sky.wrapS = THREE.RepeatWrapping;
-      sky.colorSpace = THREE.SRGBColorSpace;
-      sky.repeat.set(-2, 1); // twice round, unmirrored from inside
-      this.paintedSky.map = sky;
-      this.paintedSky.needsUpdate = true;
-    }
     this.hemi.color.set(th.hemi[0]);
     this.hemi.groundColor.set(th.hemi[1]);
     this.hemi.intensity = th.hemi[2];

@@ -29,8 +29,6 @@ export interface Theme {
   tint?: string;
   /** Colour of the archway stone, if not the island's rock lightened. */
   arch?: string;
-  /** A painted backdrop instead of the drawn sky and cloud sea: a seamless cloud-sea tile and a looping sky panorama. */
-  backdrop?: { sea: string; pano: string };
   /** Something that glows on top of the pillars at the ends of each archway run. */
   crown?: (seed: number) => THREE.Object3D;
   /** A small thing to dot the distant islands with. */
@@ -259,16 +257,15 @@ export const THEMES: Record<string, Theme> = {
     grass: "#3f9c78",
     soil: "#5a4060",
     rock: "#6a5a80",
-    sky: { zenith: "#040a2a", sky: "#0e215e", haze: "#2c4c92", below: "#071848", stars: 1.5 },
-    fog: "#13285c",
-    clouds: "#2e4c8e",
-    hemi: ["#8aa6f0", "#141c34", 0.8],
-    sun: ["#c4d4ff", 1.5],
+    sky: { zenith: "#170f48", sky: "#3a2f86", haze: "#a070c4", below: "#28286e", stars: 1 },
+    fog: "#3a2e78",
+    clouds: "#8a74c4",
+    hemi: ["#b8a0f0", "#2a2040", 0.85],
+    sun: ["#d8c8ff", 1.4],
     exposure: 1.3,
     wall: "column",
     boulder: "hydrangea",
     arch: "#f2c8dc",
-    backdrop: { sea: "sky/fairy-sea.webp", pano: "sky/fairy-pano.webp" },
     crown: (seed) => makeStarLantern(STAR_COLOURS[seed % STAR_COLOURS.length]!, 0.42, seed),
     particles: "sparkles",
     scatter: (size, seed) => (seed % 3 === 0 ? makeMushroomLamp(size * 0.9, seed) : seed % 3 === 1 ? makeBlossomTree(size * 1.1, seed) : makeHydrangea(size * 0.5, seed)),
@@ -299,8 +296,10 @@ export const THEMES: Record<string, Theme> = {
           add(t.group, makeMushroom(0.35, i * 9 + k), Math.cos(a) * t.r * 0.16, 0, Math.sin(a) * t.r * 0.16);
         }
       });
+      const moon = new THREE.Mesh(new THREE.SphereGeometry(14, 32, 16), new THREE.MeshBasicMaterial({ color: "#e6f4ff", fog: false }));
+      moon.position.set(-160, 200, -420);
+      d.group.add(moon);
       d.group.add(makeShootingStars(d.low ? 2 : 4));
-
     },
   },
   "castle-rise": {
