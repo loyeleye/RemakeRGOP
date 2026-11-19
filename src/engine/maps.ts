@@ -194,6 +194,7 @@ export const MAP_SCALE = 1.5;
  *   gates      pillars all round, one 3-wide arch in the middle of each side (tightest)
  *   open       the corners are open too: arches in the middle, open diagonals (loosest)
  *   diagonals  the middle of each side is walled up; only the open corners let wisps in
+ *   wickets    a one-tile gate in the middle of each wall, open corners
  *   pillared   like open, but a lone pillar stands on each corner, so nothing comes in
  *              straight down a diagonal
  *   pinwheel   pillars all round, with each side's gap pushed off centre the same way round,
@@ -493,7 +494,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     name: "Cascade Falls",
     blurb: "A long island cut by two streams. Wisps float over; you need the fords. The streams run clockwise round the island, carrying a loose wisp a tile a tick.",
     isle: { radius: 12.5, squareness: 2.8, coves: 0.1, heads: 0.08, seed: 2, stretch: [0.8, 1.3] },
-    rings: [{ radius: 5, style: "diagonals" }],
+    rings: [{ radius: 5, style: "posts" }],
     gimmicks: { current: "swirl" },
     rows: [
       "                                     ",
@@ -753,7 +754,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
         { a: 4, ta: 0.92, b: 0, tb: 0.42, bend: 3, width: 1.3, clutter: 1.2 },
       ],
     },
-    rings: [{ radius: 5, style: "diagonals" }, { radius: 9, style: "gates" }],
+    rings: [{ radius: 5, style: "wickets" }, { radius: 9, style: "gates" }],
     spawnBand: [16, 90],
     rows: [
       "                                   ",
