@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Board, Tile, pt } from "../src/engine/board.js";
+import { Board, Mover, Tile, pt } from "../src/engine/board.js";
 import { Game, ROUND_TICKS, flingOffset, type JoinSpec } from "../src/engine/game.js";
 import { SHRINES, SHRINE_DEFS, mirrorRows, buildShrine, type Shrine } from "../src/engine/maps.js";
 
@@ -48,6 +48,16 @@ describe("shrines", () => {
     }
   });
 
+  it("are islands: open sky round the edge, the same coastline for both guilds", () => {
+    for (const s of SHRINES) {
+      const b = s.board;
+      expect(b.tile(pt(0, 0)), s.id).toBe(Tile.Edge);
+      for (let y = 0; y < b.height; y++)
+        for (let x = 0; x < b.width; x++)
+          expect(b.tile(pt(x, y)) === Tile.Edge, `${s.id} (${x},${y})`).toBe(b.tile(pt(b.width - 1 - x, b.height - 1 - y)) === Tile.Edge);
+    }
+  });
+
   it("have a 3x3 brazier at the centre", () => {
     for (const s of SHRINES) {
       expect(s.board.tile(s.board.center)).toBe(Tile.Brazier);
@@ -57,6 +67,13 @@ describe("shrines", () => {
 });
 
 describe("board", () => {
+  it("lets sight cross open sky but nobody walk or float into it", () => {
+    const b = new Board(3, 1, [Tile.Floor, Tile.Edge, Tile.Floor]);
+    expect(b.passable(pt(1, 0), Mover.Walker)).toBe(false);
+    expect(b.passable(pt(1, 0), Mover.Wisp)).toBe(false);
+    expect(b.canSee(pt(0, 0), pt(2, 0))).toBe(true);
+  });
+
   const W = 9;
   const mk = (walls: [number, number][]) => {
     const tiles = Array<Tile>(W * W).fill(Tile.Floor);

@@ -52,6 +52,8 @@ export interface IslandOptions {
   /** Ring segments around, and rings in the long taper. */
   segments?: number;
   rings?: number;
+  /** Radius at angle a; replaces the superellipse (rx, rz, squareness) when given. */
+  radius?: (a: number) => number;
   /** How far headlands push out past the base outline (0 = none, 0.5 = up to half again). */
   lobes?: number;
   /** Drop a terrace: a grassy shelf this far below the top, stepping out from the cliff. */
@@ -79,7 +81,7 @@ function superellipse(a: number, rx: number, rz: number, n: number) {
  * Lobes only ever push outward, so whatever sits inside the base outline stays on the island.
  */
 function outline(o: IslandOptions, a: number) {
-  const p = superellipse(a, o.rx, o.rz, o.squareness);
+  const p = o.radius ? { x: Math.cos(a) * o.radius(a), z: Math.sin(a) * o.radius(a) } : superellipse(a, o.rx, o.rz, o.squareness);
   const lobes = o.lobes ?? 0;
   if (!lobes) return p;
   const n = fbm(Math.cos(a) * 1.4 + 3, 0.5, Math.sin(a) * 1.4 + 3, o.seed + 41);
@@ -205,11 +207,13 @@ export function makeIsland(o: IslandOptions): THREE.Group {
 
   // Hanging spires: smaller ragged cones tucked under the body, poking out at odd angles.
   const spires = o.spires ?? 0;
+  const span = ring.reduce((m, p) => m + Math.hypot(p.x, p.z), 0) / ring.length;
+  const sx = o.radius ? span : o.rx, sz = o.radius ? span : o.rz;
   for (let i = 0; i < spires; i++) {
     const rnd = (k: number) => hash3(o.seed, i, k, 77);
     const a = rnd(1) * Math.PI * 2;
     const d = 0.25 + rnd(2) * 0.4;
-    const r = Math.min(o.rx, o.rz) * (0.18 + rnd(3) * 0.2);
+    const r = Math.min(sx, sz) * (0.18 + rnd(3) * 0.2);
     const spire = makeIsland({
       rx: r,
       rz: r * (0.7 + rnd(4) * 0.5),
@@ -224,7 +228,7 @@ export function makeIsland(o: IslandOptions): THREE.Group {
       noTop: true,
     });
     const top = -(0.2 + d * 0.5) * o.depth * 0.45;
-    spire.position.set(Math.cos(a) * o.rx * d, top, Math.sin(a) * o.rz * d);
+    spire.position.set(Math.cos(a) * sx * d, top, Math.sin(a) * sz * d);
     spire.rotation.set((rnd(6) - 0.5) * 0.25, rnd(7) * 6, (rnd(8) - 0.5) * 0.25);
     group.add(spire);
   }

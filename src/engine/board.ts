@@ -21,6 +21,8 @@ export enum Tile {
   Water = 3,
   /** The brazier itself: nobody stands in it; wisps that reach its rim are banked. */
   Brazier = 4,
+  /** Past the island's edge: open sky. Nobody walks or floats out there, but sight and reach carry across. */
+  Edge = 5,
 }
 
 /** Who is moving: decides which tiles are passable. */
@@ -61,6 +63,7 @@ export class Board {
       case Tile.Wall:
         return false;
       case Tile.Rock:
+      case Tile.Edge:
         return who === Mover.Sight;
       case Tile.Water:
       case Tile.Brazier:

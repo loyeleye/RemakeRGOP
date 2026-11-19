@@ -569,28 +569,49 @@ export class World {
     const H = b.height;
     const g = this.shrineGroup;
 
-    // The plaza: floor texture on top of a thick floating slab of rock.
-    const floorTex = tex(`textures/floor-${shrine.id}.webp`, W / 6);
+    // The coastline the rules use: tiles past it are open sky. Shrines without one are the
+    // old walled rectangle, drawn as a rounded square.
+    const hw = W / 2 - 0.5, hh = H / 2 - 0.5;
+    const coast =
+      shrine.outline ??
+      ((a: number) => {
+        const c = Math.cos(a), sn = Math.sin(a);
+        const n = 10;
+        return 1 / Math.pow(Math.pow(Math.abs(c) / hw, n) + Math.pow(Math.abs(sn) / hh, n), 1 / n);
+      });
+    const ring = (a: number, out: number) => ({ x: Math.cos(a) * (coast(a) + out), z: Math.sin(a) * (coast(a) + out) });
+
+    // The plaza: flagstones laid right up to the island's edge.
+    const floorTex = tex(`textures/floor-${shrine.id}.webp`, 1 / 6);
+    const floorShape = new THREE.Shape();
+    for (let i = 0; i <= 256; i++) {
+      const p = ring((i / 256) * Math.PI * 2, 0.35);
+      if (i === 0) floorShape.moveTo(p.x, -p.z);
+      else floorShape.lineTo(p.x, -p.z);
+    }
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(W - 2, H - 2),
+      new THREE.ShapeGeometry(floorShape, 1),
       new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.9, color: "#ffffff" }),
     );
     floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0.01;
     floor.receiveShadow = true;
     g.add(floor);
     const wallTex = tex("sprites/wall.png", 3);
-    // The island itself: a ragged plateau with headlands, a grassy terrace and hanging spires.
+    // The island itself follows the coastline, with a grassy verge outside the parapet, then
+    // the cliff, a grassy terrace and hanging spires.
     const island = makeIsland({
-      rx: W * 0.7, rz: H * 0.7, depth: 22, squareness: 3, seed: W + H,
-      lobes: 0.55, ledge: 2.4, spires: this.low ? 3 : 6, grass: "#5f9446",
-      segments: this.low ? 96 : 160,
+      rx: 1, rz: 1, depth: 24, squareness: 2, seed: W + H,
+      radius: (a) => (coast(a) + 2.1) / 0.95,
+      ledge: 2.4, spires: this.low ? 3 : 6, grass: "#5f9446",
+      segments: this.low ? 128 : 220,
     });
     island.position.y = -0.03;
     g.add(island);
     const edge = island.userData.outline as (a: number) => { x: number; z: number };
     // Lower tiers: smaller plateaus stepping down from the main one, so the whole thing reads as
     // one broken table of land rather than a single slab.
-    const tiers: [number, number, number][] = [[0.9, 0.42, -2.6], [2.6, 0.36, -4.2], [4.3, 0.3, -1.8]];
+    const tiers: [number, number, number][] = [[0.9, 0.24, -4.5], [2.6, 0.2, -6.5], [4.3, 0.17, -3.6]];
     const fallU = { value: 0 };
     this.timeUniforms.push(fallU);
     tiers.forEach(([a, size, ty], i) => {
@@ -626,39 +647,31 @@ export class World {
       mist.position.set(e.x * 1.05, -22, e.z * 1.05);
       g.add(mist);
     }
-    // Trees scattered over the grass between the plaza and the cliff edge.
-    for (let i = 0; i < 26; i++) {
-      const a = (i / 26) * Math.PI * 2 + Math.sin(i * 3.1) * 0.1;
-      const e = edge(a);
-      const f = 0.72 + ((i * 37) % 10) * 0.02;
-      const tx = e.x * f;
-      const tz = e.z * f;
-      if (Math.abs(tx) < W / 2 + 0.6 && Math.abs(tz) < H / 2 + 0.6) continue;
-      const tree = makeTree(1.6 + (i % 3) * 0.5, i + W);
-      tree.position.set(tx, 0, tz);
+    // Trees on the far (north) verge, where they frame the view without hiding anyone.
+    for (let i = 0; i < 12; i++) {
+      const a = Math.PI * (1.08 + (i / 11) * 0.84);
+      const p = ring(a, 1.35 + (i % 2) * 0.3);
+      const tree = makeTree(1.4 + (i % 3) * 0.45, i + W);
+      tree.position.set(p.x, 0, p.z);
       g.add(tree);
     }
 
-    // A low rounded stone curb marks the edge of the plaza.
+    // A low rounded parapet runs round the edge of the flagstones: the limit of play.
     const curbPts: THREE.Vector3[] = [];
-    const hw = W / 2 - 0.5, hh = H / 2 - 0.5;
-    for (let i = 0; i < 160; i++) {
-      const a = (i / 160) * Math.PI * 2;
-      const c = Math.cos(a), sn = Math.sin(a);
-      curbPts.push(new THREE.Vector3(hw * Math.sign(c) * Math.pow(Math.abs(c), 0.18), 0.12, hh * Math.sign(sn) * Math.pow(Math.abs(sn), 0.18)));
+    for (let i = 0; i < 240; i++) {
+      const p = ring((i / 240) * Math.PI * 2, 0.45);
+      curbPts.push(new THREE.Vector3(p.x, 0.12, p.z));
     }
     const curb = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curbPts, true), 320, 0.3, 16, true),
-      new THREE.MeshStandardMaterial({ map: wallTex, color: "#b8aec4", roughness: 0.85 }),
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curbPts, true), 480, 0.26, 14, true),
+      new THREE.MeshStandardMaterial({ map: wallTex, color: "#c9bda8", roughness: 0.85 }),
     );
     curb.castShadow = curb.receiveShadow = true;
     g.add(curb);
-    // Corner monoliths and edge braziers for scale.
-    for (const [cx, cz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
-      this.addProp("monolith", (cx * (W - 1)) / 2, (cz * (H - 1)) / 2, 4.2, 1.3, cx * 3 + cz);
-      const fl = glowSprite("#ff9a4a", 1.6, 0.5);
-      fl.position.set((cx * (W - 1)) / 2, 4.6, (cz * (H - 1)) / 2);
-      g.add(fl);
+    // Four tall monoliths stand on the verge for scale.
+    for (let k = 0; k < 4; k++) {
+      const p = ring(Math.PI / 4 + (k * Math.PI) / 2, 1.2);
+      this.addProp("monolith", p.x, p.z, 4.2, 1.3, k);
     }
 
     // Tiles.
@@ -1073,6 +1086,7 @@ export function drawMinimap(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
   for (let y = 0; y < b.height; y++)
     for (let x = 0; x < b.width; x++) {
       const t = b.tiles[y * b.width + x];
+      if (t === Tile.Edge) continue;
       g.fillStyle = t === Tile.Wall ? "#4a4a55" : t === Tile.Water ? "#3f9fa8" : t === Tile.Rock ? "#888" : t === Tile.Brazier ? "#ff9a3a" : "#3b3346";
       g.fillRect(rect.x + x * k, rect.y + y * k, Math.ceil(k), Math.ceil(k));
     }
