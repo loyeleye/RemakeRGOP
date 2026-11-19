@@ -51,6 +51,19 @@ export type ClientMsg =
 export type ServerMsg =
   | { t: "welcome"; you: number; token: string }
   | { t: "room"; room: RoomView }
-  | { t: "tick"; snap: GameSnapshot; tickMs: number }
+  | { t: "tick"; snap: GameSnapshot; tickMs: number; bots?: BotDebug[] }
   | { t: "error"; message: string }
   | { t: "pong"; at: number };
+
+/** A bot's state for the debug overlay. */
+export interface BotDebug {
+  id: number;
+  name: string;
+  guild: number;
+  level: string;
+  role: string;
+  half?: string;
+  home?: string;
+  team?: string;
+  intent: string;
+}

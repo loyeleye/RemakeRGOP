@@ -57,6 +57,41 @@ export type BotLevel = keyof typeof BOT_LEVELS;
 /** Kept for older callers: the old "sharper bot". */
 export const BOT_FAIR = BOT_HARD;
 
+/** What a bot is up to, for the debug overlay. */
+export interface BotTrace {
+  /** solo, half (coording by halves), anchor (home square) or fetcher. */
+  role: string;
+  /** Its half when coording: east, west, north or south. */
+  half?: string;
+  /** Its home square when anchoring, as an offset from the brazier. */
+  home?: string;
+  /** Who it's teamed with (names), if anyone. */
+  team?: string;
+  /** What it decided this tick, in words. */
+  intent: string;
+}
+
+const traces = new WeakMap<Game, Map<number, BotTrace>>();
+
+/** The bots' latest traces for this game (for the debug overlay). */
+export function botTraces(game: Game): Map<number, BotTrace> {
+  let m = traces.get(game);
+  if (!m) traces.set(game, (m = new Map()));
+  return m;
+}
+
+function note(game: Game, id: number, t: Partial<BotTrace>) {
+  const m = botTraces(game);
+  m.set(id, { role: "solo", intent: "", ...m.get(id), ...t });
+}
+
+/** A tile as an offset from the brazier, e.g. "(+3,-2)". */
+function off(game: Game, p: Pt): string {
+  const c = game.board.center;
+  const f = (n: number) => (n > 0 ? "+" + n : String(n));
+  return `(${f(p.x - c.x)},${f(p.y - c.y)})`;
+}
+
 export function botCommand(game: Game, id: number, style: BotStyle, rand: () => number = Math.random): Command | null {
   const me = game.players.find((p) => p.id === id);
   if (!me) return null;
@@ -68,8 +103,12 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
       const cmd = coopCommand(game, me, team, style, rand);
       if (cmd !== undefined) return cmd;
     }
+  } else if (team) note(game, id, { intent: "teamwork lapse: playing solo this tick" });
+  if (!team) note(game, id, { role: "solo", half: undefined, home: undefined, team: undefined });
+  if (style.lapse && rand() < style.lapse) {
+    if (!team) note(game, id, { intent: "lapse: a Medium move" });
+    return botCommand(game, id, BOT_MEDIUM, rand);
   }
-  if (style.lapse && rand() < style.lapse) return botCommand(game, id, BOT_MEDIUM, rand);
   if (style.wait) return waited(game, id, style, rand);
   const c = game.board.center;
   const live = (w: Wisp) => !game.board.inBankZone(w.pos);
@@ -80,6 +119,7 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
       .filter((w) => w.guild !== me.guild && live(w) && cheb(w.pos, c) <= 2 + style.pushy && w.target)
       .sort((a, b) => cheb(a.pos, c) - cheb(b.pos, c))[0];
     if (threat && game.inReach({ ...me, mode: "push" }, threat)) {
+      note(game, id, { intent: `push rival wisp ${threat.id} away from the rim` });
       if (me.action.kind === "staff" && me.action.wisp === threat.id && me.mode === "push") return null;
       return { action: { kind: "staff", wisp: threat.id }, toggleMode: me.mode !== "push" };
     }
@@ -118,6 +158,7 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
   if (!target) return fixMode ? { toggleMode: true, action: { kind: "idle" } } : null;
 
   const spot = planSpot(game, me.id, me.pos, target, rank, !!style.straightOnly);
+  note(game, id, { intent: spot ? `wisp ${target.id}: pull from ${off(game, spot)}` : `wisp ${target.id}: pull from here` });
   if (!spot) return { action: { kind: "staff", wisp: target.id }, toggleMode: fixMode || undefined };
   const atSpot = me.pos.x === spot.x && me.pos.y === spot.y;
   if (!atSpot) {
@@ -449,6 +490,7 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
   for (const p of game.players)
     if (p.id !== me.id && p.guild === me.guild && p.action.kind === "staff") claimed.add(p.action.wisp);
 
+  note(game, me.id, { role: home ? "anchor" : "fetcher", home: home ? off(game, home) : undefined, half: undefined, team: mateNames(game, me) });
   if (home) {
     // Anchor. Pull in the wisp that banks soonest from here.
     if (me.action.kind === "staff" && !fixMode) {
@@ -465,17 +507,24 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
         const score = left * 4 + ticks;
         if (!pick || score < pick.score) pick = { id: w.id, score };
       }
-      if (pick) return { action: { kind: "staff", wisp: pick.id }, toggleMode: fixMode || undefined };
+      if (pick) {
+        note(game, me.id, { intent: `on home square: bank wisp ${pick.id}` });
+        return { action: { kind: "staff", wisp: pick.id }, toggleMode: fixMode || undefined };
+      }
       // Nothing in reach: wait here if a fetcher is bringing one in or one is nearly in reach;
       // otherwise go and get one like anyone would.
       const incoming = game.wisps.some((w) => live(w) && claimed.has(w.id));
+      note(game, me.id, { intent: incoming ? "on home square: waiting for a feed" : "on home square: nothing coming, fetching one myself" });
       if (incoming && team.homes.length < team.bots.length + team.people) return fixMode ? { toggleMode: true } : me.action.kind === "idle" ? null : { action: { kind: "idle" } };
       return undefined;
     }
     // Off the square: finish the wisp I went for, then head back when there's work there.
     if (me.action.kind === "staff" && live(game.wisps[me.action.wisp]!)) return undefined;
     if (me.action.kind === "walk" && samePt(me.action.to, home)) return null;
-    if (game.wisps.some((w) => live(w) && cheb(w.pos, home) <= PULL_REACH && !claimed.has(w.id))) return { action: { kind: "walk", to: home }, toggleMode: fixMode || undefined };
+    if (game.wisps.some((w) => live(w) && cheb(w.pos, home) <= PULL_REACH && !claimed.has(w.id))) {
+      note(game, me.id, { intent: "back to home square: a wisp is in reach there" });
+      return { action: { kind: "walk", to: home }, toggleMode: fixMode || undefined };
+    }
     return undefined;
   }
 
@@ -504,7 +553,9 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
     target = targets.sort((a, b) => cheb(a.pos, me.pos) - cheb(b.pos, me.pos))[0]!;
     mine.set(me.id, target.id);
   }
-  const spot = feedSpot(game, me.pos, target, homes, team.partners) ?? planSpot(game, me.id, me.pos, target, 0, false);
+  const fed = feedSpot(game, me.pos, target, homes, team.partners);
+  const spot = fed ?? planSpot(game, me.id, me.pos, target, 0, false);
+  note(game, me.id, { intent: fed ? `fetch wisp ${target.id}: feed it from ${off(game, fed)}` : `fetch wisp ${target.id}: bring it in myself` });
   if (!spot) return { action: { kind: "staff", wisp: target.id }, toggleMode: fixMode || undefined };
   if (!samePt(me.pos, spot)) {
     if (me.action.kind === "walk" && samePt(me.action.to, spot)) return fixMode ? { toggleMode: true } : null;
@@ -627,6 +678,10 @@ export function halfCommand(game: Game, me: Game["players"][number], mate: Game[
   if (Math.abs(m) >= 2 && (wantAxis !== half.axis || wantSide !== half.side)) {
     if (++half.crowded >= 5) all.set(me.id, (half = { axis: wantAxis, side: wantSide, crowded: 0 }));
   } else half.crowded = 0;
+  const sideName = half.axis === "x" ? (half.side > 0 ? "east" : "west") : half.side > 0 ? "south" : "north";
+  const prev = botTraces(game).get(me.id);
+  note(game, me.id, { role: "half", half: sideName, home: undefined, team: mate.name });
+  if (prev?.half && prev.half !== sideName) note(game, me.id, { intent: `partner moved: switching to the ${sideName} half` });
   const mine = (p: Pt) => along(p) * half!.side >= 1;
   const theirs = (p: Pt) => along(p) * half!.side <= -1;
 
@@ -674,7 +729,10 @@ export function halfCommand(game: Game, me: Game["players"][number], mate: Game[
       if (!best || cost < best.cost) best = { s, id: w.id, cost };
     }
   }
-  if (best && best.cost < 30) return go(best.s, best.id);
+  if (best && best.cost < 30) {
+    note(game, me.id, { intent: `bank wisp ${best.id} from ${off(game, best.s)}${theirs(game.wisps[best.id]!.pos) ? " (on partner's side)" : ""}` });
+    return go(best.s, best.id);
+  }
 
   // 2. Feed: a wisp on my side out of my partner's reach. Pull it in (going out for it if I
   // must) until they can reach it.
@@ -692,8 +750,15 @@ export function halfCommand(game: Game, me: Game["players"][number], mate: Game[
         if (!feed || cost < feed.cost) feed = { s, id: w.id, cost };
       }
   }
-  if (feed) return go(feed.s, feed.id);
-  if (best) return go(best.s, best.id);
+  if (feed) {
+    note(game, me.id, { intent: `feed wisp ${feed.id} into ${mate.name}'s reach from ${off(game, feed.s)}` });
+    return go(feed.s, feed.id);
+  }
+  if (best) {
+    note(game, me.id, { intent: `bank wisp ${best.id} from ${off(game, best.s)} (long one)` });
+    return go(best.s, best.id);
+  }
+  note(game, me.id, { intent: `nothing to do: waiting in the ${sideName} half` });
 
   // 3. Nothing to do: wait in my half of the court, nearest the middle of it.
   const wait = court.sort((a, b) => cheb(a, me.pos) * 0.2 + Math.abs(along(a)) - (cheb(b, me.pos) * 0.2 + Math.abs(along(b))))[0];
@@ -708,4 +773,8 @@ function bigShrine(game: Game): boolean {
   const c = game.board.center;
   const mid = field.map((p) => cheb(p, c)).sort((a, b) => a - b)[field.length >> 1]!;
   return mid > 12;
+}
+
+function mateNames(game: Game, me: Game["players"][number]): string {
+  return game.players.filter((p) => p.guild === me.guild && p.id !== me.id).map((p) => p.name).join(", ");
 }

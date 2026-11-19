@@ -2,7 +2,7 @@
 // It knows nothing about the transport: the Node server and the Cloudflare Durable Object
 // both hand it a `send` function per connection and feed it parsed messages.
 
-import { BOT_LEVELS, botCommand, type BotStyle } from "../engine/bot.js";
+import { BOT_LEVELS, botCommand, botTraces, type BotStyle } from "../engine/bot.js";
 import { COUNTDOWN_TICKS, Game, MAX_TEAMS, TICK_MS, type Action, type Guild } from "../engine/game.js";
 import { SHRINES, shrineById, shrineFor } from "../engine/maps.js";
 import { FLAMES, type ClientMsg, type Flame, type LobbyPlayer, type Phase, type RoomView, type ServerMsg } from "../engine/protocol.js";
@@ -247,7 +247,12 @@ export class Room {
 
   private broadcastTick() {
     if (!this.game) return;
-    const m: ServerMsg = { t: "tick", snap: this.game.snapshot(), tickMs: TICK_MS };
+    const traces = botTraces(this.game);
+    const level = (b: BotStyle) => (Object.entries(BOT_LEVELS).find(([, v]) => v === b)?.[0] ?? "custom");
+    const bots = this.seats
+      .filter((s) => s.bot)
+      .map((s) => ({ id: s.id, name: s.name, guild: s.guild, level: level(s.bot!), role: "solo", intent: "", ...traces.get(s.id) }));
+    const m: ServerMsg = { t: "tick", snap: this.game.snapshot(), tickMs: TICK_MS, bots };
     for (const s of this.seats) s.send?.(m);
   }
 

@@ -3,7 +3,7 @@
 import type { Pt } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
-import { FLAMES, FLAME_COLORS, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
+import { FLAMES, FLAME_COLORS, type BotDebug, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
@@ -51,6 +51,7 @@ function onServer(m: ServerMsg) {
     case "tick":
       prevSnap = snap && snap.tick === m.snap.tick - 1 ? snap : null;
       snap = m.snap;
+      debugTick(m.snap, m.bots ?? []);
       snapAt = performance.now();
       tickMs = m.tickMs;
       for (const b of m.snap.banks) bankFlash(b.guild);
@@ -373,6 +374,7 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 window.addEventListener("keydown", (e) => {
   if (room?.phase !== "playing" || (e.target as HTMLElement).tagName === "INPUT") return;
   const k = e.key.toLowerCase();
+  if (k === "`") return void (toggleDebug(), e.preventDefault());
   if (k === "q") act({ toggleMode: true });
   else if (k === "r") act({ toggleRun: true });
   else if (k === " " || k === "s") act({ action: { kind: "idle" } });
@@ -682,3 +684,67 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   me: () => me,
   toScreen: (x: number, y: number) => cam.toScreen(x, y),
 };
+
+// ------------------------------------------------------------------ debug overlay
+// Press ` during a round to see each bot's level, role, half or home square and what it's
+// doing, with a log of the changes.
+
+const debugLog: string[] = [];
+const lastBot = new Map<number, string>();
+let lastMode = "";
+let lastDebugTick = 0;
+
+function toggleDebug() {
+  const d = $("debug");
+  d.hidden = !d.hidden;
+}
+
+function debugTick(s: GameSnapshot, bots: BotDebug[]) {
+  const t = `t${String(s.tick).padStart(3, "0")}`;
+  const log = (line: string) => {
+    debugLog.push(`${t} ${line}`);
+    if (debugLog.length > 400) debugLog.splice(0, debugLog.length - 400);
+  };
+  // A new round: start the log afresh.
+  if (s.tick < lastDebugTick) {
+    lastBot.clear();
+    lastMode = "";
+    debugLog.length = 0;
+  }
+  lastDebugTick = s.tick;
+  const shrine = room ? shrineFor(room.shrine, room.teams) : null;
+  const c = shrine?.board.center ?? { x: 0, y: 0 };
+  const off = (x: number, y: number) => `(${x - c.x >= 0 ? "+" : ""}${x - c.x},${y - c.y >= 0 ? "+" : ""}${y - c.y})`;
+  const you = s.players.find((p) => p.id === me);
+  if (you) {
+    const mode = `${you.mode}${you.run ? " running" : ""}`;
+    if (mode !== lastMode) log(`you: ${mode}`);
+    lastMode = mode;
+  }
+  for (const b of s.banks) log(`banked: ${GUILD_NAMES[b.guild] ?? b.guild} wisp ${b.wisp}`);
+  for (const b of bots) {
+    const head = `${b.name} [${b.level}] ${b.role}${b.half ? " " + b.half + " half" : ""}${b.home ? " home " + b.home : ""}${b.team ? " with " + b.team : ""}`;
+    const was = lastBot.get(b.id);
+    const now = `${head} | ${b.intent}`;
+    if (was !== now) {
+      if (!was || was.split(" | ")[0] !== head) log(`${b.name}: ${head.slice(b.name.length + 1)}`);
+      if (b.intent && (!was || was.split(" | ")[1] !== b.intent)) log(`${b.name}: ${b.intent}`);
+    }
+    lastBot.set(b.id, now);
+  }
+  const d = $("debug");
+  if (d.hidden) return;
+  const lines = [`tick ${s.tick}  scores ${s.scores.join(" : ")}`];
+  if (you) lines.push(`you: ${off(you.x, you.y)} ${you.mode}${you.run ? " running" : ""}, guild ${GUILD_NAMES[you.guild] ?? you.guild}`);
+  for (const b of bots) {
+    const p = s.players.find((q) => q.id === b.id);
+    lines.push(`${b.name} [${b.level}, ${GUILD_NAMES[b.guild] ?? b.guild}] at ${p ? off(p.x, p.y) : "?"}`);
+    lines.push(`  ${b.role}${b.half ? ", " + b.half + " half" : ""}${b.home ? ", home square " + b.home : ""}${b.team ? ", teamed with " + b.team : ""}`);
+    lines.push(`  ${b.intent || "-"}`);
+  }
+  $("debug-state").textContent = lines.join("\n");
+  const l = $("debug-log");
+  const atEnd = l.scrollTop + l.clientHeight >= l.scrollHeight - 4;
+  l.textContent = debugLog.join("\n");
+  if (atEnd) l.scrollTop = l.scrollHeight;
+}
