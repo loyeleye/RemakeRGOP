@@ -1,0 +1,36 @@
+{
+  "name": "lanternfall",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lanternfall: two lamplighter guilds steer drifting wisps into a shrine brazier on a 600 ms tick clock.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsx tools/build.ts",
+    "start": "npm run build && tsx src/server/node.ts",
+    "dev": "npm run build && tsx watch src/server/node.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p cloudflare",
+    "test": "vitest run",
+    "cf:dev": "npm run build && wrangler dev",
+    "cf:deploy": "npm run build && wrangler deploy"
+  },
+  "dependencies": {
+    "@types/three": "^0.170.0",
+    "three": "^0.170.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261026.1",
+    "@gltf-transform/cli": "^4.1.1",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "esbuild": "^0.28.2",
+    "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7",
+    "wrangler": "^4.153.0"
+  }
+}

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#14121c" />
+  <title>Lanternfall</title>
+  <link rel="icon" href="sprites/wisp-dawn.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="home" class="panel">
+    <img class="logo" src="sprites/brazier.png" alt="" />
+    <h1>Lanternfall</h1>
+    <p class="tag">Up to four lamplighter guilds. One shrine brazier. Pull your wisps in, push theirs away.</p>
+    <label class="field">Your name <input id="name" maxlength="16" autocomplete="nickname" placeholder="Lamplighter" /></label>
+    <button id="create" class="big">Create a room</button>
+    <form id="join-form" class="row">
+      <input id="code" maxlength="4" placeholder="CODE" autocapitalize="characters" aria-label="Room code" />
+      <button type="submit">Join</button>
+    </form>
+    <button id="practice" class="ghost">Practice alone</button>
+    <details class="how">
+      <summary>How to play</summary>
+      <ul>
+        <li>The shrine runs on a clock: every 0.6 s is one <b>tick</b>. A round is 200 ticks.</li>
+        <li><b>Tap a wisp</b> to reach for it with your staff (10 tiles, in sight). Keep holding the action and it keeps drifting 2 tiles at a time.</li>
+        <li><b>Pull</b> works on your guild's wisps. <b>Push</b> (Q) works on any wisp, from 8 tiles.</li>
+        <li>A wisp that sits on the glowing rim for 2 ticks is <b>banked</b> for its guild and respawns.</li>
+        <li>Tap the ground to walk. <b>Run</b> (R) moves 2 tiles a tick. If you step into reach, you steady for one tick before your staff takes hold.</li>
+        <li>A wisp in flight belongs to whoever flung it. Rivals can only push once it settles.</li>
+        <li><b>Camera:</b> scroll, pinch or press + and − to zoom, drag or use the arrow keys to look around, and press C or ◎ to come back to yourself.</li>
+      </ul>
+    </details>
+  </main>
+
+  <main id="lobby" class="panel" hidden>
+    <div class="row between">
+      <button id="leave" class="ghost small">← Leave</button>
+      <div class="code">Room <b id="room-code"></b></div>
+      <button id="share" class="ghost small">Invite</button>
+    </div>
+    <div class="guilds">
+      <section class="guild dawn">
+        <h2>Dawn</h2>
+        <ul id="guild-0"></ul>
+        <button id="join-0" class="small">Join Dawn</button>
+        <div class="row host-only"><button id="bot-0" class="ghost small grow">+ Bot</button><button id="unbot-0" class="ghost small" aria-label="Remove a bot">−</button></div>
+      </section>
+      <section class="guild dusk">
+        <h2>Dusk</h2>
+        <ul id="guild-1"></ul>
+        <button id="join-1" class="small">Join Dusk</button>
+        <div class="row host-only"><button id="bot-1" class="ghost small grow">+ Bot</button><button id="unbot-1" class="ghost small" aria-label="Remove a bot">−</button></div>
+      </section>
+      <section class="guild tide" id="team-2" hidden>
+        <h2>Tide</h2>
+        <ul id="guild-2"></ul>
+        <button id="join-2" class="small">Join Tide</button>
+        <div class="row host-only"><button id="bot-2" class="ghost small grow">+ Bot</button><button id="unbot-2" class="ghost small" aria-label="Remove a bot">−</button></div>
+      </section>
+      <section class="guild grove" id="team-3" hidden>
+        <h2>Grove</h2>
+        <ul id="guild-3"></ul>
+        <button id="join-3" class="small">Join Grove</button>
+        <div class="row host-only"><button id="bot-3" class="ghost small grow">+ Bot</button><button id="unbot-3" class="ghost small" aria-label="Remove a bot">−</button></div>
+      </section>
+    </div>
+    <div class="field">Lantern flame <div id="flames" class="flames"></div></div>
+    <label class="field">Guilds <select id="teams"><option value="2">2 guilds</option><option value="3">3 guilds</option><option value="4">4 guilds</option></select></label>
+    <label class="field">Shrine <select id="shrine"></select></label>
+    <label class="field host-only">New bots <select id="bot-level"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></label>
+    <p id="shrine-blurb" class="blurb"></p>
+    <button id="start" class="big">Light the shrine</button>
+    <p id="wait-host" class="blurb">Waiting for the host (★) to start…</p>
+  </main>
+
+  <div id="play" hidden>
+    <canvas id="board"></canvas>
+    <canvas id="overlay"></canvas>
+    <header class="hud">
+      <button id="leave2" class="ghost small" aria-label="Leave">✕</button>
+      <span class="score dawn" id="score-0">0</span>
+      <span class="score tide" id="score-2" hidden>0</span>
+      <span id="ticks" class="ticks"></span>
+      <span class="score grove" id="score-3" hidden>0</span>
+      <span class="score dusk" id="score-1">0</span>
+      <button id="recenter" class="ghost small" aria-label="Centre on me">◎</button>
+    </header>
+    <div class="thumbs">
+      <div id="stick" class="stick touch-only" aria-label="Walk"><div class="knob"></div></div>
+      <button id="run" class="thumb desk-only">Run</button>
+      <div class="pad">
+        <button id="run2" class="thumb touch-only">Run</button>
+        <button id="mode" class="thumb">Pull</button>
+        <button id="next" class="thumb touch-only" aria-label="Next wisp">Next</button>
+        <button id="staff" class="thumb staff touch-only">Staff</button>
+      </div>
+    </div>
+    <div id="results" class="panel overlay" hidden>
+      <h2 id="result-title"></h2>
+      <p id="result-score" class="final"></p>
+      <button id="again" class="big">Back to the lobby</button>
+      <button id="leave3" class="ghost">Leave room</button>
+    </div>
+  </div>
+  <div id="toast" hidden></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

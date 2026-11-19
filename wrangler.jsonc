@@ -1,0 +1,17 @@
+// Lanternfall on Cloudflare: `npm run cf:dev` locally, `npm run cf:deploy` to publish.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lanternfall",
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/ws", "/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "RoomObject" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoomObject"] }],
+  "observability": { "enabled": true }
+}

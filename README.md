@@ -1,74 +1,68 @@
-# RemakeRGOP: the Great Orb Project knowledge base
+# Lanternfall
 
-A complete, beginner-friendly reference for **The Great Orb Project** (GOP), the team
-Runecrafting minigame in RuneScape (released 12 August 2008). It covers the full ruleset, the
-tick-level game engine, every altar map with its angles, and the objectives and rewards. It is
-written so that someone who has never played RuneScape can understand the game, and so that
-someone building a remake has every rule in one place.
+Up to four lamplighter guilds, **Dawn**, **Dusk**, **Tide** and **Grove**, steer drifting wisps into a shrine's brazier with
+lodestone staffs that pull or push. The shrine is a floating stone plaza above a sea of cloud
+at dusk, rendered in 3D with Three.js and lit by the brazier's fire and the wisps' own glow. Every 0.6 s is one tick, and a round lasts 200 ticks (about
+2 minutes). You can play with 2, 3 or 4 guilds of up to 4 each in a browser on a phone or a computer, and fill empty
+seats with bots.
 
-## Read in this order
+The game is original. Its tick-based engine is inspired by the rules of RuneScape's Great Orb
+Project minigame: a fixed tick clock, wisps that step one tile per tick, line-of-sight reach,
+attract/repel, and rules for who holds a contested wisp. No code, maps or art come from that
+game or from [yongyi781/great-orb-project](https://github.com/yongyi781/great-orb-project).
+See [docs/design.md](docs/design.md).
 
-| # | Page | What it covers |
-|---|---|---|
-| 00 | [Start here: RuneScape basics](docs/00-start-here.md) | Tiles, ticks, Runecrafting, F2P vs members |
-| 01 | [What the Great Orb Project is](docs/01-overview.md) | One-paragraph summary, key facts, story, game flow |
-| 02 | [Getting there, joining and teams](docs/02-joining-and-teams.md) | The Guild, requirements, lobby rules, leaving penalties |
-| 03 | [Equipment](docs/03-equipment.md) | Hat, attractor, repeller, barrier generator |
-| 04 | [Round flow and timers](docs/04-round-flow-and-timers.md) | Altar order, every timer in seconds and ticks, HUD, activity bar |
-| 05 | [The tick engine](docs/05-tick-engine.md) | What is documented, then the exact engine rules: board, tick order, the angle rule, orb stepping, sight, control, prototicks |
-| 06 | [Angles and geometry](docs/06-angles-and-geometry.md) | Why there are exactly 16 headings, the shared pillar layout, how to read the angle maps |
-| 07 | [The altars and their maps](docs/07-altars-and-maps.md) | All 8 altars compared |
-| 08 | [Scoring, objectives and rewards](docs/08-scoring-and-rewards.md) | Tokens, essence, XP, the reward shop |
-| 09 | [Strategy](docs/09-strategy.md) | Beginner to advanced, team play, defence, records |
-| 10 | [History and trivia](docs/10-history-and-trivia.md) | Dated update history, community, trivia |
-| 11 | [Contradictions and open questions](docs/11-open-questions.md) | Where sources disagree and what nobody has documented |
-| | [Angles from the video guides](docs/video-angles/README.md) | 315 angles and every caption, read frame by frame from 20 silent guides |
-| | [Glossary](docs/glossary.md) · [Sources](docs/sources.md) · [Video index](docs/videos.md) | |
+## Play locally
 
-## Maps and angle atlas
-
-[docs/maps/](docs/maps/README.md) has a generated page for each free altar (Air, Mind, Water,
-Earth, Fire, Body). Each one has the real tile map with every orb spawn point, a heat map for each
-of the four home squares showing how many ticks it takes to score an orb from every tile, and a
-four-player coverage map. [docs/maps/angle-rule.md](docs/maps/angle-rule.md) shows the 16 headings
-an orb can take.
-
-## How it was built
-
-* **Text sources:** the RuneScape Wiki (main article, player-written Guide, item and NPC pages),
-  the fandom wiki, Tip.It, RuneHQ, the archived official Knowledge Base, Jagex's 2008 news post,
-  a clan guide, and YouTube commentary. See [docs/sources.md](docs/sources.md).
-* **Engine and maps:** the community emulator *Vief's Trapdoor*
-  ([yongyi781/great-orb-project](https://github.com/yongyi781/great-orb-project)), whose rules were
-  reverse-engineered by GOP players. [tools/gop_engine.py](tools/gop_engine.py) re-implements those
-  rules in Python for documentation. [tools/angle_atlas.py](tools/angle_atlas.py) generates every
-  map.
-* **Honesty markers:** every page separates what a source says from what is derived (worked out
-  from sourced numbers) and what is **inferred** (a reasoned guess). Conflicts are logged in
-  [11](docs/11-open-questions.md).
-
-## Regenerate the maps
-
-```sh
-python3 tools/gop_engine.py     # self-test
-python3 tools/angle_atlas.py    # rewrites docs/maps/
+```bash
+npm install
+npm start            # http://localhost:8787
 ```
 
-Python 3.9+ and the standard library only. To re-extract the map data from upstream, see
-[data/README.md](data/README.md).
+To play from a phone on the same Wi-Fi, open `http://<your-computer's-LAN-IP>:8787`.
+**Create a room** shows a 4-letter code and an **Invite** link. **Practice alone** runs a whole
+round in the page against a bot, with no server needed.
 
-## Known gaps
+### Controls
 
-* The members altars **Chaos** and **Nature** have no tile data. Nature has a layout description
-  from video; Chaos has nothing.
-* The angles read from the silent videos ([docs/video-angles/](docs/video-angles/README.md)) are
-  mostly estimates. Only 13 Air rows and the puzzle start positions are exact.
-* Barrier timing, activity-bar drain rates and essence rounding are undocumented.
+| | Phone | Desktop |
+|---|---|---|
+| Reach for a wisp | tap it (or near it) | click it |
+| Walk | tap the ground | click the ground |
+| Pull / Push | right thumb button | **Q** |
+| Run / Walk | left thumb button | **R** |
+| Stop | | **Space** |
+| Look around | drag, pinch, or tap the mini-map | wheel to zoom |
+| Back to me | double-tap or ◎ | **C** or ◎ |
 
-## Licence note
+## Deploy (Cloudflare)
 
-The map data is derived from an upstream repository with no licence file, and it describes Jagex's
-arenas. The emulator's author has told the project owner informally that non-commercial use is fine.
-Commercial use still needs separate permission. See
-[docs/sources.md](docs/sources.md#licence-status-of-reused-material). RuneScape is a trademark of Jagex Ltd. This is a fan
-reference.
+`npm run cf:deploy` publishes a Worker with one Durable Object per room code. That object runs
+the authoritative 600 ms clock. Static files come from `dist/`. `npm run cf:dev` runs the same
+setup locally.
+
+## Code
+
+| Path | What |
+|---|---|
+| `src/engine/` | The deterministic tick engine (`game.ts`), the grid (`board.ts`), the shrines (`maps.ts`), the bot (`bot.ts`) and the wire protocol. Shared by the server, the client and the tests. |
+| `src/server/room.ts` | One room (lobby, countdown, round, results), independent of the transport. |
+| `src/server/node.ts` | Node server: static files plus `ws`. |
+| `cloudflare/worker.ts` | Worker plus the `RoomObject` Durable Object. |
+| `src/client/view3d.ts` | The 3D renderer (Three.js): tilted camera, sky, cloud sea, floating plaza, firelight, bloom and the models. |
+| `src/client/main.ts` | Lobby, HUD, touch and mouse input, and the frame loop. |
+| `public/models/`, `public/textures/` | 3D models and floor textures generated with Sogni (see [CREDITS.md](CREDITS.md)). `tools/models.sh` and `tools/textures.py` rebuild them from the raw renders. |
+| `tests/` | Vitest: engine rules, shrines, room flow, and bot rounds on every shrine. |
+| `tools/smoke.cjs` | Playwright smoke test: a desktop player and a phone player in one room. |
+
+```bash
+npm test          # engine + room tests
+npm run typecheck
+```
+
+## Great Orb Project knowledge base
+
+The research behind the rules lives in [docs/gop-knowledge-base.md](docs/gop-knowledge-base.md):
+the original minigame's full ruleset, tick engine, altar maps and angle atlas. It is a fan reference
+for study only. Its map data describes Jagex's arenas, so nothing from it goes into Lanternfall's
+shrines.
