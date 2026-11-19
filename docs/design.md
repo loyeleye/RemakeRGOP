@@ -37,7 +37,7 @@ style is drawn along one side and turned 90° for the others, so it is fair to 2
 | Style | Layout | Plays | Islands |
 |---|---|---|---|
 | gates | pillars all round, a 3-wide gate mid-side | tight | Old Bastion (radius 6) |
-| open | gates plus open corners | loose | Crystal Spire, Blossom Garden |
+| open | gates plus open corners | loose | Crystal Spire, Blossom Garden, Fairy Ring |
 | diagonals | mid-sides walled, corners open | medium | Tidepool Steps, Cascade Falls |
 | pillared | open, with a lone pillar on each corner | medium | Misty Stones, Castle Rise |
 | pinwheel | gates pushed off centre, the same way round | medium, no straight shot across | Ember Quarry, Night Glade |
@@ -55,6 +55,13 @@ that a wisp could be pulled in from (`spawnBand`, default 6 to 10 tiles; Old Bas
 Sunwell Terrace 16 to 90). GOP does the same with about 200 fixed spawn tiles per altar, many
 4 to 9 tiles out, which is why a GOP expert barely walks. The drawn `a`/`b` marks are kept as a
 fallback.
+
+**Fairy Ring** is the record map: a small round glade, the open archway style, four boulders
+and nothing else, with wisps spawning only 6 to 8 tiles out (`spawnBand: [6, 8]`). The
+ceiling is about 98: a round is 200 ticks, you can touch one wisp per tick, and even the
+closest spawn needs 2 touches (2 tiles each) to reach the rim, after which it banks by itself
+while you work the next. With average spawn luck it's more like 60 to 70. The greedy tapping
+bot gets about 30.
 
 **Bot levels** (`BOT_LEVELS`; the host picks one in the lobby for new bots):
 
@@ -95,7 +102,7 @@ them, then their order carries on. Wisps float over ice as if it were floor.
 
 ## Islands
 
-Twelve shrines, each with its own arena shape (round glade, wide atoll, hourglass, six-point star,
+Thirteen shrines, each with its own arena shape (round glade, wide atoll, hourglass, six-point star,
 long strip, cross, four-petal clover, bastioned square, diagonal ridge, jagged floe, and two big
 low-scoring ones: a ruined fortress and a terrace with two rings of arches) and a
 layout drawn for that shape, plus its own island look (`src/client/themes.ts`): palette, sky, light, what
@@ -114,6 +121,7 @@ drifting particles.
 | Castle Rise | Castle | ramparts | boulders | a small castle, towers | |
 | Night Glade | Night | glowing trees | boulders | a giant glowing tree, glowing ponds | fireflies |
 | Glacier | Glacier | ice spires | ice rocks | ice peaks, ice patches you slide on | snow |
+| Fairy Ring | Fairy Ring | giant toadstools | mushroom clusters | toadstools on the verge and every tier, pink haze | fireflies |
 | Old Bastion | Bastion (big) | ramparts | boulders | towers and broken ramparts, sunset | pollen |
 | Sunwell Terrace | Sunwell (big) | monoliths | boulders | palms, stone blocks, golden sky | sparkles |
 
@@ -204,7 +212,7 @@ targeting works the same as it did in 2D.
 
 - **Story mode:** solo chapters on story-only shrines with their own twists (bank N wisps in T
   ticks, a wandering rival, moving pools). `bot.ts` is the starting point for opponents.
-- **More shrines:** twelve islands are in. New maps are data plus a theme. Ideas: a shrine with
+- **More shrines:** thirteen islands are in. New maps are data plus a theme. Ideas: a shrine with
   two braziers, one with a narrow wall maze.
 - **Cosmetics:** lantern flames exist now (6 colours, visual only). Next: robe trims and staff
   heads as Sogni sprites.

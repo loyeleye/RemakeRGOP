@@ -8,7 +8,7 @@ import { makeCloud, makeTree, makeWaterfall, noise3 } from "./islands.js";
 
 export type Particles = "pollen" | "embers" | "sparkles" | "mist" | "petals" | "fireflies" | "snow" | null;
 /** What a wall tile (#) or a boulder tile (o) is drawn as. "monolith" and "boulder" are the Sogni models. */
-export type PropKind = "monolith" | "boulder" | "crystal" | "icespire" | "rampart" | "glowtree" | "flowerbed" | "standing" | "icerock" | "smallcrystal";
+export type PropKind = "monolith" | "boulder" | "crystal" | "icespire" | "rampart" | "glowtree" | "flowerbed" | "standing" | "icerock" | "smallcrystal" | "toadstool" | "mushrooms";
 
 export interface Theme {
   name: string;
@@ -247,6 +247,34 @@ export const THEMES: Record<string, Theme> = {
       });
     },
   },
+  "fairy-ring": {
+    name: "Fairy Ring",
+    floor: "fairy-ring",
+    grass: "#7cc456",
+    soil: "#7a5238",
+    rock: "#8a7a8e",
+    sky: { zenith: "#3d5fc4", sky: "#8aa6ea", haze: "#f6d2e6", below: "#9a8ee0", stars: 0 },
+    fog: "#e6cfe8",
+    clouds: "#fff4fa",
+    hemi: ["#fff0f6", "#5a6a48", 1.2],
+    sun: ["#ffe8d0", 2.8],
+    exposure: 1.05,
+    wall: "toadstool",
+    boulder: "mushrooms",
+    particles: "fireflies",
+    scatter: (size, seed) => makeMushroom(size * 0.9, seed),
+    decorate(d) {
+      // Giant toadstools round the verge, and a cluster on every lower tier.
+      for (let i = 0; i < 9; i++) {
+        const p = d.ring(Math.PI * (1.05 + (i / 8) * 0.9), 1.4 + (i % 2) * 0.5);
+        add(d.group, makeMushroom(2.4 + (i % 3) * 1.3, i + 3), p.x, 0, p.z);
+      }
+      add(d.group, makeMushroom(8, 77), d.ring(NORTH, 4).x, 0, d.ring(NORTH, 4).z);
+      d.tiers.forEach((t, i) => {
+        for (let k = 0; k < 4; k++) add(t.group, makeMushroom(1.4 + k * 0.6, i * 5 + k), Math.cos(k * 1.7 + i) * t.r * 0.35, 0, Math.sin(k * 1.7 + i) * t.r * 0.35);
+      });
+    },
+  },
   "castle-rise": {
     name: "Castle Rise",
     floor: "castle-rise",
@@ -427,6 +455,13 @@ export function makeTileProp(kind: PropKind, height: number, seed: number): THRE
       return makeFlowerbed(seed);
     case "standing":
       return makeStoneBlock(1.2 + rnd(seed, 1) * 0.5, seed);
+    case "toadstool":
+      return makeMushroom(height * 0.95, seed, true);
+    case "mushrooms": {
+      const g = new THREE.Group();
+      for (let i = 0; i < 3; i++) add(g, makeMushroom(0.5 + rnd(seed, i) * 0.6, seed * 3 + i), Math.cos(i * 2.1) * 0.25, 0, Math.sin(i * 2.1) * 0.25);
+      return g;
+    }
     default:
       return null;
   }
@@ -644,6 +679,48 @@ function makeFlower(h: number, color: string, seed: number) {
   head.add(centre);
   g.add(head);
   return shadows(g);
+}
+
+const CAPS = ["#e0443a", "#e86a3a", "#c84ad0", "#f0a040"];
+const stalkMat = new THREE.MeshStandardMaterial({ color: "#f2e6d4", roughness: 0.8 });
+const gillMat = new THREE.MeshStandardMaterial({ color: "#e8d2bc", roughness: 0.9, side: THREE.DoubleSide });
+const spotMat = new THREE.MeshStandardMaterial({ color: "#fffaf0", roughness: 0.6 });
+
+/** A toadstool `h` tall: a curved stalk, a domed spotted cap. `pillar` keeps it upright and stout. */
+function makeMushroom(h: number, seed: number, pillar = false) {
+  const g = new THREE.Group();
+  const lean = pillar ? 0 : (rnd(seed, 1) - 0.5) * 0.5 * h * 0.3;
+  const capR = h * (pillar ? 0.42 : 0.38 + rnd(seed, 2) * 0.12);
+  const stalkR = h * (pillar ? 0.16 : 0.1);
+  const pts = [0, 0.3, 0.7, 1].map((t) => new THREE.Vector2(stalkR * (1.25 - 0.35 * t + (t === 0 ? 0.2 : 0)), h * 0.82 * t));
+  const stalk = new THREE.Mesh(new THREE.LatheGeometry(pts, 20), stalkMat);
+  stalk.castShadow = true;
+  g.add(stalk);
+  const capColor = CAPS[Math.floor(rnd(seed, 3) * CAPS.length)]!;
+  const capMat = new THREE.MeshStandardMaterial({ color: capColor, roughness: 0.55, emissive: new THREE.Color(capColor).multiplyScalar(0.08) });
+  const capGeo = new THREE.SphereGeometry(capR, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+  capGeo.scale(1, 0.62, 1);
+  const cap = new THREE.Mesh(capGeo, capMat);
+  cap.position.set(lean, h * 0.78, 0);
+  cap.castShadow = true;
+  g.add(cap);
+  const gills = new THREE.Mesh(new THREE.CircleGeometry(capR * 0.98, 32), gillMat);
+  gills.rotation.x = Math.PI / 2;
+  gills.position.copy(cap.position);
+  g.add(gills);
+  const spots = 5 + Math.floor(rnd(seed, 4) * 5);
+  const spotGeo = new THREE.SphereGeometry(capR * 0.11, 10, 6);
+  spotGeo.scale(1, 0.4, 1);
+  for (let i = 0; i < spots; i++) {
+    const a = rnd(seed, 10 + i) * Math.PI * 2;
+    const el = 0.25 + rnd(seed, 20 + i) * 0.9;
+    const s = new THREE.Mesh(spotGeo, spotMat);
+    s.position.set(lean + Math.cos(a) * Math.cos(el) * capR, h * 0.78 + Math.sin(el) * capR * 0.62, Math.sin(a) * Math.cos(el) * capR);
+    s.lookAt(cap.position);
+    s.rotateX(Math.PI / 2);
+    g.add(s);
+  }
+  return g;
 }
 
 function makeFlowerbed(seed: number) {
