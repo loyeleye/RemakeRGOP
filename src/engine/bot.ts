@@ -60,10 +60,11 @@ export const BOT_FAIR = BOT_HARD;
 export function botCommand(game: Game, id: number, style: BotStyle, rand: () => number = Math.random): Command | null {
   const me = game.players.find((p) => p.id === id);
   if (!me) return null;
-  // Teamwork lapses like the rest of a bot's judgment: some team decisions are solo ones.
-  if (style.coop && rand() >= (style.coopLapse ?? 0)) {
-    const team = coopTeam(game, me);
-    if (team) {
+  // Teamwork lapses like the rest of a bot's judgment: among bots, some team decisions are
+  // solo ones. With a person on the team it always plays along, so they can count on it.
+  const team = style.coop ? coopTeam(game, me) : null;
+  if (team && (team.people > 0 || rand() >= (style.coopLapse ?? 0))) {
+    {
       const cmd = coopCommand(game, me, team, style, rand);
       if (cmd !== undefined) return cmd;
     }
@@ -432,6 +433,11 @@ export function homeSquares(game: Game, n: number): Pt[] {
  * prefer pulls that land a wisp where a home square can bank it.
  */
 function coopCommand(game: Game, me: Game["players"][number], team: Team, style: BotStyle, rand: () => number): Command | null | undefined {
+  // Two on a team coord the classic way: a half of the shrine each.
+  const mates = game.players.filter((p) => p.guild === me.guild && p.id !== me.id);
+  // On small shrines, that is. On big ones the wisps are too far out for it: there one holds
+  // a home square and the other fetches.
+  if (mates.length === 1 && !bigShrine(game)) return halfCommand(game, me, mates[0]!, rand, style);
   const board = game.board, W = board.width;
   const fixMode = me.mode !== "pull";
   const live = (w: Wisp) => w.guild === me.guild && !board.inBankZone(w.pos);
@@ -477,12 +483,16 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
   if (me.action.kind === "staff" && !fixMode) {
     const w = game.wisps[me.action.wisp];
     const stuck = me.beam === w?.id && w && samePt(w.prev, w.pos);
-    if (w && live(w) && !me.slipped && !stuck && (w.target || me.beam !== w.id)) return null;
+    if (w && live(w) && !claimed.has(w.id) && !me.slipped && !stuck && (w.target || me.beam !== w.id)) return null;
   }
   if (rand() < style.sloppiness) return fixMode ? { toggleMode: true } : null;
   // A wisp an anchor can already bank from its square is theirs.
   const homes = [...team.homes.filter((h) => team.bots.some((id, i) => i < team.homes.length && samePt(game.players.find((p) => p.id === id)?.pos ?? pt(-1, -1), h))), ...team.partners];
-  const anchorHas = (w: Wisp) => homes.some((h) => cheb(h, w.pos) <= PULL_REACH && board.canSee(h, w.pos) && board.inBankZone(simulatePull(board, h, w.pos, 30, game.shrine.gimmicks).end));
+  const anchorHas = (w: Wisp) =>
+    homes.some((h) => cheb(h, w.pos) <= PULL_REACH && board.canSee(h, w.pos) && board.inBankZone(simulatePull(board, h, w.pos, 30, game.shrine.gimmicks).end)) ||
+    // A person holding a square gets anything in their reach that they're working: one left
+    // sitting there for a few ticks is fair game.
+    (restingFor(game, w) < 6 && team.partners.some((h) => cheb(h, w.pos) <= PULL_REACH && board.canSee(h, w.pos)));
   const targets = game.wisps.filter((w) => live(w) && !claimed.has(w.id) && !anchorHas(w));
   let mine = fetching.get(game);
   if (!mine) fetching.set(game, (mine = new Map()));
@@ -494,7 +504,7 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
     target = targets.sort((a, b) => cheb(a.pos, me.pos) - cheb(b.pos, me.pos))[0]!;
     mine.set(me.id, target.id);
   }
-  const spot = feedSpot(game, me.pos, target, homes) ?? planSpot(game, me.id, me.pos, target, 0, false);
+  const spot = feedSpot(game, me.pos, target, homes, team.partners) ?? planSpot(game, me.id, me.pos, target, 0, false);
   if (!spot) return { action: { kind: "staff", wisp: target.id }, toggleMode: fixMode || undefined };
   if (!samePt(me.pos, spot)) {
     if (me.action.kind === "walk" && samePt(me.action.to, spot)) return fixMode ? { toggleMode: true } : null;
@@ -507,37 +517,56 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
  * The best tile to pull this wisp from so it lands where a held home square can bank it in
  * one pull, if that's quicker than taking it all the way in myself. Null if no such feed.
  */
+/** Per game, where each wisp was last seen and since which tick it's sat there. */
+const resting = new WeakMap<Game, Map<number, { x: number; y: number; since: number }>>();
+
+/** How many ticks this wisp has sat still. */
+function restingFor(game: Game, w: Wisp): number {
+  let m = resting.get(game);
+  if (!m) resting.set(game, (m = new Map()));
+  const r = m.get(w.id);
+  if (!r || r.x !== w.pos.x || r.y !== w.pos.y) {
+    m.set(w.id, { x: w.pos.x, y: w.pos.y, since: game.tick });
+    return 0;
+  }
+  return game.tick - r.since;
+}
+
 /** Per game, the wisp each fetcher has set out for. */
 const fetching = new WeakMap<Game, Map<number, number>>();
 
 const feeds = new WeakMap<Game, Map<number, { key: string; spot: Pt | null }>>();
 
-function feedSpot(game: Game, me: Pt, wisp: Wisp, homes: Pt[]): Pt | null {
+function feedSpot(game: Game, me: Pt, wisp: Wisp, homes: Pt[], partners: Pt[] = []): Pt | null {
   if (!homes.length) return null;
   let cache = feeds.get(game);
   if (!cache) feeds.set(game, (cache = new Map()));
   const key = `${wisp.pos.x},${wisp.pos.y},${homes.map((h) => h.x + "," + h.y).join(";")}`;
   const hit = cache.get(wisp.id);
   if (hit && hit.key === key) return hit.spot;
-  const spot = findFeed(game, me, wisp, homes);
+  const spot = findFeed(game, me, wisp, homes, partners);
   cache.set(wisp.id, { key, spot });
   return spot;
 }
 
-function findFeed(game: Game, me: Pt, wisp: Wisp, homes: Pt[]): Pt | null {
-  const board = game.board, W = board.width;
+function findFeed(game: Game, me: Pt, wisp: Wisp, homes: Pt[], partners: Pt[]): Pt | null {
+  const board = game.board;
   const g = game.shrine.gimmicks;
   let best: { s: Pt; cost: number } | null = null;
   for (let dy = -PULL_REACH; dy <= PULL_REACH; dy++)
     for (let dx = -PULL_REACH; dx <= PULL_REACH; dx++) {
       const s = pt(wisp.pos.x + dx, wisp.pos.y + dy);
       if (!board.inside(s) || (dx === 0 && dy === 0) || !board.passable(s, Mover.Walker) || board.tile(s) === Tile.Ice) continue;
+      // Keep off a person's square: that's their spot.
+      if (partners.some((h) => cheb(h, s) <= 1)) continue;
       if (!board.canSee(s, wisp.pos)) continue;
       const walk = cheb(me, s);
       if (walk > 12) continue;
       const { end, ticks } = simulatePull(board, s, wisp.pos, 30, g);
       if (board.inBankZone(end)) {
-        const cost = walk + ticks;
+        // With a person holding a square, feeding them is the point: finishing it myself
+        // has to be a good deal quicker.
+        const cost = walk + ticks + (partners.length ? 10 : 0);
         if (!best || cost < best.cost) best = { s, cost };
         continue;
       }
@@ -550,4 +579,126 @@ function findFeed(game: Game, me: Pt, wisp: Wisp, homes: Pt[]): Pt | null {
       }
     }
   return best?.s ?? null;
+}
+
+// ------------------------------------------------------------------ half-shrine coording
+
+/**
+ * Per game, each bot's half: the axis (x or y) and the side of the brazier (+1 or -1) it
+ * works from, and how long its partner has been on that same side (to swap if they stay).
+ */
+const halves = new WeakMap<Game, Map<number, { axis: "x" | "y"; side: number; crowded: number }>>();
+
+/**
+ * Coording with one teammate, the way pairs play the orb game: each takes a half of the
+ * shrine and moves about inside the archways there. Wisps across the brazier on the
+ * partner's side are pulled in over the rim from my half. A wisp on my side that's out of my
+ * partner's reach I pull in until they can reach it, so they never have to leave their half.
+ */
+export function halfCommand(game: Game, me: Game["players"][number], mate: Game["players"][number], rand: () => number = Math.random, style: BotStyle = BOT_HARD): Command | null | undefined {
+  const board = game.board, c = board.center, W = board.width;
+  const g = game.shrine.gimmicks;
+  const fixMode = me.mode !== "pull";
+  const live = (w: Wisp) => w.guild === me.guild && !board.inBankZone(w.pos);
+  // My half: opposite my partner, along whichever axis they're furthest out on.
+  let all = halves.get(game);
+  if (!all) halves.set(game, (all = new Map()));
+  let half = all.get(me.id);
+  const mdx = mate.pos.x - c.x, mdy = mate.pos.y - c.y;
+  if (!half) {
+    const axis = Math.abs(mdx) >= Math.abs(mdy) ? "x" : "y";
+    const m = axis === "x" ? mdx : mdy;
+    half = { axis, side: m > 0 ? -1 : m < 0 ? 1 : me.id % 2 ? 1 : -1, crowded: 0 };
+    all.set(me.id, half);
+  }
+  const along = (p: Pt) => (half!.axis === "x" ? p.x - c.x : p.y - c.y);
+  // If my partner settles on my half, they've picked it: I take the other.
+  if (along(mate.pos) * half.side >= 2) {
+    if (++half.crowded >= 5) {
+      const axis = Math.abs(mdx) >= Math.abs(mdy) ? "x" : "y";
+      const m = axis === "x" ? mdx : mdy;
+      all.set(me.id, (half = { axis, side: m > 0 ? -1 : 1, crowded: 0 }));
+    }
+  } else half.crowded = 0;
+  const mine = (p: Pt) => along(p) * half!.side >= 1;
+  const theirs = (p: Pt) => along(p) * half!.side <= -1;
+
+  // The court tiles on my half, inside the archways and off the rim.
+  const inner = Math.min(...game.shrine.rings.map((r) => r.radius));
+  const court: Pt[] = [];
+  // Inside the archways; if that's all ice (or too cramped), just outside them too.
+  for (const reach of [inner - 1, inner + 2]) {
+    for (let dy = -reach; dy <= reach; dy++)
+      for (let dx = -reach; dx <= reach; dx++) {
+        const s = pt(c.x + dx, c.y + dy);
+        const d = Math.max(Math.abs(dx), Math.abs(dy));
+        if (d < 3 || (reach > inner - 1 && d <= inner - 1) || !mine(s) || !board.passable(s, Mover.Walker) || board.tile(s) === Tile.Ice) continue;
+        court.push(s);
+      }
+    if (court.length >= 6) break;
+  }
+  const mateReach = (p: Pt) => cheb(mate.pos, p) <= PULL_REACH && board.canSee(mate.pos, p);
+  const go = (to: Pt, wisp: number): Command | null => {
+    if (!samePt(me.pos, to)) {
+      if (me.action.kind === "walk" && samePt(me.action.to, to)) return fixMode ? { toggleMode: true } : null;
+      return { action: { kind: "walk", to }, toggleMode: fixMode || undefined };
+    }
+    if (me.action.kind === "staff" && me.action.wisp === wisp && !fixMode && game.wisps[wisp]!.target) return null;
+    return { action: { kind: "staff", wisp }, toggleMode: fixMode || undefined };
+  };
+  // Keep at a pull that's still going.
+  if (me.action.kind === "staff" && !fixMode && mate.action.kind !== "staff") {
+    const w = game.wisps[me.action.wisp];
+    if (w && live(w) && w.target && me.beam === w.id) return null;
+  }
+  if (rand() < style.sloppiness) return fixMode ? { toggleMode: true } : null;
+  const busy = mate.action.kind === "staff" ? mate.action.wisp : -1;
+
+  // 1. Bank a wisp from my half: one on their side (it flies over the rim), or any I can.
+  let best: { s: Pt; id: number; cost: number } | null = null;
+  for (const w of game.wisps) {
+    if (!live(w) || w.id === busy) continue;
+    for (const s of court) {
+      if (cheb(s, w.pos) > PULL_REACH || samePt(s, w.pos) || !board.canSee(s, w.pos)) continue;
+      const { end, ticks } = simulatePull(board, s, w.pos, 30, g);
+      if (!board.inBankZone(end)) continue;
+      // A wisp on my own side is my partner's to bank unless they can't reach it.
+      const cost = cheb(me.pos, s) + ticks + (mine(w.pos) && mateReach(w.pos) ? 12 : 0);
+      if (!best || cost < best.cost) best = { s, id: w.id, cost };
+    }
+  }
+  if (best && best.cost < 30) return go(best.s, best.id);
+
+  // 2. Feed: a wisp on my side out of my partner's reach. Pull it in (going out for it if I
+  // must) until they can reach it.
+  let feed: { s: Pt; id: number; cost: number } | null = null;
+  for (const w of game.wisps) {
+    if (!live(w) || w.id === busy || !mine(w.pos) || mateReach(w.pos)) continue;
+    for (let dy = -PULL_REACH; dy <= PULL_REACH; dy++)
+      for (let dx = -PULL_REACH; dx <= PULL_REACH; dx++) {
+        const s = pt(w.pos.x + dx, w.pos.y + dy);
+        if ((!dx && !dy) || !board.inside(s) || !board.passable(s, Mover.Walker) || board.tile(s) === Tile.Ice || !board.canSee(s, w.pos)) continue;
+        const { end, ticks } = simulatePull(board, s, w.pos, 30, g);
+        if (!mateReach(end) && !board.inBankZone(end)) continue;
+        // Staying in my half's court is best; stepping out costs more.
+        const cost = cheb(me.pos, s) * (mine(s) && cheb(s, c) < inner ? 1 : 1.5) + ticks;
+        if (!feed || cost < feed.cost) feed = { s, id: w.id, cost };
+      }
+  }
+  if (feed) return go(feed.s, feed.id);
+  if (best) return go(best.s, best.id);
+
+  // 3. Nothing to do: wait in my half of the court, nearest the middle of it.
+  const wait = court.sort((a, b) => cheb(a, me.pos) * 0.2 + Math.abs(along(a)) - (cheb(b, me.pos) * 0.2 + Math.abs(along(b))))[0];
+  if (wait && !mine(me.pos)) return go(wait, -1);
+  return fixMode ? { toggleMode: true } : me.action.kind === "idle" ? null : { action: { kind: "idle" } };
+}
+
+/** A shrine whose wisps appear well out past the court (Old Bastion, Sunwell Terrace). */
+function bigShrine(game: Game): boolean {
+  const field = game.shrine.spawnField;
+  if (!field.length) return false;
+  const c = game.board.center;
+  const mid = field.map((p) => cheb(p, c)).sort((a, b) => a - b)[field.length >> 1]!;
+  return mid > 12;
 }

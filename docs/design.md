@@ -82,10 +82,14 @@ bot gets about 30.
   its decisions are solo ones. That leaves a pair of Hard bots banking about 1.25 times what
   two solo Hard bots do (with no lapses it was about 1.8 times).
 
-  People on the team count too. A Hard bot leaves alone any wisp a teammate (bot or person)
-  is pulling. A person who stands still in or by the court for 2 ticks is treated as holding a
-  home square: the bot feeds them, and with nobody else to feed them a lone Hard bot fetches.
-  A person off fetching is fed by a Hard bot holding a home square.
+  A team of two coords by halves on the smaller shrines, like pairs do in the orb game: each
+  takes the half of the shrine opposite the other and moves about inside the archways there.
+  From its half it pulls in wisps on its partner's side, over the rim. A wisp on its own side
+  that's out of its partner's reach it pulls in until the partner can reach it, so the partner
+  never has to leave their half. If its partner (a person, say) settles on its half, it swaps.
+  On the big shrines (Old Bastion, Sunwell Terrace), where wisps appear far out, it uses home
+  squares and fetching instead. A Hard bot teamed with a person never lapses out of teamwork,
+  and it never goes after a wisp a teammate is pulling.
 
 Alone over a round, Easy banks about 2 to 5 on the regular islands, Medium 7 to 12, Hard 9 to
 16. On Old Bastion and Sunwell Terrace, Easy banks about 1 and the others 2 to 5. A human who
