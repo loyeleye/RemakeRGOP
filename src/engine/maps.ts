@@ -54,6 +54,8 @@ export interface IsleShape {
   waves?: [number, number, number][];
   /** Tentacle arms that curl out from the core. They needn't be symmetric. */
   arms?: Arm[];
+  /** Bridges between arms. */
+  links?: Link[];
 }
 
 /**
@@ -67,24 +69,77 @@ export interface Arm {
   curl: number;
   width: [number, number];
   wiggle?: number;
+  /** Side routes that leave this arm and rejoin it further out. */
+  forks?: Fork[];
 }
 
-const armCache = new WeakMap<IsleShape, { x: number; y: number; w: number }[]>();
+/**
+ * A second route along an arm: it leaves at `from` and rejoins at `to` (0 = arm root, 1 = tip),
+ * bowing out `bend` tiles to one side (negative for the other), with half-width `width`.
+ * `clutter` scales the boulders, walls and ice on it (1 = like the arm).
+ */
+export interface Fork {
+  from: number;
+  to: number;
+  bend: number;
+  width: number;
+  clutter: number;
+}
 
-/** Points along every arm, half a tile apart, with the half-width there. */
-export function armSamples(s: IsleShape): { x: number; y: number; w: number }[] {
+/** A bridge between two arms: from arm a at ta to arm b at tb, bowing out `bend` tiles. */
+export interface Link {
+  a: number;
+  ta: number;
+  b: number;
+  tb: number;
+  bend: number;
+  width: number;
+  clutter: number;
+}
+
+export interface ArmSample {
+  x: number;
+  y: number;
+  /** Half-width here. */
+  w: number;
+  /** How cluttered this stretch is (1 = normal). */
+  c: number;
+}
+
+const armCache = new WeakMap<IsleShape, ArmSample[]>();
+
+function armPoint(s: IsleShape, arm: Arm, t: number): { x: number; y: number; w: number } {
+  const r = isleRadius(s, arm.from) * 0.6 + arm.length * t;
+  const th = arm.from + arm.curl * t * t + Math.sin(t * Math.PI * 3) * (arm.wiggle ?? 0) * t;
+  return { x: Math.cos(th) * r, y: Math.sin(th) * r, w: arm.width[0] + (arm.width[1] - arm.width[0]) * t };
+}
+
+/** A bowed path from p to q (quadratic curve whose middle sits `bend` tiles off the line). */
+function bowed(p: { x: number; y: number }, q: { x: number; y: number }, bend: number, width: number, c: number): ArmSample[] {
+  const dx = q.x - p.x, dy = q.y - p.y, len = Math.hypot(dx, dy) || 1;
+  const cx = (p.x + q.x) / 2 - (dy / len) * bend * 2, cy = (p.y + q.y) / 2 + (dx / len) * bend * 2;
+  const n = Math.ceil((len + Math.abs(bend) * 2) * 2);
+  const out: ArmSample[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    out.push({ x: u * u * p.x + 2 * u * t * cx + t * t * q.x, y: u * u * p.y + 2 * u * t * cy + t * t * q.y, w: width, c });
+  }
+  return out;
+}
+
+/** Points along every arm, fork and bridge, half a tile apart, with the half-width there. */
+export function armSamples(s: IsleShape): ArmSample[] {
   const hit = armCache.get(s);
   if (hit) return hit;
-  const out: { x: number; y: number; w: number }[] = [];
+  const out: ArmSample[] = [];
   for (const arm of s.arms ?? []) {
-    const r0 = isleRadius(s, arm.from) * 0.6;
     const n = Math.ceil(arm.length * 2);
-    for (let i = 0; i <= n; i++) {
-      const t = i / n;
-      const r = r0 + arm.length * t;
-      const th = arm.from + arm.curl * t * t + Math.sin(t * Math.PI * 3) * (arm.wiggle ?? 0) * t;
-      out.push({ x: Math.cos(th) * r, y: Math.sin(th) * r, w: arm.width[0] + (arm.width[1] - arm.width[0]) * t });
-    }
+    for (let i = 0; i <= n; i++) out.push({ ...armPoint(s, arm, i / n), c: 1 });
+    for (const f of arm.forks ?? []) out.push(...bowed(armPoint(s, arm, f.from), armPoint(s, arm, f.to), f.bend, f.width, f.clutter));
+  }
+  for (const l of s.links ?? []) {
+    const a = s.arms?.[l.a], b = s.arms?.[l.b];
+    if (a && b) out.push(...bowed(armPoint(s, a, l.ta), armPoint(s, b, l.tb), l.bend, l.width, l.clutter));
   }
   armCache.set(s, out);
   return out;
@@ -562,11 +617,18 @@ export const SHRINE_DEFS: ShrineDef[] = [
       radius: 13, squareness: 2.2, coves: 0.08, heads: 0.06, seed: 12, waves: [[4, 0.1, 0]],
       // Five long tentacles, deliberately not symmetric.
       arms: [
-        { from: 0.1, length: 50, curl: 0.9, width: [2.8, 1.4], wiggle: 0.12 },
-        { from: 1.35, length: 40, curl: 0.7, width: [2.5, 1.5], wiggle: 0.2 },
-        { from: 2.45, length: 54, curl: 1.0, width: [3, 1.4], wiggle: 0.1 },
-        { from: 3.75, length: 42, curl: 0.6, width: [2.6, 1.5], wiggle: 0.22 },
-        { from: 5.0, length: 46, curl: 0.8, width: [2.8, 1.4], wiggle: 0.14 },
+        // Three ways along this one: the arm, a clear loop out one side, a cluttered cut the other.
+        { from: 0.1, length: 50, curl: 0.9, width: [2.8, 1.4], wiggle: 0.12, forks: [{ from: 0.3, to: 0.66, bend: 7, width: 1.6, clutter: 0.3 }, { from: 0.36, to: 0.6, bend: -4, width: 1.4, clutter: 2.6 }] },
+        { from: 1.35, length: 40, curl: 0.7, width: [2.5, 1.5], wiggle: 0.2, forks: [{ from: 0.45, to: 0.8, bend: -6, width: 1.5, clutter: 0.4 }] },
+        { from: 2.45, length: 54, curl: 1.0, width: [3, 1.4], wiggle: 0.08, forks: [{ from: 0.22, to: 0.5, bend: -6, width: 1.5, clutter: 0.3 }, { from: 0.58, to: 0.88, bend: 5, width: 1.4, clutter: 2.4 }] },
+        { from: 3.75, length: 42, curl: 0.6, width: [2.6, 1.5], wiggle: 0.22, forks: [{ from: 0.35, to: 0.72, bend: 6, width: 1.5, clutter: 2.5 }] },
+        { from: 5.0, length: 46, curl: 0.8, width: [2.8, 1.4], wiggle: 0.14, forks: [{ from: 0.2, to: 0.52, bend: -5, width: 1.5, clutter: 0.3 }] },
+      ],
+      // Bridges between neighbouring arms: a wisp can be passed across instead of walked round.
+      links: [
+        { a: 0, ta: 0.78, b: 1, tb: 0.85, bend: 3, width: 1.3, clutter: 1.4 },
+        { a: 2, ta: 0.7, b: 3, tb: 0.75, bend: -3, width: 1.3, clutter: 1.4 },
+        { a: 3, ta: 0.95, b: 4, tb: 0.8, bend: 2, width: 1.2, clutter: 1 },
       ],
     },
     rings: [{ radius: 5, style: "diagonals" }, { radius: 9, style: "gates" }],
@@ -694,7 +756,13 @@ function scaledIsle(def: ShrineDef): IsleShape | undefined {
     def.isle && {
       ...def.isle,
       radius: def.isle.radius * f,
-      arms: def.isle.arms?.map((a) => ({ ...a, length: a.length * f, width: [a.width[0] * f, a.width[1] * f] as [number, number] })),
+      arms: def.isle.arms?.map((a) => ({
+        ...a,
+        length: a.length * f,
+        width: [a.width[0] * f, a.width[1] * f] as [number, number],
+        forks: a.forks?.map((k) => ({ ...k, bend: k.bend * f, width: k.width * f })),
+      })),
+      links: def.isle.links?.map((l) => ({ ...l, bend: l.bend * f, width: l.width * f })),
     }
   );
 }
@@ -880,10 +948,23 @@ function scatterArms(g: string[][], cx: number, cy: number, isle: IsleShape) {
   };
   const core = (dx: number, dy: number) => Math.hypot(dx, dy) - isleRadius(isle, Math.atan2(dy, dx));
   const land = (x: number, y: number) => g[y]?.[x] === "." && core(x - cx, y - cy) > 1.5;
+  const samples = armSamples(isle);
+  // Clutter of the route a tile is on: the sample it sits deepest inside.
+  const clutter = (dx: number, dy: number) => {
+    let best = Infinity, c = 1;
+    for (const p of samples) {
+      const d = Math.hypot(dx - p.x, dy - p.y) - p.w;
+      if (d < best) {
+        best = d;
+        c = p.c;
+      }
+    }
+    return c;
+  };
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       if (!land(x, y)) continue;
-      const r = hash(x, y, 1);
+      const r = hash(x, y, 1) / clutter(x - cx, y - cy);
       if (r < 0.028) g[y]![x] = "o";
       else if (r < 0.036) {
         // A short wall, two or three tiles, along x or y.

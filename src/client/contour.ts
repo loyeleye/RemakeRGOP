@@ -11,6 +11,11 @@ export interface P2 {
  * Inside is f < 0. The loop runs counter-clockwise in (x, y).
  */
 export function contourLoop(f: (x: number, y: number) => number, x0: number, y0: number, x1: number, y1: number, step: number): P2[] {
+  return contourLoops(f, x0, y0, x1, y1, step)[0] ?? [];
+}
+
+/** Every closed loop where f = 0, longest first: the outer edge, then the holes. */
+export function contourLoops(f: (x: number, y: number) => number, x0: number, y0: number, x1: number, y1: number, step: number): P2[][] {
   const nx = Math.ceil((x1 - x0) / step) + 1, ny = Math.ceil((y1 - y0) / step) + 1;
   const v = new Float32Array(nx * ny);
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) v[j * nx + i] = f(x0 + i * step, y0 + j * step);
@@ -52,7 +57,7 @@ export function contourLoop(f: (x: number, y: number) => number, x0: number, y0:
         case 14: seg(bottom, left); break;
       }
     }
-  let best: P2[] = [];
+  const loops: P2[][] = [];
   const used = new Set<number>();
   for (const start of next.keys()) {
     if (used.has(start)) continue;
@@ -63,7 +68,7 @@ export function contourLoop(f: (x: number, y: number) => number, x0: number, y0:
       loop.push(at(e));
       e = next.get(e);
     }
-    if (loop.length > best.length) best = loop;
+    if (loop.length > 2) loops.push(loop);
   }
-  return best;
+  return loops.sort((a, b) => b.length - a.length);
 }

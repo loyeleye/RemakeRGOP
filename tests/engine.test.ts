@@ -128,6 +128,26 @@ describe("shrines", () => {
       const land = b.tiles.filter((t) => t !== Tile.Edge).length;
       expect(land, s.id).toBeGreaterThan(3000);
       expect(s.spawnField.length).toBeGreaterThan(1000);
+      // Clutter never seals off a spawn: a lamplighter can walk within reach of each one.
+      const W = b.width;
+      const seen = new Uint8Array(W * b.height);
+      const q = [s.starts[0]![0]!];
+      seen[q[0]!.y * W + q[0]!.x] = 1;
+      for (let i = 0; i < q.length; i++)
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const n = pt(q[i]!.x + dx, q[i]!.y + dy);
+            if (b.canStep(q[i]!, dx, dy, Mover.Walker) && !seen[n.y * W + n.x]) {
+              seen[n.y * W + n.x] = 1;
+              q.push(n);
+            }
+          }
+      const near = (p: { x: number; y: number }) => {
+        for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (seen[(p.y + dy) * W + p.x + dx]) return true;
+        return false;
+      };
+      const cut = s.spawnField.filter((p) => !near(p));
+      expect(cut, s.id).toEqual([]);
     }
   });
 

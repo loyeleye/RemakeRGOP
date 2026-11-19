@@ -12,7 +12,7 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import { Tile, type Board } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, type GameSnapshot, type Guild } from "../engine/game.js";
 import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js";
-import { contourLoop } from "./contour.js";
+import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeIsland, makeWaterfall } from "./islands.js";
 import { ambientParticles, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
@@ -718,9 +718,16 @@ export class World {
     // Tentacle islands: trace the edge from the rules' own coast field instead of a radius.
     const coastField = shrine.arms && shrine.coast ? shrine.coast : null;
     const traced = (out: number) =>
-      contourLoop((x, y) => coastField!(x, y) - out, -W / 2 - 3, -H / 2 - 3, W / 2 + 3, H / 2 + 3, 0.5);
+      contourLoops((x, y) => coastField!(x, y) - out, -W / 2 - 3, -H / 2 - 3, W / 2 + 3, H / 2 + 3, 0.5);
     if (coastField) {
-      traced(0.35).forEach((p, i) => (i === 0 ? floorShape.moveTo(p.x, -p.y) : floorShape.lineTo(p.x, -p.y)));
+      // The longest loop is the outer edge; the rest are the gaps of sky between routes.
+      const [outer, ...holes] = traced(0.35);
+      (outer ?? []).forEach((p, i) => (i === 0 ? floorShape.moveTo(p.x, -p.y) : floorShape.lineTo(p.x, -p.y)));
+      for (const h of holes) {
+        const path = new THREE.Path();
+        h.forEach((p, i) => (i === 0 ? path.moveTo(p.x, -p.y) : path.lineTo(p.x, -p.y)));
+        floorShape.holes.push(path);
+      }
     } else
       for (let i = 0; i <= 256; i++) {
         const p = ring((i / 256) * Math.PI * 2, 0.35);
@@ -810,8 +817,19 @@ export class World {
 
     // A low rounded parapet runs round the edge of the flagstones: the limit of play.
     const curbPts: THREE.Vector3[] = [];
-    if (coastField) traced(0.45).forEach((p, i) => i % 2 === 0 && curbPts.push(new THREE.Vector3(p.x, 0.12, p.y)));
-    else
+    const curbMat = new THREE.MeshStandardMaterial({ map: wallTex, color: "#c9bda8", roughness: 0.85 });
+    if (coastField) {
+      // One parapet per loop: round the outside and round each gap.
+      const [outer, ...holes] = traced(0.45);
+      (outer ?? []).forEach((p, i) => i % 2 === 0 && curbPts.push(new THREE.Vector3(p.x, 0.12, p.y)));
+      for (const h of holes) {
+        const pts = h.filter((_, i) => i % 2 === 0).map((p) => new THREE.Vector3(p.x, 0.12, p.y));
+        if (pts.length < 4) continue;
+        const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), pts.length * 2, 0.26, 10, true), curbMat);
+        tube.castShadow = tube.receiveShadow = true;
+        g.add(tube);
+      }
+    } else
       for (let i = 0; i < 240; i++) {
         const p = ring((i / 240) * Math.PI * 2, 0.45);
         curbPts.push(new THREE.Vector3(p.x, 0.12, p.z));

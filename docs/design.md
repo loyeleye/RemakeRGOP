@@ -52,7 +52,7 @@ it stops, so no direction is favoured on four-guild islands.
 Each guild has **3 wisps** (`WISPS_PER_GUILD`), like GOP's 3 orbs per colour. Wisps appear on a
 **spawn field** shared by every guild: every floor tile a set distance from the brazier centre
 that a wisp could be pulled in from (`spawnBand`, default 6 to 10 tiles; Old Bastion 14 to 30,
-Sunwell Terrace 13 to 28). GOP does the same with about 200 fixed spawn tiles per altar, many
+Sunwell Terrace 16 to 90). GOP does the same with about 200 fixed spawn tiles per altar, many
 4 to 9 tiles out, which is why a GOP expert barely walks. The drawn `a`/`b` marks are kept as a
 fallback.
 
@@ -135,6 +135,23 @@ The coastline uses only even harmonics, so it is identical turned 180°. A coast
 would cut off a spawn or start is rejected when the shrine is built. The renderer lays the
 flagstones, the parapet and the island mesh along the same coastline, so what you see is
 exactly where you can go.
+
+**Sunwell Terrace** is a kraken: a small core with five long arms (`arms` in `isle`) that curl
+out up to about 50 tiles, so most wisps spawn far down an arm and a team has to relay them home.
+It isn't symmetric; what keeps it fair is that every guild shares the same spawn field. Each arm
+splits and rejoins (`forks`), and some arms are bridged to their neighbours (`links`), so bringing
+a wisp in is a run of small route choices:
+
+- **Forks:** where an arm splits, one branch is the short way but cluttered with boulders, short
+  walls and ice (`clutter`), and the other is longer and clear. A wisp on the cluttered branch
+  needs angled pulls round the obstacles; on the clear one it needs more pulls.
+- **Bridges:** three links join neighbouring arms near their far ends, so a far wisp can be
+  brought round through a neighbouring arm, or a teammate can cut across to meet it.
+- Loops leave holes of open sky inside the island; the renderer traces them from the same
+  coastline and draws a curb round each.
+
+Clutter is scattered with a fixed seed, and a test checks that every spawn tile stays within
+walking reach.
 
 ## Multiplayer
 
