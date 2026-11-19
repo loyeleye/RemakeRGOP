@@ -639,6 +639,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     isle: { radius: 14, squareness: 2.3, coves: 0.08, heads: 0.06, seed: 7, stretch: [1.3, 0.62], turn: -Math.PI / 6 },
     rings: [{ radius: 5, style: "pinwheel" }],
     gimmicks: { ponds: true },
+    farSpawns: { band: [10, 14], share: 0.5 },
     rows: [
       "                                     ",
       "                                     ",

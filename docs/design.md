@@ -122,7 +122,7 @@ get it back as usual, and drops out of the average until they touch it again.
 |---|---|
 | Tidepool Steps | Big tide pools sit on the way in at the corners and outside each wall, and each wall has a one-tile wicket gate. The tide turns every 20 ticks (the HUD shows which way and how long). While it comes in, a loose wisp on a pool drifts a tile a tick toward the brazier; while it goes out, away. |
 | Blossom Garden | Petal paths (`+`) out from each gate and corner: a wisp crossing one moves 2 tiles a tick. |
-| Night Glade | Linked moon ponds: a wisp that flies into one comes out of its twin across the brazier, still heading the same way, flies 3 tiles on and is let go. |
+| Night Glade | Half the wisps appear far out (10 to 14 tiles from the brazier). Linked moon ponds: a wisp that flies into one comes out of its twin across the brazier, still heading the same way, flies 3 tiles on and is let go. |
 | Cascade Falls | The stream runs clockwise round the brazier: a loose wisp on water drifts a tile a tick along it. |
 | Ember Quarry | Vents (`^`) in a pinwheel on each arm erupt every 5 ticks: a wisp sitting on one is thrown 6 tiles toward the brazier, out of every staff's grip. |
 | Castle Rise | Portcullises (`=`) in the east and west archways open for 10 ticks, then those shut and the north and south ones open. A shut portcullis is a wall. |
