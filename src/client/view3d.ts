@@ -536,9 +536,11 @@ const MOSS_MAT = new THREE.MeshStandardMaterial({ color: "#4f8a3a", roughness: 1
 function makeMoss(x: number, z: number, seed: number): THREE.Group {
   const g = new THREE.Group();
   g.position.set(x, 0, z);
+  // Each tuft gets its own material so a torn one can wither on its own.
+  const mat = MOSS_MAT.clone();
   const rnd = (k: number) => fract(Math.sin(seed * 31.7 + k * 12.9) * 43758.5);
   for (let i = 0; i < 4; i++) {
-    const m = new THREE.Mesh(MOSS_GEO, MOSS_MAT);
+    const m = new THREE.Mesh(MOSS_GEO, mat);
     const s = 0.55 + rnd(i) * 0.4;
     m.scale.set(s, 0.5 + rnd(i + 9) * 0.5, s);
     m.position.set((rnd(i + 3) - 0.5) * 0.5, 0, (rnd(i + 6) - 0.5) * 0.5);
@@ -547,6 +549,8 @@ function makeMoss(x: number, z: number, seed: number): THREE.Group {
   }
   return g;
 }
+
+const MOSS_BIT_GEO = new THREE.BoxGeometry(0.12, 0.06, 0.12);
 
 /** A pressure plate: a worn stone slab with a groove; it lights up while someone stands on it. */
 function makePlate(x: number, z: number): { g: THREE.Group; glow: THREE.MeshStandardMaterial } {
@@ -690,6 +694,8 @@ export class World {
   private plates: { glow: THREE.MeshStandardMaterial; q: string }[] = [];
   private mists: THREE.Group[] = [];
   private mossRigs = new Map<number, THREE.Group>();
+  private mossHp = new Map<number, { hp: number; hit: number }>();
+  private mossBits: { obj: THREE.Mesh; v: THREE.Vector3; born: number }[] = [];
   private players = new Map<number, PlayerRig>();
   private wisps = new Map<number, WispRig>();
   private brazierLight = new THREE.PointLight("#ff9a4a", 60, 30, 1.6);
@@ -877,6 +883,8 @@ export class World {
     this.plates = [];
     this.mists = [];
     this.mossRigs.clear();
+    this.mossHp.clear();
+    this.mossBits = [];
     this.gates = [];
     this.gimmicks = shrine.gimmicks ?? {};
     for (const r of this.players.values()) this.scene.remove(r.root);
@@ -1166,6 +1174,18 @@ export class World {
    * a pillar on each, a lintel joining neighbours along a side, and an arch over every gap of
    * 1 to 3 tiles between two pillars. A pillar standing alone is drawn taller, as an obelisk.
    */
+  /** Scraps of moss flung up off a tuft that's being torn at. */
+  private shedMoss(rig: THREE.Group, time: number, n: number) {
+    const mat = ((rig.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial).clone();
+    for (let k = 0; k < n; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const obj = new THREE.Mesh(MOSS_BIT_GEO, mat);
+      obj.position.set(rig.position.x, 0.3, rig.position.z);
+      this.shrineGroup.add(obj);
+      this.mossBits.push({ obj, v: new THREE.Vector3(Math.cos(a) * 0.04, 0.08 + Math.random() * 0.05, Math.sin(a) * 0.04), born: time });
+    }
+  }
+
   private makeArches(b: Board, ring: Ring, th: Theme, wallTex: THREE.Texture) {
     const g = new THREE.Group();
     const R = ring.radius;
@@ -1485,15 +1505,44 @@ export class World {
           this.shrineGroup.add(rig);
           this.mossRigs.set(i, rig);
         }
+        // Torn at: it shudders, sheds a few bits, and goes brown and ragged.
+        const was = this.mossHp.get(i);
+        if (was && hp < was.hp) {
+          was.hit = time;
+          this.shedMoss(rig, time, 4);
+        }
+        this.mossHp.set(i, { hp, hit: was && hp < was.hp ? time : was?.hit ?? -99 });
+        const torn = 1 - hp / MOSS_HP;
+        const mat = (rig.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        mat.color.set("#4f8a3a").lerp(new THREE.Color("#9a8443"), torn);
         // It springs up when it grows, and shrinks as it's torn at.
         const goal = 0.55 + 0.45 * (hp / MOSS_HP);
         rig.scale.setScalar(rig.scale.x + (goal - rig.scale.x) * 0.15);
+        const since = time - this.mossHp.get(i)!.hit;
+        const shake = since < 0.4 ? Math.sin(since * 60) * 0.12 * (1 - since / 0.4) : 0;
+        rig.rotation.z = shake;
+        rig.rotation.x = shake * 0.6;
       }
       for (const [i, rig] of this.mossRigs)
         if (!seen.has(i)) {
+          // Torn clean away: it bursts into flying scraps.
+          if (this.mossHp.get(i)) this.shedMoss(rig, time, 10);
           this.shrineGroup.remove(rig);
           this.mossRigs.delete(i);
+          this.mossHp.delete(i);
         }
+    }
+    for (let k = this.mossBits.length - 1; k >= 0; k--) {
+      const bit = this.mossBits[k]!;
+      const age = time - bit.born;
+      if (age > 0.8 || age < 0) {
+        this.shrineGroup.remove(bit.obj);
+        this.mossBits.splice(k, 1);
+        continue;
+      }
+      bit.v.y -= 0.012;
+      bit.obj.position.add(bit.v);
+      bit.obj.scale.setScalar(1 - age / 0.8);
     }
     const lerp = (a: number, z: number) => a + (z - a) * Math.min(1, st.t);
 
