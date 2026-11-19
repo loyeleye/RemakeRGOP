@@ -13,6 +13,7 @@ import { Tile, type Board } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, type GameSnapshot } from "../engine/game.js";
 import type { Shrine } from "../engine/maps.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
+import { makeCloud, makeIsland, makeTree, makeWaterfall } from "./islands.js";
 
 export const GUILD_COLORS = ["#ffcf5a", "#b07cff"] as const;
 export const GUILD_NAMES = ["Dawn", "Dusk"] as const;
@@ -60,7 +61,26 @@ export class Camera {
   fitBoard(board: Board) {
     this.board = board;
     // Fit the whole plaza with a little sky around it.
-    this.scale = Math.min(this.w / (board.width + 6), this.h / ((board.height + 4) * 0.95));
+    this.scale = this.fitScale(board);
+  }
+
+  private fitScale(board: Board) {
+    return Math.min(this.w / (board.width + 6), this.h / ((board.height + 4) * 0.95));
+  }
+
+  /** Zoomed out past the plaza, the camera tips down toward the horizon to show the island. */
+  private get pitch() {
+    const b = this.board;
+    if (!b) return PITCH;
+    const fit = this.fitScale(b);
+    const lo = this.minScale(b);
+    if (this.scale >= fit || fit <= lo) return PITCH;
+    const t = (fit - this.scale) / (fit - lo);
+    return PITCH - THREE.MathUtils.degToRad(28) * t * t * (3 - 2 * t);
+  }
+
+  private minScale(board: Board) {
+    return Math.min(this.w / (board.width + 44), this.h / (board.height + 44));
   }
 
   phoneZoom() {
@@ -75,7 +95,8 @@ export class Camera {
     const d = this.dist;
     const cam = this.three;
     cam.aspect = this.w / this.h;
-    cam.position.set(target.x, Math.sin(PITCH) * d, target.z + Math.cos(PITCH) * d);
+    const pitch = this.pitch;
+    cam.position.set(target.x, Math.sin(pitch) * d, target.z + Math.cos(pitch) * d);
     cam.lookAt(target);
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
@@ -99,7 +120,7 @@ export class Camera {
 
   clamp(board: Board) {
     this.board = board;
-    const lo = Math.min(this.w / (board.width + 10), this.h / (board.height + 10));
+    const lo = this.minScale(board);
     const hi = Math.min(this.w, this.h) / 5;
     this.scale = Math.max(lo, Math.min(hi, this.scale));
     this.cx = Math.max(0, Math.min(board.width, this.cx));
@@ -202,24 +223,20 @@ void main() {
 const SKY_FS = /* glsl */ `
 varying vec3 vDir;
 uniform float uTime;
-float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 void main() {
   float h = vDir.y;
-  vec3 top = vec3(0.01, 0.015, 0.05);
-  vec3 mid = vec3(0.07, 0.04, 0.14);
-  vec3 low = vec3(0.45, 0.20, 0.18);
-  vec3 col = mix(mid, top, smoothstep(0.05, 0.6, h));
-  col = mix(low, col, smoothstep(-0.02, 0.22, h));
-  // Below the horizon: the deep dusk under the cloud sea.
-  col = mix(vec3(0.02, 0.015, 0.045), col, smoothstep(-0.35, -0.02, h));
-  // Aurora ribbon.
-  float a = sin(vDir.x * 6.0 + uTime * 0.07) * 0.5 + sin(vDir.z * 9.0 - uTime * 0.05) * 0.5;
-  float band = smoothstep(0.25, 0.0, abs(h - 0.35 - a * 0.08)) * smoothstep(0.1, 0.4, h);
-  col += vec3(0.15, 0.55, 0.45) * band * 0.35;
-  // Stars.
-  vec3 cell = floor(vDir * 220.0);
-  float s = step(0.9975, hash(cell)) * smoothstep(0.1, 0.4, h);
-  col += s * (0.6 + 0.4 * sin(uTime * 2.0 + hash(cell) * 30.0));
+  vec3 zenith = vec3(0.10, 0.36, 0.78);
+  vec3 sky = vec3(0.36, 0.62, 0.92);
+  vec3 haze = vec3(0.66, 0.79, 0.95);
+  vec3 col = mix(sky, zenith, smoothstep(0.1, 0.75, h));
+  col = mix(haze, col, smoothstep(-0.05, 0.22, h));
+  // Below the horizon: open blue sky beneath the cloud sea, deepening straight down.
+  vec3 below = mix(vec3(0.30, 0.52, 0.86), vec3(0.62, 0.76, 0.94), smoothstep(-0.9, -0.1, h));
+  col = mix(below, col, smoothstep(-0.25, -0.02, h));
+  // The sun.
+  vec3 sunDir = normalize(vec3(-0.5, 0.45, -0.75));
+  float d = max(0.0, dot(normalize(vDir), sunDir));
+  col += vec3(1.0, 0.92, 0.75) * (pow(d, 400.0) * 3.0 + pow(d, 12.0) * 0.35);
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -234,14 +251,13 @@ float noise(vec2 p) {
 }
 float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
 void main() {
-  vec2 p = vUv * 9.0 + vec2(uTime * 0.012, uTime * 0.006);
-  float n = fbm(p + fbm(p * 0.7));
+  vec2 p = vUv * 10.0 + vec2(uTime * 0.01, uTime * 0.005);
+  float n = fbm(p + fbm(p * 0.6));
   float r = length(vUv - 0.5) * 2.0;
-  vec3 col = mix(vec3(0.04, 0.03, 0.09), vec3(0.30, 0.18, 0.32), n * n);
-  // Firelight from the shrine above, warming the clouds near the centre.
-  col += vec3(0.35, 0.14, 0.04) * smoothstep(0.35, 0.0, r) * n;
-  float alpha = smoothstep(0.25, 0.75, n) * smoothstep(1.0, 0.3, r);
-  gl_FragColor = vec4(col, alpha * 0.8);
+  // Bright billowing tops, cool blue-grey in the hollows.
+  vec3 col = mix(vec3(0.62, 0.70, 0.86), vec3(1.0, 0.99, 0.97), smoothstep(0.35, 0.8, n));
+  float alpha = smoothstep(0.42, 0.68, n) * smoothstep(1.0, 0.4, r);
+  gl_FragColor = vec4(col, alpha);
 }`;
 
 const UV_VS = /* glsl */ `
@@ -408,17 +424,18 @@ export class World {
   private brazierSlot = new THREE.Group();
   private propSlots: { kind: ModelName; group: THREE.Group; seed: number }[] = [];
   private low: boolean;
+  private floaters: { obj: THREE.Object3D; y: number; phase: number; drift: number }[] = [];
 
   constructor(readonly canvas: HTMLCanvasElement, readonly cam: Camera) {
     this.low = cam.compact || (navigator.hardwareConcurrency ?? 8) <= 4;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !this.low, powerPreference: "high-performance" });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = !this.low;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.scene.fog = new THREE.FogExp2("#120c22", 0.011);
-    this.scene.background = new THREE.Color("#07060f");
+    this.scene.fog = new THREE.FogExp2("#9dbde8", 0.0028);
+    this.scene.background = new THREE.Color("#8fb4e6");
 
     // Sky dome.
     const skyU = { value: 0 };
@@ -437,25 +454,16 @@ export class World {
       new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: CLOUD_FS, uniforms: { uTime: cloudU }, transparent: true, depthWrite: false, fog: false }),
     );
     clouds.rotation.x = -Math.PI / 2;
-    clouds.position.y = -14;
+    clouds.position.y = -18;
     this.scene.add(clouds);
 
-    // Distant peaks.
-    const peakMat = new THREE.MeshBasicMaterial({ color: "#1a1028", fog: false });
-    for (let i = 0; i < 28; i++) {
-      const a = (i / 28) * Math.PI * 2 + Math.sin(i * 7.1) * 0.1;
-      const r = 120 + (i % 3) * 18;
-      const h = 18 + ((i * 37) % 23);
-      const peak = new THREE.Mesh(new THREE.ConeGeometry(10 + (i % 4) * 4, h, 5), peakMat);
-      peak.position.set(Math.cos(a) * r, -14 + h / 2, Math.sin(a) * r);
-      peak.rotation.y = i;
-      this.scene.add(peak);
-    }
+    // Distant sky islands, drifting, some with trees and falls.
+    this.buildDistantIslands();
 
     // Light: cool moonlight, warm brazier.
-    this.scene.add(new THREE.HemisphereLight("#9a8ce0", "#2a1a20", 1.1));
-    const moon = new THREE.DirectionalLight("#c4ccff", 1.8);
-    moon.position.set(-18, 30, -12);
+    this.scene.add(new THREE.HemisphereLight("#cfe2ff", "#5a6a50", 1.15));
+    const moon = new THREE.DirectionalLight("#fff1d6", 3.0);
+    moon.position.set(-16, 26, -22);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
     const sc = moon.shadow.camera;
@@ -484,11 +492,50 @@ export class World {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, cam.three));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.7, 0.5, 0.82);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.45, 0.9);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
     modelWaiters.push(() => this.refreshProps());
+  }
+
+  private buildDistantIslands() {
+    const fallU = { value: 0 };
+    this.timeUniforms.push(fallU);
+    const n = this.low ? 7 : 11;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.sin(i * 4.7) * 0.25;
+      const r = 48 + ((i * 37) % 5) * 14;
+      const size = 3 + ((i * 53) % 7) * 1.4;
+      const isl = makeIsland({ rx: size, rz: size * (0.7 + ((i * 17) % 5) * 0.08), depth: size * 2.4, squareness: 2.2, seed: i * 13 + 5, segments: 64, rings: 24, lobes: 0.5, ledge: i % 3 === 0 ? size * 0.3 : 0, spires: this.low ? 1 : 3 });
+      const y = -6 + ((i * 29) % 9) * 2.2 - (r - 48) * 0.12;
+      isl.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+      isl.rotation.y = i;
+      const trees = 1 + (i % 3);
+      for (let t = 0; t < trees; t++) {
+        const tree = makeTree(size * 0.45, i * 7 + t);
+        const ta = t * 2.1 + i;
+        tree.position.set(Math.cos(ta) * size * 0.45, 0, Math.sin(ta) * size * 0.35);
+        isl.add(tree);
+      }
+      if (i % 2 === 0) {
+        const fall = makeWaterfall(size * 0.25, size * 3.5, fallU);
+        fall.position.set(0, -0.05, size * 0.7);
+        isl.add(fall);
+      }
+      this.scene.add(isl);
+      this.floaters.push({ obj: isl, y, phase: i * 1.3, drift: 0.4 + (i % 3) * 0.2 });
+    }
+    // Soft cloud puffs drifting between the islands.
+    for (let i = 0; i < (this.low ? 10 : 18); i++) {
+      const a = (i / 18) * Math.PI * 2 + i;
+      const r = 30 + ((i * 41) % 60);
+      const c = makeCloud(16 + (i % 4) * 7, "#ffffff", 0.45);
+      const y = -10 + ((i * 23) % 10);
+      c.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+      this.scene.add(c);
+      this.floaters.push({ obj: c, y, phase: i, drift: 0.2 });
+    }
   }
 
   resize(w: number, h: number, dpr: number) {
@@ -532,31 +579,80 @@ export class World {
     floor.receiveShadow = true;
     g.add(floor);
     const wallTex = tex("sprites/wall.png", 3);
-    const slabMat = new THREE.MeshStandardMaterial({ map: wallTex, color: "#7a6f80", roughness: 1 });
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(W, 3, H), slabMat);
-    slab.position.y = -1.52;
-    slab.receiveShadow = true;
-    g.add(slab);
-    // A jagged underside so it reads as a floating island.
-    const under = new THREE.Mesh(new THREE.ConeGeometry(W * 0.62, 14, 9, 4), new THREE.MeshStandardMaterial({ color: "#3a2c3e", roughness: 1, flatShading: true }));
-    jitter(under.geometry as THREE.BufferGeometry, 1.4);
-    under.rotation.x = Math.PI;
-    under.rotation.y = 0.3;
-    under.position.y = -10;
-    g.add(under);
+    // The island itself: a ragged plateau with headlands, a grassy terrace and hanging spires.
+    const island = makeIsland({
+      rx: W * 0.7, rz: H * 0.7, depth: 22, squareness: 3, seed: W + H,
+      lobes: 0.55, ledge: 2.4, spires: this.low ? 3 : 6, grass: "#5f9446",
+      segments: this.low ? 96 : 160,
+    });
+    island.position.y = -0.03;
+    g.add(island);
+    const edge = island.userData.outline as (a: number) => { x: number; z: number };
+    // Lower tiers: smaller plateaus stepping down from the main one, so the whole thing reads as
+    // one broken table of land rather than a single slab.
+    const tiers: [number, number, number][] = [[0.9, 0.42, -2.6], [2.6, 0.36, -4.2], [4.3, 0.3, -1.8]];
+    const fallU = { value: 0 };
+    this.timeUniforms.push(fallU);
+    tiers.forEach(([a, size, ty], i) => {
+      const e = edge(a);
+      const r = Math.min(W, H) * size;
+      const tier = makeIsland({
+        rx: r, rz: r * 0.8, depth: 9 + i * 3, squareness: 2.6, seed: W * 7 + i,
+        lobes: 0.45, spires: this.low ? 1 : 2, grass: "#6a9c4c", segments: 72, rings: 28,
+      });
+      tier.position.set(e.x * 1.02, ty, e.z * 1.02);
+      g.add(tier);
+      for (let t = 0; t < 3; t++) {
+        const tree = makeTree(1.3 + ((t + i) % 3) * 0.45, i * 5 + t + W);
+        const ta = a + (t - 1) * 0.9;
+        tree.position.set(Math.cos(ta) * r * 0.45, 0, Math.sin(ta) * r * 0.35);
+        tier.add(tree);
+      }
+      // Each tier spills a waterfall off its outer edge.
+      const te = (tier.userData.outline as typeof edge)(a);
+      const fall = makeWaterfall(1.4, 20, fallU);
+      fall.position.set(te.x * 0.97, -0.1, te.z * 0.97);
+      fall.rotation.y = Math.PI / 2 - a;
+      tier.add(fall);
+    });
+    // Waterfalls pour off the main plateau's terrace too.
+    for (const a of [Math.PI * 1.35, Math.PI * 0.05, Math.PI * 1.85]) {
+      const e = edge(a);
+      const fall = makeWaterfall(1.8, 24, fallU);
+      fall.position.set(e.x * 1.15, -2.85, e.z * 1.15);
+      fall.rotation.y = Math.PI / 2 - a;
+      g.add(fall);
+      const mist = makeCloud(8, "#ffffff", 0.35);
+      mist.position.set(e.x * 1.05, -22, e.z * 1.05);
+      g.add(mist);
+    }
+    // Trees scattered over the grass between the plaza and the cliff edge.
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2 + Math.sin(i * 3.1) * 0.1;
+      const e = edge(a);
+      const f = 0.72 + ((i * 37) % 10) * 0.02;
+      const tx = e.x * f;
+      const tz = e.z * f;
+      if (Math.abs(tx) < W / 2 + 0.6 && Math.abs(tz) < H / 2 + 0.6) continue;
+      const tree = makeTree(1.6 + (i % 3) * 0.5, i + W);
+      tree.position.set(tx, 0, tz);
+      g.add(tree);
+    }
 
-    // Parapet around the edge.
-    const parapetMat = new THREE.MeshStandardMaterial({ map: wallTex, color: "#9a90a8", roughness: 0.9 });
-    const addWall = (x: number, z: number, w: number, d: number) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.55, d), parapetMat);
-      m.position.set(x, 0.27, z);
-      m.castShadow = m.receiveShadow = true;
-      g.add(m);
-    };
-    addWall(0, -H / 2 + 0.5, W, 1);
-    addWall(0, H / 2 - 0.5, W, 1);
-    addWall(-W / 2 + 0.5, 0, 1, H - 2);
-    addWall(W / 2 - 0.5, 0, 1, H - 2);
+    // A low rounded stone curb marks the edge of the plaza.
+    const curbPts: THREE.Vector3[] = [];
+    const hw = W / 2 - 0.5, hh = H / 2 - 0.5;
+    for (let i = 0; i < 160; i++) {
+      const a = (i / 160) * Math.PI * 2;
+      const c = Math.cos(a), sn = Math.sin(a);
+      curbPts.push(new THREE.Vector3(hw * Math.sign(c) * Math.pow(Math.abs(c), 0.18), 0.12, hh * Math.sign(sn) * Math.pow(Math.abs(sn), 0.18)));
+    }
+    const curb = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curbPts, true), 320, 0.3, 16, true),
+      new THREE.MeshStandardMaterial({ map: wallTex, color: "#b8aec4", roughness: 0.85 }),
+    );
+    curb.castShadow = curb.receiveShadow = true;
+    g.add(curb);
     // Corner monoliths and edge braziers for scale.
     for (const [cx, cz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
       this.addProp("monolith", (cx * (W - 1)) / 2, (cz * (H - 1)) / 2, 4.2, 1.3, cx * 3 + cz);
@@ -604,7 +700,7 @@ export class World {
     const cz = this.worldZ(b, c.y);
     const daisMat = new THREE.MeshStandardMaterial({ map: floorTex, color: "#9a8f9c", roughness: 0.85 });
     for (const [r, h] of [[2.4, 0.18], [1.9, 0.36]] as const) {
-      const d = new THREE.Mesh(new THREE.CylinderGeometry(r, r + 0.1, h, 40), daisMat);
+      const d = new THREE.Mesh(new THREE.CylinderGeometry(r, r + 0.1, h, 72), daisMat);
       d.position.set(cx, h / 2, cz);
       d.receiveShadow = d.castShadow = true;
       g.add(d);
@@ -692,9 +788,9 @@ export class World {
       m.castShadow = m.receiveShadow = true;
       group.add(m);
     } else if (kind === "boulder") {
-      const geo = new THREE.DodecahedronGeometry(0.45, 1);
-      jitter(geo, 0.08);
-      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: "#77707a", roughness: 1, flatShading: true }));
+      const geo = new THREE.SphereGeometry(0.42, 24, 16);
+      geo.scale(1, 0.75, 1);
+      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: "#77707a", roughness: 1 }));
       m.position.y = 0.32;
       m.castShadow = m.receiveShadow = true;
       group.add(m);
@@ -821,7 +917,8 @@ export class World {
     this.cam.update();
     const time = st.now / 1000;
     for (const u of this.timeUniforms) u.value = time;
-    this.brazierLight.intensity = 38 + Math.sin(time * 9) * 4 + Math.sin(time * 23) * 3;
+    for (const f of this.floaters) f.obj.position.y = f.y + Math.sin(time * 0.25 * f.drift + f.phase) * 0.8;
+    this.brazierLight.intensity = 18 + Math.sin(time * 9) * 3 + Math.sin(time * 23) * 2;
     const lerp = (a: number, z: number) => a + (z - a) * Math.min(1, st.t);
 
     // Wisps.

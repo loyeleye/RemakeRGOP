@@ -56,14 +56,18 @@ New shrines are new drawings.
 
 ## Look
 
-The shrine is a floating island of flagstones at dusk. Below it is a sea of cloud warmed by
-the brazier, and above it a starry sky with a faint aurora. The brazier sits on a stepped dais
-and sends a pillar of light up into the sky. Wisps are glowing orbs that cast their own light.
-Lamplighters, the brazier, the obelisks (shrine walls) and the boulders are Sogni Pixal3D
-models. Everything else is shaders. Bloom and ACES tone mapping give the glow. Phones and
-low-core devices drop antialiasing and shadows and render bloom at half resolution.
+The shrine is a flagstone plaza on a floating plateau in a bright daytime sky. The plateau is
+generated (`src/client/islands.ts`): an irregular outline with headlands, a grassy terrace
+below the cliff, lower tiers stepping off its sides, ragged rock spires hanging underneath and
+waterfalls pouring into the cloud sea. Smaller islands drift around it. Everything is smooth
+shaded with enough segments that nothing reads as faceted. The brazier sits on a stepped dais.
+Wisps are glowing orbs that cast their own light. Lamplighters, the brazier, the obelisks
+(shrine walls) and the boulders are Sogni Pixal3D models; the floors are Sogni textures.
+Everything else is procedural geometry and shaders. Bloom and ACES tone mapping give the glow.
+Phones and low-core devices drop antialiasing and shadows, render bloom at half resolution
+and build fewer islands.
 
-The camera looks down at 56°. Taps are picked by casting a ray onto the ground plane, so touch
+The camera looks down at 56°. Zooming out past the plaza tips it toward the horizon (down to 28°) so you can take in the whole island. Taps are picked by casting a ray onto the ground plane, so touch
 targeting works the same as it did in 2D.
 
 ## Phones
