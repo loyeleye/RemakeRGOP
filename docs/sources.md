@@ -44,9 +44,10 @@ videos quoted are AnroyRS (`svnoU6JmD-s`), DailyRsFix (`Wc6AOOjYoLQ`), HowToPlay
   Python re-implementation of the rules it encodes, written to document them. The upstream
   repository has **no licence file**, so by default its code is all rights reserved.
 * **Map data** in `data/altars/*.json` is converted from the emulator's `AltarData.ts`. It describes
-  Jagex's arena layouts as transcribed by the emulator's author. ❓ No licence covers it. Fine for
-  study, but **ask the author (GitHub `yongyi781`) before shipping it in a product**, and note that
-  the layouts themselves are Jagex's design.
+  Jagex's arena layouts as transcribed by the emulator's author. No licence file covers it, but the
+  author (GitHub `yongyi781`) has told the project owner informally (19 Nov 2026) that
+  **non-commercial use is fine**. ❓ Commercial use is not covered: get written permission before
+  shipping it in a product, and note that the layouts themselves are Jagex's design.
 * RS Wiki text is CC BY-NC-SA 3.0. Quotes here are short and attributed.
 * RuneScape, Jagex and all game names are trademarks of Jagex Ltd. This knowledge base is a fan
   reference.

@@ -65,7 +65,8 @@ Python 3.9+ and the standard library only. To re-extract the map data from upstr
 
 ## Licence note
 
-The map data is derived from an unlicensed upstream repository and describes Jagex's arenas. It is
-fine for study, but read [docs/sources.md](docs/sources.md#licence-status-of-reused-material) before
-using it in anything public or commercial. RuneScape is a trademark of Jagex Ltd. This is a fan
+The map data is derived from an upstream repository with no licence file, and it describes Jagex's
+arenas. The emulator's author has told the project owner informally that non-commercial use is fine.
+Commercial use still needs separate permission. See
+[docs/sources.md](docs/sources.md#licence-status-of-reused-material). RuneScape is a trademark of Jagex Ltd. This is a fan
 reference.

@@ -5,9 +5,10 @@ They were converted by [tools/extract_altars.py](../tools/extract_altars.py) fro
 Trapdoor emulator ([yongyi781/great-orb-project](https://github.com/yongyi781/great-orb-project),
 `src/GOP/Scripts/Engine/AltarData.ts` at commit `073b074`).
 
-> ❓ **Licence:** the upstream repository has no licence file, and the layouts are Jagex's arena
-> designs. Use this data for study and prototyping. Get the emulator author's permission (and think
-> about Jagex's rights) before shipping it in anything public or commercial. See
+> **Licence:** the upstream repository has no licence file, and the layouts are Jagex's arena
+> designs. The emulator's author has told the project owner informally (19 Nov 2026) that
+> **non-commercial use is fine**. ❓ Commercial use is not covered: get written permission (and think
+> about Jagex's rights) before shipping it in anything commercial. See
 > [docs/sources.md](../docs/sources.md#licence-status-of-reused-material).
 
 ## Format
