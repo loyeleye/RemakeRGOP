@@ -211,6 +211,7 @@ function renderHud() {
   $("mode").textContent = p?.mode === "push" ? "Push" : "Pull";
   $("mode").classList.toggle("push", p?.mode === "push");
   $("run").textContent = $("run2").textContent = p?.run === false ? "Walk" : "Run";
+  $("run2").classList.toggle("walking", p?.run === false);
   const staff = $("staff");
   staff.textContent = p?.mode === "push" ? "Push" : "Pull";
   staff.classList.toggle("push", p?.mode === "push");

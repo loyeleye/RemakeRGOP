@@ -81,6 +81,20 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 .touch .thumb.staff { width: 92px; height: 92px; font-size: 17px; font-weight: 700; border-color: var(--dawn); color: var(--dawn); }
 .touch .thumb.staff.push { border-color: #ff7070; color: #ff8a8a; }
 .touch .thumb.staff.far { opacity: 0.6; }
+/* Painted controls (Sogni). Icons carry the meaning; only the mode switch keeps a caption. */
+.touch .thumb { background: center / cover no-repeat; border: none; box-shadow: 0 4px 14px #0008; text-shadow: 0 1px 3px #000, 0 0 6px #000; }
+.touch .thumb:active { transform: scale(0.94); }
+.touch #staff, .touch #next, .touch #run2 { font-size: 0; }
+.touch #staff { background-image: url(ui/pull.webp); }
+.touch #staff.push { background-image: url(ui/push.webp); }
+.touch #next { background-image: url(ui/next.webp); }
+.touch #run2 { background-image: url(ui/run.webp); }
+.touch #run2.walking { filter: grayscale(0.9) brightness(0.7); }
+.touch #mode { background-image: url(ui/push.webp); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; }
+.touch #mode.push { background-image: url(ui/pull.webp); color: #fff; }
+.touch .stick { background: url(ui/stick-base.webp) center / cover no-repeat; border: none; box-shadow: 0 4px 14px #0008; }
+.touch .stick .knob { background: url(ui/stick-knob.webp) center / cover no-repeat; border: none; box-shadow: 0 2px 8px #000a; }
+.touch .stick.held .knob { background: url(ui/stick-knob.webp) center / cover no-repeat; filter: brightness(1.25); }
 .stick { pointer-events: auto; position: relative; width: 132px; height: 132px; border-radius: 50%; background: #221f2e99; border: 2px solid #ffffff33; backdrop-filter: blur(4px); touch-action: none; }
 .stick .knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: #ffffff33; border: 2px solid #ffffff88; transition: transform 0.08s; }
 .stick.held .knob { transition: none; background: #ffffff55; }
