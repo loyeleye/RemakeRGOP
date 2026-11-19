@@ -83,14 +83,20 @@ bot gets about 30.
   two solo Hard bots do (with no lapses it was about 1.8 times).
 
   A team of two coords by halves on the smaller shrines, like pairs do in the orb game: each
-  takes the half of the shrine opposite the other and moves about inside the archways there.
-  At the start the bot heads straight for the far side, across the brazier from where its
-  guild starts (split along whichever axis its partner is further out on).
-  From its half it pulls in wisps on its partner's side, over the rim. A wisp on its own side
-  that's out of its partner's reach it pulls in until the partner can reach it, so the partner
-  never has to leave their half. If its partner lingers (5 ticks) somewhere that calls for a
-  different split, on its half, or clearly out to the north or south when they're splitting
-  east-west (or the other way round), it adapts and takes the half opposite them.
+  stands just off the brazier on its own side, level with the middle (east-west, or
+  north-south turned a quarter), and banks from there. At the start the bot heads straight
+  for the far side, across the brazier from where its guild starts (split along whichever
+  axis its partner is further out on).
+  The split goes by who can bank a wisp without moving, not a straight line: a wisp only one
+  spot can bank belongs to that player, even if it's a little over the middle. A wisp both
+  can bank goes to whoever's half it's on. A wisp neither spot can bank is fetched by
+  whoever's half it's on: they step out (a tile or two inside the court often does it, or
+  further) and pull it in until one of the spots can bank it, then go back to their spot.
+  The bot only takes a wisp that's its partner's if the partner is away and can't reach it.
+  If its partner (a person) lingers (5 ticks) somewhere that calls for a different split, on
+  its half, or clearly out to the north or south when they're splitting east-west (or the
+  other way round), it adapts and takes the half opposite them. Two bots just split
+  east-west and keep to it.
   On the big shrines (Old Bastion, Sunwell Terrace), where wisps appear far out, it uses home
   squares and fetching instead. A Hard bot teamed with a person never lapses out of teamwork,
   and it never goes after a wisp a teammate is pulling.

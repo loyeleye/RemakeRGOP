@@ -655,7 +655,7 @@ describe("co-op hard bots", () => {
         const g = new Game(shrineFor("fairy-ring", 2), [{ id: 1, guild: 0, name: "me" }, { id: 2, guild: 0, name: "bot" }], seed);
         for (let t = 0; t < ROUND_TICKS; t++) {
           // The person plays their half of the shrine, moving about inside the archways.
-          const p = halfCommand(g, g.players[0]!, g.players[1]!, rand, { ...BOT_HARD, sloppiness: 0 });
+          const p = halfCommand(g, g.players[0]!, g.players[1]!, rand, { ...BOT_HARD, sloppiness: 0 }, false);
           if (p) g.command(1, p);
           const c = botCommand(g, 2, { ...BOT_HARD, coop }, rand);
           if (c) g.command(2, c);
