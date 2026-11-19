@@ -9,7 +9,7 @@
 // So a staff touch shows up as wisp movement on the *next* tick, and a lamplighter who walks
 // into reach on one tick only touches the wisp on the tick after.
 
-import { Board, Mover, Tile, cheb, isCrystal, isSlick, pt, samePt, sign, type Pt } from "./board.js";
+import { Board, DIRS, Mover, Tile, cheb, isCrystal, isSlick, pt, samePt, sign, type Pt } from "./board.js";
 import type { Shrine } from "./maps.js";
 
 export const TICK_MS = 600;
@@ -38,10 +38,39 @@ export function ventErupts(tick: number, period: number) {
   return tick % period === 0;
 }
 
+/** Where the mist banks are on this tick (centre and radius in tiles). */
+export function mistBanks(tick: number, center: Pt): { x: number; y: number; r: number }[] {
+  // Four banks drift round the brazier, one lap every MIST_LAP ticks, so every guild gets the same.
+  const a0 = (tick / MIST_LAP) * Math.PI * 2;
+  return [0, 1, 2, 3].map((k) => {
+    const a = a0 + (k * Math.PI) / 2;
+    return { x: center.x + Math.cos(a) * MIST_ORBIT, y: center.y + Math.sin(a) * MIST_ORBIT, r: MIST_RADIUS };
+  });
+}
+
+/** Which quarter round the brazier an offset falls in, as "sx,sy". */
+export const quarterOf = (dx: number, dy: number) => `${sign(dx)},${sign(dy)}`;
+
+/** The quarters with somebody standing on a pressure plate: their shortcut gates are open. */
+export function platesHeld(board: Board, players: readonly { pos: Pt }[]): Set<string> {
+  const c = board.center;
+  const out = new Set<string>();
+  for (const p of players) if (board.tile(p.pos) === Tile.Plate) out.add(quarterOf(p.pos.x - c.x, p.pos.y - c.y));
+  return out;
+}
+
 /** Is the tide coming in on this tick (it turns every `period` ticks, starting in)? */
 export function tideIn(tick: number, period: number) {
   return Math.floor(tick / period) % 2 === 0;
 }
+/** Mist banks: how far out they drift, how big they are, and how many ticks a lap takes. */
+export const MIST_ORBIT = 9;
+export const MIST_RADIUS = 2.2;
+export const MIST_LAP = 150;
+/** Moss: taps it takes to break a tuft, how often it grows (ticks), and how much there can be. */
+export const MOSS_HP = 3;
+export const MOSS_GROW = 6;
+export const MOSS_MAX = 64;
 /** Pushing reaches less far than pulling. */
 export const PUSH_REACH = 8;
 export const WISPS_PER_GUILD = 3;
@@ -90,6 +119,8 @@ export interface Wisp {
   glide: number;
   /** Teammates pulling it together this tick (the midpoint of all of them is what it heads for). */
   pullers: number[];
+  /** Tiles left of a sun glyph's relay toward the brazier (0 when it isn't being relayed). */
+  relay: number;
 }
 
 export interface Lamplighter {
@@ -125,6 +156,8 @@ export interface BankEvent {
 
 export interface GameSnapshot {
   tick: number;
+  /** Moss tufts as flat [tile index, taps left] pairs, on shrines that have moss. */
+  moss?: number[];
   /** One score per team in the round. */
   scores: number[];
   wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null }[];
@@ -238,6 +271,10 @@ export class Game {
   readonly board: Board;
   /** The portcullis tiles, if any, as offsets from the centre too. */
   private gates: { p: Pt; dx: number; dy: number }[] = [];
+  /** Moss tufts by tile index, and how many more taps each takes to break. */
+  private mossHp = new Map<number, number>();
+  /** Sun glyph relays: each tile's distance in wisp moves from the bank zone. */
+  private flow: Int32Array | null = null;
   tick = 0;
   scores: number[];
   wisps: Wisp[] = [];
@@ -252,9 +289,14 @@ export class Game {
     seed: number,
     wispsPerGuild = WISPS_PER_GUILD,
   ) {
-    const gp = shrine.gimmicks?.portcullis;
-    // Portcullises change the tiles mid-round, so this round gets its own copy of the board.
-    this.board = gp ? new Board(shrine.board.width, shrine.board.height, shrine.board.tiles.slice()) : shrine.board;
+    const gm = shrine.gimmicks ?? {};
+    const gp = gm.portcullis || gm.plates;
+    // Gates and mist change the board mid-round, so this round gets its own copy of it.
+    const moss = shrine.board.tiles.includes(Tile.Moss);
+    this.board = gp || gm.mist || moss ? new Board(shrine.board.width, shrine.board.height, shrine.board.tiles.slice()) : shrine.board;
+    if (gm.glyphs) this.flow = this.board.bankFlow();
+    if (moss) this.board.tiles.forEach((t, i) => t === Tile.Moss && this.mossHp.set(i, MOSS_HP));
+    if (gm.mist) this.setMist();
     if (gp) {
       const c = this.board.center;
       this.board.tiles.forEach((t, i) => {
@@ -282,6 +324,7 @@ export class Game {
           skate: null,
           glide: 0,
           pullers: [],
+          relay: 0,
         };
         this.placeWisp(w, used);
         this.wisps.push(w);
@@ -346,7 +389,9 @@ export class Game {
     this.banks = [];
     for (const w of this.wisps) w.pullers = [];
     const g = this.shrine.gimmicks;
-    if (g?.portcullis && this.tick % g.portcullis === 0) this.setGates();
+    if ((g?.portcullis && this.tick % g.portcullis === 0) || g?.plates) this.setGates();
+    if (g?.mist) this.setMist();
+    if (this.mossHp.size && this.tick % MOSS_GROW === 0) this.growMoss();
     if (g?.vents && ventErupts(this.tick, g.vents)) {
       const c = this.board.center;
       for (const w of this.wisps) {
@@ -386,7 +431,27 @@ export class Game {
       }
       return;
     }
-    if (held) w.glide = 0;
+    if (held) {
+      w.glide = 0;
+      w.relay = 0;
+    }
+    // Left resting on a sun glyph: it's relayed in, two tiles a tick, the short way round.
+    if (this.flow && !held && !w.relay && !w.target && !w.skate && this.board.tile(w.pos) === Tile.Glyph) w.relay = this.shrine.gimmicks.glyphs! - 2;
+    if (w.relay > 0 && !held) {
+      for (let k = 0; k < 2 && w.relay > 0; k++) {
+        const from = w.pos;
+        const next = this.flowStep(w.pos);
+        if (!next) {
+          w.relay = 0;
+          break;
+        }
+        w.pos = next;
+        w.relay--;
+        this.afterStep(w, from);
+        if (this.board.inBankZone(w.pos)) w.relay = 0;
+      }
+      return;
+    }
     this.moveWisp(w, held);
     // Petal beds hurry a moving wisp: a second step this tick.
     if (this.board.tile(w.pos) === Tile.Bloom && !samePt(w.pos, w.prev) && (w.target || w.skate) && !this.board.inBankZone(w.pos)) this.moveWisp(w, held);
@@ -476,11 +541,98 @@ export class Game {
     if (isSlick(this.board.tile(w.pos)) && !this.board.inBankZone(w.pos)) w.skate = pt(dx, dy);
   }
 
-  /** Open and shut the portcullises for this tick. Shut, a gate is wall. */
+  /**
+   * Open and shut the gates for this tick: by the clock (portcullises) or by who stands on the
+   * pressure plates. Shut, a gate is wall, but it never drops on a wisp or a lamplighter in it.
+   */
   private setGates() {
-    const period = this.shrine.gimmicks.portcullis!;
-    for (const g of this.gates) this.board.tiles[g.p.y * this.board.width + g.p.x] = gateOpen(this.tick, period, g.dx, g.dy) ? Tile.Gate : Tile.Wall;
-    this.board.version++;
+    const { portcullis, plates } = this.shrine.gimmicks;
+    const held = plates ? platesHeld(this.board, this.players) : null;
+    let changed = false;
+    for (const g of this.gates) {
+      const i = g.p.y * this.board.width + g.p.x;
+      const open = held ? held.has(quarterOf(g.dx, g.dy)) : gateOpen(this.tick, portcullis!, g.dx, g.dy);
+      const blocked = this.wisps.some((w) => samePt(w.pos, g.p)) || this.players.some((p) => samePt(p.pos, g.p));
+      const t = open || blocked ? Tile.Gate : Tile.Wall;
+      if (this.board.tiles[i] !== t) {
+        this.board.tiles[i] = t;
+        changed = true;
+      }
+    }
+    if (changed) this.board.version++;
+  }
+
+  /** Lay this tick's mist: it hides what's behind it, but walkers and wisps go through. */
+  private setMist() {
+    const b = this.board;
+    const fog = b.fog ?? (b.fog = new Uint8Array(b.width * b.height));
+    fog.fill(0);
+    for (const m of mistBanks(this.tick, b.center))
+      for (let y = Math.floor(m.y - m.r); y <= Math.ceil(m.y + m.r); y++)
+        for (let x = Math.floor(m.x - m.r); x <= Math.ceil(m.x + m.r); x++)
+          if (b.inside(pt(x, y)) && Math.hypot(x - m.x, y - m.y) <= m.r) fog[y * b.width + x] = 1;
+  }
+
+  /**
+   * Moss creeps: a tuft spreads to a free tile next to it, or now and then a new one takes root
+   * out in the field. It grows the same on every guild's side.
+   */
+  private growMoss() {
+    if (this.mossHp.size >= MOSS_MAX) return;
+    const b = this.board, W = b.width, c = b.center;
+    const tufts = [...this.mossHp.keys()];
+    let at: Pt;
+    if (this.rng.next() < 0.25 && this.shrine.spawnField.length) at = this.shrine.spawnField[this.rng.int(this.shrine.spawnField.length)]!;
+    else {
+      const i = tufts[this.rng.int(tufts.length)]!;
+      const d = DIRS[this.rng.int(4)]!;
+      at = pt((i % W) + d.x, Math.floor(i / W) + d.y);
+    }
+    const dx = at.x - c.x, dy = at.y - c.y;
+    const images = this.teams === 4 ? [pt(dx, dy), pt(-dy, dx), pt(-dx, -dy), pt(dy, -dx)] : [pt(dx, dy), pt(-dx, -dy)];
+    const taken = (q: Pt) => this.wisps.some((w) => samePt(w.pos, q)) || this.players.some((p) => samePt(p.pos, q));
+    const spots = images.map((o) => pt(c.x + o.x, c.y + o.y));
+    // Never in the court or on anything: only plain ground well out from the archways.
+    if (cheb(at, c) < 8 || spots.some((q) => b.tile(q) !== Tile.Floor || taken(q))) return;
+    for (const q of spots) {
+      b.tiles[q.y * W + q.x] = Tile.Moss;
+      this.mossHp.set(q.y * W + q.x, MOSS_HP);
+    }
+    b.version++;
+  }
+
+  /** A fresh tap on a wisp the moss is holding back tears at the tuft in its way. */
+  private chipMoss(p: Lamplighter, w: Wisp) {
+    const off = flingOffset(p.pos, w.pos, p.mode);
+    const sx = sign(off.x), sy = sign(off.y);
+    if (!sx && !sy) return;
+    const W = this.board.width;
+    for (const d of [pt(sx, sy), pt(sx, 0), pt(0, sy)]) {
+      if (!d.x && !d.y) continue;
+      const q = pt(w.pos.x + d.x, w.pos.y + d.y);
+      const i = q.y * W + q.x;
+      const hp = this.mossHp.get(i);
+      if (hp === undefined) continue;
+      if (hp > 1) this.mossHp.set(i, hp - 1);
+      else {
+        this.mossHp.delete(i);
+        this.board.tiles[i] = Tile.Floor;
+        this.board.version++;
+      }
+      return;
+    }
+  }
+
+  /** One tile nearer the bank zone along the glyphs' flow, or null if there's no way. */
+  private flowStep(p: Pt): Pt | null {
+    const f = this.flow!, W = this.board.width;
+    const d = f[p.y * W + p.x]!;
+    if (d <= 0) return null;
+    for (const dir of DIRS) {
+      const n = pt(p.x + dir.x, p.y + dir.y);
+      if (this.board.inside(n) && f[n.y * W + n.x] === d - 1 && this.board.canStep(p, dir.x, dir.y, Mover.Wisp)) return n;
+    }
+    return null;
   }
 
   /** Every staff on this wisp lets go. */
@@ -612,6 +764,7 @@ export class Game {
 
   private touch(p: Lamplighter, w: Wisp, fresh: boolean) {
     if (fresh) p.slipped = false;
+    if (fresh && this.mossHp.size) this.chipMoss(p, w);
     // Pulling together: a teammate already pulled this wisp this tick, so it heads for the
     // point between all of them instead.
     if (TEAM_PULL && p.mode === "pull" && w.touched && w.pullers.length > 0 && !w.pullers.includes(p.id)) {
@@ -683,6 +836,7 @@ export class Game {
         walkTo: p.action.kind === "walk" ? p.action.to : null,
       })),
       banks: this.banks,
+      moss: this.mossHp.size ? [...this.mossHp].flat() : undefined,
     };
   }
 

@@ -126,6 +126,10 @@ get it back as usual, and drops out of the average until they touch it again.
 | Cascade Falls | The stream runs clockwise round the brazier: a loose wisp on water drifts a tile a tick along it. |
 | Ember Quarry | Vents (`^`) in a pinwheel on each arm erupt every 5 ticks: a wisp sitting on one is thrown 6 tiles toward the brazier, out of every staff's grip. |
 | Castle Rise | Portcullises (`=`) in the east and west archways open for 10 ticks, then those shut and the north and south ones open. A shut portcullis is a wall. |
+| Misty Stones | Four mist banks drift round the brazier (a lap every 150 ticks). You can't see a wisp through or inside one from more than 2 tiles off, so you can't reach it. Walkers and wisps pass through. |
+| Moss Hollow | Moss (`&`) holds wisps back like a boulder, but you walk through it. Each fresh tap on a wisp it's holding back tears at the tuft in the way; the third tap clears it. Every 6 ticks moss spreads or takes root somewhere out in the field (the same on every side), up to 64 tufts. |
+| Old Bastion | Each closed corner of the gatehouse has a shortcut gate (`=`) that opens while someone stands on that quarter's pressure plate (`_`). The middle arches are always open, so you never need a plate to score. |
+| Sunwell Terrace | Bands of sun glyphs cross the arms every 10 wisp moves from 20 out. A wisp left resting on one is relayed 8 tiles in, two a tick, the short way toward the brazier. |
 
 ## Glancing angles (experimental)
 

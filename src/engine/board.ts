@@ -39,13 +39,16 @@ export enum Tile {
   Vent = 11,
   /** Portcullis: a gate in the archways that is open or shut by the clock (shut, it's a wall). */
   Gate = 12,
-  /** Moss: soft ground that catches a wisp: one that moves onto it stops dead and the staff lets go. */
+  /** Moss: a thick tuft you can walk through, but it holds wisps back like a boulder until it's torn away. */
   Moss = 13,
   /** Pressure plate: stand on one and the shortcut gates on its side of the brazier open. */
   Plate = 14,
   /** Sun glyph: a wisp left resting on one is relayed along the way toward the brazier. */
   Glyph = 15,
 }
+
+/** In mist you can still make out anything this close (Chebyshev tiles). */
+export const MIST_CLEAR = 2;
 
 /** Do wisps skate on this tile? */
 export const isSlick = (t: Tile) => t === Tile.Ice || t === Tile.Rime;
@@ -134,6 +137,9 @@ export class Board {
       case Tile.Water:
       case Tile.Brazier:
         return who !== Mover.Walker;
+      case Tile.Moss:
+        // A thick tuft: you wade through it, but it holds a wisp back.
+        return who !== Mover.Wisp;
       default:
         return true;
     }
@@ -182,6 +188,14 @@ export class Board {
    * sight is always mutual.
    */
   canSee(a: Pt, b: Pt): boolean {
+    // Mist hides only what's more than a couple of tiles off.
+    if (this.fog && cheb(a, b) <= MIST_CLEAR) {
+      const fog = this.fog;
+      this.fog = null;
+      const seen = this.traceClear(a, b) || this.traceClear(b, a);
+      this.fog = fog;
+      return seen;
+    }
     return this.traceClear(a, b) || this.traceClear(b, a);
   }
 

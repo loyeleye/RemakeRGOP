@@ -265,6 +265,14 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
   const t = cam.toTile(sx, sy);
   const p = snap.players.find((q) => q.id === me);
   const radius = cam.compact ? 1.3 : 0.9;
+  // On a phone the focused wisp always has a finger-sized target, however far out you've zoomed.
+  if (document.body.classList.contains("touch")) {
+    const f = padFocus ? snap.wisps.find((w) => w.id === padWisp) : undefined;
+    if (f) {
+      const c = cam.toScreen(f.x + 0.5, f.y + 0.5, 0.75);
+      if (Math.hypot(c.x - sx, c.y - sy) <= FOCUS_TAP_PX) return { action: { kind: "staff", wisp: f.id }, wisp: f.id };
+    }
+  }
   let best: { id: number; d: number } | null = null;
   for (const w of snap.wisps) {
     const d = Math.hypot(w.x + 0.5 - t.x, w.y + 0.5 - t.y);
@@ -280,6 +288,9 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
   // A tap on a wall or pool still walks as close to it as the path allows.
   return { action: { kind: "walk", to: tile }, wisp: null };
 }
+
+/** Radius in CSS pixels of the focused wisp's tap target: a 56 px circle, above the 44-48 px minimum. */
+const FOCUS_TAP_PX = 28;
 
 const pointers = new Map<number, { x: number; y: number; sx: number; sy: number; t: number }>();
 let pinch: { d: number; scale: number } | null = null;
@@ -392,6 +403,8 @@ setTouch();
 
 /** The wisp the pad's Staff button works on. */
 let padWisp: number | null = null;
+/** Whether the pad keeps a wisp in focus at all (long-press Next to switch it off or on). */
+let padFocus = true;
 
 /** Wisps your staff can work in the current mode, nearest first. */
 function padChoices() {
@@ -406,12 +419,36 @@ function padChoices() {
 
 /** Keeps the pad's wisp valid: if it's gone or the wrong kind, take the nearest one. */
 function padTarget(): number | null {
+  if (!padFocus) return null;
   const c = padChoices();
   if (!c.some((w) => w.id === padWisp)) padWisp = c[0]?.id ?? null;
   return padWisp;
 }
 
+// Long-press Next to switch focus off (no wisp is picked out) or back on.
+let nextHold = 0;
+let nextLong = false;
+const nextBtn = $("next");
+nextBtn.addEventListener("pointerdown", () => {
+  nextLong = false;
+  clearTimeout(nextHold);
+  nextHold = window.setTimeout(() => {
+    nextLong = true;
+    padFocus = !padFocus;
+    nextBtn.classList.toggle("off", !padFocus);
+    navigator.vibrate?.(30);
+    toast(padFocus ? "Focus on: Next picks a wisp" : "Focus off. Long-press Next to turn it back on");
+  }, 550);
+});
+for (const ev of ["pointerup", "pointercancel", "pointerleave"]) nextBtn.addEventListener(ev, () => clearTimeout(nextHold));
+nextBtn.addEventListener("contextmenu", (e) => e.preventDefault());
 $("next").onclick = () => {
+  // The click that ends a long press doesn't also step to the next wisp.
+  if (nextLong) return void (nextLong = false);
+  if (!padFocus) {
+    padFocus = true;
+    nextBtn.classList.remove("off");
+  }
   const c = padChoices();
   if (!c.length) return;
   const i = c.findIndex((w) => w.id === padWisp);

@@ -78,6 +78,8 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 .pad { display: grid; grid-template-columns: auto auto; gap: 10px; align-items: end; justify-items: end; pointer-events: none; }
 .pad > * { pointer-events: auto; }
 .touch .thumb { width: 64px; height: 64px; border-radius: 50%; font-size: 14px; }
+.touch .thumb.off { opacity: 0.55; border-style: dashed; text-decoration: line-through; }
+#next { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 .touch .thumb.staff { width: 92px; height: 92px; font-size: 17px; font-weight: 700; border-color: var(--dawn); color: var(--dawn); }
 .touch .thumb.staff.push { border-color: #ff7070; color: #ff8a8a; }
 .touch .thumb.staff.far { opacity: 0.6; }

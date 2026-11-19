@@ -111,9 +111,9 @@ describe("shrines", () => {
         for (let dy = -r.radius; dy <= r.radius; dy++)
           for (let dx = -r.radius; dx <= r.radius; dx++) {
             if (Math.max(Math.abs(dx), Math.abs(dy)) !== r.radius) continue;
-            // A portcullis stands in a gap: still a gap, just one that shuts now and then.
-            const t = b.tile(pt(c.x + dx, c.y + dy)) === Tile.Gate ? Tile.Floor : b.tile(pt(c.x + dx, c.y + dy));
-            expect(t, `${s.id} ${s.teams} (${dx},${dy})`).toBe(walls.has(`${dx},${dy}`) ? Tile.Wall : Tile.Floor);
+            // A gate can stand in a gap or in the wall line: it's either.
+            if (b.tile(pt(c.x + dx, c.y + dy)) === Tile.Gate) continue;
+            expect(b.tile(pt(c.x + dx, c.y + dy)), `${s.id} ${s.teams} (${dx},${dy})`).toBe(walls.has(`${dx},${dy}`) ? Tile.Wall : Tile.Floor);
           }
     }
   });
@@ -441,6 +441,88 @@ describe("game", () => {
     g.step();
     g.step();
     expect(g.wisps[0]!.pos).toEqual(pt(9, 13));
+  });
+
+  it("moss holds a wisp back, and tapping the wisp again tears the moss away", () => {
+    const shrine = openShrine([pt(13, 4)], [pt(20, 23)]);
+    shrine.board.tiles[6 * 27 + 13] = Tile.Moss;
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(13, 12);
+    const tap = () => {
+      g.command(1, { action: { kind: "staff", wisp: 0 } });
+      g.step();
+    };
+    tap(); // the wisp comes up against the moss and stops there
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(13, 5));
+    expect(g.board.tile(pt(13, 6))).toBe(Tile.Moss);
+    // Three taps while it's held back tear the tuft away.
+    tap();
+    tap();
+    expect(g.board.tile(pt(13, 6))).toBe(Tile.Moss);
+    tap();
+    expect(g.board.tile(pt(13, 6))).toBe(Tile.Floor);
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos.y).toBeGreaterThan(6);
+    // You can walk through it all the same.
+    expect(g.board.passable(pt(13, 6), Mover.Walker)).toBe(true);
+  });
+
+  it("moss grows through the round, the same on both sides", () => {
+    const def = SHRINE_DEFS.find((d) => d.id === "moss-hollow")!;
+    const g = new Game(buildShrine(def), duo, 3);
+    const count = () => g.board.tiles.filter((t) => t === Tile.Moss).length;
+    const before = count();
+    for (let i = 0; i < 120; i++) g.step();
+    expect(count()).toBeGreaterThan(before);
+    const b = g.board, W = b.width, H = b.height;
+    for (let i = 0; i < W * H; i++) if (b.tiles[i] === Tile.Moss) expect(b.tiles[W * H - 1 - i]).toBe(Tile.Moss);
+  });
+
+  it("mist hides a wisp inside it from the staff", () => {
+    const def = SHRINE_DEFS.find((d) => d.id === "misty-stones")!;
+    const g = new Game(buildShrine(def), duo, 1);
+    const c = g.board.center;
+    const fogged = (x: number, y: number) => !!g.board.fog?.[y * g.board.width + x];
+    // At tick 0 a bank sits due east of the brazier: you can't see through it.
+    expect(fogged(c.x + 9, c.y)).toBe(true);
+    expect(g.board.canSee(pt(c.x + 5, c.y), pt(c.x + 13, c.y))).toBe(false);
+    // It drifts on: an eighth of a lap later the east lies between two banks, clear.
+    for (let i = 0; i < 19; i++) g.step();
+    expect(fogged(c.x + 9, c.y)).toBe(false);
+  });
+
+  it("standing on a pressure plate opens that quarter's shortcut gates, and only while you stand there", () => {
+    const def = SHRINE_DEFS.find((d) => d.id === "old-bastion")!;
+    const g = new Game(buildShrine(def), duo, 1);
+    const c = g.board.center;
+    const gate = pt(c.x - 6, c.y - 6);
+    expect(g.board.tile(gate)).toBe(Tile.Wall);
+    // The middle arches are open without anyone on a plate, so a lone lamplighter can score.
+    expect(g.board.tile(pt(c.x, c.y - 6))).toBe(Tile.Floor);
+    g.players[0]!.pos = pt(c.x - 9, c.y - 9);
+    g.step();
+    expect(g.board.tile(gate)).toBe(Tile.Gate);
+    expect(g.board.tile(pt(c.x + 6, c.y + 6))).toBe(Tile.Wall);
+    g.players[0]!.pos = pt(c.x - 9, c.y - 12);
+    g.step();
+    expect(g.board.tile(gate)).toBe(Tile.Wall);
+  });
+
+  it("a wisp left on a sun glyph is relayed toward the brazier", () => {
+    const shrine = openShrine([pt(13, 2)], [pt(20, 23)]);
+    shrine.board.tiles[2 * 27 + 13] = Tile.Glyph;
+    shrine.gimmicks = { glyphs: 6 };
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(2, 24);
+    g.step();
+    g.step();
+    // 4 tiles in, two a tick, straight down toward the brazier.
+    expect(g.wisps[0]!.pos).toEqual(pt(13, 6));
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(13, 6));
   });
 
   it("a stream carries a loose wisp clockwise round the brazier", () => {

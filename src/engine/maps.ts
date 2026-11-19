@@ -50,6 +50,12 @@ export interface Gimmicks {
   vents?: number;
   /** Portcullises change every this many ticks: east and west gates open while north and south are shut, then the other way. */
   portcullis?: number;
+  /** Mist banks drift round the brazier, hiding wisps behind and inside them from sight. */
+  mist?: boolean;
+  /** Pressure plates (`_`): someone standing on one opens the shortcut gates (`=`) in its quarter. */
+  plates?: boolean;
+  /** Sun glyph bands every this many wisp moves out along the way in; a wisp left on one is relayed this many tiles less 2. */
+  glyphs?: number;
 }
 
 /** Default spawn band: from just past the archways to a couple of pulls out. */
@@ -381,7 +387,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     name: "Moss Hollow",
     blurb: "A round glade. A few boulders, a pond, long sight lines.",
     isle: { radius: 13.5, squareness: 2.2, coves: 0.12, heads: 0.1, seed: 7 },
-    rings: [{ radius: 5, style: "colonnade" }],
+    rings: [{ radius: 5, style: "colonnade", marks: [{ x: 8, y: 3, c: "&" }, { x: 8, y: 4, c: "&" }, { x: 7, y: 7, c: "&" }] }],
     rows: [
       "                                     ",
       "                                     ",
@@ -527,6 +533,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     blurb: "A cross of four causeways. Standing stones in still pools; reach over them, walk round.",
     isle: { radius: 11.5, squareness: 2.6, coves: 0.05, heads: 0.05, seed: 5, waves: [[4, 0.42, 0]] },
     rings: [{ radius: 5, style: "pillared" }],
+    gimmicks: { mist: true },
     rows: [
       "                                     ",
       "                                     ",
@@ -700,7 +707,10 @@ export const SHRINE_DEFS: ShrineDef[] = [
     name: "Old Bastion",
     blurb: "A huge ruined fortress. Broken walls everywhere and a tight gatehouse round the brazier: every wisp is hard won.",
     isle: { radius: 21, squareness: 3.2, coves: 0.06, heads: 0.05, seed: 4, waves: [[4, 0.06, Math.PI]] },
-    rings: [{ radius: 6, style: "gates" }],
+    // Shortcut gates in the closed corners: shut unless someone holds that quarter's plate.
+    // The middle arches are always open, so a lone lamplighter can still score.
+    rings: [{ radius: 6, style: "gates", marks: [{ x: 6, y: 6, c: "=" }, { x: 6, y: 5, c: "=" }, { x: 9, y: 9, c: "_" }] }],
+    gimmicks: { plates: true },
     spawnBand: [14, 30],
     rows: [
       "                                                         ",
@@ -758,6 +768,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
       ],
     },
     rings: [{ radius: 5, style: "posts" }, { radius: 9, style: "open" }],
+    gimmicks: { glyphs: 10 },
     spawnBand: [16, 90],
     rows: [
       "                                   ",
@@ -848,6 +859,12 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   const board = new Board(width, height, tiles);
   for (let dy = -1; dy <= 1; dy++)
     for (let dx = -1; dx <= 1; dx++) tiles[(board.center.y + dy) * width + board.center.x + dx] = Tile.Brazier;
+  const every = def.gimmicks?.glyphs;
+  if (every) {
+    // Sun glyphs: a band across the way in at every `every` moves, starting two bands out.
+    const d = board.bankFlow();
+    for (let i = 0; i < tiles.length; i++) if (tiles[i] === Tile.Floor && d[i]! >= 2 * every && d[i]! % every === 0) tiles[i] = Tile.Glyph;
+  }
   return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0, poolField: def.poolSpawns ? spawnField(board, def.poolSpawns.band, Tile.Water) : [], poolShare: def.poolSpawns?.share ?? 0 };
 }
 
@@ -963,7 +980,8 @@ export function addRings(rows: string[], rings: Ring[]): string[] {
           }
         }
       }
-      g[y]![x] = walls.has(`${dx},${dy}`) ? "#" : d > 2 && court.has(`${dx},${dy}`) ? court.get(`${dx},${dy}`)! : d <= 1 ? "B" : ".";
+      // A gate mark can stand in the ring's own wall line (it's a wall whenever it's shut).
+      g[y]![x] = court.get(`${dx},${dy}`) === "=" ? "=" : walls.has(`${dx},${dy}`) ? "#" : d > 2 && court.has(`${dx},${dy}`) ? court.get(`${dx},${dy}`)! : d <= 1 ? "B" : ".";
     }
   return g.map((r) => r.join(""));
 }
