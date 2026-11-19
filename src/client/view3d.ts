@@ -144,6 +144,15 @@ const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
 const texLoader = new THREE.TextureLoader();
 
+/**
+ * For locked-down pages: no WebAssembly decoder (those copies are stored uncompressed) and
+ * textures read through <img> rather than fetch.
+ */
+const plainLoader = new GLTFLoader().register((parser) => {
+  (parser as unknown as { textureLoader: THREE.Loader }).textureLoader = new THREE.TextureLoader(parser.options.manager);
+  return { name: "plain_textures" };
+});
+
 export function loadModels() {
   for (const n of ["dawn", "dusk", "brazier", "monolith", "boulder"] as ModelName[]) {
     loader.load(
@@ -154,7 +163,19 @@ export function loadModels() {
       },
       undefined,
       () => {
-        /* missing model: the procedural stand-in stays */
+        // Hosts that won't serve .glb (the shareable demo page) get it as base64 text instead.
+        fetch(`models/${n}.glb.txt`)
+          .then((r) => (r.ok ? r.text() : Promise.reject()))
+          .then((b64) => {
+            const bin = Uint8Array.from(atob(b64.trim()), (c) => c.charCodeAt(0));
+            plainLoader.parse(bin.buffer, "", (g: GLTF) => {
+              models[n] = normalize(g.scene, n === "monolith");
+              modelWaiters.forEach((f) => f());
+            });
+          })
+          .catch(() => {
+            /* missing model: the procedural stand-in stays */
+          });
       },
     );
   }
