@@ -27,12 +27,14 @@ export interface BotStyle {
    * the Medium bot (no taps, best walking plan) for that decision.
    */
   pick?: [number, number];
+  /** Chance per decision to lapse and play like the Easy bot for that decision. */
+  easyLapse?: number;
 }
 
 /** Easy: pulls only, along the 4 straight directions, and dawdles. Never pushes. */
 export const BOT_EASY: BotStyle = { pushy: 0, sloppiness: 0.3, straightOnly: true };
-/** Medium: walks to the best spot for its nearest wisp and holds it in; pushes rivals about to bank. */
-export const BOT_MEDIUM: BotStyle = { pushy: 3, sloppiness: 0.15 };
+/** Medium: walks to the best spot for its nearest wisp and holds it in; pushes rivals about to bank. Half its decisions are Easy ones. */
+export const BOT_MEDIUM: BotStyle = { pushy: 3, sloppiness: 0.15, easyLapse: 1 / 2 };
 /** Hard: taps to juggle wisps, but picks the best angle only half the time. */
 export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.05, taps: true, pick: [1 / 2, 1 / 6] };
 export const BOT_LEVELS = { easy: BOT_EASY, medium: BOT_MEDIUM, hard: BOT_HARD } as const;
@@ -43,6 +45,7 @@ export const BOT_FAIR = BOT_HARD;
 export function botCommand(game: Game, id: number, style: BotStyle, rand: () => number = Math.random): Command | null {
   const me = game.players.find((p) => p.id === id);
   if (!me) return null;
+  if (style.easyLapse && rand() < style.easyLapse) return botCommand(game, id, BOT_EASY, rand);
   const c = game.board.center;
   const live = (w: Wisp) => !game.board.inBankZone(w.pos);
 
