@@ -62,11 +62,11 @@ fallback.
   often, never pushes.
 - **Medium:** walks to the best spot for its nearest wisp and holds it in; pushes a rival wisp
   that's about to bank.
-- **Hard:** taps to juggle, but each decision takes the best angle 1/2 of the time, the second
-  best (one that leaves the wisp somewhere else) 1/3, and 1/6 of the time lapses into Medium play.
+- **Hard:** taps to juggle, but each decision takes the best angle 1/2 of the time, lapses into
+  Medium play 1/3, and takes the second best (one that leaves the wisp somewhere else) 1/6.
 
 Alone over a round, Easy banks about 8 to 12 on the regular islands, Medium 11 to 21, Hard 12 to
-25 (close to the perfect bot, because a second-best angle usually costs only a tick or two). All
+26 (close to the perfect bot: a Medium lapse or a second-best angle usually costs only a tick or two). All
 three bank 2 to 5 on Old Bastion and Sunwell Terrace.
 
 The perfect bot (taps, no mistakes) **taps**: from where it stands it touches whichever of its wisps

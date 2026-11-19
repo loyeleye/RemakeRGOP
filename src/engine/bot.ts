@@ -34,7 +34,7 @@ export const BOT_EASY: BotStyle = { pushy: 0, sloppiness: 0.3, straightOnly: tru
 /** Medium: walks to the best spot for its nearest wisp and holds it in; pushes rivals about to bank. */
 export const BOT_MEDIUM: BotStyle = { pushy: 3, sloppiness: 0.15 };
 /** Hard: taps to juggle wisps, but picks the best angle only half the time. */
-export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.05, taps: true, pick: [1 / 2, 1 / 3] };
+export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.05, taps: true, pick: [1 / 2, 1 / 6] };
 export const BOT_LEVELS = { easy: BOT_EASY, medium: BOT_MEDIUM, hard: BOT_HARD } as const;
 export type BotLevel = keyof typeof BOT_LEVELS;
 /** Kept for older callers: the old "sharper bot". */
