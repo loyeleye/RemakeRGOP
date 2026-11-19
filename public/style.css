@@ -112,3 +112,8 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 #debug pre { margin: 0; padding: 6px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 #debug-state { border-bottom: 1px solid #ffffff22; }
 #debug-log { overflow-y: auto; flex: 1; min-height: 80px; max-height: 40vh; color: #b9c4b2; }
+.guild li .bot-set { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 2px 0 0 16px; font-size: 0.85em; opacity: 0.85; }
+.guild li .bot-set select { width: auto; min-height: 32px; padding: 2px 6px; border-radius: 8px; }
+.guild li .bot-coop input { width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; }
+.guild li .bot-coop { display: inline-flex; gap: 4px; white-space: nowrap; align-items: center; cursor: pointer; }
+.guild li .bot-coop.off { opacity: 0.45; cursor: not-allowed; }

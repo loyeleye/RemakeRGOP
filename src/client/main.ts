@@ -3,7 +3,7 @@
 import type { Pt } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
-import { FLAMES, FLAME_COLORS, type BotDebug, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
+import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
@@ -135,6 +135,34 @@ function render() {
   renderHud();
 }
 
+const BOT_LEVEL_LABELS: Record<BotLevelName, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
+
+/** A bot's own level picker and co-op switch. Only the host can change them; co-op needs a guildmate. */
+function botControls(p: LobbyPlayer, host: boolean, alone: boolean): HTMLElement {
+  const box = document.createElement("span");
+  box.className = "bot-set";
+  const level = p.botLevel ?? "medium";
+  if (!host) {
+    box.textContent = `${BOT_LEVEL_LABELS[level]}${p.coop && !alone ? " · co-op" : ""}`;
+    return box;
+  }
+  const sel = document.createElement("select");
+  sel.setAttribute("aria-label", `${p.name} level`);
+  for (const l of Object.keys(BOT_LEVEL_LABELS) as BotLevelName[]) sel.add(new Option(BOT_LEVEL_LABELS[l], l, false, l === level));
+  sel.onchange = () => link?.send({ t: "botset", id: p.id, level: sel.value as BotLevelName });
+  const lab = document.createElement("label");
+  lab.className = "bot-coop" + (alone ? " off" : "");
+  lab.title = alone ? "Co-op needs a guildmate" : "Play as a team with its guild";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !!p.coop;
+  cb.disabled = alone;
+  cb.onchange = () => link?.send({ t: "botset", id: p.id, coop: cb.checked });
+  lab.append(cb, " co-op");
+  box.append(sel, lab);
+  return box;
+}
+
 function renderLobby() {
   if (!room) return;
   const mine = room.players.find((p) => p.id === me);
@@ -154,6 +182,7 @@ function renderLobby() {
           dot.style.background = FLAME_COLORS[p.flame];
           li.append(dot, p.name + (p.id === me ? " (you)" : "") + (p.id === room!.host ? " ★" : ""));
           if (!p.connected) li.classList.add("away");
+          if (p.bot) li.append(botControls(p, host, room!.players.filter((q) => q.guild === g).length < 2));
           return li;
         }),
     );

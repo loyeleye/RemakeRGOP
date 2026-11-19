@@ -95,6 +95,8 @@ function off(game: Game, p: Pt): string {
 export function botCommand(game: Game, id: number, style: BotStyle, rand: () => number = Math.random): Command | null {
   const me = game.players.find((p) => p.id === id);
   if (!me) return null;
+  // Slow bots think first, then decide (as a team player or not) when the wait is up.
+  if (style.wait) return waited(game, id, style, rand);
   // Teamwork lapses like the rest of a bot's judgment: among bots, some team decisions are
   // solo ones. With a person on the team it always plays along, so they can count on it.
   const team = style.coop ? coopTeam(game, me) : null;
@@ -109,7 +111,6 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
     if (!team) note(game, id, { intent: "lapse: a Medium move" });
     return botCommand(game, id, BOT_MEDIUM, rand);
   }
-  if (style.wait) return waited(game, id, style, rand);
   const c = game.board.center;
   const live = (w: Wisp) => !game.board.inBankZone(w.pos);
 
