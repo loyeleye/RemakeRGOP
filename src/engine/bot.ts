@@ -32,6 +32,12 @@ export interface BotStyle {
   lapse?: number;
   /** Before each new move, stand still for a random number of ticks in this range. */
   wait?: [number, number];
+  /**
+   * Plays as a team with other co-op bots on its guild: some hold home squares by the
+   * archways and pull in whatever comes into reach, the rest fetch wisps and feed them to
+   * the home squares, and nobody chases a wisp a teammate already has.
+   */
+  coop?: boolean;
 }
 
 /** Easy: Medium's straight pulls, but it stops to think for 3 to 12 ticks before each new move. */
@@ -43,7 +49,7 @@ export const BOT_MEDIUM: BotStyle = { pushy: 0, sloppiness: 0.3, straightOnly: t
  * to bank, but half its decisions are Medium ones. It never taps: juggling wisps with taps is
  * left as the trick a human can learn to beat it.
  */
-export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.15, lapse: 1 / 2 };
+export const BOT_HARD: BotStyle = { pushy: 3, sloppiness: 0.15, lapse: 1 / 2, coop: true };
 export const BOT_LEVELS = { easy: BOT_EASY, medium: BOT_MEDIUM, hard: BOT_HARD } as const;
 export type BotLevel = keyof typeof BOT_LEVELS;
 /** Kept for older callers: the old "sharper bot". */
@@ -52,6 +58,13 @@ export const BOT_FAIR = BOT_HARD;
 export function botCommand(game: Game, id: number, style: BotStyle, rand: () => number = Math.random): Command | null {
   const me = game.players.find((p) => p.id === id);
   if (!me) return null;
+  if (style.coop) {
+    const team = coopTeam(game, me);
+    if (team) {
+      const cmd = coopCommand(game, me, team, style, rand);
+      if (cmd !== undefined) return cmd;
+    }
+  }
   if (style.lapse && rand() < style.lapse) return botCommand(game, id, BOT_MEDIUM, rand);
   if (style.wait) return waited(game, id, style, rand);
   const c = game.board.center;
@@ -311,4 +324,206 @@ function pickTap(game: Game, me: Game["players"][number], rank = 0): number | nu
   ranked.sort((a, b) => a.score - b.score);
   const best = (ranked[Math.min(rank, ranked.length - 1)] ?? null)?.id ?? null;
   return best ?? (moving !== null && me.action.kind === "staff" ? me.action.wisp : null);
+}
+
+// ------------------------------------------------------------------ co-op
+
+/** Per game, the ids of co-op bots (they sign in the first time they're asked to move). */
+const coopBots = new WeakMap<Game, Set<number>>();
+
+interface Team {
+  /** Co-op bots on my guild, by id. */
+  bots: number[];
+  /** Home squares held by the first bots in `bots`: one per anchor. */
+  homes: Pt[];
+}
+
+/** My guild's co-op team, or null if I'm the only co-op bot on it. */
+function coopTeam(game: Game, me: Game["players"][number]): Team | null {
+  let set = coopBots.get(game);
+  if (!set) coopBots.set(game, (set = new Set()));
+  set.add(me.id);
+  const bots = game.players.filter((p) => p.guild === me.guild && set.has(p.id)).map((p) => p.id).sort((a, b) => a - b);
+  if (bots.length < 2) return null;
+  // Half the team (rounded up) hold home squares; the rest fetch.
+  const anchors = Math.ceil(bots.length / 2);
+  return { bots, homes: homeSquares(game, anchors) };
+}
+
+const homeCache = new WeakMap<Game, Pt[]>();
+
+/**
+ * The best home squares: tiles in or just outside the court that the most spawn tiles can be
+ * pulled straight into the brazier from (from across it, so they fly over the rim). Each extra one is as far round as can be from those
+ * already taken, so anchors cover different sides, like players on opposite home squares.
+ */
+export function homeSquares(game: Game, n: number): Pt[] {
+  const cached = homeCache.get(game);
+  if (cached) return cached.slice(0, n);
+  const board = game.board, c = board.center;
+  const ring = Math.max(...game.shrine.rings.map((r) => r.radius), 4);
+  const all = game.shrine.spawnField.length ? game.shrine.spawnField : game.shrine.wispSpawns.flat();
+  // Big fields are sampled: an even spread of up to 120 tiles is plenty to rank squares by.
+  const field = all.length > 120 ? all.filter((_, i) => i % Math.ceil(all.length / 120) === 0) : all;
+  const scored: { s: Pt; score: number }[] = [];
+  for (let dy = -(ring + 3); dy <= ring + 3; dy++)
+    for (let dx = -(ring + 3); dx <= ring + 3; dx++) {
+      const d = Math.max(Math.abs(dx), Math.abs(dy));
+      const s = pt(c.x + dx, c.y + dy);
+      // In the court or just outside it: wherever wisps across the brazier come in from.
+      if (d < 2 || !board.inside(s) || board.tile(s) !== Tile.Floor || board.inBankZone(s)) continue;
+      let score = 0;
+      for (const f of field) {
+        if (cheb(f, s) > PULL_REACH || !board.canSee(s, f)) continue;
+        if (board.inBankZone(simulatePull(board, s, f, 30, game.shrine.gimmicks).end)) score++;
+      }
+      if (score > 0) scored.push({ s, score });
+    }
+  scored.sort((a, b) => b.score - a.score);
+  const out: Pt[] = [];
+  const angle = (p: Pt) => Math.atan2(p.y - c.y, p.x - c.x);
+  while (out.length < 4 && out.length < scored.length) {
+    if (!out.length) {
+      out.push(scored[0]!.s);
+      continue;
+    }
+    // Score, weighted by how far round it is from the nearest square already chosen.
+    let best = -1, bestV = -1;
+    scored.forEach((o, i) => {
+      if (out.some((h) => samePt(h, o.s))) return;
+      const sep = Math.min(...out.map((h) => Math.abs(Math.atan2(Math.sin(angle(o.s) - angle(h)), Math.cos(angle(o.s) - angle(h))))));
+      const v = o.score * (sep / Math.PI);
+      if (v > bestV) [best, bestV] = [i, v];
+    });
+    if (best < 0) break;
+    out.push(scored[best]!.s);
+  }
+  homeCache.set(game, out);
+  return out.slice(0, n);
+}
+
+/**
+ * A co-op bot's move, or undefined to fall back on its usual play. Anchors hold their home
+ * square and pull in what comes into reach; fetchers leave a teammate's wisp alone and
+ * prefer pulls that land a wisp where a home square can bank it.
+ */
+function coopCommand(game: Game, me: Game["players"][number], team: Team, style: BotStyle, rand: () => number): Command | null | undefined {
+  const board = game.board, W = board.width;
+  const fixMode = me.mode !== "pull";
+  const live = (w: Wisp) => w.guild === me.guild && !board.inBankZone(w.pos);
+  const slot = team.bots.indexOf(me.id);
+  const home = team.homes[slot];
+  const bank = bankDistances(board);
+  // Wisps my teammates are working on (pulling, or walking to pull).
+  const claimed = new Set<number>();
+  for (const p of game.players)
+    if (p.id !== me.id && p.guild === me.guild && p.action.kind === "staff") claimed.add(p.action.wisp);
+
+  if (home) {
+    // Anchor. Pull in the wisp that banks soonest from here.
+    if (me.action.kind === "staff" && !fixMode) {
+      const w = game.wisps[me.action.wisp];
+      if (w && live(w) && !me.slipped && w.target && samePt(me.pos, home)) return null;
+    }
+    if (samePt(me.pos, home)) {
+      let pick: { id: number; score: number } | null = null;
+      for (const w of game.wisps) {
+        if (!live(w) || !game.inReach({ ...me, mode: "pull" }, w)) continue;
+        const { end, ticks } = simulatePull(board, me.pos, w.pos, 30, game.shrine.gimmicks);
+        const left = bank[end.y * W + end.x]!;
+        if (left >= bank[w.pos.y * W + w.pos.x]!) continue;
+        const score = left * 4 + ticks;
+        if (!pick || score < pick.score) pick = { id: w.id, score };
+      }
+      if (pick) return { action: { kind: "staff", wisp: pick.id }, toggleMode: fixMode || undefined };
+      // Nothing in reach: wait here if a fetcher is bringing one in or one is nearly in reach;
+      // otherwise go and get one like anyone would.
+      const incoming = game.wisps.some((w) => live(w) && claimed.has(w.id));
+      if (incoming && team.homes.length < team.bots.length) return fixMode ? { toggleMode: true } : me.action.kind === "idle" ? null : { action: { kind: "idle" } };
+      return undefined;
+    }
+    // Off the square: finish the wisp I went for, then head back when there's work there.
+    if (me.action.kind === "staff" && live(game.wisps[me.action.wisp]!)) return undefined;
+    if (me.action.kind === "walk" && samePt(me.action.to, home)) return null;
+    if (game.wisps.some((w) => live(w) && cheb(w.pos, home) <= PULL_REACH && !claimed.has(w.id))) return { action: { kind: "walk", to: home }, toggleMode: fixMode || undefined };
+    return undefined;
+  }
+
+  // Fetcher.
+  if (me.action.kind === "staff" && !fixMode) {
+    const w = game.wisps[me.action.wisp];
+    const stuck = me.beam === w?.id && w && samePt(w.prev, w.pos);
+    if (w && live(w) && !me.slipped && !stuck && (w.target || me.beam !== w.id)) return null;
+  }
+  if (rand() < style.sloppiness) return fixMode ? { toggleMode: true } : null;
+  // A wisp an anchor can already bank from its square is theirs.
+  const homes = team.homes.filter((h) => team.bots.some((id, i) => i < team.homes.length && samePt(game.players.find((p) => p.id === id)?.pos ?? pt(-1, -1), h)));
+  const anchorHas = (w: Wisp) => homes.some((h) => cheb(h, w.pos) <= PULL_REACH && board.canSee(h, w.pos) && board.inBankZone(simulatePull(board, h, w.pos, 30, game.shrine.gimmicks).end));
+  const targets = game.wisps.filter((w) => live(w) && !claimed.has(w.id) && !anchorHas(w));
+  let mine = fetching.get(game);
+  if (!mine) fetching.set(game, (mine = new Map()));
+  // Stick with the wisp I set out for while it's still mine to fetch.
+  let target = targets.find((w) => w.id === mine!.get(me.id));
+  if (!target) {
+    if (!targets.length) return undefined;
+    // Nearest to me: fetching is about getting there first.
+    target = targets.sort((a, b) => cheb(a.pos, me.pos) - cheb(b.pos, me.pos))[0]!;
+    mine.set(me.id, target.id);
+  }
+  const spot = feedSpot(game, me.pos, target, homes) ?? planSpot(game, me.id, me.pos, target, 0, false);
+  if (!spot) return { action: { kind: "staff", wisp: target.id }, toggleMode: fixMode || undefined };
+  if (!samePt(me.pos, spot)) {
+    if (me.action.kind === "walk" && samePt(me.action.to, spot)) return fixMode ? { toggleMode: true } : null;
+    return { action: { kind: "walk", to: spot }, toggleMode: fixMode || undefined };
+  }
+  return { action: { kind: "staff", wisp: target.id }, toggleMode: fixMode || undefined };
+}
+
+/**
+ * The best tile to pull this wisp from so it lands where a held home square can bank it in
+ * one pull, if that's quicker than taking it all the way in myself. Null if no such feed.
+ */
+/** Per game, the wisp each fetcher has set out for. */
+const fetching = new WeakMap<Game, Map<number, number>>();
+
+const feeds = new WeakMap<Game, Map<number, { key: string; spot: Pt | null }>>();
+
+function feedSpot(game: Game, me: Pt, wisp: Wisp, homes: Pt[]): Pt | null {
+  if (!homes.length) return null;
+  let cache = feeds.get(game);
+  if (!cache) feeds.set(game, (cache = new Map()));
+  const key = `${wisp.pos.x},${wisp.pos.y},${homes.map((h) => h.x + "," + h.y).join(";")}`;
+  const hit = cache.get(wisp.id);
+  if (hit && hit.key === key) return hit.spot;
+  const spot = findFeed(game, me, wisp, homes);
+  cache.set(wisp.id, { key, spot });
+  return spot;
+}
+
+function findFeed(game: Game, me: Pt, wisp: Wisp, homes: Pt[]): Pt | null {
+  const board = game.board, W = board.width;
+  const g = game.shrine.gimmicks;
+  let best: { s: Pt; cost: number } | null = null;
+  for (let dy = -PULL_REACH; dy <= PULL_REACH; dy++)
+    for (let dx = -PULL_REACH; dx <= PULL_REACH; dx++) {
+      const s = pt(wisp.pos.x + dx, wisp.pos.y + dy);
+      if (!board.inside(s) || (dx === 0 && dy === 0) || !board.passable(s, Mover.Walker) || board.tile(s) === Tile.Ice) continue;
+      if (!board.canSee(s, wisp.pos)) continue;
+      const walk = cheb(me, s);
+      if (walk > 12) continue;
+      const { end, ticks } = simulatePull(board, s, wisp.pos, 30, g);
+      if (board.inBankZone(end)) {
+        const cost = walk + ticks;
+        if (!best || cost < best.cost) best = { s, cost };
+        continue;
+      }
+      for (const h of homes) {
+        if (cheb(h, end) > PULL_REACH || !board.canSee(h, end)) continue;
+        const fin = simulatePull(board, h, end, 30, g);
+        if (!board.inBankZone(fin.end)) continue;
+        const cost = walk + ticks + fin.ticks;
+        if (!best || cost < best.cost) best = { s, cost };
+      }
+    }
+  return best?.s ?? null;
 }

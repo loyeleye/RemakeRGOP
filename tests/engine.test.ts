@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Board, Mover, Tile, pt } from "../src/engine/board.js";
 import { Game, ROUND_TICKS, flingOffset, type JoinSpec } from "../src/engine/game.js";
+import { BOT_HARD, botCommand } from "../src/engine/bot.js";
 import { SHRINES, ringWalls, SHRINE_DEFS, mirrorRows, buildShrine, shrineFor, type Shrine } from "../src/engine/maps.js";
 
 /** An empty 27x27 shrine with the given wisp spawns. */
@@ -618,5 +619,30 @@ describe("ice", () => {
     g.step();
     expect(p.pos).toEqual(pt(6, 5));
     expect(p.slid).toBe(false);
+  });
+});
+
+describe("co-op hard bots", () => {
+  const teamScore = (coop: boolean) => {
+    let seedR = 7;
+    const rand = () => (seedR = (seedR * 16807) % 2147483647) / 2147483647;
+    const roster: JoinSpec[] = [1, 2].map((id) => ({ id, guild: 0, name: "b" + id }));
+    let total = 0;
+    for (let seed = 1; seed <= 3; seed++) {
+      const g = new Game(shrineFor("fairy-ring", 2), roster, seed);
+      for (let t = 0; t < ROUND_TICKS; t++) {
+        for (const r of roster) {
+          const c = botCommand(g, r.id, { ...BOT_HARD, coop }, rand);
+          if (c) g.command(r.id, c);
+        }
+        g.step();
+      }
+      total += g.scores[0]!;
+    }
+    return total;
+  };
+
+  it("bank more as a pair than two hard bots each playing alone", () => {
+    expect(teamScore(true)).toBeGreaterThan(teamScore(false) * 1.3);
   });
 });

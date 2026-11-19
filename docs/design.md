@@ -73,6 +73,14 @@ bot gets about 30.
   that's about to bank, but half its decisions are Medium ones. It never taps: juggling
   several wisps with taps is a human-only trick.
 
+  With other Hard bots in its guild it plays as a team (only Hard bots do). Half of them,
+  rounded up, hold home squares: tiles in or by the court that the most spawns can be pulled
+  across the brazier from. A home-square bot pulls in whatever it can bank from there and waits
+  while a teammate is bringing one, and otherwise goes and fetches one itself. The rest fetch:
+  each sticks to one wisp nobody else is working on, and pulls it where a home square can
+  finish it if that's quicker. Two co-op Hard bots bank about 1.5 to 2 times what two solo Hard
+  bots do (e.g. Fairy Ring 21 to 39, Castle Rise 11 to 20).
+
 Alone over a round, Easy banks about 2 to 5 on the regular islands, Medium 7 to 12, Hard 9 to
 16. On Old Bastion and Sunwell Terrace, Easy banks about 1 and the others 2 to 5. A human who
 taps can beat Hard.
