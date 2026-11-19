@@ -303,6 +303,18 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
       if (Math.hypot(c.x - sx, c.y - sy) <= FOCUS_TAP_PX) return { action: { kind: "staff", wisp: f.id }, wisp: f.id };
     }
   }
+  // Big taps (O on a laptop): every wisp gets a finger-sized circle on screen, nearest wins.
+  if (bigTaps) {
+    let near: { id: number; d: number } | null = null;
+    for (const w of snap.wisps) {
+      const c = cam.toScreen(w.x + 0.5, w.y + 0.5, 0.75);
+      const d = Math.hypot(c.x - sx, c.y - sy);
+      const usable = p && (p.mode === "push" || w.guild === p.guild);
+      const score = d - (usable ? 6 : 0);
+      if (d <= bigTapRadius() && (!near || score < near.d)) near = { id: w.id, d: score };
+    }
+    if (near) return { action: { kind: "staff", wisp: near.id }, wisp: near.id };
+  }
   let best: { id: number; d: number } | null = null;
   for (const w of snap.wisps) {
     const d = Math.hypot(w.x + 0.5 - t.x, w.y + 0.5 - t.y);
@@ -321,6 +333,11 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
 
 /** Radius in CSS pixels of the focused wisp's tap target: a 56 px circle, above the 44-48 px minimum. */
 const FOCUS_TAP_PX = 28;
+
+/** Big taps: O switches every wisp to a large, ringed click target (and back). */
+let bigTaps = false;
+/** A big tap target's radius in CSS pixels: never under the focus target, and never smaller than a normal click. */
+const bigTapRadius = () => Math.max(FOCUS_TAP_PX, cam.scale * (cam.compact ? 1.3 : 0.9));
 
 const pointers = new Map<number, { x: number; y: number; sx: number; sy: number; t: number }>();
 let pinch: { d: number; scale: number } | null = null;
@@ -404,7 +421,10 @@ window.addEventListener("keydown", (e) => {
   if (room?.phase !== "playing" || (e.target as HTMLElement).tagName === "INPUT") return;
   const k = e.key.toLowerCase();
   if (k === "`") return void (toggleDebug(), e.preventDefault());
-  if (k === "q") act({ toggleMode: true });
+  if (k === "o") {
+    bigTaps = !bigTaps;
+    toast(bigTaps ? "Big taps on: every wisp has a larger target. O to turn off" : "Big taps off");
+  } else if (k === "q") act({ toggleMode: true });
   else if (k === "r") act({ toggleRun: true });
   else if (k === " " || k === "s") act({ action: { kind: "idle" } });
   else if (k === "c") cam.follow = true;
@@ -689,6 +709,7 @@ function frame(now: number) {
     g.stroke();
     g.restore();
   }
+  if (bigTaps) drawBigTaps(g, mine?.mode === "push", mine?.guild, lit, t, now);
   if (cam.compact) {
     const w = Math.min(120, cam.w * 0.3);
     minimapRect = { x: cam.w - w - 10, y: 64, w, h: w };
@@ -696,6 +717,28 @@ function frame(now: number) {
   }
 }
 requestAnimationFrame(frame);
+
+/** Big taps: a dashed ring around each wisp showing its click target. Ones your staff can work now are bright; the hovered one is solid. */
+function drawBigTaps(g: CanvasRenderingContext2D, push: boolean, guild: number | undefined, hover: number | null, t: number, now: number) {
+  if (!snap) return;
+  const r = bigTapRadius();
+  g.save();
+  g.lineWidth = 2;
+  for (const w of snap.wisps) {
+    const x = w.px + (w.x - w.px) * t + 0.5, y = w.py + (w.y - w.py) * t + 0.5;
+    const c = cam.toScreen(x, y, 0.75);
+    const usable = push || w.guild === guild;
+    const on = w.id === hover;
+    g.strokeStyle = push ? (usable ? "#ff8a8ad0" : "#ff8a8a50") : usable ? "#ffffffe0" : "#ffffff55";
+    g.lineWidth = on ? 3.5 : 2.5;
+    g.setLineDash(on ? [] : [5, 5]);
+    g.lineDashOffset = -now / 80;
+    g.beginPath();
+    g.arc(c.x, c.y, r, 0, Math.PI * 2);
+    g.stroke();
+  }
+  g.restore();
+}
 
 loadModels();
 render();
