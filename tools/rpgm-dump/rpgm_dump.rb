@@ -174,10 +174,21 @@ class TextCleaner
     m.empty? || m.casecmp?('normal') ? nil : m
   end
 
+  # \V[n] is a variable; with a letter (AMS-style message scripts) it is a database name.
+  def value_code(kind, id)
+    case kind.downcase
+    when 'i' then @db.item(id)
+    when 'w' then @db.weapon(id)
+    when 'a' then @db.armor(id)
+    when 's' then @db.skill(id)
+    else "[#{@db.var(id)}]"
+    end
+  end
+
   def clean(raw)
     t = utf8(raw)
     t = t.gsub(/\\[Nn]\[(\d+)\]/) { @db.actor(Regexp.last_match(1).to_i) }
-    t = t.gsub(/\\[Vv]\[[A-Za-z]?(\d+)\]/) { "[#{@db.var(Regexp.last_match(1).to_i)}]" }
+    t = t.gsub(/\\[Vv]\[([IiWwAaSs]?)(\d+)\]/) { value_code(Regexp.last_match(1), Regexp.last_match(2).to_i) }
     t = t.gsub(/\\[Mm]\[(\d+)\]/) { @db.enemy(Regexp.last_match(1).to_i) }
     t = t.gsub(/\\[Cc]lass\[(\d+)\]/, '[class]')
     t = t.gsub(/\\[Mm]ap\b/, '[map name]')
@@ -333,11 +344,16 @@ class StoryWriter
   include RpgmDump
   TRIGGERS = ['action button', 'player touch', 'event touch', 'autorun', 'parallel'].freeze
 
+  # One event page that moves the story: a cutscene (autorun/parallel) or a page that sets a switch ON.
+  Beat = Struct.new(:where, :region, :needs, :sets, :lines)
+  attr_reader :beats
+
   def initialize(db, renderer, flags, out)
     @db = db
     @r = renderer
     @flags = flags
     @out = out
+    @beats = []
   end
 
   def run
@@ -346,6 +362,7 @@ class StoryWriter
     regions.each_with_index do |(root, ids), n|
       full = []
       dial = []
+      @region = @db.map_name(root)
       ids.each { |mid| map_section(mid, full, dial) }
       next if full.empty?
 
@@ -428,7 +445,8 @@ class StoryWriter
         mfull << '```' << indent(lines) << '```' << ''
         next unless lines.any? { |l| l.dialogue && l.text.start_with?('💬', '❓') }
 
-        mdial << "**#{ev_name}#{tag}**#{conds.empty? ? '' : " · needs #{conds.join(' & ')}"}"
+        note_beat(pg, where, lines)
+        mdial << "**#{ev_name}#{tag}**"#{conds.empty? ? '' : " · needs #{conds.join(' & ')}"}"
         mdial.concat(indent(lines.select(&:dialogue))) << ''
       end
     end
@@ -438,6 +456,19 @@ class StoryWriter
     head = "## Map #{mid}: #{@db.map_name(mid)}#{crumb.empty? ? '' : " (in #{crumb.join(' › ')})"}"
     full.push(head, '', *mfull)
     dial.push(head, '', *mdial) unless mdial.empty?
+  end
+
+  def note_beat(page, where, lines)
+    sets = Array(iv(page, 'list')).flat_map do |c|
+      p = Array(iv(c, 'parameters'))
+      iv(c, 'code') == 121 && p[2].to_i.zero? ? (p[0]..p[1]).to_a : []
+    end
+    cutscene = iv(page, 'trigger').to_i >= 3
+    return if sets.empty? && !cutscene
+
+    c = iv(page, 'condition')
+    needs = c ? %w[switch1 switch2].select { |k| iv(c, "#{k}_valid") }.map { |k| iv(c, "#{k}_id") } : []
+    @beats << Beat.new(where, @region, needs, sets.uniq, lines.select(&:dialogue))
   end
 
   def page_conditions(page, where)
@@ -503,6 +534,41 @@ class StoryWriter
   end
 
   def indent(lines) = lines.map { |l| ('  ' * l.indent) + l.text }
+end
+
+# ---------------------------------------------------------------------------
+# timeline.md: the story pages in approximate play order.
+# Order key: the highest switch a page needs, then the lowest switch it sets. Most
+# developers add switches as they write the game, so switch numbers rise through
+# the story. This is a heuristic, so check flags.md when two scenes look swapped.
+# ---------------------------------------------------------------------------
+class TimelineWriter
+  include RpgmDump
+
+  def initialize(db, beats, out)
+    @db = db
+    @beats = beats
+    @out = out
+  end
+
+  def run
+    lines = ['# Story timeline (approximate)', '',
+             'Cutscenes and flag-setting scenes, sorted by the story flags they need and set (switch numbers',
+             'mostly rise through the story). Side chatter that changes no flag is left out: see dialogue/.',
+             'Each heading gives the needed flag → the flags set.', '']
+    sorted = @beats.each_with_index.sort_by do |b, i|
+      [b.needs.max || 0, b.sets.min || b.needs.max || 0, i]
+    end
+    sorted.each do |b, _|
+      need = b.needs.empty? ? 'start' : b.needs.map { |id| @db.sw(id) }.join(' & ')
+      set = b.sets.first(3).map { |id| @db.sw(id) }.join(', ')
+      set += ', …' if b.sets.size > 3
+      lines << "### #{b.where} [#{b.region}]" << "_#{need}#{set.empty? ? '' : " → #{set}"}_"
+      lines.concat(b.lines.map { |l| ('  ' * l.indent) + l.text }) << ''
+    end
+    File.write(File.join(@out, 'timeline.md'), lines.join("\n"))
+    @beats.size
+  end
 end
 
 # ---------------------------------------------------------------------------
@@ -763,7 +829,9 @@ if $PROGRAM_NAME == __FILE__
   db = Db.new(data_dir)
   flags = FlagIndex.new
   renderer = EventRenderer.new(db, TextCleaner.new(db), flags)
-  regions = StoryWriter.new(db, renderer, flags, out_dir).run
+  story = StoryWriter.new(db, renderer, flags, out_dir)
+  regions = story.run
+  beats = TimelineWriter.new(db, story.beats, out_dir).run
   FlagWriter.new(db, flags, out_dir).run
   mechanics = MechanicsWriter.new(db, out_dir).run
   scripts = ScriptWriter.new(db, out_dir).run
@@ -773,7 +841,8 @@ if $PROGRAM_NAME == __FILE__
   idx = ["# #{title}: game dump", '',
          "Made by `tools/rpgm-dump/rpgm_dump.rb` from #{maps_on_disk} map files (#{db.ext}).", '',
          'Start with the **dialogue/** file for a region to follow the plot; open the same file in **story/**',
-         'for the full event logic (branches, flags, transfers). **flags.md** shows the order beats unlock in.', '',
+         'for the full event logic (branches, flags, transfers). **timeline.md** lists the story scenes in rough',
+         "play order (#{beats} scenes), and **flags.md** shows what unlocks what.", '',
          'Legend: 💬 line of dialogue (Speaker (mood): text) · ❓ choice · → branch · ⚑ story flag ·',
          '🚪 map transfer · ⚔ battle · 👥 party change · ▶ shared scene (common event).', '',
          '## Story by region', '', '| File | Region | Maps | Dialogue words |', '|---|---|---|---|']

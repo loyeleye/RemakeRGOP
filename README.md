@@ -61,6 +61,13 @@ npm test          # engine + room tests
 npm run typecheck
 ```
 
+## Quintessence reference
+
+[docs/quintessence/](docs/quintessence/HANDOFF.md) holds a story-beats and mechanics summary of the RPG Maker
+game *Quintessence*, written in our own words from a dump made with `tools/rpgm-dump`. Start with
+[HANDOFF.md](docs/quintessence/HANDOFF.md). Like the GOP research, it is for study only, and the raw dump stays
+out of git.
+
 ## Great Orb Project knowledge base
 
 The research behind the rules lives in [docs/gop-knowledge-base.md](docs/gop-knowledge-base.md):

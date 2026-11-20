@@ -27,6 +27,7 @@ your machine and is never committed. Run the tool again on new data, for example
 | `README.md` | Index: every region with its map count and dialogue word count, plus links to the rest. Start here. |
 | `dialogue/NN-region.md` | Only the story: lines as `Speaker (mood): text`, choices and their branches, party changes, battles, transfers. Each event page is tagged with the flags it needs. |
 | `story/NN-region.md` | The same events in full: branches, flag changes, item and gold changes, common-event calls, script calls and developer comments. |
+| `timeline.md` | Story scenes (cutscenes and flag-setting pages) in rough play order, sorted by the switches they need and set. Side chatter is left out. |
 | `flags.md` | Every switch and variable, with where it is set and which pages need or check it. Follow it to put the beats in order. |
 | `mechanics/*.md` | Actors (stats by level), classes (skills learned), skills, items, weapons, armors, enemies (stats, actions, weaknesses), states, troops and system terms. IDs are replaced with names, and default values are left out. |
 | `scripts/` | Each Ruby script as a `.rb` file, plus `README.md`, which marks the scripts that are not stock RPG Maker XP. Custom systems live there. |
@@ -37,6 +38,9 @@ Lines in brackets, `[ like this ]`, are a character's inner thoughts. Speaker na
 is how the game itself labels that speaker.
 
 ## Using it with Claude
+
+For Quintessence, the committed summaries and the full handoff are in
+[docs/quintessence/](../../docs/quintessence/HANDOFF.md).
 
 Point Claude at `reference/<game>/README.md` first. Then load one `dialogue/` file at a time: the full
 Quintessence dump is too long to read in one pass. For a mechanic, read the matching `mechanics/` file. If the
