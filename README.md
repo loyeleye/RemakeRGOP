@@ -54,11 +54,19 @@ setup locally.
 | `public/models/`, `public/textures/` | 3D models and floor textures generated with Sogni (see [CREDITS.md](CREDITS.md)). `tools/models.sh` and `tools/textures.py` rebuild them from the raw renders. |
 | `tests/` | Vitest: engine rules, shrines, room flow, and bot rounds on every shrine. |
 | `tools/smoke.cjs` | Playwright smoke test: a desktop player and a phone player in one room. |
+| `tools/rpgm-dump/` | Dumps an RPG Maker XP/VX/Ace game's story, story flags, mechanics and scripts to Markdown in the git-ignored `reference/` folder, for study only. See its [README](tools/rpgm-dump/README.md). |
 
 ```bash
 npm test          # engine + room tests
 npm run typecheck
 ```
+
+## Quintessence reference
+
+[docs/quintessence/](docs/quintessence/HANDOFF.md) holds a story-beats and mechanics summary of the RPG Maker
+game *Quintessence*, written in our own words from a dump made with `tools/rpgm-dump`. Start with
+[HANDOFF.md](docs/quintessence/HANDOFF.md). Like the GOP research, it is for study only, and the raw dump stays
+out of git.
 
 ## Great Orb Project knowledge base
 
