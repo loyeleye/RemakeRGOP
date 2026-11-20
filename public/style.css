@@ -78,6 +78,8 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 .pad { display: grid; grid-template-columns: auto auto; gap: 10px; align-items: end; justify-items: end; pointer-events: none; }
 .pad > * { pointer-events: auto; }
 .touch .thumb { width: 64px; height: 64px; border-radius: 50%; font-size: 14px; }
+.touch .thumb.off { opacity: 0.55; border-style: dashed; text-decoration: line-through; }
+#next { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 .touch .thumb.staff { width: 92px; height: 92px; font-size: 17px; font-weight: 700; border-color: var(--dawn); color: var(--dawn); }
 .touch .thumb.staff.push { border-color: #ff7070; color: #ff8a8a; }
 .touch .thumb.staff.far { opacity: 0.6; }
@@ -101,3 +103,17 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 .grow { flex: 1; }
 .check { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 14px; }
 .check input { width: auto; min-height: 0; }
+
+/* Debug overlay (toggle with the backtick key). */
+#debug { position: fixed; top: 56px; left: 8px; width: min(520px, calc(100vw - 16px)); max-height: calc(100vh - 180px); display: flex; flex-direction: column; background: #0b0a10e6; color: #d8e6d0; border: 1px solid #ffffff33; border-radius: 8px; font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; z-index: 20; pointer-events: auto; }
+#debug[hidden] { display: none; }
+#debug .debug-head { padding: 6px 10px; font-weight: 700; border-bottom: 1px solid #ffffff22; }
+#debug .debug-head span { font-weight: 400; opacity: 0.6; }
+#debug pre { margin: 0; padding: 6px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+#debug-state { border-bottom: 1px solid #ffffff22; }
+#debug-log { overflow-y: auto; flex: 1; min-height: 80px; max-height: 40vh; color: #b9c4b2; }
+.guild li .bot-set { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 2px 0 0 16px; font-size: 0.85em; opacity: 0.85; }
+.guild li .bot-set select { width: auto; min-height: 32px; padding: 2px 6px; border-radius: 8px; }
+.guild li .bot-coop input { width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; }
+.guild li .bot-coop { display: inline-flex; gap: 4px; white-space: nowrap; align-items: center; cursor: pointer; }
+.guild li .bot-coop.off { opacity: 0.45; cursor: not-allowed; }

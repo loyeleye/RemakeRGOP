@@ -73,6 +73,34 @@ bot gets about 30.
   that's about to bank, but half its decisions are Medium ones. It never taps: juggling
   several wisps with taps is a human-only trick.
 
+  With other Hard bots in its guild it plays as a team (only Hard bots do). Half of them,
+  rounded up, hold home squares: tiles in or by the court that the most spawns can be pulled
+  across the brazier from. A home-square bot pulls in whatever it can bank from there and waits
+  while a teammate is bringing one, and otherwise goes and fetches one itself. The rest fetch:
+  each sticks to one wisp nobody else is working on, and pulls it where a home square can
+  finish it if that's quicker. Like the rest of Hard's judgment the teamwork lapses: 70% of
+  its decisions are solo ones. That leaves a pair of Hard bots banking about 1.25 times what
+  two solo Hard bots do (with no lapses it was about 1.8 times).
+
+  A team of two coords by halves on the smaller shrines, like pairs do in the orb game: each
+  stands just off the brazier on its own side, level with the middle (east-west, or
+  north-south turned a quarter), and banks from there. At the start the bot heads straight
+  for the far side, across the brazier from where its guild starts (split along whichever
+  axis its partner is further out on).
+  The split goes by who can bank a wisp without moving, not a straight line: a wisp only one
+  spot can bank belongs to that player, even if it's a little over the middle. A wisp both
+  can bank goes to whoever's half it's on. A wisp neither spot can bank is fetched by
+  whoever's half it's on: they step out (a tile or two inside the court often does it, or
+  further) and pull it in until one of the spots can bank it, then go back to their spot.
+  The bot only takes a wisp that's its partner's if the partner is away and can't reach it.
+  If its partner (a person) lingers (5 ticks) somewhere that calls for a different split, on
+  its half, or clearly out to the north or south when they're splitting east-west (or the
+  other way round), it adapts and takes the half opposite them. Two bots just split
+  east-west and keep to it.
+  On the big shrines (Old Bastion, Sunwell Terrace), where wisps appear far out, it uses home
+  squares and fetching instead. A Hard bot teamed with a person never lapses out of teamwork,
+  and it never goes after a wisp a teammate is pulling.
+
 Alone over a round, Easy banks about 2 to 5 on the regular islands, Medium 7 to 12, Hard 9 to
 16. On Old Bastion and Sunwell Terrace, Easy banks about 1 and the others 2 to 5. A human who
 taps can beat Hard.
@@ -94,11 +122,56 @@ human are 42 to 44 on small altars; a human who learns the angles should beat th
 | Pool `~` | ✗ | ✓ | ✓ |
 | Brazier (3×3) | ✗ | ✓ | ✓ |
 | Open sky (past the island's edge) | ✗ | ✗ | ✓ |
-| Ice `*` | slides | ✓ | ✓ |
+| Ice `*` | slides | skates | ✓ |
+| Rime `%` | ✓ | skates | ✓ |
+| Crystal mirror `/` `\` | ✗ | turned | ✓ |
 
-**Ice.** A lamplighter who starts a tick on ice slides one tile the way they last stepped, and
-that slide is their whole tick. They keep sliding until they leave the ice or something blocks
-them, then their order carries on. Wisps float over ice as if it were floor.
+**Ice.** A lamplighter who steps onto ice loses their footing: each tick they slide one tile the
+way they were going, glancing off things like a wisp, until something stops them or they're off
+the ice; then their order carries on. Paths plan for it: a step onto ice counts as the whole slide.
+
+**Skating (experimental).** A pull beats the ice: while a staff is on a wisp it goes where it's
+pulled, ice or not. The tick nobody touches a wisp on ice, it skates on the way it last moved,
+glancing off scenery, until it leaves the ice or stops. Rime (unused for now) is frosted ice that
+boots grip, so it only affects wisps.
+
+**Crystal mirrors (experimental).** A thin mirror on its tile's diagonal. A wisp that would step
+into one is turned off the mirror (heading east into `\` turns south), takes its first step the
+new way, and flies straight on for up to 8 tiles (or until something stops it or it reaches the
+rim); every staff on it lets go.
+
+**Team pull (experimental).** When teammates pull the same wisp on the same tick, it heads for
+the average of their positions, at the normal speed. A teammate who loses reach or sight walks to
+get it back as usual, and drops out of the average until they touch it again.
+
+## Shrine gimmicks (experimental)
+
+| Shrine | Gimmick |
+|---|---|
+| Tidepool Steps | A third of wisps appear far out (11 to 15 tiles) and some appear right on the pools. Big tide pools sit on the way in at the corners and outside each wall, and each wall has a 3-tile gate in the middle as well as the open corners. The tide turns every 20 ticks (the HUD shows which way and how long). While it comes in, a loose wisp on a pool drifts a tile a tick toward the brazier; while it goes out, away. |
+| Blossom Garden | Petal paths (`+`) out from each gate and corner: a wisp crossing one moves 2 tiles a tick. |
+| Night Glade | Half the wisps appear far out (10 to 14 tiles from the brazier). Linked moon ponds: a wisp that flies into one comes out of its twin across the brazier, still heading the same way, flies 3 tiles on and is let go. |
+| Cascade Falls | The stream runs clockwise round the brazier: a loose wisp on water drifts a tile a tick along it. |
+| Ember Quarry | Vents (`^`) in a pinwheel on each arm erupt every 5 ticks: a wisp sitting on one is thrown 6 tiles toward the brazier, out of every staff's grip. |
+| Castle Rise | Portcullises (`=`) in the east and west archways open for 10 ticks, then those shut and the north and south ones open. A shut portcullis is a wall. |
+| Misty Stones | Four mist banks drift round the brazier (a lap every 150 ticks). You can't see a wisp through or inside one from more than 2 tiles off, so you can't reach it. Walkers and wisps pass through. |
+| Moss Hollow | Moss (`&`) holds wisps back like a boulder, but you walk through it. Each fresh tap on a wisp it's holding back tears at the tuft in the way; the second tap clears it. Every 6 ticks moss spreads or takes root somewhere out in the field (the same on every side), up to 64 tufts. |
+| Old Bastion | Each closed corner of the gatehouse has a shortcut gate (`=`) that opens while someone stands on that quarter's pressure plate (`_`). The middle arches are always open, so you never need a plate to score. |
+| Sunwell Terrace | Bands of sun glyphs cross the arms every 10 wisp moves from 20 out. A wisp left resting on one is relayed 8 tiles in, two a tick, the short way toward the brazier. |
+
+## Glancing angles (experimental)
+
+In the Great Orb Project about 3 in 4 scoring pulls from a home square bounce off scenery on the
+way in (Air, Fire, Body and Water measured with `tools/gop_engine.py`); on our open archways it
+was about 1 in 4 to 1 in 3. Three shrines try a different fix each:
+
+| Shrine | Mechanic | Shots that glance | Home-square coverage |
+|---|---|---|---|
+| Fairy Ring | toadstool deflectors on the court diagonals (3, 3), posts beside each gate | 59% | 100% |
+| Crystal Spire | 8 crystal mirrors out among the spawns at (7, 2), angled to send a wisp in through a gate: 77% of spawns can be banked with a mirror shot from somewhere | 40% | 71% |
+| Glacier | a round sheet of ice round the rim (radius 4.6; the court's corners stay dry). Let go of a wisp on it and it skates; step on it and so do you | - | - |
+
+Glacier also sends 1 wisp in 5 to a farther band (10 to 14 tiles out).
 
 ## Islands
 

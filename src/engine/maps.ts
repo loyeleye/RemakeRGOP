@@ -28,6 +28,34 @@ export interface ShrineDef {
    * tiles), shared by all guilds and picked at random. Default SPAWN_BAND.
    */
   spawnBand?: [number, number];
+  /** The shrine's own trick, if any. */
+  gimmicks?: Gimmicks;
+  /** A share of wisps (0..1) that appear in a second, farther band instead. */
+  farSpawns?: { band: [number, number]; share: number };
+  /** A share of wisps appear on pools in this band instead (of those not sent far out). */
+  poolSpawns?: { band: [number, number]; share: number };
+}
+
+export interface Gimmicks {
+  /**
+   * The tide turns every this many ticks: while it comes in, a loose wisp on a pool drifts a
+   * tile a tick toward the brazier; while it goes out, away from it.
+   */
+  tide?: number;
+  /** Pools are linked moon ponds: a wisp flying into one comes out of its mirror image across the brazier. */
+  ponds?: boolean;
+  /** Pools are streams running clockwise round the brazier: a loose wisp on one is carried a tile a tick. */
+  current?: "swirl";
+  /** Vents erupt every this many ticks, flinging a wisp on one up to 6 tiles toward the brazier. */
+  vents?: number;
+  /** Portcullises change every this many ticks: east and west gates open while north and south are shut, then the other way. */
+  portcullis?: number;
+  /** Mist banks drift round the brazier, hiding wisps behind and inside them from sight. */
+  mist?: boolean;
+  /** Pressure plates (`_`): someone standing on one opens the shortcut gates (`=`) in its quarter. */
+  plates?: boolean;
+  /** Sun glyph bands every this many wisp moves out along the way in; a wisp left on one is relayed this many tiles less 2. */
+  glyphs?: number;
 }
 
 /** Default spawn band: from just past the archways to a couple of pulls out. */
@@ -180,13 +208,64 @@ export const MAP_SCALE = 1.5;
  *              so no gap lines up with the one across the brazier
  *   colonnade  a pillar on every other tile: lots of 1-wide gaps, but a wisp can't cut
  *              diagonally between two pillars
+ *   posts      one post each side of a narrow middle gate; everything else open
  */
-export type RingStyle = "gates" | "open" | "diagonals" | "pillared" | "pinwheel" | "colonnade";
+export type RingStyle = "gates" | "open" | "diagonals" | "pillared" | "pinwheel" | "colonnade" | "posts";
 
 export interface Ring {
   /** Chebyshev distance of the pillars from the centre tile. */
   radius: number;
   style: RingStyle;
+  /**
+   * Deflector stones on the four diagonals at this distance from the centre, inside the ring.
+   * They stop wisps and walkers but not sight, so a wisp flung at a corner of the rim glances
+   * off one and slides in: most good angles are bank shots off a stone.
+   */
+  stones?: number;
+  /** A round sheet of ice round the rim, out to this radius (the court's corners stay dry). */
+  ice?: number;
+  /**
+   * Crystals in the court, given in one eighth and copied to all eight symmetric places. A
+   * crystal is a thin mirror on its tile's diagonal ("/" or "\\" as drawn, north up): it blocks
+   * walking and wisps but not sight, and a wisp that flies into it is turned off the mirror.
+   */
+  crystals?: { x: number; y: number; o: "/" | "\\" }[];
+  /** Other tiles (by map character), given in one eighth and copied to all eight symmetric places. */
+  marks?: { x: number; y: number; c: string; turns?: boolean }[];
+}
+
+/** Every court feature of a ring as offset -> map character. */
+export function courtFeatures(ring: Ring): Map<string, string> {
+  const out = new Map<string, string>();
+  if (ring.ice) {
+    const r = ring.ice, R = Math.ceil(r);
+    for (let dy = -R; dy <= R; dy++)
+      for (let dx = -R; dx <= R; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) > 2 && Math.hypot(dx, dy) <= r) out.set(`${dx},${dy}`, "*");
+  }
+  if (ring.stones) for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) out.set(`${sx * ring.stones},${sy * ring.stones}`, "o");
+  for (const m of ring.marks ?? []) {
+    if (m.turns) {
+      // Only the four quarter turns (for pinwheel rings, which have no mirror symmetry).
+      let x = m.x, y = m.y;
+      for (let k = 0; k < 4; k++) {
+        out.set(`${x},${y}`, m.c);
+        [x, y] = [-y, x];
+      }
+      continue;
+    }
+    for (const [x, y] of [[m.x, m.y], [m.y, m.x]] as const)
+      for (const sx of [1, -1]) for (const sy of [1, -1]) out.set(`${x * sx},${y * sy}`, m.c);
+  }
+  for (const c of ring.crystals ?? [])
+    for (const swap of [false, true])
+      for (const sx of [1, -1])
+        for (const sy of [1, -1]) {
+          const x = (swap ? c.y : c.x) * sx, y = (swap ? c.x : c.y) * sy;
+          // A mirror flipped on one axis turns into the other diagonal; swapping x and y keeps it.
+          const o = sx * sy < 0 ? (c.o === "/" ? "\\" : "/") : c.o;
+          out.set(`${x},${y}`, o);
+        }
+  return out;
 }
 
 export const RING: Ring = { radius: 5, style: "gates" };
@@ -199,12 +278,16 @@ export const RING_NOTES: Record<RingStyle, string> = {
   pillared: "Archways: open corners, but a pillar stops straight diagonal shots.",
   pinwheel: "Archways: every gate is off-centre, so nothing lines up across the brazier.",
   colonnade: "Archways: a pillar on every other tile. Lots of narrow ways in.",
+  posts: "Archways: a post each side of every gate, wide open corners.",
 };
 
 /** The lobby line for a shrine's archways (outer ring first when there are two). */
 export function ringNote(rings: Ring[]): string {
   if (rings.length > 1) return "Two rings of archways: in through a gate, round the court, in at a corner. Very hard to score.";
-  return rings[0] ? RING_NOTES[rings[0].style] : "";
+  if (!rings[0]) return "";
+  const r = rings[0];
+  const extra = r.stones ? " Stones by the brazier turn wisps in off the corners." : r.crystals ? " Pull a wisp into a crystal mirror and it flies off at right angles, straight on." : r.ice ? " The brazier stands on a round sheet of ice: let go of a wisp on it and it skates on; step on it and so do you." : "";
+  return RING_NOTES[r.style] + extra;
 }
 
 /** Is tile t along a side (t from -R to R, centre 0) a pillar? */
@@ -223,6 +306,8 @@ function ringPillar(style: RingStyle, R: number, t: number): boolean {
       return t < 1 || t > 3;
     case "colonnade":
       return a >= 2 && a % 2 === 0;
+    case "posts":
+      return a === 1;
   }
 }
 
@@ -257,6 +342,12 @@ export interface Shrine {
   wispSpawns: Pt[][];
   /** Where wisps appear, shared by every guild. */
   spawnField: Pt[];
+  /** A farther-out field that a share of wisps appear in instead (empty for none). */
+  farField: Pt[];
+  farShare: number;
+  /** Pool tiles that a share of wisps appear on instead (empty for none). */
+  poolField: Pt[];
+  poolShare: number;
   starts: Pt[][];
   /** The archway rings round the brazier, innermost first. */
   rings: Ring[];
@@ -266,6 +357,7 @@ export interface Shrine {
   coast: ((dx: number, dy: number) => number) | null;
   /** True when the island has arms, so its outline isn't one radius per angle. */
   arms: boolean;
+  gimmicks: Gimmicks;
   /** The island's shape in played tiles (scaled), or null. */
   isle: IsleShape | null;
 }
@@ -295,7 +387,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     name: "Moss Hollow",
     blurb: "A round glade. A few boulders, a pond, long sight lines.",
     isle: { radius: 13.5, squareness: 2.2, coves: 0.12, heads: 0.1, seed: 7 },
-    rings: [{ radius: 5, style: "colonnade" }],
+    rings: [{ radius: 5, style: "colonnade", marks: [{ x: 8, y: 3, c: "&" }, { x: 8, y: 4, c: "&" }, { x: 7, y: 7, c: "&" }] }],
     rows: [
       "                                     ",
       "                                     ",
@@ -321,9 +413,12 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "tidepool-steps",
     name: "Tidepool Steps",
-    blurb: "A wide lagoon atoll dotted with pools. Wisps drift over; you can't wade.",
+    blurb: "A wide lagoon atoll with big tide pools on the way in. Wisps drift over; you can't wade. The tide turns every 20 ticks: a loose wisp on a pool drifts in toward the brazier, then out again.",
     isle: { radius: 12.5, squareness: 2.4, coves: 0.14, heads: 0.08, seed: 11, stretch: [1.35, 0.8] },
-    rings: [{ radius: 5, style: "diagonals" }],
+    rings: [{ radius: 5, style: "open" }],
+    gimmicks: { tide: 20 },
+    farSpawns: { band: [11, 15], share: 1 / 3 },
+    poolSpawns: { band: [5, 15], share: 0.4 },
     rows: [
       "                                     ",
       "                                     ",
@@ -336,22 +431,23 @@ export const SHRINE_DEFS: ShrineDef[] = [
       "                                     ",
       "          .........  .....           ",
       "         ..................          ",
-      "        .......~~.......b.....       ",
-      "       ..o...a.......~~........      ",
-      "    ......~~......o..~~.........     ",
-      "  ....a...~~...............~~.b..    ",
-      "  ...~~.................o..~~....    ",
-      " ....~~.....~~.................~~.   ",
-      "  ..1...........................2..  ",
+      "        ..........~.....b.....       ",
+      "       ..o...a...~~~...........      ",
+      "    .........~~..~o~..~~........     ",
+      "  ....a.....~~~~..~..~~~~.....b..    ",
+      "  ...........~~.......~~o........    ",
+      " ......~~~.................~~~....   ",
+      "  ..1..~~~.................~~~..2..  ",
       "  .................",
     ],
   },
   {
     id: "ember-quarry",
     name: "Ember Quarry",
-    blurb: "Two halves of a broken mountain, joined only at the brazier. Basalt pillars break sight.",
+    blurb: "Two halves of a broken mountain, joined only at the brazier. Basalt pillars break sight. Ember vents erupt every 5 ticks, flinging a wisp on one toward the brazier.",
     isle: { radius: 13, squareness: 2.6, coves: 0.1, heads: 0.08, seed: 7, turn: Math.PI / 4, waves: [[2, 0.42, 0]] },
-    rings: [{ radius: 5, style: "pinwheel" }],
+    rings: [{ radius: 5, style: "pinwheel", marks: [{ x: 7, y: 3, c: "^", turns: true }, { x: 8, y: 5, c: "^", turns: true }] }],
+    gimmicks: { vents: 5 },
     rows: [
       "                                     ",
       "                                     ",
@@ -377,9 +473,9 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "crystal-spire",
     name: "Crystal Spire",
-    blurb: "A six-pointed star. Crystal clusters guard the points; sight runs down the arms.",
+    blurb: "A six-pointed star. Crystal clusters guard the points; sight runs down the arms. Crystal mirrors out among the spawns turn a wisp at right angles and send it flying straight on.",
     isle: { radius: 12.2, squareness: 2, coves: 0.06, heads: 0.06, seed: 9, waves: [[6, 0.3, 0]] },
-    rings: [{ radius: 5, style: "open" }],
+    rings: [{ radius: 5, style: "open", crystals: [{ x: 7, y: 2, o: "/" }] }],
     rows: [
       "                                     ",
       "                                     ",
@@ -405,9 +501,10 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "cascade-falls",
     name: "Cascade Falls",
-    blurb: "A long island cut by two streams. Wisps float over; you need the fords.",
+    blurb: "A long island cut by two streams. Wisps float over; you need the fords. The streams run clockwise round the island, carrying a loose wisp a tile a tick.",
     isle: { radius: 12.5, squareness: 2.8, coves: 0.1, heads: 0.08, seed: 2, stretch: [0.8, 1.3] },
-    rings: [{ radius: 5, style: "diagonals" }],
+    rings: [{ radius: 5, style: "open" }],
+    gimmicks: { current: "swirl" },
     rows: [
       "                                     ",
       "                                     ",
@@ -436,6 +533,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     blurb: "A cross of four causeways. Standing stones in still pools; reach over them, walk round.",
     isle: { radius: 11.5, squareness: 2.6, coves: 0.05, heads: 0.05, seed: 5, waves: [[4, 0.42, 0]] },
     rings: [{ radius: 5, style: "pillared" }],
+    gimmicks: { mist: true },
     rows: [
       "                                     ",
       "                                     ",
@@ -461,9 +559,10 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "blossom-garden",
     name: "Blossom Garden",
-    blurb: "A four-petal flower. Flower beds you can reach across but not walk through.",
+    blurb: "A four-petal flower. Flower beds you can reach across but not walk through, and petal paths that hurry a wisp along at 2 tiles a tick.",
     isle: { radius: 12, squareness: 2, coves: 0.05, heads: 0.05, seed: 5, waves: [[4, 0.32, Math.PI]] },
-    rings: [{ radius: 5, style: "open" }],
+    rings: [{ radius: 5, style: "open", marks: [{ x: 6, y: 0, c: "+" }, { x: 7, y: 0, c: "+" }, { x: 8, y: 0, c: "+" }, { x: 6, y: 6, c: "+" }, { x: 7, y: 7, c: "+" }] }],
+    gimmicks: {},
     rows: [
       "                                     ",
       "                                     ",
@@ -491,7 +590,7 @@ export const SHRINE_DEFS: ShrineDef[] = [
     name: "Fairy Ring",
     blurb: "A small glade inside a ring of giant toadstools. Wisps appear close and the gates line up: the place to learn your angles and chase records.",
     isle: { radius: 12, squareness: 2, coves: 0.04, heads: 0.04, seed: 21 },
-    rings: [{ radius: 5, style: "open" }],
+    rings: [{ radius: 5, style: "posts", stones: 3 }],
     spawnBand: [6, 8],
     rows: [
       "                                     ",
@@ -518,9 +617,10 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "castle-rise",
     name: "Castle Rise",
-    blurb: "A walled square with corner bastions. Sight lines run through the gates.",
+    blurb: "A walled square with corner bastions. Portcullises in the gates rise and fall every 10 ticks: east and west, then north and south.",
     isle: { radius: 12, squareness: 7, coves: 0.03, heads: 0.03, seed: 3, waves: [[4, 0.13, Math.PI]] },
-    rings: [{ radius: 5, style: "pillared" }],
+    rings: [{ radius: 5, style: "pillared", marks: [{ x: 5, y: 0, c: "=" }, { x: 5, y: 1, c: "=" }] }],
+    gimmicks: { portcullis: 10 },
     rows: [
       "                                     ",
       "                                     ",
@@ -546,9 +646,11 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "night-glade",
     name: "Night Glade",
-    blurb: "A long moonlit ridge lying across the sky. Old trees and a glowing pond.",
+    blurb: "A long moonlit ridge lying across the sky. Old trees and two linked moon ponds: a wisp that flies into one comes out of the other, still going the same way.",
     isle: { radius: 14, squareness: 2.3, coves: 0.08, heads: 0.06, seed: 7, stretch: [1.3, 0.62], turn: -Math.PI / 6 },
     rings: [{ radius: 5, style: "pinwheel" }],
+    gimmicks: { ponds: true },
+    farSpawns: { band: [10, 14], share: 0.5 },
     rows: [
       "                                     ",
       "                                     ",
@@ -574,9 +676,10 @@ export const SHRINE_DEFS: ShrineDef[] = [
   {
     id: "glacier",
     name: "Glacier",
-    blurb: "A jagged ice floe. Ice patches slide you the way you're facing; ice spires block sight.",
+    blurb: "A jagged ice floe. Step on ice and you slide until something stops you or you're off it; let go of a wisp on ice and it skates on the same way. The brazier sits on a round sheet of ice.",
     isle: { radius: 13, squareness: 2.4, coves: 0.04, heads: 0.04, seed: 9, waves: [[10, 0.1, 0], [14, 0.06, 1]] },
-    rings: [{ radius: 5, style: "colonnade" }],
+    rings: [{ radius: 5, style: "open", ice: 4.6 }],
+    farSpawns: { band: [10, 14], share: 0.2 },
     rows: [
       "                                     ",
       "                                     ",
@@ -586,16 +689,16 @@ export const SHRINE_DEFS: ShrineDef[] = [
       "             ...    ...              ",
       "             ...#  ....              ",
       "             ..... .....             ",
-      "             .......***...           ",
-      "       .............***....  .       ",
-      "       ..a..***............b...      ",
+      "             .......****..           ",
+      "       .............****...  .       ",
+      "       ..a..****....****...b...      ",
       "       .....***a.....b.........      ",
-      "      ....#............***#....      ",
-      "       .........**.....***....       ",
-      "       ..**..................        ",
-      "       ..**...........#.....         ",
-      "       ...................**...      ",
-      "      .......#............**..2..    ",
+      "      ....#.****.......***#....      ",
+      "       .........***....****...       ",
+      "       ..***....***....****..        ",
+      "       ..***..........#.....         ",
+      "       ..***..............***..      ",
+      "      .......#............***.2..    ",
       "    ..1............",
     ],
   },
@@ -604,7 +707,10 @@ export const SHRINE_DEFS: ShrineDef[] = [
     name: "Old Bastion",
     blurb: "A huge ruined fortress. Broken walls everywhere and a tight gatehouse round the brazier: every wisp is hard won.",
     isle: { radius: 21, squareness: 3.2, coves: 0.06, heads: 0.05, seed: 4, waves: [[4, 0.06, Math.PI]] },
-    rings: [{ radius: 6, style: "gates" }],
+    // Shortcut gates in the closed corners: shut unless someone holds that quarter's plate.
+    // The middle arches are always open, so a lone lamplighter can still score.
+    rings: [{ radius: 6, style: "gates", marks: [{ x: 6, y: 6, c: "=" }, { x: 6, y: 5, c: "=" }, { x: 9, y: 9, c: "_" }] }],
+    gimmicks: { plates: true },
     spawnBand: [14, 30],
     rows: [
       "                                                         ",
@@ -661,7 +767,8 @@ export const SHRINE_DEFS: ShrineDef[] = [
         { a: 4, ta: 0.92, b: 0, tb: 0.42, bend: 3, width: 1.3, clutter: 1.2 },
       ],
     },
-    rings: [{ radius: 5, style: "diagonals" }, { radius: 9, style: "gates" }],
+    rings: [{ radius: 5, style: "posts" }, { radius: 9, style: "open" }],
+    gimmicks: { glyphs: 10 },
     spawnBand: [16, 90],
     rows: [
       "                                   ",
@@ -693,6 +800,14 @@ const TILE_OF: Record<string, Tile> = {
   o: Tile.Rock,
   "~": Tile.Water,
   B: Tile.Brazier,
+  "%": Tile.Rime,
+  "+": Tile.Bloom,
+  "^": Tile.Vent,
+  "=": Tile.Gate,
+  "&": Tile.Moss,
+  _: Tile.Plate,
+  "/": Tile.CrystalA,
+  "\\": Tile.CrystalB,
 };
 
 const SWAP: Record<string, string> = { a: "b", b: "a", "1": "2", "2": "1" };
@@ -744,14 +859,20 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   const board = new Board(width, height, tiles);
   for (let dy = -1; dy <= 1; dy++)
     for (let dx = -1; dx <= 1; dx++) tiles[(board.center.y + dy) * width + board.center.x + dx] = Tile.Brazier;
-  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null };
+  const every = def.gimmicks?.glyphs;
+  if (every) {
+    // Sun glyphs: a band across the way in at every `every` moves, starting two bands out.
+    const d = board.bankFlow();
+    for (let i = 0; i < tiles.length; i++) if (tiles[i] === Tile.Floor && d[i]! >= 2 * every && d[i]! % every === 0) tiles[i] = Tile.Glyph;
+  }
+  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0, poolField: def.poolSpawns ? spawnField(board, def.poolSpawns.band, Tile.Water) : [], poolShare: def.poolSpawns?.share ?? 0 };
 }
 
 /**
  * The floor tiles in the band that a wisp could be pulled from into the brazier zone. The
  * board is symmetric, so the field is too, and every guild draws from the same field.
  */
-export function spawnField(board: Board, [lo, hi]: [number, number]): Pt[] {
+export function spawnField(board: Board, [lo, hi]: [number, number], kind: Tile = Tile.Floor): Pt[] {
   const W = board.width, H = board.height, c = board.center;
   // Tiles a wisp can travel from to reach the zone.
   const ok = new Uint8Array(W * H);
@@ -775,7 +896,7 @@ export function spawnField(board: Board, [lo, hi]: [number, number]): Pt[] {
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const r = Math.hypot(x - c.x, y - c.y);
-      if (r >= lo && r <= hi && ok[y * W + x] && board.tile(pt(x, y)) === Tile.Floor) out.push(pt(x, y));
+      if (r >= lo && r <= hi && ok[y * W + x] && board.tile(pt(x, y)) === kind) out.push(pt(x, y));
     }
   return out;
 }
@@ -836,11 +957,18 @@ export function addRings(rows: string[], rings: Ring[]): string[] {
   const g = rows.map((r) => [...r]);
   const walls = new Set(rings.flatMap(ringWalls).map((p) => `${p.x},${p.y}`));
   const outer = Math.max(...rings.map((r) => r.radius));
+  const court = new Map(rings.flatMap((r) => [...courtFeatures(r)]));
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const dx = x - cx, dy = y - cy;
       const d = Math.max(Math.abs(dx), Math.abs(dy));
-      if (d > outer + 1 || g[y]![x] === " ") continue;
+      if (g[y]![x] === " ") continue;
+      if (d > outer + 1) {
+        // Features out past the archways sit on whatever ground is there (spawns move aside).
+        const f = court.get(`${dx},${dy}`);
+        if (f && g[y]![x] !== "#") g[y]![x] = f;
+        continue;
+      }
       const ch = g[y]![x]!;
       if ("abcd1234".includes(ch)) {
         for (let k = outer + 2; ; k++) {
@@ -852,7 +980,8 @@ export function addRings(rows: string[], rings: Ring[]): string[] {
           }
         }
       }
-      g[y]![x] = walls.has(`${dx},${dy}`) ? "#" : d <= 1 ? "B" : ".";
+      // A gate mark can stand in the ring's own wall line (it's a wall whenever it's shut).
+      g[y]![x] = court.get(`${dx},${dy}`) === "=" ? "=" : walls.has(`${dx},${dy}`) ? "#" : d > 2 && court.has(`${dx},${dy}`) ? court.get(`${dx},${dy}`)! : d <= 1 ? "B" : ".";
     }
   return g.map((r) => r.join(""));
 }

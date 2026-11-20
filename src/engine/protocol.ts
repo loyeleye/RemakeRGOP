@@ -20,7 +20,12 @@ export interface LobbyPlayer {
   flame: Flame;
   connected: boolean;
   bot: boolean;
+  /** For a bot: its level, and whether it plays as a team with its guild. */
+  botLevel?: BotLevelName;
+  coop?: boolean;
 }
+
+export type BotLevelName = "easy" | "medium" | "hard";
 
 export type Phase = "lobby" | "countdown" | "playing" | "results";
 
@@ -43,6 +48,7 @@ export type ClientMsg =
   | { t: "shrine"; shrine: string }
   | { t: "teams"; teams: number }
   | { t: "bot"; guild: Guild; level?: "easy" | "medium" | "hard"; hard?: boolean; remove?: boolean }
+  | { t: "botset"; id: number; level?: BotLevelName; coop?: boolean }
   | { t: "start" }
   | { t: "act"; action?: Action; toggleRun?: boolean; toggleMode?: boolean }
   | { t: "lobby" }
@@ -51,6 +57,19 @@ export type ClientMsg =
 export type ServerMsg =
   | { t: "welcome"; you: number; token: string }
   | { t: "room"; room: RoomView }
-  | { t: "tick"; snap: GameSnapshot; tickMs: number }
+  | { t: "tick"; snap: GameSnapshot; tickMs: number; bots?: BotDebug[] }
   | { t: "error"; message: string }
   | { t: "pong"; at: number };
+
+/** A bot's state for the debug overlay. */
+export interface BotDebug {
+  id: number;
+  name: string;
+  guild: number;
+  level: string;
+  role: string;
+  half?: string;
+  home?: string;
+  team?: string;
+  intent: string;
+}

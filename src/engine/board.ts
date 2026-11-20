@@ -25,7 +25,36 @@ export enum Tile {
   Edge = 5,
   /** Ice: open ground, but a lamplighter who starts a tick on it slides a tile the way they face. */
   Ice = 6,
+  /**
+   * Crystal mirrors, drawn "/" (A) and "\\" (B) with north up: they block walking and wisps but
+   * not sight, and a wisp flying into one is turned off the mirror (see wispMove).
+   */
+  CrystalA = 7,
+  CrystalB = 8,
+  /** Rime: frosted ice that boots grip, so lamplighters walk it like floor, but wisps skate on it as on ice. */
+  Rime = 9,
+  /** Petal bed: open ground that hurries a wisp along: one crossing it moves 2 tiles a tick. */
+  Bloom = 10,
+  /** Ember vent: open ground that erupts every few ticks, flinging a wisp on it toward the brazier. */
+  Vent = 11,
+  /** Portcullis: a gate in the archways that is open or shut by the clock (shut, it's a wall). */
+  Gate = 12,
+  /** Moss: a thick tuft you can walk through, but it holds wisps back like a boulder until it's torn away. */
+  Moss = 13,
+  /** Pressure plate: stand on one and the shortcut gates on its side of the brazier open. */
+  Plate = 14,
+  /** Sun glyph: a wisp left resting on one is relayed along the way toward the brazier. */
+  Glyph = 15,
 }
+
+/** In mist you can still make out anything this close (Chebyshev tiles). */
+export const MIST_CLEAR = 2;
+
+/** Do wisps skate on this tile? */
+export const isSlick = (t: Tile) => t === Tile.Ice || t === Tile.Rime;
+
+/** Is this tile a crystal mirror? */
+export const isCrystal = (t: Tile) => t === Tile.CrystalA || t === Tile.CrystalB;
 
 /** Who is moving: decides which tiles are passable. */
 export enum Mover {
@@ -51,6 +80,41 @@ export class Board {
     this.center = pt(Math.floor(width / 2), Math.floor(height / 2));
   }
 
+  /** Bumped whenever the tiles change during a round (portcullises), so caches know. */
+  version = 0;
+
+  /** Mist: tiles that block sight (but not walking or wisps) this tick, or null for none. */
+  fog: Uint8Array | null = null;
+
+  /**
+   * How many wisp moves each tile is from the bank zone (-1 where a wisp can't get there).
+   * Used to lay sun glyphs and to send a relayed wisp the short way in.
+   */
+  bankFlow(): Int32Array {
+    const W = this.width, H = this.height;
+    const d = new Int32Array(W * H).fill(-1);
+    const q: Pt[] = [];
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const p = pt(x, y);
+        if (this.inBankZone(p) && this.passable(p, Mover.Wisp) && this.tile(p) !== Tile.Brazier) {
+          d[y * W + x] = 0;
+          q.push(p);
+        }
+      }
+    for (let i = 0; i < q.length; i++) {
+      const p = q[i]!;
+      for (const dir of DIRS) {
+        const n = pt(p.x + dir.x, p.y + dir.y);
+        if (!this.inside(n) || d[n.y * W + n.x] !== -1) continue;
+        if (!this.canStep(n, -dir.x, -dir.y, Mover.Wisp)) continue;
+        d[n.y * W + n.x] = d[p.y * W + p.x]! + 1;
+        q.push(n);
+      }
+    }
+    return d;
+  }
+
   inside(p: Pt) {
     return p.x >= 0 && p.y >= 0 && p.x < this.width && p.y < this.height;
   }
@@ -61,15 +125,21 @@ export class Board {
 
   passable(p: Pt, who: Mover): boolean {
     const t = this.tile(p);
+    if (who === Mover.Sight && this.fog && this.inside(p) && this.fog[p.y * this.width + p.x]) return false;
     switch (t) {
       case Tile.Wall:
         return false;
       case Tile.Rock:
       case Tile.Edge:
+      case Tile.CrystalA:
+      case Tile.CrystalB:
         return who === Mover.Sight;
       case Tile.Water:
       case Tile.Brazier:
         return who !== Mover.Walker;
+      case Tile.Moss:
+        // A thick tuft: you wade through it, but it holds a wisp back.
+        return who !== Mover.Wisp;
       default:
         return true;
     }
@@ -118,6 +188,14 @@ export class Board {
    * sight is always mutual.
    */
   canSee(a: Pt, b: Pt): boolean {
+    // Mist hides only what's more than a couple of tiles off.
+    if (this.fog && cheb(a, b) <= MIST_CLEAR) {
+      const fog = this.fog;
+      this.fog = null;
+      const seen = this.traceClear(a, b) || this.traceClear(b, a);
+      this.fog = fog;
+      return seen;
+    }
     return this.traceClear(a, b) || this.traceClear(b, a);
   }
 
@@ -144,42 +222,88 @@ export class Board {
    * `stopAdjacent`, the path ends on a tile next to `to` (used to approach a wisp).
    */
   walkPath(from: Pt, to: Pt, stopAdjacent = false): Pt[] {
+    // Dijkstra over ticks, knowing that a step onto ice turns into a slide: the step's far end
+    // is wherever the slide stops. Only the first steps matter, since a slide clears the path
+    // and it is planned again from where the slide ends.
     const W = this.width;
     const key = (p: Pt) => p.y * W + p.x;
     const parent = new Map<number, number>();
+    const entry = new Map<number, number>();
+    const cost = new Map<number, number>();
     parent.set(key(from), -1);
-    const queue: Pt[] = [from];
+    cost.set(key(from), 0);
+    let open: Pt[] = [from];
     let best = from;
     let bestD = dist2(from, to);
     const done = (p: Pt) => (stopAdjacent ? cheb(p, to) <= 1 && !samePt(p, to) : samePt(p, to));
     if (done(from)) return [];
     let found: Pt | null = null;
-    for (let qi = 0; qi < queue.length && !found; qi++) {
-      const cur = queue[qi]!;
+    const closed = new Set<number>();
+    while (open.length > 0 && !found) {
+      // The open tile with the lowest cost (the boards are small).
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (cost.get(key(open[i]!))! < cost.get(key(open[bi]!))!) bi = i;
+      const cur = open[bi]!;
+      open.splice(bi, 1);
+      const ck = key(cur);
+      if (closed.has(ck)) continue;
+      closed.add(ck);
+      if (done(cur)) {
+        found = cur;
+        break;
+      }
+      const dd = dist2(cur, to);
+      if (dd < bestD) {
+        bestD = dd;
+        best = cur;
+      }
       for (const d of DIRS) {
+        if (!this.canStep(cur, d.x, d.y, Mover.Walker)) continue;
         const nx = pt(cur.x + d.x, cur.y + d.y);
-        const k = key(nx);
-        if (parent.has(k) || !this.canStep(cur, d.x, d.y, Mover.Walker)) continue;
-        parent.set(k, key(cur));
-        queue.push(nx);
-        if (done(nx)) {
-          found = nx;
-          break;
+        let end = nx;
+        let c = 1;
+        if (this.tile(nx) === Tile.Ice && !done(nx)) {
+          end = this.slideEnd(nx, d);
+          c += cheb(nx, end);
         }
-        const dd = dist2(nx, to);
-        if (dd < bestD) {
-          bestD = dd;
-          best = nx;
-        }
+        const k = key(end);
+        const nc = cost.get(ck)! + c;
+        if (cost.has(k) && cost.get(k)! <= nc) continue;
+        cost.set(k, nc);
+        parent.set(k, ck);
+        entry.set(k, key(nx));
+        open.push(end);
       }
     }
     const end = found ?? best;
     const path: Pt[] = [];
     for (let k = key(end); k !== key(from); k = parent.get(k)!) {
-      path.push(pt(k % W, Math.floor(k / W)));
+      const e = entry.get(k)!;
+      // A slide's far end isn't walked to: only its first step onto the ice is.
+      if (e !== k) path.length = 0;
+      path.push(pt(e % W, Math.floor(e / W)));
     }
     return path.reverse();
   }
+
+  /** Where a walker who steps onto ice at p going d ends up: glancing off things like a wisp, until stopped or off the ice. */
+  slideEnd(p: Pt, d: Pt): Pt {
+    let cur = p, dx = d.x, dy = d.y;
+    for (let i = 0; i < 64 && this.tile(cur) === Tile.Ice; i++) {
+      let step: [number, number] | null = null;
+      if (this.canStep(cur, dx, dy, Mover.Walker)) step = [dx, dy];
+      else if (dx !== 0 && dy !== 0) {
+        const okX = this.canStep(cur, dx, 0, Mover.Walker), okY = this.canStep(cur, 0, dy, Mover.Walker);
+        if (okX && !okY) step = [dx, 0];
+        else if (okY && !okX) step = [0, dy];
+      }
+      if (!step) break;
+      [dx, dy] = step;
+      cur = pt(cur.x + dx, cur.y + dy);
+    }
+    return cur;
+  }
+
 }
 
 function dist2(a: Pt, b: Pt) {

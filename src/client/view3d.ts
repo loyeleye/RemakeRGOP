@@ -10,7 +10,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { Tile, type Board } from "../engine/board.js";
-import { PULL_REACH, PUSH_REACH, type GameSnapshot, type Guild } from "../engine/game.js";
+import { PULL_REACH, PUSH_REACH, gateOpen, mistBanks, platesHeld, quarterOf, MOSS_HP, type GameSnapshot, type Guild } from "../engine/game.js";
 import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js";
 import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
@@ -457,6 +457,162 @@ const GLOW = glowTexture();
  * A soft mask of every tile of one kind: a disc on each tile, blurred, so neighbouring tiles
  * melt into one rounded pool. The water shader thresholds it into a natural outline.
  */
+/**
+ * A crystal mirror: a tall thin glowing slab standing on its tile's diagonal, "/" (SW to NE)
+ * or "\\" (NW to SE) as the map draws it, so you can read which way it turns a wisp.
+ */
+function makeMirror(x: number, z: number, slash: boolean, colour: string): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.rotation.y = slash ? Math.PI / 4 : -Math.PI / 4;
+  const slab = new THREE.Mesh(
+    new THREE.BoxGeometry(1.3, 1.5, 0.14),
+    new THREE.MeshStandardMaterial({ color: colour, emissive: colour, emissiveIntensity: 0.45, roughness: 0.3, metalness: 0 }),
+  );
+  slab.position.y = 0.85;
+  g.add(slab);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.08, 0.2), new THREE.MeshBasicMaterial({ color: "#ffffff" }));
+  edge.position.y = 1.62;
+  g.add(edge);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.18, 6), new THREE.MeshStandardMaterial({ color: "#6a5a80", roughness: 0.8 }));
+  base.position.y = 0.09;
+  g.add(base);
+  return g;
+}
+
+/** A vent: a dark cracked ring with an ember core and a plume that rises on eruption. */
+function makeVent(x: number, z: number): { g: THREE.Group; plume: THREE.Mesh; core: THREE.MeshStandardMaterial } {
+  const g = new THREE.Group();
+  g.position.set(x, 0.03, z);
+  const rim = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.6, 14), new THREE.MeshStandardMaterial({ color: "#3a2a24", roughness: 0.95 }));
+  rim.rotation.x = -Math.PI / 2;
+  g.add(rim);
+  const core = new THREE.MeshStandardMaterial({ color: "#ff7a2a", emissive: "#ff5a10", emissiveIntensity: 0.6 });
+  const hole = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), core);
+  hole.rotation.x = -Math.PI / 2;
+  hole.position.y = 0.005;
+  g.add(hole);
+  const plume = new THREE.Mesh(
+    new THREE.ConeGeometry(0.45, 2.4, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: "#ffb060", transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  plume.rotation.x = Math.PI;
+  plume.position.y = 1.2;
+  g.add(plume);
+  return { g, plume, core };
+}
+
+/** A portcullis: two posts and an iron grille that drops shut or lifts open. */
+function makeGate(x: number, z: number, eastWest: boolean): { g: THREE.Group; grille: THREE.Group } {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  // The grille spans across the way a walker passes through it.
+  if (eastWest) g.rotation.y = Math.PI / 2;
+  const stone = new THREE.MeshStandardMaterial({ color: "#8a8178", roughness: 0.9 });
+  for (const s of [-0.55, 0.55]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.2, 0.3), stone);
+    post.position.set(s, 1.1, 0);
+    g.add(post);
+  }
+  const grille = new THREE.Group();
+  const iron = new THREE.MeshStandardMaterial({ color: "#3b3a40", metalness: 0.6, roughness: 0.5 });
+  for (let i = 0; i < 5; i++) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.9, 0.06), iron);
+    bar.position.set(-0.4 + i * 0.2, 0.95, 0);
+    grille.add(bar);
+  }
+  for (const h of [0.5, 1.4]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.06, 0.06), iron);
+    rail.position.y = h;
+    grille.add(rail);
+  }
+  g.add(grille);
+  return { g, grille };
+}
+
+/** A tuft of moss: a low, lumpy green mound. */
+const MOSS_GEO = new THREE.SphereGeometry(0.5, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+const MOSS_MAT = new THREE.MeshStandardMaterial({ color: "#4f8a3a", roughness: 1, flatShading: true });
+function makeMoss(x: number, z: number, seed: number): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  // Each tuft gets its own material so a torn one can wither on its own.
+  const mat = MOSS_MAT.clone();
+  const rnd = (k: number) => fract(Math.sin(seed * 31.7 + k * 12.9) * 43758.5);
+  for (let i = 0; i < 4; i++) {
+    const m = new THREE.Mesh(MOSS_GEO, mat);
+    const s = 0.55 + rnd(i) * 0.4;
+    m.scale.set(s, 0.5 + rnd(i + 9) * 0.5, s);
+    m.position.set((rnd(i + 3) - 0.5) * 0.5, 0, (rnd(i + 6) - 0.5) * 0.5);
+    m.castShadow = true;
+    g.add(m);
+  }
+  return g;
+}
+
+const MOSS_BIT_GEO = new THREE.BoxGeometry(0.12, 0.06, 0.12);
+
+/** A pressure plate: a worn stone slab with a groove; it lights up while someone stands on it. */
+function makePlate(x: number, z: number): { g: THREE.Group; glow: THREE.MeshStandardMaterial } {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.9), new THREE.MeshStandardMaterial({ color: "#8d867c", roughness: 0.9 }));
+  slab.position.y = 0.04;
+  g.add(slab);
+  const glow = new THREE.MeshStandardMaterial({ color: "#d9c48a", emissive: "#ffcf5a", emissiveIntensity: 0.1 });
+  const inlay = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.3, 16), glow);
+  inlay.rotation.x = -Math.PI / 2;
+  inlay.position.y = 0.085;
+  g.add(inlay);
+  return { g, glow };
+}
+
+/** A sun glyph: a gold rune set flat in the floor. */
+const GLYPH_GEO = new THREE.RingGeometry(0.12, 0.44, 8);
+const GLYPH_MAT = new THREE.MeshStandardMaterial({ color: "#ffd36a", emissive: "#ffb830", emissiveIntensity: 0.9, transparent: true, opacity: 0.95 });
+function makeGlyph(x: number, z: number): THREE.Mesh {
+  const m = new THREE.Mesh(GLYPH_GEO, GLYPH_MAT);
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(x, 0.035, z);
+  return m;
+}
+
+/** A mist bank: a few soft, overlapping translucent puffs. */
+function makeMist(r: number): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: "#eef2f7", transparent: true, opacity: 0.32, depthWrite: false });
+  const geo = new THREE.SphereGeometry(1, 14, 10);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const m = new THREE.Mesh(geo, mat);
+    const s = r * (0.55 + (i % 3) * 0.12);
+    m.scale.set(s, s * 0.55, s);
+    m.position.set(Math.cos(a) * r * 0.45, 0.8 + (i % 2) * 0.4, Math.sin(a) * r * 0.45);
+    g.add(m);
+  }
+  return g;
+}
+
+/** A petal bed: a soft pink patch scattered with petals, flat on the floor. */
+function makePetals(x: number, z: number, seed: number): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(x, 0.03, z);
+  const rnd = (k: number) => fract(Math.sin(seed * 51.3 + k * 17.7) * 43758.5);
+  const bed = new THREE.Mesh(new THREE.CircleGeometry(0.62, 18), new THREE.MeshStandardMaterial({ color: "#f7b6d2", emissive: "#f48fbf", emissiveIntensity: 0.25, roughness: 0.9, transparent: true, opacity: 0.85 }));
+  bed.rotation.x = -Math.PI / 2;
+  g.add(bed);
+  const petal = new THREE.CircleGeometry(0.09, 5);
+  const mat = new THREE.MeshStandardMaterial({ color: "#fff0f6", emissive: "#ffd1e6", emissiveIntensity: 0.3 });
+  for (let i = 0; i < 9; i++) {
+    const p = new THREE.Mesh(petal, mat);
+    p.rotation.x = -Math.PI / 2;
+    p.rotation.z = rnd(i) * 6.28;
+    p.position.set((rnd(i + 20) - 0.5) * 1.0, 0.01, (rnd(i + 40) - 0.5) * 1.0);
+    g.add(p);
+  }
+  return g;
+}
+
 function poolMask(b: Board, kind: Tile): THREE.Texture | null {
   const PX = 16;
   const c = document.createElement("canvas");
@@ -469,14 +625,16 @@ function poolMask(b: Board, kind: Tile): THREE.Texture | null {
   let any = false;
   for (let y = 0; y < b.height; y++)
     for (let x = 0; x < b.width; x++) {
-      if (b.tiles[y * b.width + x] !== kind) continue;
+      // Rime paints as ice.
+      const same = (t: Tile | undefined) => t === kind || (kind === Tile.Ice && t === Tile.Rime);
+      if (!same(b.tiles[y * b.width + x])) continue;
       any = true;
       g.beginPath();
       g.arc((x + 0.5) * PX, (y + 0.5) * PX, PX * 0.6, 0, Math.PI * 2);
       g.fill();
       // Join to the right and below so pools are one body, not beads.
-      if (b.tiles[y * b.width + x + 1] === kind && x + 1 < b.width) g.fillRect((x + 0.5) * PX, (y + 0.5) * PX - PX * 0.45, PX, PX * 0.9);
-      if (y + 1 < b.height && b.tiles[(y + 1) * b.width + x] === kind) g.fillRect((x + 0.5) * PX - PX * 0.45, (y + 0.5) * PX, PX * 0.9, PX);
+      if (same(b.tiles[y * b.width + x + 1]) && x + 1 < b.width) g.fillRect((x + 0.5) * PX, (y + 0.5) * PX - PX * 0.45, PX, PX * 0.9);
+      if (y + 1 < b.height && same(b.tiles[(y + 1) * b.width + x])) g.fillRect((x + 0.5) * PX - PX * 0.45, (y + 0.5) * PX, PX * 0.9, PX);
     }
   if (!any) return null;
   const out = document.createElement("canvas");
@@ -530,6 +688,14 @@ export class World {
   private shrineId = "";
   private distantPush = 0;
   private timeUniforms: { value: number }[] = [];
+  private vents: { plume: THREE.Mesh; core: THREE.MeshStandardMaterial }[] = [];
+  private gates: { grille: THREE.Group; dx: number; dy: number; lift: number }[] = [];
+  private gimmicks: Shrine["gimmicks"] = {};
+  private plates: { glow: THREE.MeshStandardMaterial; q: string }[] = [];
+  private mists: THREE.Group[] = [];
+  private mossRigs = new Map<number, THREE.Group>();
+  private mossHp = new Map<number, { hp: number; hit: number }>();
+  private mossBits: { obj: THREE.Mesh; v: THREE.Vector3; born: number }[] = [];
   private players = new Map<number, PlayerRig>();
   private wisps = new Map<number, WispRig>();
   private brazierLight = new THREE.PointLight("#ff9a4a", 60, 30, 1.6);
@@ -713,6 +879,14 @@ export class World {
     this.shrineId = shrine.id + "~" + shrine.teams;
     this.shrineGroup.clear();
     this.propSlots = [];
+    this.vents = [];
+    this.plates = [];
+    this.mists = [];
+    this.mossRigs.clear();
+    this.mossHp.clear();
+    this.mossBits = [];
+    this.gates = [];
+    this.gimmicks = shrine.gimmicks ?? {};
     for (const r of this.players.values()) this.scene.remove(r.root);
     this.players.clear();
     for (const r of this.wisps.values()) this.scene.remove(r.root);
@@ -886,7 +1060,27 @@ export class World {
         seed++;
         if (t === Tile.Wall && ringSet.has(`${x - b.center.x},${y - b.center.y}`)) continue;
         if (t === Tile.Wall) this.addProp(th.wall, wx, wz, 2.8, 2.2, seed);
-        else if (t === Tile.Rock) this.addProp(th.boulder, wx, wz, 0.9, 1.05, seed);
+        else if (t === Tile.Rock) {
+          // Deflector stones inside the archways can have their own look.
+          const court = Math.max(Math.abs(x - b.center.x), Math.abs(y - b.center.y)) <= 4;
+          this.addProp(court && th.deflector ? th.deflector : th.boulder, wx, wz, court && th.deflector ? 1.3 : 0.9, 1.05, seed);
+        } else if (t === Tile.Bloom) this.shrineGroup.add(makePetals(wx, wz, seed));
+        else if (t === Tile.CrystalA || t === Tile.CrystalB) this.shrineGroup.add(makeMirror(wx, wz, t === Tile.CrystalA, th.crystal ?? "#e6c8ff"));
+        else if (t === Tile.Vent) {
+          const v = makeVent(wx, wz);
+          this.shrineGroup.add(v.g);
+          this.vents.push(v);
+        } else if (t === Tile.Plate) {
+          const pl = makePlate(wx, wz);
+          this.shrineGroup.add(pl.g);
+          this.plates.push({ glow: pl.glow, q: quarterOf(x - b.center.x, y - b.center.y) });
+        } else if (t === Tile.Glyph) this.shrineGroup.add(makeGlyph(wx, wz));
+        else if (t === Tile.Gate) {
+          const dx = x - b.center.x, dy = y - b.center.y;
+          const gt = makeGate(wx, wz, Math.abs(dx) >= Math.abs(dy));
+          this.shrineGroup.add(gt.g);
+          this.gates.push({ grille: gt.grille, dx, dy, lift: 0 });
+        }
       }
     for (const [kind, ice] of [[Tile.Water, 0], [Tile.Ice, 1]] as const) {
       const mask = poolMask(b, kind);
@@ -980,6 +1174,18 @@ export class World {
    * a pillar on each, a lintel joining neighbours along a side, and an arch over every gap of
    * 1 to 3 tiles between two pillars. A pillar standing alone is drawn taller, as an obelisk.
    */
+  /** Scraps of moss flung up off a tuft that's being torn at. */
+  private shedMoss(rig: THREE.Group, time: number, n: number) {
+    const mat = ((rig.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial).clone();
+    for (let k = 0; k < n; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const obj = new THREE.Mesh(MOSS_BIT_GEO, mat);
+      obj.position.set(rig.position.x, 0.3, rig.position.z);
+      this.shrineGroup.add(obj);
+      this.mossBits.push({ obj, v: new THREE.Vector3(Math.cos(a) * 0.04, 0.08 + Math.random() * 0.05, Math.sin(a) * 0.04), born: time });
+    }
+  }
+
   private makeArches(b: Board, ring: Ring, th: Theme, wallTex: THREE.Texture) {
     const g = new THREE.Group();
     const R = ring.radius;
@@ -1253,6 +1459,91 @@ export class World {
     for (const u of this.timeUniforms) u.value = time;
     for (const f of this.floaters) f.obj.position.y = f.y + Math.sin(time * 0.25 * f.drift + f.phase) * 0.8;
     this.brazierLight.intensity = 18 + Math.sin(time * 9) * 3 + Math.sin(time * 23) * 2;
+    const { vents, portcullis } = this.gimmicks;
+    if (vents) {
+      // The plume flares on the eruption tick and fades over the next one; the core glows hotter as it nears.
+      const since = (st.snap.tick % vents) + Math.min(1, st.t);
+      const flare = Math.max(0, 1 - since / 1.5);
+      const warm = (st.snap.tick % vents) / (vents - 1 || 1);
+      for (const v of this.vents) {
+        (v.plume.material as THREE.MeshBasicMaterial).opacity = flare * 0.75;
+        v.plume.scale.set(1, 0.4 + flare * 0.6, 1);
+        v.core.emissiveIntensity = 0.4 + warm * 1.4 + flare * 2;
+      }
+    }
+    const held = this.gimmicks.plates ? platesHeld(b, st.snap.players.map((p) => ({ pos: { x: p.x, y: p.y } }))) : null;
+    if (held) for (const pl of this.plates) pl.glow.emissiveIntensity += ((held.has(pl.q) ? 1.6 : 0.1) - pl.glow.emissiveIntensity) * 0.2;
+    if (portcullis || held)
+      for (const gt of this.gates) {
+        const open = held ? held.has(quarterOf(gt.dx, gt.dy)) : gateOpen(st.snap.tick, portcullis!, gt.dx, gt.dy);
+        const goal = open ? 1.85 : 0;
+        gt.lift += (goal - gt.lift) * 0.15;
+        gt.grille.position.y = gt.lift;
+      }
+    if (this.gimmicks.mist) {
+      // The banks drift smoothly between ticks.
+      const banks = mistBanks(st.snap.tick - 1 + Math.min(1, st.t), b.center);
+      while (this.mists.length < banks.length) {
+        const m = makeMist(banks[this.mists.length]!.r);
+        this.shrineGroup.add(m);
+        this.mists.push(m);
+      }
+      banks.forEach((k, i) => {
+        this.mists[i]!.position.set(this.worldX(b, k.x), Math.sin(time * 0.6 + i) * 0.15, this.worldZ(b, k.y));
+        this.mists[i]!.rotation.y = time * 0.05 * (i % 2 ? 1 : -1);
+      });
+    }
+    if (st.snap.moss) {
+      const seen = new Set<number>();
+      for (let k = 0; k < st.snap.moss.length; k += 2) {
+        const i = st.snap.moss[k]!, hp = st.snap.moss[k + 1]!;
+        seen.add(i);
+        let rig = this.mossRigs.get(i);
+        if (!rig) {
+          rig = makeMoss(this.worldX(b, i % b.width), this.worldZ(b, Math.floor(i / b.width)), i);
+          rig.scale.setScalar(0.01);
+          this.shrineGroup.add(rig);
+          this.mossRigs.set(i, rig);
+        }
+        // Torn at: it shudders, sheds a few bits, and goes brown and ragged.
+        const was = this.mossHp.get(i);
+        if (was && hp < was.hp) {
+          was.hit = time;
+          this.shedMoss(rig, time, 4);
+        }
+        this.mossHp.set(i, { hp, hit: was && hp < was.hp ? time : was?.hit ?? -99 });
+        const torn = 1 - hp / MOSS_HP;
+        const mat = (rig.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        mat.color.set("#4f8a3a").lerp(new THREE.Color("#9a8443"), torn);
+        // It springs up when it grows, and shrinks as it's torn at.
+        const goal = 0.55 + 0.45 * (hp / MOSS_HP);
+        rig.scale.setScalar(rig.scale.x + (goal - rig.scale.x) * 0.15);
+        const since = time - this.mossHp.get(i)!.hit;
+        const shake = since < 0.4 ? Math.sin(since * 60) * 0.12 * (1 - since / 0.4) : 0;
+        rig.rotation.z = shake;
+        rig.rotation.x = shake * 0.6;
+      }
+      for (const [i, rig] of this.mossRigs)
+        if (!seen.has(i)) {
+          // Torn clean away: it bursts into flying scraps.
+          if (this.mossHp.get(i)) this.shedMoss(rig, time, 10);
+          this.shrineGroup.remove(rig);
+          this.mossRigs.delete(i);
+          this.mossHp.delete(i);
+        }
+    }
+    for (let k = this.mossBits.length - 1; k >= 0; k--) {
+      const bit = this.mossBits[k]!;
+      const age = time - bit.born;
+      if (age > 0.8 || age < 0) {
+        this.shrineGroup.remove(bit.obj);
+        this.mossBits.splice(k, 1);
+        continue;
+      }
+      bit.v.y -= 0.012;
+      bit.obj.position.add(bit.v);
+      bit.obj.scale.setScalar(1 - age / 0.8);
+    }
     const lerp = (a: number, z: number) => a + (z - a) * Math.min(1, st.t);
 
     // Wisps.
@@ -1408,7 +1699,7 @@ export function drawMinimap(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     for (let x = 0; x < b.width; x++) {
       const t = b.tiles[y * b.width + x];
       if (t === Tile.Edge) continue;
-      g.fillStyle = t === Tile.Wall ? "#4a4a55" : t === Tile.Water ? "#3f9fa8" : t === Tile.Rock ? "#888" : t === Tile.Brazier ? "#ff9a3a" : "#3b3346";
+      g.fillStyle = t === Tile.Wall ? "#4a4a55" : t === Tile.Water ? "#3f9fa8" : t === Tile.Rock ? "#888" : t === Tile.CrystalA || t === Tile.CrystalB ? "#e6c8ff" : t === Tile.Rime ? "#cfe8f4" : t === Tile.Moss ? "#4f8a3a" : t === Tile.Glyph ? "#c9a24a" : t === Tile.Brazier ? "#ff9a3a" : "#3b3346";
       g.fillRect(rect.x + x * k, rect.y + y * k, Math.ceil(k), Math.ceil(k));
     }
   for (const w of st.snap.wisps) {

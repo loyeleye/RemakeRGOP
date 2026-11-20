@@ -1,9 +1,9 @@
 // Lanternfall client: home screen, lobby, and the round itself.
 
 import type { Pt } from "../engine/board.js";
-import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
+import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
-import { FLAMES, FLAME_COLORS, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
+import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
@@ -51,6 +51,7 @@ function onServer(m: ServerMsg) {
     case "tick":
       prevSnap = snap && snap.tick === m.snap.tick - 1 ? snap : null;
       snap = m.snap;
+      debugTick(m.snap, m.bots ?? []);
       snapAt = performance.now();
       tickMs = m.tickMs;
       for (const b of m.snap.banks) bankFlash(b.guild);
@@ -134,6 +135,34 @@ function render() {
   renderHud();
 }
 
+const BOT_LEVEL_LABELS: Record<BotLevelName, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
+
+/** A bot's own level picker and co-op switch. Only the host can change them; co-op needs a guildmate. */
+function botControls(p: LobbyPlayer, host: boolean, alone: boolean): HTMLElement {
+  const box = document.createElement("span");
+  box.className = "bot-set";
+  const level = p.botLevel ?? "medium";
+  if (!host) {
+    box.textContent = `${BOT_LEVEL_LABELS[level]}${p.coop && !alone ? " · co-op" : ""}`;
+    return box;
+  }
+  const sel = document.createElement("select");
+  sel.setAttribute("aria-label", `${p.name} level`);
+  for (const l of Object.keys(BOT_LEVEL_LABELS) as BotLevelName[]) sel.add(new Option(BOT_LEVEL_LABELS[l], l, false, l === level));
+  sel.onchange = () => link?.send({ t: "botset", id: p.id, level: sel.value as BotLevelName });
+  const lab = document.createElement("label");
+  lab.className = "bot-coop" + (alone ? " off" : "");
+  lab.title = alone ? "Co-op needs a guildmate" : "Play as a team with its guild";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !!p.coop;
+  cb.disabled = alone;
+  cb.onchange = () => link?.send({ t: "botset", id: p.id, coop: cb.checked });
+  lab.append(cb, " co-op");
+  box.append(sel, lab);
+  return box;
+}
+
 function renderLobby() {
   if (!room) return;
   const mine = room.players.find((p) => p.id === me);
@@ -153,6 +182,7 @@ function renderLobby() {
           dot.style.background = FLAME_COLORS[p.flame];
           li.append(dot, p.name + (p.id === me ? " (you)" : "") + (p.id === room!.host ? " ★" : ""));
           if (!p.connected) li.classList.add("away");
+          if (p.bot) li.append(botControls(p, host, room!.players.filter((q) => q.guild === g).length < 2));
           return li;
         }),
     );
@@ -206,7 +236,9 @@ function renderHud() {
     el.textContent = String(s?.scores[g] ?? 0);
   }
   const left = s ? ROUND_TICKS - s.tick : ROUND_TICKS;
-  $("ticks").textContent = room.phase === "countdown" ? `Starts in ${room.countdown}` : `${left} ticks · ${fmtTime((left * tickMs) / 1000)}`;
+  const tide = shrineFor(room.shrine, room.teams).gimmicks.tide;
+  const tideNote = tide && s && room.phase !== "countdown" ? ` · tide ${tideIn(s.tick + 1, tide) ? "in" : "out"} (${tide - ((s.tick + 1) % tide)})` : "";
+  $("ticks").textContent = room.phase === "countdown" ? `Starts in ${room.countdown}` : `${left} ticks · ${fmtTime((left * tickMs) / 1000)}${tideNote}`;
   const p = s?.players.find((q) => q.id === me);
   $("mode").textContent = p?.mode === "push" ? "Push" : "Pull";
   $("mode").classList.toggle("push", p?.mode === "push");
@@ -263,6 +295,26 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
   const t = cam.toTile(sx, sy);
   const p = snap.players.find((q) => q.id === me);
   const radius = cam.compact ? 1.3 : 0.9;
+  // On a phone the focused wisp always has a finger-sized target, however far out you've zoomed.
+  if (document.body.classList.contains("touch")) {
+    const f = padFocus ? snap.wisps.find((w) => w.id === padWisp) : undefined;
+    if (f) {
+      const c = cam.toScreen(f.x + 0.5, f.y + 0.5, 0.75);
+      if (Math.hypot(c.x - sx, c.y - sy) <= FOCUS_TAP_PX) return { action: { kind: "staff", wisp: f.id }, wisp: f.id };
+    }
+  }
+  // Big taps (O on a laptop): every wisp gets a finger-sized circle on screen, nearest wins.
+  if (bigTaps) {
+    let near: { id: number; d: number } | null = null;
+    for (const w of snap.wisps) {
+      const c = cam.toScreen(w.x + 0.5, w.y + 0.5, 0.75);
+      const d = Math.hypot(c.x - sx, c.y - sy);
+      const usable = p && (p.mode === "push" || w.guild === p.guild);
+      const score = d - (usable ? 6 : 0);
+      if (d <= bigTapRadius() && (!near || score < near.d)) near = { id: w.id, d: score };
+    }
+    if (near) return { action: { kind: "staff", wisp: near.id }, wisp: near.id };
+  }
   let best: { id: number; d: number } | null = null;
   for (const w of snap.wisps) {
     const d = Math.hypot(w.x + 0.5 - t.x, w.y + 0.5 - t.y);
@@ -278,6 +330,14 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
   // A tap on a wall or pool still walks as close to it as the path allows.
   return { action: { kind: "walk", to: tile }, wisp: null };
 }
+
+/** Radius in CSS pixels of the focused wisp's tap target: a 56 px circle, above the 44-48 px minimum. */
+const FOCUS_TAP_PX = 28;
+
+/** Big taps: O switches every wisp to a large, ringed click target (and back). */
+let bigTaps = false;
+/** A big tap target's radius in CSS pixels: never under the focus target, and never smaller than a normal click. */
+const bigTapRadius = () => Math.max(FOCUS_TAP_PX, cam.scale * (cam.compact ? 1.3 : 0.9));
 
 const pointers = new Map<number, { x: number; y: number; sx: number; sy: number; t: number }>();
 let pinch: { d: number; scale: number } | null = null;
@@ -360,7 +420,11 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 window.addEventListener("keydown", (e) => {
   if (room?.phase !== "playing" || (e.target as HTMLElement).tagName === "INPUT") return;
   const k = e.key.toLowerCase();
-  if (k === "q") act({ toggleMode: true });
+  if (k === "`") return void (toggleDebug(), e.preventDefault());
+  if (k === "o") {
+    bigTaps = !bigTaps;
+    toast(bigTaps ? "Big taps on: every wisp has a larger target. O to turn off" : "Big taps off");
+  } else if (k === "q") act({ toggleMode: true });
   else if (k === "r") act({ toggleRun: true });
   else if (k === " " || k === "s") act({ action: { kind: "idle" } });
   else if (k === "c") cam.follow = true;
@@ -390,6 +454,8 @@ setTouch();
 
 /** The wisp the pad's Staff button works on. */
 let padWisp: number | null = null;
+/** Whether the pad keeps a wisp in focus at all (long-press Next to switch it off or on). */
+let padFocus = true;
 
 /** Wisps your staff can work in the current mode, nearest first. */
 function padChoices() {
@@ -404,12 +470,36 @@ function padChoices() {
 
 /** Keeps the pad's wisp valid: if it's gone or the wrong kind, take the nearest one. */
 function padTarget(): number | null {
+  if (!padFocus) return null;
   const c = padChoices();
   if (!c.some((w) => w.id === padWisp)) padWisp = c[0]?.id ?? null;
   return padWisp;
 }
 
+// Long-press Next to switch focus off (no wisp is picked out) or back on.
+let nextHold = 0;
+let nextLong = false;
+const nextBtn = $("next");
+nextBtn.addEventListener("pointerdown", () => {
+  nextLong = false;
+  clearTimeout(nextHold);
+  nextHold = window.setTimeout(() => {
+    nextLong = true;
+    padFocus = !padFocus;
+    nextBtn.classList.toggle("off", !padFocus);
+    navigator.vibrate?.(30);
+    toast(padFocus ? "Focus on: Next picks a wisp" : "Focus off. Long-press Next to turn it back on");
+  }, 550);
+});
+for (const ev of ["pointerup", "pointercancel", "pointerleave"]) nextBtn.addEventListener(ev, () => clearTimeout(nextHold));
+nextBtn.addEventListener("contextmenu", (e) => e.preventDefault());
 $("next").onclick = () => {
+  // The click that ends a long press doesn't also step to the next wisp.
+  if (nextLong) return void (nextLong = false);
+  if (!padFocus) {
+    padFocus = true;
+    nextBtn.classList.remove("off");
+  }
   const c = padChoices();
   if (!c.length) return;
   const i = c.findIndex((w) => w.id === padWisp);
@@ -619,6 +709,7 @@ function frame(now: number) {
     g.stroke();
     g.restore();
   }
+  if (bigTaps) drawBigTaps(g, mine?.mode === "push", mine?.guild, lit, t, now);
   if (cam.compact) {
     const w = Math.min(120, cam.w * 0.3);
     minimapRect = { x: cam.w - w - 10, y: 64, w, h: w };
@@ -626,6 +717,28 @@ function frame(now: number) {
   }
 }
 requestAnimationFrame(frame);
+
+/** Big taps: a dashed ring around each wisp showing its click target. Ones your staff can work now are bright; the hovered one is solid. */
+function drawBigTaps(g: CanvasRenderingContext2D, push: boolean, guild: number | undefined, hover: number | null, t: number, now: number) {
+  if (!snap) return;
+  const r = bigTapRadius();
+  g.save();
+  g.lineWidth = 2;
+  for (const w of snap.wisps) {
+    const x = w.px + (w.x - w.px) * t + 0.5, y = w.py + (w.y - w.py) * t + 0.5;
+    const c = cam.toScreen(x, y, 0.75);
+    const usable = push || w.guild === guild;
+    const on = w.id === hover;
+    g.strokeStyle = push ? (usable ? "#ff8a8ad0" : "#ff8a8a50") : usable ? "#ffffffe0" : "#ffffff55";
+    g.lineWidth = on ? 3.5 : 2.5;
+    g.setLineDash(on ? [] : [5, 5]);
+    g.lineDashOffset = -now / 80;
+    g.beginPath();
+    g.arc(c.x, c.y, r, 0, Math.PI * 2);
+    g.stroke();
+  }
+  g.restore();
+}
 
 loadModels();
 render();
@@ -643,3 +756,67 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   me: () => me,
   toScreen: (x: number, y: number) => cam.toScreen(x, y),
 };
+
+// ------------------------------------------------------------------ debug overlay
+// Press ` during a round to see each bot's level, role, half or home square and what it's
+// doing, with a log of the changes.
+
+const debugLog: string[] = [];
+const lastBot = new Map<number, string>();
+let lastMode = "";
+let lastDebugTick = 0;
+
+function toggleDebug() {
+  const d = $("debug");
+  d.hidden = !d.hidden;
+}
+
+function debugTick(s: GameSnapshot, bots: BotDebug[]) {
+  const t = `t${String(s.tick).padStart(3, "0")}`;
+  const log = (line: string) => {
+    debugLog.push(`${t} ${line}`);
+    if (debugLog.length > 400) debugLog.splice(0, debugLog.length - 400);
+  };
+  // A new round: start the log afresh.
+  if (s.tick < lastDebugTick) {
+    lastBot.clear();
+    lastMode = "";
+    debugLog.length = 0;
+  }
+  lastDebugTick = s.tick;
+  const shrine = room ? shrineFor(room.shrine, room.teams) : null;
+  const c = shrine?.board.center ?? { x: 0, y: 0 };
+  const off = (x: number, y: number) => `(${x - c.x >= 0 ? "+" : ""}${x - c.x},${y - c.y >= 0 ? "+" : ""}${y - c.y})`;
+  const you = s.players.find((p) => p.id === me);
+  if (you) {
+    const mode = `${you.mode}${you.run ? " running" : ""}`;
+    if (mode !== lastMode) log(`you: ${mode}`);
+    lastMode = mode;
+  }
+  for (const b of s.banks) log(`banked: ${GUILD_NAMES[b.guild] ?? b.guild} wisp ${b.wisp}`);
+  for (const b of bots) {
+    const head = `${b.name} [${b.level}] ${b.role}${b.half ? " " + b.half + " half" : ""}${b.home ? " home " + b.home : ""}${b.team ? " with " + b.team : ""}`;
+    const was = lastBot.get(b.id);
+    const now = `${head} | ${b.intent}`;
+    if (was !== now) {
+      if (!was || was.split(" | ")[0] !== head) log(`${b.name}: ${head.slice(b.name.length + 1)}`);
+      if (b.intent && (!was || was.split(" | ")[1] !== b.intent)) log(`${b.name}: ${b.intent}`);
+    }
+    lastBot.set(b.id, now);
+  }
+  const d = $("debug");
+  if (d.hidden) return;
+  const lines = [`tick ${s.tick}  scores ${s.scores.join(" : ")}`];
+  if (you) lines.push(`you: ${off(you.x, you.y)} ${you.mode}${you.run ? " running" : ""}, guild ${GUILD_NAMES[you.guild] ?? you.guild}`);
+  for (const b of bots) {
+    const p = s.players.find((q) => q.id === b.id);
+    lines.push(`${b.name} [${b.level}, ${GUILD_NAMES[b.guild] ?? b.guild}] at ${p ? off(p.x, p.y) : "?"}`);
+    lines.push(`  ${b.role}${b.half ? ", " + b.half + " half" : ""}${b.home ? ", home square " + b.home : ""}${b.team ? ", teamed with " + b.team : ""}`);
+    lines.push(`  ${b.intent || "-"}`);
+  }
+  $("debug-state").textContent = lines.join("\n");
+  const l = $("debug-log");
+  const atEnd = l.scrollTop + l.clientHeight >= l.scrollHeight - 4;
+  l.textContent = debugLog.join("\n");
+  if (atEnd) l.scrollTop = l.scrollHeight;
+}
