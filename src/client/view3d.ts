@@ -741,7 +741,7 @@ export class World {
   }
 
   /** Demo only: swap the normal render for the ink look (toon bands and outlines). */
-  setInk(on: boolean, light: "soft" | "shaped" = "shaped") {
+  setInk(on: boolean, light: "soft" | "shaped" = "soft") {
     this.plain.enabled = !on;
     this.inkPass.enabled = on;
     this.inkOn = on;
@@ -749,7 +749,7 @@ export class World {
     this.applyToon(on);
   }
 
-  private inkLight: "soft" | "shaped" = "shaped";
+  private inkLight: "soft" | "shaped" = "soft";
 
   private inkOn = false;
   private plainBloom = 0.55;

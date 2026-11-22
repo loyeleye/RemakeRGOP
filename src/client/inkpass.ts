@@ -60,6 +60,16 @@ void main() {
   // Far things (sky, distant islands) get thinner lines.
   float fade = 1.0 - smoothstep(60.0, 140.0, d);
   edge = max(edge, cEdge * 0.85) * fade;
+  // Never ink a line on or around anything that glows: a wisp with an outline stops being light.
+  vec2 o2 = o * 2.5;
+  vec3 glowNear = max(raw, max(
+    max(texture2D(tColor, vUv + vec2(o2.x, 0.0)).rgb, texture2D(tColor, vUv - vec2(o2.x, 0.0)).rgb),
+    max(texture2D(tColor, vUv + vec2(0.0, o2.y)).rgb, texture2D(tColor, vUv - vec2(0.0, o2.y)).rgb)));
+  vec3 diag = max(
+    max(texture2D(tColor, vUv + o2 * 0.7).rgb, texture2D(tColor, vUv - o2 * 0.7).rgb),
+    max(texture2D(tColor, vUv + vec2(o2.x, -o2.y) * 0.7).rgb, texture2D(tColor, vUv + vec2(-o2.x, o2.y) * 0.7).rgb));
+  glowNear = max(glowNear, diag);
+  edge *= 1.0 - smoothstep(0.85, 1.5, max(glowNear.r, max(glowNear.g, glowNear.b)));
 
   gl_FragColor = vec4(mix(col, vec3(0.004, 0.005, 0.01), edge), 1.0);
 }`;
