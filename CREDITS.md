@@ -10,8 +10,8 @@ subscription-only billing so no Spark was spent. Sources are in the project file
 | textures/floor-*.webp (one per island, plus floor-volcano for Ember Quarry; floor-fairy-ring added later the same day) | krea2_turbo_fp8_scaled (seamless floor textures), resized with `tools/textures.py` |
 | sprites/wall.png | krea2_turbo_fp8_scaled (seamless stone) |
 | textures/ink/floor-night-glade.webp, textures/ink/floor-blossom-garden.webp (darkened after rendering), sprites/ink/wall.png (demo only, used when the ink look is switched on with `?ink`) | krea2_identity_edit_v1_2, redrawn from the plain floor and wall textures on 2026-11-22, subscription-only billing |
+| textures/ink/clouds-below.webp (demo only, shown by `window.lanternfall.sky(url)` as a drawn cloud layer under the island) | krea2_turbo_fp8_scaled, rendered 2026-11-22, subscription-only billing |
 | ui/*.webp (phone stick and buttons) | z_image_turbo_bf16, cropped to a circle with an alpha mask |
 | sprites/brazier.png, sprites/wisp-dawn.png (logo and favicon) | z_image_turbo_bf16, background removed with birefnet_image_background_removal_fp16 |
 
 The sky, cloud sea, fire, embers, light pillar, water and wisps are drawn in code with shaders.
-| textures/ink/clouds-below.webp (demo only, shown by `window.lanternfall.sky(url)` as a drawn cloud layer under the island) | krea2_turbo_fp8_scaled, rendered 2026-11-22, subscription-only billing |
