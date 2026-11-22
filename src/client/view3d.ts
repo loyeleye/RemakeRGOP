@@ -473,21 +473,23 @@ function glowTexture() {
 }
 const GLOW = glowTexture();
 
-/** Demo only: light drawn the ink way. A solid core with an inked rim and two flat halo bands, no soft falloff. */
+/**
+ * Demo only: light for the ink look. It keeps the bright, additive glow, but gives it a drawn
+ * shape: a solid core, one crisp-edged inner halo, then a soft outer haze.
+ */
 function inkGlowTexture() {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
   const g = c.getContext("2d")!;
-  const disc = (r: number, fill: string) => {
-    g.beginPath();
-    g.arc(64, 64, r, 0, Math.PI * 2);
-    g.fillStyle = fill;
-    g.fill();
-  };
-  disc(61, "rgba(255,255,255,0.14)");
-  disc(42, "rgba(255,255,255,0.30)");
-  disc(21, "rgba(0,0,0,0.9)");
-  disc(18, "rgba(255,255,255,1)");
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, "rgba(255,255,255,1)");
+  grad.addColorStop(0.2, "rgba(255,255,255,1)");
+  grad.addColorStop(0.215, "rgba(255,255,255,0.5)");
+  grad.addColorStop(0.46, "rgba(255,255,255,0.4)");
+  grad.addColorStop(0.475, "rgba(255,255,255,0.17)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
@@ -739,12 +741,15 @@ export class World {
   }
 
   /** Demo only: swap the normal render for the ink look (toon bands and outlines). */
-  setInk(on: boolean) {
+  setInk(on: boolean, light: "soft" | "shaped" = "shaped") {
     this.plain.enabled = !on;
     this.inkPass.enabled = on;
     this.inkOn = on;
+    this.inkLight = light;
     this.applyToon(on);
   }
+
+  private inkLight: "soft" | "shaped" = "shaped";
 
   private inkOn = false;
   private plainBloom = 0.55;
@@ -774,15 +779,24 @@ export class World {
         this.toonOf.set(mat, t);
         const made = t;
         if (s.map) inkVersion(s.map, (ink) => { made.map = ink; made.needsUpdate = true; });
+        if (s.map && !s.map.userData.path) {
+          // A model's painted surface: cut its colours into flat steps so it sits with the inked floor.
+          t.onBeforeCompile = (shader) => {
+            shader.fragmentShader = shader.fragmentShader.replace(
+              "#include <map_fragment>",
+              "#include <map_fragment>\n\tvec3 inkFlat = pow(max(diffuseColor.rgb, 0.0), vec3(0.4545));\n\tdiffuseColor.rgb = pow(floor(inkFlat * 5.0 + 0.5) / 5.0, vec3(2.2));",
+            );
+          };
+        }
       }
       return t;
     };
-    this.bloom.strength = on ? 0.08 : this.plainBloom;
+    const shaped = on && this.inkLight === "shaped";
+    this.bloom.strength = shaped ? 0.42 : this.plainBloom;
     this.scene.traverse((o) => {
       const sp = o as THREE.Sprite;
       if (sp.isSprite && (sp.material.map === GLOW || sp.material.map === INK_GLOW)) {
-        sp.material.map = on ? INK_GLOW : GLOW;
-        sp.material.blending = on ? THREE.NormalBlending : THREE.AdditiveBlending;
+        sp.material.map = shaped ? INK_GLOW : GLOW;
         return;
       }
       const m = o as THREE.Mesh;
