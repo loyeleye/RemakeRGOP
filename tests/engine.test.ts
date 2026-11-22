@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Board, Mover, Tile, pt } from "../src/engine/board.js";
 import { Game, ROUND_TICKS, flingOffset, type JoinSpec } from "../src/engine/game.js";
+import { BOT_HARD, botCommand, halfCommand } from "../src/engine/bot.js";
 import { SHRINES, ringWalls, SHRINE_DEFS, mirrorRows, buildShrine, shrineFor, type Shrine } from "../src/engine/maps.js";
 
 /** An empty 27x27 shrine with the given wisp spawns. */
@@ -41,8 +42,17 @@ describe("shrines", () => {
     for (const s of SHRINES) {
       for (const start of s.starts.flat()) {
         for (const spawn of s.wispSpawns.flat()) {
-          const path = s.board.walkPath(start, spawn, true);
-          const end = path.at(-1) ?? start;
+          // Walk it as a lamplighter would: re-planning after every slide across ice.
+          let end = start;
+          for (let leg = 0; leg < 40; leg++) {
+            const path = s.board.walkPath(end, spawn, true);
+            if (path.length === 0) break;
+            for (const step of path) {
+              const d = pt(Math.sign(step.x - end.x), Math.sign(step.y - end.y));
+              end = s.board.tile(step) === Tile.Ice ? s.board.slideEnd(step, d) : step;
+              if (s.board.tile(step) === Tile.Ice) break;
+            }
+          }
           expect(Math.max(Math.abs(end.x - spawn.x), Math.abs(end.y - spawn.y)), `${s.id}`).toBeLessThanOrEqual(1);
         }
       }
@@ -78,7 +88,12 @@ describe("shrines", () => {
       // Turning a quarter: (x, y) -> (N - y, x) on screen, and guild k's tiles become guild k+1's.
       const turn = (p: { x: number; y: number }) => `${N - p.y},${p.x}`;
       for (let y = 0; y <= N; y++)
-        for (let x = 0; x <= N; x++) expect(b.tile(pt(N - y, x)), `${s.id} (${x},${y})`).toBe(b.tile(pt(x, y)));
+        for (let x = 0; x <= N; x++) {
+          // A crystal mirror turned a quarter lies along the other diagonal.
+          const t = b.tile(pt(x, y));
+          const turned = t === Tile.CrystalA ? Tile.CrystalB : t === Tile.CrystalB ? Tile.CrystalA : t;
+          expect(b.tile(pt(N - y, x)), `${s.id} (${x},${y})`).toBe(turned);
+        }
       for (let k = 0; k < 4; k++) {
         const next = (k + 1) % 4;
         expect(f.wispSpawns[k]!.map(turn).sort(), `${s.id} guild ${k}`).toEqual(f.wispSpawns[next]!.map((p) => `${p.x},${p.y}`).sort());
@@ -97,14 +112,15 @@ describe("shrines", () => {
         for (let dy = -r.radius; dy <= r.radius; dy++)
           for (let dx = -r.radius; dx <= r.radius; dx++) {
             if (Math.max(Math.abs(dx), Math.abs(dy)) !== r.radius) continue;
-            const t = b.tile(pt(c.x + dx, c.y + dy));
-            expect(t, `${s.id} ${s.teams} (${dx},${dy})`).toBe(walls.has(`${dx},${dy}`) ? Tile.Wall : Tile.Floor);
+            // A gate can stand in a gap or in the wall line: it's either.
+            if (b.tile(pt(c.x + dx, c.y + dy)) === Tile.Gate) continue;
+            expect(b.tile(pt(c.x + dx, c.y + dy)), `${s.id} ${s.teams} (${dx},${dy})`).toBe(walls.has(`${dx},${dy}`) ? Tile.Wall : Tile.Floor);
           }
     }
   });
 
   it("archway styles are the same turned a quarter", () => {
-    for (const style of ["gates", "open", "diagonals", "pillared", "pinwheel", "colonnade"] as const) {
+    for (const style of ["gates", "open", "diagonals", "pillared", "pinwheel", "colonnade", "posts"] as const) {
       const w = new Set(ringWalls({ radius: 6, style }).map((p) => `${p.x},${p.y}`));
       for (const k of w) {
         const [x, y] = k.split(",").map(Number) as [number, number];
@@ -275,11 +291,12 @@ describe("game", () => {
   it("a wisp in flight can't be taken by a second lamplighter", () => {
     const roster: JoinSpec[] = [
       { id: 1, guild: 0, name: "A" },
-      { id: 2, guild: 0, name: "C" },
+      { id: 2, guild: 1, name: "C" },
     ];
     const g = new Game(openShrine([pt(13, 6)], [pt(20, 23)]), roster, 1, 1);
     g.players[0]!.pos = pt(13, 9);
     g.players[1]!.pos = pt(13, 2);
+    g.players[1]!.mode = "push";
     g.command(1, { action: { kind: "staff", wisp: 0 } });
     g.step();
     expect(g.wisps[0]!.holder).toBe(1);
@@ -287,6 +304,264 @@ describe("game", () => {
     g.step();
     expect(g.players[1]!.slipped).toBe(true);
     expect(g.wisps[0]!.holder).toBe(1);
+  });
+
+  it("a wisp flung into a crystal is turned off its mirror and flies straight on", () => {
+    const shrine = openShrine([pt(6, 6)], [pt(20, 23)]);
+    // A "\\" mirror two tiles east of the wisp: heading east, it turns south.
+    shrine.board.tiles[6 * 27 + 8] = Tile.CrystalB;
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(12, 6);
+    g.command(1, { action: { kind: "staff", wisp: 0 } });
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 6));
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 7));
+    expect(g.players[0]!.action.kind).toBe("idle");
+    // Eight tiles straight south in all, then it stops.
+    for (let i = 0; i < 10; i++) g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 14));
+    expect(g.wisps[0]!.skate).toBeNull();
+  });
+
+  it("a pull beats the ice, and a wisp let go on ice skates on until it leaves it", () => {
+    const shrine = openShrine([pt(6, 6)], [pt(20, 23)]);
+    for (let x = 7; x <= 10; x++) shrine.board.tiles[6 * 27 + x] = Tile.Ice;
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(14, 6);
+    g.command(1, { action: { kind: "staff", wisp: 0 } });
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 6));
+    // Still held: it goes where it's pulled, here two tiles east, then stops being pulled.
+    g.command(1, { action: { kind: "idle" } });
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(8, 6));
+    // Let go: it skates on east and stops just off the end of the ice.
+    for (let i = 0; i < 5; i++) g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(11, 6));
+    expect(g.wisps[0]!.skate).toBeNull();
+    // Grab one that's skating and it comes your way instead.
+    const h = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    h.players[0]!.pos = pt(14, 6);
+    h.command(1, { action: { kind: "staff", wisp: 0 } });
+    h.step();
+    h.step();
+    h.command(1, { action: { kind: "idle" } });
+    h.step();
+    h.step();
+    expect(h.wisps[0]!.pos).toEqual(pt(9, 6));
+    h.players[0]!.pos = pt(9, 12);
+    h.command(1, { action: { kind: "staff", wisp: 0 } });
+    h.step();
+    h.step();
+    // It skates one more tile while your staff takes hold, then comes your way.
+    expect(h.wisps[0]!.pos).toEqual(pt(10, 7));
+  });
+
+  it("a lamplighter who steps onto ice slides on until something stops them or they're off it", () => {
+    const shrine = openShrine();
+    for (let x = 5; x <= 9; x++) shrine.board.tiles[13 * 27 + x] = Tile.Ice;
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(4, 13);
+    g.command(1, { action: { kind: "walk", to: pt(5, 13) } });
+    g.step();
+    expect(g.players[0]!.pos).toEqual(pt(5, 13));
+    for (let i = 0; i < 5; i++) g.step();
+    expect(g.players[0]!.pos).toEqual(pt(10, 13));
+  });
+
+  it("a wisp crossing a petal bed moves two tiles a tick", () => {
+    const shrine = openShrine([pt(6, 6)], [pt(20, 23)]);
+    for (let x = 7; x <= 12; x++) shrine.board.tiles[6 * 27 + x] = Tile.Bloom;
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(16, 6);
+    g.command(1, { action: { kind: "staff", wisp: 0 } });
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(8, 6));
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(10, 6));
+  });
+
+  it("the tide carries a loose wisp on a pool in, then out", () => {
+    const shrine = openShrine([pt(6, 13)], [pt(20, 23)]);
+    for (let x = 4; x <= 9; x++) shrine.board.tiles[13 * 27 + x] = Tile.Water;
+    shrine.gimmicks = { tide: 3 };
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(2, 2);
+    g.step(); // tick 1 (in): toward the brazier at (13, 13)
+    g.step(); // tick 2 (in)
+    expect(g.wisps[0]!.pos).toEqual(pt(8, 13));
+    g.step(); // tick 3 (out)
+    g.step(); // tick 4 (out)
+    expect(g.wisps[0]!.pos).toEqual(pt(6, 13));
+  });
+
+  it("a wisp flying into a moon pond comes out of its twin across the brazier", () => {
+    const shrine = openShrine([pt(6, 6)], [pt(20, 23)]);
+    shrine.board.tiles[6 * 27 + 8] = Tile.Water;
+    shrine.board.tiles[20 * 27 + 18] = Tile.Water;
+    shrine.gimmicks = { ponds: true };
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(12, 6);
+    g.command(1, { action: { kind: "staff", wisp: 0 } });
+    g.step();
+    g.step();
+    g.step();
+    // Into the pond at (8, 6), out of (18, 20) still heading east, and let go.
+    expect(g.wisps[0]!.pos).toEqual(pt(18, 20));
+    expect(g.players[0]!.action.kind).toBe("idle");
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(19, 20));
+  });
+
+  it("portcullises open and shut by the clock, east and west first", () => {
+    const def = SHRINE_DEFS.find((d) => d.id === "castle-rise")!;
+    const g = new Game(buildShrine(def), duo, 1);
+    const c = g.board.center;
+    expect(g.board.tile(pt(c.x + 5, c.y))).toBe(Tile.Gate);
+    expect(g.board.tile(pt(c.x, c.y + 5))).toBe(Tile.Wall);
+    for (let i = 0; i < 10; i++) g.step();
+    expect(g.board.tile(pt(c.x + 5, c.y))).toBe(Tile.Wall);
+    expect(g.board.tile(pt(c.x, c.y + 5))).toBe(Tile.Gate);
+    // The shared shrine board is never touched.
+    expect(SHRINES.find((s) => s.id === "castle-rise")!.board.tile(pt(c.x, c.y + 5))).toBe(Tile.Gate);
+  });
+
+  it("an erupting vent flings a wisp on it toward the brazier", () => {
+    const shrine = openShrine([pt(6, 13)], [pt(20, 23)]);
+    shrine.board.tiles[13 * 27 + 6] = Tile.Vent;
+    shrine.gimmicks = { vents: 2 };
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(2, 2);
+    g.step(); // tick 1: nothing
+    g.step(); // tick 2: erupts, first step
+    expect(g.wisps[0]!.pos).toEqual(pt(7, 13));
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(9, 13));
+  });
+
+  it("moss holds a wisp back, and tapping the wisp again tears the moss away", () => {
+    const shrine = openShrine([pt(13, 4)], [pt(20, 23)]);
+    shrine.board.tiles[6 * 27 + 13] = Tile.Moss;
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(13, 12);
+    const tap = () => {
+      g.command(1, { action: { kind: "staff", wisp: 0 } });
+      g.step();
+    };
+    tap(); // the wisp comes up against the moss and stops there
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(13, 5));
+    expect(g.board.tile(pt(13, 6))).toBe(Tile.Moss);
+    // Two taps while it's held back tear the tuft away.
+    tap();
+    expect(g.board.tile(pt(13, 6))).toBe(Tile.Moss);
+    tap();
+    expect(g.board.tile(pt(13, 6))).toBe(Tile.Floor);
+    g.step();
+    g.step();
+    expect(g.wisps[0]!.pos.y).toBeGreaterThan(6);
+    // You can walk through it all the same.
+    expect(g.board.passable(pt(13, 6), Mover.Walker)).toBe(true);
+  });
+
+  it("moss grows through the round, the same on both sides", () => {
+    const def = SHRINE_DEFS.find((d) => d.id === "moss-hollow")!;
+    const g = new Game(buildShrine(def), duo, 3);
+    const count = () => g.board.tiles.filter((t) => t === Tile.Moss).length;
+    const before = count();
+    for (let i = 0; i < 120; i++) g.step();
+    expect(count()).toBeGreaterThan(before);
+    const b = g.board, W = b.width, H = b.height;
+    for (let i = 0; i < W * H; i++) if (b.tiles[i] === Tile.Moss) expect(b.tiles[W * H - 1 - i]).toBe(Tile.Moss);
+  });
+
+  it("mist hides a wisp inside it from the staff", () => {
+    const def = SHRINE_DEFS.find((d) => d.id === "misty-stones")!;
+    const g = new Game(buildShrine(def), duo, 1);
+    const c = g.board.center;
+    const fogged = (x: number, y: number) => !!g.board.fog?.[y * g.board.width + x];
+    // At tick 0 a bank sits due east of the brazier: you can't see through it.
+    expect(fogged(c.x + 9, c.y)).toBe(true);
+    expect(g.board.canSee(pt(c.x + 5, c.y), pt(c.x + 13, c.y))).toBe(false);
+    // It drifts on: an eighth of a lap later the east lies between two banks, clear.
+    for (let i = 0; i < 19; i++) g.step();
+    expect(fogged(c.x + 9, c.y)).toBe(false);
+  });
+
+  it("standing on a pressure plate opens that quarter's shortcut gates, and only while you stand there", () => {
+    const def = SHRINE_DEFS.find((d) => d.id === "old-bastion")!;
+    const g = new Game(buildShrine(def), duo, 1);
+    const c = g.board.center;
+    const gate = pt(c.x - 6, c.y - 6);
+    expect(g.board.tile(gate)).toBe(Tile.Wall);
+    // The middle arches are open without anyone on a plate, so a lone lamplighter can score.
+    expect(g.board.tile(pt(c.x, c.y - 6))).toBe(Tile.Floor);
+    g.players[0]!.pos = pt(c.x - 9, c.y - 9);
+    g.step();
+    expect(g.board.tile(gate)).toBe(Tile.Gate);
+    expect(g.board.tile(pt(c.x + 6, c.y + 6))).toBe(Tile.Wall);
+    g.players[0]!.pos = pt(c.x - 9, c.y - 12);
+    g.step();
+    expect(g.board.tile(gate)).toBe(Tile.Wall);
+  });
+
+  it("a wisp left on a sun glyph is relayed toward the brazier", () => {
+    const shrine = openShrine([pt(13, 2)], [pt(20, 23)]);
+    shrine.board.tiles[2 * 27 + 13] = Tile.Glyph;
+    shrine.gimmicks = { glyphs: 6 };
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(2, 24);
+    g.step();
+    g.step();
+    // 4 tiles in, two a tick, straight down toward the brazier.
+    expect(g.wisps[0]!.pos).toEqual(pt(13, 6));
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(13, 6));
+  });
+
+  it("a stream carries a loose wisp clockwise round the brazier", () => {
+    const shrine = openShrine([pt(13, 6)], [pt(20, 23)]);
+    for (let x = 10; x <= 16; x++) shrine.board.tiles[6 * 27 + x] = Tile.Water;
+    shrine.gimmicks = { current: "swirl" };
+    const g = new Game(shrine, [{ id: 1, guild: 0, name: "A" }], 1, 1);
+    g.players[0]!.pos = pt(2, 2);
+    g.step();
+    g.step();
+    // North of the brazier, clockwise is east.
+    expect(g.wisps[0]!.pos).toEqual(pt(15, 6));
+  });
+
+  it("teammates pulling one wisp pull it toward the point between them", () => {
+    const roster: JoinSpec[] = [
+      { id: 1, guild: 0, name: "A" },
+      { id: 2, guild: 0, name: "C" },
+    ];
+    const g = new Game(openShrine([pt(13, 6)], [pt(20, 23)]), roster, 1, 1);
+    // One due south, one due east of it: alone each would pull it straight; together it goes
+    // diagonally toward the point between them.
+    g.players[0]!.pos = pt(13, 12);
+    g.players[1]!.pos = pt(19, 6);
+    g.command(1, { action: { kind: "staff", wisp: 0 } });
+    g.command(2, { action: { kind: "staff", wisp: 0 } });
+    g.step();
+    expect(g.wisps[0]!.target).toEqual(pt(15, 8));
+    g.step();
+    expect(g.wisps[0]!.pos).toEqual(pt(14, 7));
+    // Opposite sides: a tug of war, and it stays put.
+    const h = new Game(openShrine([pt(13, 6)], [pt(20, 23)]), roster, 1, 1);
+    h.players[0]!.pos = pt(13, 10);
+    h.players[1]!.pos = pt(13, 2);
+    h.command(1, { action: { kind: "staff", wisp: 0 } });
+    h.command(2, { action: { kind: "staff", wisp: 0 } });
+    h.step();
+    h.step();
+    expect(h.wisps[0]!.pos).toEqual(pt(13, 6));
   });
 
   it("is deterministic and ends after the round", () => {
@@ -344,5 +619,52 @@ describe("ice", () => {
     g.step();
     expect(p.pos).toEqual(pt(6, 5));
     expect(p.slid).toBe(false);
+  });
+});
+
+describe("co-op hard bots", () => {
+  const teamScore = (coop: boolean) => {
+    let seedR = 7;
+    const rand = () => (seedR = (seedR * 16807) % 2147483647) / 2147483647;
+    const roster: JoinSpec[] = [1, 2].map((id) => ({ id, guild: 0, name: "b" + id }));
+    let total = 0;
+    for (let seed = 1; seed <= 3; seed++) {
+      const g = new Game(shrineFor("fairy-ring", 2), roster, seed);
+      for (let t = 0; t < ROUND_TICKS; t++) {
+        for (const r of roster) {
+          const c = botCommand(g, r.id, { ...BOT_HARD, coop, coopLapse: 0 }, rand);
+          if (c) g.command(r.id, c);
+        }
+        g.step();
+      }
+      total += g.scores[0]!;
+    }
+    return total;
+  };
+
+  it("bank more as a pair than two hard bots each playing alone (with their teamwork lapses off)", () => {
+    expect(teamScore(true)).toBeGreaterThan(teamScore(false) * 1.3);
+  });
+
+  it("coord with a person: each takes a half and the bot feeds what's out of the person's reach", () => {
+    const score = (coop: boolean) => {
+      let seedR = 11;
+      const rand = () => (seedR = (seedR * 16807) % 2147483647) / 2147483647;
+      let total = 0;
+      for (let seed = 1; seed <= 3; seed++) {
+        const g = new Game(shrineFor("fairy-ring", 2), [{ id: 1, guild: 0, name: "me" }, { id: 2, guild: 0, name: "bot" }], seed);
+        for (let t = 0; t < ROUND_TICKS; t++) {
+          // The person plays their half of the shrine, moving about inside the archways.
+          const p = halfCommand(g, g.players[0]!, g.players[1]!, rand, { ...BOT_HARD, sloppiness: 0 }, false);
+          if (p) g.command(1, p);
+          const c = botCommand(g, 2, { ...BOT_HARD, coop }, rand);
+          if (c) g.command(2, c);
+          g.step();
+        }
+        total += g.scores[0]!;
+      }
+      return total;
+    };
+    expect(score(true)).toBeGreaterThan(score(false) * 1.15);
   });
 });

@@ -2,10 +2,10 @@
 // It knows nothing about the transport: the Node server and the Cloudflare Durable Object
 // both hand it a `send` function per connection and feed it parsed messages.
 
-import { BOT_LEVELS, botCommand, type BotStyle } from "../engine/bot.js";
+import { BOT_LEVELS, botCommand, botTraces, type BotStyle } from "../engine/bot.js";
 import { COUNTDOWN_TICKS, Game, MAX_TEAMS, TICK_MS, type Action, type Guild } from "../engine/game.js";
 import { SHRINES, shrineById, shrineFor } from "../engine/maps.js";
-import { FLAMES, type ClientMsg, type Flame, type LobbyPlayer, type Phase, type RoomView, type ServerMsg } from "../engine/protocol.js";
+import { FLAMES, type ClientMsg, type Flame, type LobbyPlayer, type BotLevelName, type Phase, type RoomView, type ServerMsg } from "../engine/protocol.js";
 
 export const MAX_PER_GUILD = 4;
 const NAME_MAX = 16;
@@ -25,6 +25,11 @@ interface Seat extends Omit<LobbyPlayer, "bot"> {
   token: string;
   send: ((m: ServerMsg) => void) | null;
   bot: BotStyle | null;
+}
+
+/** A bot's play style from its level and co-op setting. */
+function botStyle(level: BotLevelName, coop: boolean): BotStyle {
+  return { ...BOT_LEVELS[level], coop };
 }
 
 const BOT_NAMES = ["Wick", "Ember", "Moth", "Cinder", "Glim", "Soot", "Tallow", "Flint"];
@@ -162,8 +167,21 @@ export class Room {
           if (last) this.seats = this.seats.filter((s) => s !== last);
         } else {
           const level = msg.level && msg.level in BOT_LEVELS ? msg.level : msg.hard ? "hard" : "medium";
-          this.addBot(g, BOT_LEVELS[level]);
+          this.addBot(g, level);
         }
+        return this.broadcastRoom();
+      }
+      case "botset": {
+        if (seat.id !== this.host || this.phase !== "lobby") return;
+        const b = this.seats.find((s) => s.id === msg.id && s.bot);
+        if (!b) return;
+        if (msg.level && msg.level in BOT_LEVELS) {
+          // A new level brings that level's usual co-op setting, unless one is given too.
+          if (msg.coop === undefined && b.botLevel !== msg.level) b.coop = msg.level === "hard";
+          b.botLevel = msg.level;
+        }
+        if (msg.coop !== undefined) b.coop = !!msg.coop;
+        b.bot = botStyle(b.botLevel ?? "medium", !!b.coop);
         return this.broadcastRoom();
       }
       case "start":
@@ -184,8 +202,12 @@ export class Room {
     }
   }
 
-  /** Adds a computer lamplighter to a guild, if there's room. */
-  addBot(guild: Guild, style: BotStyle) {
+  /** Adds a computer lamplighter to a guild, if there's room. Hard bots co-op by default. */
+  addBot(guild: Guild, level: BotLevelName | BotStyle = "medium", coop?: boolean) {
+    // Older callers pass a style: keep it as it is.
+    const named = typeof level === "string" ? level : (Object.entries(BOT_LEVELS).find(([, v]) => v === level)?.[0] as BotLevelName | undefined);
+    const co = coop ?? named === "hard";
+    const style = typeof level === "string" ? botStyle(level, co) : level;
     if (!this.validGuild(guild) || this.guildCounts()[guild]! >= MAX_PER_GUILD) return;
     const id = this.nextId++;
     this.seats.push({
@@ -197,6 +219,8 @@ export class Room {
       token: "",
       send: null,
       bot: style,
+      botLevel: named,
+      coop: style.coop ?? co,
     });
   }
 
@@ -247,7 +271,11 @@ export class Room {
 
   private broadcastTick() {
     if (!this.game) return;
-    const m: ServerMsg = { t: "tick", snap: this.game.snapshot(), tickMs: TICK_MS };
+    const traces = botTraces(this.game);
+    const bots = this.seats
+      .filter((s) => s.bot)
+      .map((s) => ({ id: s.id, name: s.name, guild: s.guild, level: `${s.botLevel ?? "custom"}${s.bot!.coop ? ", co-op on" : ", co-op off"}`, role: "solo", intent: "", ...traces.get(s.id) }));
+    const m: ServerMsg = { t: "tick", snap: this.game.snapshot(), tickMs: TICK_MS, bots };
     for (const s of this.seats) s.send?.(m);
   }
 
@@ -258,7 +286,7 @@ export class Room {
       host: this.host,
       shrine: this.shrine,
       teams: this.teams,
-      players: this.seats.map(({ id, name, guild, flame, connected, bot }) => ({ id, name, guild, flame, connected, bot: !!bot })),
+      players: this.seats.map(({ id, name, guild, flame, connected, bot, botLevel, coop }) => ({ id, name, guild, flame, connected, bot: !!bot, ...(bot ? { botLevel, coop: !!coop } : {}) })),
       countdown: this.countdown,
       lastScores: this.lastScores,
     };
