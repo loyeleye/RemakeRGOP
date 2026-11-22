@@ -643,4 +643,5 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   me: () => me,
   toScreen: (x: number, y: number) => cam.toScreen(x, y),
   ink: (on: boolean, light?: "soft" | "shaped") => world?.setInk(on, light),
+  sky: (url: string | null, speed?: number) => world?.setDrawnSky(url, speed),
 };

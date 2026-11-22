@@ -14,3 +14,4 @@ subscription-only billing so no Spark was spent. Sources are in the project file
 | sprites/brazier.png, sprites/wisp-dawn.png (logo and favicon) | z_image_turbo_bf16, background removed with birefnet_image_background_removal_fp16 |
 
 The sky, cloud sea, fire, embers, light pillar, water and wisps are drawn in code with shaders.
+| textures/ink/clouds-below.webp (demo only, shown by `window.lanternfall.sky(url)` as a drawn cloud layer under the island) | krea2_turbo_fp8_scaled, rendered 2026-11-22, subscription-only billing |

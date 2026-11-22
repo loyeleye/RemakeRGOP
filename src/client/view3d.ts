@@ -631,6 +631,7 @@ export class World {
     clouds.rotation.x = -Math.PI / 2;
     clouds.position.y = -18;
     this.scene.add(clouds);
+    this.cloudSea = clouds;
 
     // Distant sky islands are built with each shrine, in its palette.
     this.scene.add(this.distant);
@@ -747,6 +748,40 @@ export class World {
     this.inkOn = on;
     this.inkLight = light;
     this.applyToon(on);
+  }
+
+  private cloudSea: THREE.Mesh | null = null;
+  private drawnSky: THREE.Mesh | null = null;
+  private drawnSkySpeed = 0;
+
+  /**
+   * Demo only: a drawn cloud layer under the island in place of the soft cloud sea. The game
+   * camera never tips far enough to show the horizon, so the backdrop a player sees is what lies
+   * below and beside the board. A speed above 0 slides it past, as on a flying-ship run.
+   */
+  setDrawnSky(url: string | null, speed = 0) {
+    if (this.drawnSky) {
+      this.scene.remove(this.drawnSky);
+      this.drawnSky = null;
+    }
+    if (this.cloudSea) this.cloudSea.visible = !url;
+    this.drawnSkySpeed = speed;
+    if (!url) return;
+    const t = new THREE.TextureLoader().load(url);
+    t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping;
+    t.repeat.set(9, 9);
+    t.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(2600, 2600),
+      new THREE.MeshBasicMaterial({ map: t, color: 0xc8c8c8, fog: false, depthWrite: false }),
+    );
+    m.rotation.x = -Math.PI / 2;
+    // Well below the island, so it reads as far away and slides slower than the board.
+    m.position.y = -110;
+    // After the sky dome, which is drawn without depth and would otherwise paint over it.
+    m.renderOrder = 1;
+    this.drawnSky = m;
+    this.scene.add(m);
   }
 
   private inkLight: "soft" | "shaped" = "soft";
@@ -1486,6 +1521,10 @@ export class World {
 
     // Demo only: models and wisps that arrive later also need the toon materials.
     if (this.inkOn && ++this.inkFrame % 20 === 0) this.applyToon(true);
+    if (this.drawnSky && this.drawnSkySpeed) {
+      const map = (this.drawnSky.material as THREE.MeshBasicMaterial).map!;
+      map.offset.y = (map.offset.y + this.drawnSkySpeed / 60) % 2;
+    }
     this.composer.render();
   }
 }
