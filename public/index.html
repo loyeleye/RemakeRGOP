@@ -20,6 +20,7 @@
       <button type="submit">Join</button>
     </form>
     <button id="practice" class="ghost">Practice alone</button>
+    <button id="story" class="ghost">Story: the Grand Kindling <span class="soon">prototype</span></button>
     <details class="how">
       <summary>How to play</summary>
       <ul>
@@ -87,6 +88,7 @@
       <span class="score dusk" id="score-1">0</span>
       <button id="recenter" class="ghost small" aria-label="Centre on me">◎</button>
     </header>
+    <div id="caption" hidden></div>
     <div class="thumbs">
       <div id="stick" class="stick touch-only" aria-label="Walk"><div class="knob"></div></div>
       <button id="run" class="thumb desk-only">Run</button>
@@ -100,6 +102,10 @@
     <div id="results" class="panel overlay" hidden>
       <h2 id="result-title"></h2>
       <p id="result-score" class="final"></p>
+      <div id="story-end" hidden>
+        <div class="sky"><div id="sky-fill"></div></div>
+        <ol id="end-lines"></ol>
+      </div>
       <button id="again" class="big">Back to the lobby</button>
       <button id="leave3" class="ghost">Leave room</button>
     </div>

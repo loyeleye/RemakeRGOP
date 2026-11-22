@@ -39,6 +39,32 @@ export interface RoomView {
   players: LobbyPlayer[];
   countdown: number;
   lastScores: number[] | null;
+  /** Ticks in this round, when it isn't the usual length (a story movement). */
+  roundTicks?: number;
+  /** Set in a story run: what the story layer shows. */
+  story?: StoryView;
+}
+
+/** A line of a story run, shown as a caption with the speaker's name. */
+export interface StoryLine {
+  who: string;
+  text: string;
+}
+
+export interface StoryView {
+  /** The run's name, e.g. "The Grand Kindling". */
+  run: string;
+  /** Which movement (0, 1, 2) and its title. */
+  movement: number;
+  title: string;
+  /** The tile Hesta's ring marks, if any. */
+  ring: { x: number; y: number } | null;
+  /** A wisp picked out for Rook: one the crew left him (Hesta), or the one Lumi is calling. */
+  mark: { wisp: number; who: string } | null;
+  /** Kes's island's score (scripted). */
+  kes: number;
+  /** At the end: how bright the sky got (0 to 1), and the closing lines. */
+  end?: { banked: number; kes: number; sky: number; lines: StoryLine[] };
 }
 
 export type ClientMsg =
@@ -58,6 +84,8 @@ export type ServerMsg =
   | { t: "welcome"; you: number; token: string }
   | { t: "room"; room: RoomView }
   | { t: "tick"; snap: GameSnapshot; tickMs: number; bots?: BotDebug[] }
+  /** Story runs: lines said on this tick. */
+  | { t: "say"; lines: StoryLine[] }
   | { t: "error"; message: string }
   | { t: "pong"; at: number };
 

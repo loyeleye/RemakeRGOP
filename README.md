@@ -21,7 +21,10 @@ npm start            # http://localhost:8787
 
 To play from a phone on the same Wi-Fi, open `http://<your-computer's-LAN-IP>:8787`.
 **Create a room** shows a 4-letter code and an **Invite** link. **Practice alone** runs a whole
-round in the page against a bot, with no server needed.
+round in the page against a bot, with no server needed. **Story: the Grand Kindling** (a prototype of
+story run 1) also runs in the page: three movements of about 6 minutes in all, with Hesta's and Lumi's lines as
+captions. Its numbers (movement lengths, wisp counts, spawn bands, how often Lumi calls, Kes's pace) are in
+`KINDLING` at the top of `src/engine/kindling.ts`.
 
 ### Controls
 
@@ -47,6 +50,7 @@ setup locally.
 |---|---|
 | `src/engine/` | The deterministic tick engine (`game.ts`), the grid (`board.ts`), the shrines (`maps.ts`), the bot (`bot.ts`) and the wire protocol. Shared by the server, the client and the tests. |
 | `src/server/room.ts` | One room (lobby, countdown, round, results), independent of the transport. |
+| `src/server/story.ts`, `src/engine/kindling.ts` | Story run 1, the Grand Kindling: three Games in a row with the story's lines, Hesta's ring, the fetch-only crew and Lumi's calls. |
 | `src/server/node.ts` | Node server: static files plus `ws`. |
 | `cloudflare/worker.ts` | Worker plus the `RoomObject` Durable Object. |
 | `src/client/view3d.ts` | The 3D renderer (Three.js): tilted camera, sky, cloud sea, floating plaza, firelight, bloom and the models. |

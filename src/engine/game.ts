@@ -287,7 +287,10 @@ export class Game {
     readonly shrine: Shrine,
     roster: JoinSpec[],
     seed: number,
-    wispsPerGuild = WISPS_PER_GUILD,
+    /** Wisps for every guild, or one count per guild (a story run can leave a guild with none). */
+    wispsPerGuild: number | readonly number[] = WISPS_PER_GUILD,
+    /** How many ticks this round lasts. */
+    readonly roundTicks = ROUND_TICKS,
   ) {
     const gm = shrine.gimmicks ?? {};
     const gp = gm.portcullis || gm.plates;
@@ -310,7 +313,8 @@ export class Game {
     this.scores = Array<number>(this.teams).fill(0);
     const used = new Set<string>();
     for (let g = 0 as Guild; g < this.teams; g = (g + 1) as Guild) {
-      for (let i = 0; i < wispsPerGuild; i++) {
+      const n = typeof wispsPerGuild === "number" ? wispsPerGuild : (wispsPerGuild[g] ?? 0);
+      for (let i = 0; i < n; i++) {
         const w: Wisp = {
           id: this.wisps.length,
           guild: g,
@@ -365,7 +369,7 @@ export class Game {
   }
 
   get finished() {
-    return this.tick >= ROUND_TICKS;
+    return this.tick >= this.roundTicks;
   }
 
   /** Queue a command for the next tick. A later command in the same tick replaces the action. */

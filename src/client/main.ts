@@ -3,8 +3,9 @@
 import type { Pt } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
-import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg } from "../engine/protocol.js";
+import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg, type StoryLine } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
+import { StoryRoom } from "../server/story.js";
 import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -57,6 +58,9 @@ function onServer(m: ServerMsg) {
       for (const b of m.snap.banks) bankFlash(b.guild);
       renderHud();
       break;
+    case "say":
+      for (const l of m.lines) sayLine(l);
+      break;
     case "error":
       toast(m.message);
       break;
@@ -102,6 +106,56 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
+/** A story run (the Grand Kindling) runs in the page too, like Practice. */
+function connectStory(name: string) {
+  practice = true;
+  const r = new StoryRoom();
+  const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
+  link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
+  link.send({ t: "hello", name: name || "Rook" });
+}
+
+// ------------------------------------------------------------------ story captions
+
+const captions: StoryLine[] = [];
+let captionTimer = 0;
+const esc = (t: string) => t.replace(/[&<>"]/g, (c) => `&${({ "&": "amp", "<": "lt", ">": "gt", '"': "quot" } as Record<string, string>)[c]};`);
+/** Lines are plain text; *word* is said with weight. */
+const lineHtml = (t: string) => esc(t).replace(/\*([^*]+)\*/g, "<em>$1</em>");
+
+function sayLine(l: StoryLine) {
+  captions.push(l);
+  // Don't let lines pile up: keep the newest few.
+  if (captions.length > 3) captions.splice(0, captions.length - 3);
+  if (!captionTimer) nextCaption();
+}
+
+function nextCaption() {
+  const el = $("caption");
+  const l = captions.shift();
+  if (!l) {
+    el.hidden = true;
+    captionTimer = 0;
+    return;
+  }
+  el.hidden = false;
+  el.className = l.who ? "" : "tell";
+  el.innerHTML = (l.who ? `<b class="${l.who.toLowerCase()}">${esc(l.who)}</b>` : "") + lineHtml(l.text);
+  // Restart the fade-in.
+  el.style.animation = "none";
+  void el.offsetWidth;
+  el.style.animation = "";
+  const ms = Math.max(2200, l.text.length * 60) * (captions.length ? 0.7 : 1);
+  captionTimer = window.setTimeout(nextCaption, ms);
+}
+
+function clearCaptions() {
+  captions.length = 0;
+  clearTimeout(captionTimer);
+  captionTimer = 0;
+  $("caption").hidden = true;
+}
+
 function botLevel(): "easy" | "medium" | "hard" {
   const v = $<HTMLSelectElement>("bot-level").value;
   return v === "easy" || v === "hard" ? v : "medium";
@@ -113,6 +167,8 @@ function leave() {
   l?.close();
   room = null;
   snap = prevSnap = null;
+  clearCaptions();
+  skyBase = null;
   try {
     history.replaceState(null, "", location.pathname);
   } catch {
@@ -213,6 +269,9 @@ function renderLobby() {
 }
 
 function renderResults() {
+  $("story-end").hidden = !room?.story;
+  if (room?.story) return renderStoryEnd();
+  $("again").textContent = "Back to the lobby";
   if (!room?.lastScores) return;
   const scores = room.lastScores;
   const mine = room.players.find((p) => p.id === me)?.guild;
@@ -227,6 +286,32 @@ function renderResults() {
   $("again").hidden = room.host !== me;
 }
 
+let shownEnd: unknown = null;
+
+/** The Kindling's ending: the total, how bright the sky got, and the last lines, one by one. */
+function renderStoryEnd() {
+  const st = room!.story!, end = st.end;
+  $("again").textContent = "Play again";
+  $("again").hidden = false;
+  if (!end || shownEnd === end) return;
+  shownEnd = end;
+  clearCaptions();
+  $("result-title").textContent = st.run;
+  $("result-score").innerHTML = `<b style="color:${GUILD_COLORS[0]}">${end.banked}</b> <span class="blurb">wisps banked · Kes's island ${end.kes}</span>`;
+  const fill = $("sky-fill");
+  fill.style.width = "0";
+  requestAnimationFrame(() => requestAnimationFrame(() => (fill.style.width = `${Math.round(end.sky * 100)}%`)));
+  $("end-lines").replaceChildren(
+    ...end.lines.map((l, i) => {
+      const li = document.createElement("li");
+      if (!l.who) li.className = "tell";
+      li.innerHTML = (l.who ? `<b class="${l.who.toLowerCase()}">${esc(l.who)}</b>` : "") + lineHtml(l.text);
+      li.style.animationDelay = `${0.6 + i * 1.8}s`;
+      return li;
+    }),
+  );
+}
+
 function renderHud() {
   if (!room) return;
   const s = snap;
@@ -235,10 +320,24 @@ function renderHud() {
     el.hidden = g >= room.teams;
     el.textContent = String(s?.scores[g] ?? 0);
   }
-  const left = s ? ROUND_TICKS - s.tick : ROUND_TICKS;
+  const story = room.story;
+  $("score-1").classList.toggle("kes", !!story);
+  if (story) {
+    $("score-1").textContent = `${cam.compact ? "Kes" : "Kes's island"} ${story.kes}`;
+    if (room.phase === "countdown") {
+      $("ticks").textContent = `🔔 ${story.title}`;
+      return renderPad(s);
+    }
+  }
+  const len = room.roundTicks ?? ROUND_TICKS;
+  const left = s ? len - s.tick : len;
   const tide = shrineFor(room.shrine, room.teams).gimmicks.tide;
   const tideNote = tide && s && room.phase !== "countdown" ? ` · tide ${tideIn(s.tick + 1, tide) ? "in" : "out"} (${tide - ((s.tick + 1) % tide)})` : "";
-  $("ticks").textContent = room.phase === "countdown" ? `Starts in ${room.countdown}` : `${left} ticks · ${fmtTime((left * tickMs) / 1000)}${tideNote}`;
+  $("ticks").textContent = (story ? `${story.title} · ` : "") + (room.phase === "countdown" ? `Starts in ${room.countdown}` : `${left} ticks · ${fmtTime((left * tickMs) / 1000)}${tideNote}`);
+  renderPad(s);
+}
+
+function renderPad(s: GameSnapshot | null) {
   const p = s?.players.find((q) => q.id === me);
   $("mode").textContent = p?.mode === "push" ? "Push" : "Pull";
   $("mode").classList.toggle("push", p?.mode === "push");
@@ -599,6 +698,7 @@ $("join-form").onsubmit = (e) => {
   connectOnline(code, playerName());
 };
 $("practice").onclick = () => connectPractice(playerName());
+$("story").onclick = () => connectStory(playerName());
 $("start").onclick = () => link?.send({ t: "start" });
 $<HTMLSelectElement>("teams").onchange = (e) => {
   const n = Number((e.target as HTMLSelectElement).value);
@@ -710,6 +810,7 @@ function frame(now: number) {
     g.restore();
   }
   if (bigTaps) drawBigTaps(g, mine?.mode === "push", mine?.guild, lit, t, now);
+  if (room.story) drawStory(g, t, now);
   if (cam.compact) {
     const w = Math.min(120, cam.w * 0.3);
     minimapRect = { x: cam.w - w - 10, y: 64, w, h: w };
@@ -717,6 +818,94 @@ function frame(now: number) {
   }
 }
 requestAnimationFrame(frame);
+
+/** Exposure before the ending lit the sky, to put back afterwards. */
+let skyBase: number | null = null;
+
+/** Story marks: Hesta's ring on the ground, the wisp Lumi is calling, and the sky lighting at the end. */
+function drawStory(g: CanvasRenderingContext2D, t: number, now: number) {
+  const st = room?.story;
+  if (!st || !snap || !world) return;
+  const pulse = 0.5 + 0.5 * Math.sin(now / 260);
+  if (st.ring && room!.phase === "playing") {
+    const cx = st.ring.x + 0.5, cy = st.ring.y + 0.5;
+    g.save();
+    for (const [r, a, w] of [[0.62, 0.95, 3], [0.62 + 0.25 * pulse, 0.5 * (1 - pulse), 2]] as const) {
+      g.beginPath();
+      for (let i = 0; i <= 40; i++) {
+        const ang = (i / 40) * Math.PI * 2;
+        const p = cam.toScreen(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r, 0.02);
+        if (i) g.lineTo(p.x, p.y);
+        else g.moveTo(p.x, p.y);
+      }
+      g.strokeStyle = `rgba(255, 214, 120, ${a})`;
+      g.lineWidth = w;
+      g.shadowColor = "#ffd36a";
+      g.shadowBlur = 12;
+      g.stroke();
+    }
+    g.restore();
+    edgeArrow(g, cam.toScreen(cx, cy, 0.02), "#ffd36a");
+  }
+  const cw = st.mark ? snap.wisps.find((w) => w.id === st.mark!.wisp) : null;
+  if (cw) {
+    const col = st.mark!.who === "Lumi" ? "#ffd36a" : "#9fd8ff";
+    const x = cw.px + (cw.x - cw.px) * t + 0.5, y = cw.py + (cw.y - cw.py) * t + 0.5;
+    const c = cam.toScreen(x, y, 0.75);
+    const r = Math.max(18, cam.scale * 0.9) * (1 + 0.15 * pulse);
+    g.save();
+    g.strokeStyle = col;
+    g.lineWidth = 3;
+    g.shadowColor = col;
+    g.shadowBlur = 10;
+    g.beginPath();
+    g.arc(c.x, c.y, r, 0, Math.PI * 2);
+    g.stroke();
+    g.font = "700 12px system-ui, sans-serif";
+    g.fillStyle = col;
+    g.textAlign = "center";
+    g.fillText(st.mark!.who === "Lumi" ? "LUMI" : "YOURS", c.x, c.y - r - 6);
+    g.restore();
+    edgeArrow(g, c, col);
+  }
+  // The ending: the camera pulls out and the sky brightens with the score.
+  const r = world.renderer;
+  if (st.end && room!.phase === "results") {
+    if (skyBase === null) skyBase = r.toneMappingExposure;
+    const goal = skyBase * (1 + 0.9 * st.end.sky);
+    r.toneMappingExposure += (goal - r.toneMappingExposure) * 0.02;
+    cam.follow = false;
+    cam.scale *= 0.997;
+  } else if (skyBase !== null) {
+    r.toneMappingExposure = skyBase;
+    skyBase = null;
+  }
+}
+
+/** When a story mark is off screen, an arrow at the edge points the way to it. */
+function edgeArrow(g: CanvasRenderingContext2D, p: { x: number; y: number }, col: string) {
+  const m = 36;
+  if (p.x >= m && p.y >= m + 40 && p.x <= cam.w - m && p.y <= cam.h - m) return;
+  const cx = cam.w / 2, cy = cam.h / 2;
+  const a = Math.atan2(p.y - cy, p.x - cx);
+  // Where the line from the centre meets the inset edge of the screen.
+  const sx = (cam.w / 2 - m) / Math.abs(Math.cos(a) || 1e-6), sy = (cam.h / 2 - m - 40) / Math.abs(Math.sin(a) || 1e-6);
+  const d = Math.min(sx, sy);
+  const x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d;
+  g.save();
+  g.translate(x, y);
+  g.rotate(a);
+  g.fillStyle = col;
+  g.shadowColor = col;
+  g.shadowBlur = 10;
+  g.beginPath();
+  g.moveTo(14, 0);
+  g.lineTo(-8, -10);
+  g.lineTo(-8, 10);
+  g.closePath();
+  g.fill();
+  g.restore();
+}
 
 /** Big taps: a dashed ring around each wisp showing its click target. Ones your staff can work now are bright; the hovered one is solid. */
 function drawBigTaps(g: CanvasRenderingContext2D, push: boolean, guild: number | undefined, hover: number | null, t: number, now: number) {

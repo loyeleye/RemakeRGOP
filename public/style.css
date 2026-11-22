@@ -117,3 +117,23 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 .guild li .bot-coop input { width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; }
 .guild li .bot-coop { display: inline-flex; gap: 4px; white-space: nowrap; align-items: center; cursor: pointer; }
 .guild li .bot-coop.off { opacity: 0.45; cursor: not-allowed; }
+
+/* Story runs: captions, the sky meter and the ending. */
+.soon { font-size: 11px; opacity: 0.7; border: 1px solid currentColor; border-radius: 6px; padding: 0 4px; margin-left: 4px; vertical-align: middle; }
+#caption { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); width: min(92vw, 560px); background: #120f1cd8; border: 1px solid #ffffff22; border-radius: 12px; padding: 10px 14px; text-align: center; font-size: 17px; line-height: 1.35; z-index: 8; pointer-events: none; animation: cap-in 0.25s ease-out; }
+#caption b { display: block; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 2px; }
+#caption b.hesta { color: #9fd8ff; }
+#caption b.lumi { color: #ffd36a; }
+#caption.tell { font-style: italic; color: #e8e0ff; }
+@keyframes cap-in { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+body:not(.touch) #caption { bottom: 40px; }
+body.touch #caption { bottom: 240px; font-size: 16px; }
+.score.kes { font-size: 15px; }
+#story-end .sky { height: 10px; border-radius: 6px; background: #ffffff18; margin: 10px 0 12px; overflow: hidden; }
+#sky-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffb347, #fff2b0); transition: width 3s ease-out; }
+#end-lines { list-style: none; padding: 0; margin: 0 0 12px; text-align: left; }
+#end-lines li { opacity: 0; animation: cap-in-line 0.6s ease-out forwards; margin: 6px 0; }
+#end-lines li b { color: #ffd36a; margin-right: 6px; }
+#end-lines li b.hesta { color: #9fd8ff; }
+#end-lines li.tell { font-style: italic; color: #d9d0f5; }
+@keyframes cap-in-line { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
