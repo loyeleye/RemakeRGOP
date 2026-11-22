@@ -473,6 +473,27 @@ function glowTexture() {
 }
 const GLOW = glowTexture();
 
+/** Demo only: light drawn the ink way. A solid core with an inked rim and two flat halo bands, no soft falloff. */
+function inkGlowTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  const disc = (r: number, fill: string) => {
+    g.beginPath();
+    g.arc(64, 64, r, 0, Math.PI * 2);
+    g.fillStyle = fill;
+    g.fill();
+  };
+  disc(61, "rgba(255,255,255,0.14)");
+  disc(42, "rgba(255,255,255,0.30)");
+  disc(21, "rgba(0,0,0,0.9)");
+  disc(18, "rgba(255,255,255,1)");
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const INK_GLOW = inkGlowTexture();
+
 /**
  * A soft mask of every tile of one kind: a disc on each tile, blurred, so neighbouring tiles
  * melt into one rounded pool. The water shader thresholds it into a natural outline.
@@ -647,10 +668,10 @@ export class World {
     this.composer.addPass(this.plain);
     this.inkPass = new InkPass(this.scene, cam.three);
     this.composer.addPass(this.inkPass);
-    this.setInk(new URLSearchParams(location.search).has("ink"));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.45, 0.9);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    this.setInk(new URLSearchParams(location.search).has("ink"));
 
     modelWaiters.push(() => this.refreshProps());
   }
@@ -726,6 +747,7 @@ export class World {
   }
 
   private inkOn = false;
+  private plainBloom = 0.55;
   private inkFrame = 0;
   private toonOf = new Map<THREE.Material, THREE.MeshToonMaterial>();
   private toonRamp: THREE.DataTexture | null = null;
@@ -755,7 +777,14 @@ export class World {
       }
       return t;
     };
+    this.bloom.strength = on ? 0.08 : this.plainBloom;
     this.scene.traverse((o) => {
+      const sp = o as THREE.Sprite;
+      if (sp.isSprite && (sp.material.map === GLOW || sp.material.map === INK_GLOW)) {
+        sp.material.map = on ? INK_GLOW : GLOW;
+        sp.material.blending = on ? THREE.NormalBlending : THREE.AdditiveBlending;
+        return;
+      }
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       m.material = Array.isArray(m.material) ? m.material.map(swap) : swap(m.material);
