@@ -7,6 +7,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { InkPass } from "./inkpass.js";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { Tile, type Board } from "../engine/board.js";
@@ -526,6 +527,8 @@ export class World {
   readonly scene = new THREE.Scene();
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
+  private plain!: RenderPass;
+  private inkPass!: InkPass;
   private shrineGroup = new THREE.Group();
   private shrineId = "";
   private distantPush = 0;
@@ -621,7 +624,11 @@ export class World {
     this.scene.add(this.walkMark);
 
     this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, cam.three));
+    this.plain = new RenderPass(this.scene, cam.three);
+    this.composer.addPass(this.plain);
+    this.inkPass = new InkPass(this.scene, cam.three);
+    this.composer.addPass(this.inkPass);
+    this.setInk(new URLSearchParams(location.search).has("ink"));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.45, 0.9);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
@@ -689,6 +696,49 @@ export class World {
       this.distant.add(c);
       this.floaters.push({ obj: c, y, phase: i, drift: 0.2 });
     }
+  }
+
+  /** Demo only: swap the normal render for the ink look (toon bands and outlines). */
+  setInk(on: boolean) {
+    this.plain.enabled = !on;
+    this.inkPass.enabled = on;
+    this.inkOn = on;
+    this.applyToon(on);
+  }
+
+  private inkOn = false;
+  private inkFrame = 0;
+  private toonOf = new Map<THREE.Material, THREE.MeshToonMaterial>();
+  private toonRamp: THREE.DataTexture | null = null;
+
+  /** Swap every lit material for a toon one with a four-step ramp, or swap them back. */
+  private applyToon(on: boolean) {
+    if (!this.toonRamp) {
+      this.toonRamp = new THREE.DataTexture(new Uint8Array([36, 110, 185, 255]), 4, 1, THREE.RedFormat);
+      this.toonRamp.minFilter = this.toonRamp.magFilter = THREE.NearestFilter;
+      this.toonRamp.needsUpdate = true;
+    }
+    const swap = (mat: THREE.Material): THREE.Material => {
+      if (!on) return (mat.userData.plain as THREE.Material | undefined) ?? mat;
+      const s = mat as THREE.MeshStandardMaterial;
+      if (!s.isMeshStandardMaterial) return mat;
+      let t = this.toonOf.get(mat);
+      if (!t) {
+        t = new THREE.MeshToonMaterial({
+          map: s.map, color: s.color, emissive: s.emissive, emissiveMap: s.emissiveMap, emissiveIntensity: s.emissiveIntensity,
+          transparent: s.transparent, opacity: s.opacity, side: s.side, alphaTest: s.alphaTest, vertexColors: s.vertexColors,
+          depthWrite: s.depthWrite, gradientMap: this.toonRamp,
+        });
+        t.userData.plain = mat;
+        this.toonOf.set(mat, t);
+      }
+      return t;
+    };
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.material = Array.isArray(m.material) ? m.material.map(swap) : swap(m.material);
+    });
   }
 
   resize(w: number, h: number, dpr: number) {
@@ -1370,6 +1420,8 @@ export class World {
       this.walkMark.visible = false;
     }
 
+    // Demo only: models and wisps that arrive later also need the toon materials.
+    if (this.inkOn && ++this.inkFrame % 20 === 0) this.applyToon(true);
     this.composer.render();
   }
 }

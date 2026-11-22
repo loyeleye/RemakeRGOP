@@ -642,4 +642,5 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   room: () => room,
   me: () => me,
   toScreen: (x: number, y: number) => cam.toScreen(x, y),
+  ink: (on: boolean) => world?.setInk(on),
 };
