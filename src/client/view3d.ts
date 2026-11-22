@@ -243,7 +243,26 @@ function tex(path: string, repeat: number, fallback?: string) {
   t.repeat.set(repeat, repeat);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
+  t.userData.path = path;
   return t;
+}
+
+/** Demo only: the hand-inked version of a floor or wall picture, if one has been drawn. */
+const inkTextures = new Map<THREE.Texture, THREE.Texture>();
+function inkVersion(plain: THREE.Texture, onReady: (t: THREE.Texture) => void) {
+  const known = inkTextures.get(plain);
+  if (known) return onReady(known);
+  const path = plain.userData.path as string | undefined;
+  if (!path) return;
+  const slash = path.lastIndexOf("/");
+  texLoader.load(`${path.slice(0, slash)}/ink${path.slice(slash)}`, (t) => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.copy(plain.repeat);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    inkTextures.set(plain, t);
+    onReady(t);
+  }, undefined, () => {});
 }
 
 // ------------------------------------------------------------------ shaders
@@ -731,6 +750,8 @@ export class World {
         });
         t.userData.plain = mat;
         this.toonOf.set(mat, t);
+        const made = t;
+        if (s.map) inkVersion(s.map, (ink) => { made.map = ink; made.needsUpdate = true; });
       }
       return t;
     };
