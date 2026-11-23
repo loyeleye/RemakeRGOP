@@ -243,6 +243,7 @@ function nextTalk() {
   if (!l) {
     el.hidden = true;
     typing = null;
+    callHint();
     return;
   }
   el.hidden = false;
@@ -562,6 +563,7 @@ function renderHud() {
   $("score-1").classList.toggle("kes", !!story);
   $("mute").hidden = !story;
   $("call").hidden = !story?.canCall;
+  callHint();
   if (story) {
     const rv = story.rival;
     $("score-1").hidden = !rv;
@@ -749,8 +751,7 @@ const endPointer = (e: PointerEvent) => {
   if (callMode && room?.story?.canCall && room.phase === "playing") {
     const t = cam.toTile(x, y);
     link?.send({ t: "call", x: Math.floor(t.x), y: Math.floor(t.y) });
-    callMode = false;
-    $("call").classList.remove("on");
+    setCallMode(false);
     return;
   }
   const t = targetAt(x, y);
@@ -775,6 +776,7 @@ window.addEventListener("keydown", (e) => {
   if (room?.phase !== "playing" || (e.target as HTMLElement).tagName === "INPUT") return;
   const k = e.key.toLowerCase();
   if (k === "`") return void (toggleDebug(), e.preventDefault());
+  if (room.story?.canCall && (k === "c" || (k === "escape" && callMode))) return void (setCallMode(k === "c" ? !callMode : false), e.preventDefault());
   if (k === "o") {
     bigTaps = !bigTaps;
     toast(bigTaps ? "Big taps on: every wisp has a larger target. O to turn off" : "Big taps off");
@@ -957,10 +959,34 @@ $("story").onclick = () => connectStory(playerName());
 $("story2").onclick = () => connectStory(playerName(), 2);
 // Run 2: call Rook to a spot. The next tap on the ground is the call.
 let callMode = false;
-$("call").onclick = () => {
-  callMode = !callMode;
-  $("call").classList.toggle("on", callMode);
-};
+function setCallMode(on: boolean) {
+  callMode = on;
+  $("call").classList.toggle("on", on);
+  canvas.style.cursor = on ? "crosshair" : "";
+  callHint();
+}
+$("call").onclick = () => setCallMode(!callMode);
+/** Until her first call, say how calling works; in call mode, say what the next tap does. */
+function callHint() {
+  const st = room?.story;
+  const can = !!st?.canCall && room?.phase === "playing";
+  // Only once Rook has finished asking ("Tell me where to stand.").
+  const fresh = can && !st?.called && $("dialog").hidden;
+  const el = $("hint");
+  el.hidden = !can || (!callMode && !fresh);
+  if (!el.hidden) {
+    // A tooltip hanging from the Call button.
+    const r = $("call").getBoundingClientRect();
+    el.style.top = `${r.bottom + 12}px`;
+    el.style.right = `${Math.max(8, innerWidth - r.right - 8)}px`;
+    el.style.setProperty("--arrow", `${Math.max(14, innerWidth - (r.left + r.width / 2) - Math.max(8, innerWidth - r.right - 8))}px`);
+  }
+  $("call").classList.toggle("nudge", fresh && !callMode);
+  const touch = document.body.classList.contains("touch");
+  el.textContent = callMode
+    ? `${touch ? "Tap" : "Click"} the ground where Rook should stand.`
+    : touch ? "Tap 📣 Call, then tap where Rook should stand." : "Press C or click 📣 Call, then click where Rook should stand.";
+}
 sound.unlockOnFirstInput();
 const muteBtn = $("mute");
 const showMute = () => {

@@ -35,7 +35,7 @@ export const LESSON = {
   firstToThree: {
     title: "First to three",
     target: 3,
-    /** Rook plays an easy game and stops at this score. */
+    /** Rook plays a real game (medium bot) up to this score, then an easy one; first to three wins. */
     rookStops: 2,
     ticks: 150,
     /** Lumi's wisps in play, and how many start on the pool (the rest come back on it once banked). */

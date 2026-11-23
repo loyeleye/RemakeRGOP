@@ -155,11 +155,14 @@ describe("Lumi's lesson", () => {
     for (let i = 0; i < 40 && r.room.state.round === 1; i++) r.room.onTick();
     expect(r.room.state.round).toBe(2);
     r.play();
-    // Round 3: her wisps on the pool, Rook stops at 2, and a win ends the run.
+    // Round 3: her wisps on the pool, and Rook plays for real: he scores early, and if she does
+    // nothing he gets to three and she goes again.
     const g = r.room.state.game;
     expect(g.wisps.filter((w) => w.guild === 0 && g.board.tile(w.pos) === Tile.Water).length).toBe(LESSON.firstToThree.onPool);
-    for (let i = 0; i < 140; i++) r.room.onTick();
-    expect(r.room.state.game.scores[1]).toBeLessThanOrEqual(LESSON.firstToThree.rookStops);
+    for (let i = 0; i < 50 && r.room.state.game.scores[1] === 0; i++) r.room.onTick();
+    expect(r.room.state.game.scores[1]).toBeGreaterThan(0);
+    for (let i = 0; i < LESSON.firstToThree.ticks && r.room.state.games === 1; i++) r.room.onTick();
+    expect(r.room.state.games).toBe(2);
   });
 
   it("losing round 3 brings best of five, and winning ends the run", () => {

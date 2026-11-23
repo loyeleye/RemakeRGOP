@@ -9,7 +9,7 @@
 // Numbers are in LESSON (src/engine/lesson.ts).
 
 import { Mover, Tile, pt, samePt, type Pt } from "../engine/board.js";
-import { BOT_EASY, botCommand } from "../engine/bot.js";
+import { BOT_EASY, BOT_MEDIUM, botCommand } from "../engine/bot.js";
 import { Game, Grip, Rng, TICK_MS, type Action, type Guild, type Wisp } from "../engine/game.js";
 import { LESSON } from "../engine/lesson.js";
 import { shrineById } from "../engine/maps.js";
@@ -208,12 +208,12 @@ export class LessonRoom {
       else action = hers !== null ? { kind: "staff", wisp: hers } : { kind: "idle" };
     }
     if (this.round === 2) {
-      if (g.scores[1]! < LESSON.firstToThree.rookStops) {
-        const cmd = botCommand(g, ROOK_ID, BOT_EASY, () => this.rng.next());
-        if (cmd) g.command(ROOK_ID, cmd);
-        return;
-      }
-      action = { kind: "idle" };
+      // He plays for real up to two, then eases off: still moving and pulling, but slowly, so
+      // she has time to find the tide pull and a slow player can still lose.
+      const style = g.scores[1]! < LESSON.firstToThree.rookStops ? BOT_MEDIUM : BOT_EASY;
+      const cmd = botCommand(g, ROOK_ID, style, () => this.rng.next());
+      if (cmd) g.command(ROOK_ID, cmd);
+      return;
     }
     if (action && !(rook.action.kind === action.kind && (action.kind !== "staff" || (rook.action.kind === "staff" && rook.action.wisp === action.wisp)))) g.command(ROOK_ID, { action });
   }
@@ -312,7 +312,8 @@ export class LessonRoom {
       this.say(LUMI, "I pulled.", { player: LUMI_ID });
     }
     if (g.scores[0]! >= T.target) return this.finish();
-    if (g.finished) {
+    // Rook to three first, or the clock runs out: she goes again.
+    if (g.finished || g.scores[1]! >= T.target) {
       this.games++;
       this.say(LUMI, "Best of five.", { talk: true });
       this.startRound(2, true);
