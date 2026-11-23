@@ -45,8 +45,12 @@ export const KINDLING = {
     callEvery: 8,
     /** A wisp counts as neglected once he hasn't touched it for this many ticks. */
     neglectAfter: 16,
-    /** A call he hasn't answered (touched the wisp) within this many ticks is a miss. She counts each wisp once, however often she calls it. */
+    /** A call he hasn't answered (touched the wisp) within this many ticks is a miss: she gives up on that wisp and calls another. She counts each wisp once. */
     answerWithin: 12,
+    /** Ticks into an unanswered call when she says it again, with feeling. */
+    repeatAfter: 6,
+    /** Chance she concedes out loud ("...Fine. That one.") when he banks a different wisp. A bank elsewhere also counts her call as missed. */
+    concede: 0.6,
   },
   /** Kes's island: a scripted score, a bank every so many ticks on average, per movement. */
   kesEvery: [16, 12, 12],
@@ -245,14 +249,14 @@ function feedSpot(game: Game, me: Pt, wisp: Pt, ready: (p: Pt) => boolean, rook:
  * least `after` ticks and he isn't working it now. `lastTouch` maps wisp id to the tick he
  * last touched it (or when it appeared).
  */
-export function neglected(game: Game, rookId: number, lastTouch: Map<number, number>, after: number): Wisp | null {
+export function neglected(game: Game, rookId: number, lastTouch: Map<number, number>, after: number, skip: (id: number) => boolean = () => false): Wisp | null {
   const rook = game.players.find((p) => p.id === rookId);
   if (!rook) return null;
   const on = rook.action.kind === "staff" ? rook.action.wisp : null;
   let pick: Wisp | null = null;
   let age = after - 1;
   for (const w of game.wisps) {
-    if (w.id === on || game.board.inBankZone(w.pos)) continue;
+    if (w.id === on || skip(w.id) || game.board.inBankZone(w.pos)) continue;
     const a = game.tick - (lastTouch.get(w.id) ?? game.tick);
     if (a > age) [pick, age] = [w, a];
   }

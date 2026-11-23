@@ -72,14 +72,16 @@ export class StoryRoom {
   private lastTouch = new Map<number, number>();
   private calls: Call[] = [];
   private lastCall = -99;
-  private lastCalled = -1;
-  private sameCalls = 0;
+  /** Wisps she gave up calling, and until which tick she leaves them be. */
+  private ignored = new Map<number, number>();
   private missed = 0;
   private lives = new Map<number, number>();
   private missedLives = new Set<string>();
 
   private readonly there = new Turns(["There. Stand there.", "That one. Stand in the ring.", "Across the brazier from it. There.", "Stand there, Rook."]);
   private readonly banked = new Turns(["That's it.", "Clean.", "Good. Again.", "That's the way."]);
+  private readonly concede = new Turns(["...Fine. That one.", "...Fine. That one works too.", "Fine. I suppose that counts."]);
+  private readonly instead = new Turns(["Forget it. {Dir} one, then.", "Never mind that one. {Dir}!", "Fine. {Dir} one. Dad."]);
   private readonly now = new Turns(["Now, Rook.", "That one's yours. Now.", "{crew} left you one, {dir}. Now.", "Now."]);
 
   constructor(
@@ -170,8 +172,7 @@ export class StoryRoom {
     this.lives = new Map();
     this.missedLives = new Set();
     this.lastCall = -99;
-    this.lastCalled = -1;
-    this.sameCalls = 0;
+    this.ignored = new Map();
     this.lastHesta = -99;
     this.phase = "countdown";
     this.countdown = KINDLING.bellTicks;
@@ -318,29 +319,38 @@ export class StoryRoom {
       this.lastTouch.set(b.wisp, g.tick);
       this.lives.set(b.wisp, (this.lives.get(b.wisp) ?? 0) + 1);
     }
-    for (const c of this.calls) {
-      if (c.answered) continue;
-      if ((this.lastTouch.get(c.wisp) ?? 0) >= c.at) c.answered = true;
-      else if (g.tick - c.at >= K.answerWithin) {
-        c.answered = true;
-        const k = `${c.wisp}@${c.life}`;
+    // Lumi's call is an opinion, not an order. Answered when he touches it. If he banks a
+    // different wisp instead, she concedes (sometimes out loud) and moves on; if he just
+    // leaves it, she says it once more with feeling, then gives up on it and calls another.
+    const cur = this.calls.find((c) => !c.answered);
+    let switchNow = false;
+    if (cur) {
+      const age = g.tick - cur.at;
+      const other = g.banks.find((b) => b.wisp !== cur.wisp);
+      if ((this.lastTouch.get(cur.wisp) ?? 0) >= cur.at) cur.answered = true;
+      else if (other || age >= K.answerWithin) {
+        cur.answered = true;
+        this.ignored.set(cur.wisp, g.tick + K.neglectAfter);
+        const k = `${cur.wisp}@${cur.life}`;
         if (!this.missedLives.has(k)) {
           this.missedLives.add(k);
           this.missed++;
         }
+        if (other && this.rng.next() < K.concede) this.say(LUMI, this.concede.next());
+        switchNow = !other;
+      } else if (age === K.repeatAfter) {
+        const Dir = cap(compass(g.board, g.wisps[cur.wisp]!.pos));
+        this.say(LUMI, `Dad. ${Dir} one. *${Dir}.*`);
       }
     }
-    if (g.tick - this.lastCall < K.callEvery) return;
-    const w = neglected(g, ROOK, this.lastTouch, K.neglectAfter);
+    if (this.calls.some((c) => !c.answered)) return;
+    if (!switchNow && g.tick - this.lastCall < K.callEvery) return;
+    const w = neglected(g, ROOK, this.lastTouch, K.neglectAfter, (id) => (this.ignored.get(id) ?? -1) > g.tick);
     if (!w) return;
-    const dir = compass(g.board, w.pos);
-    const Dir = dir[0]!.toUpperCase() + dir.slice(1);
-    this.sameCalls = w.id === this.lastCalled ? this.sameCalls + 1 : 0;
-    const line = [`Dad. ${Dir} one.`, `Dad. ${Dir} one. *${Dir}.*`, `${Dir}! I'm not saying it again.`][Math.min(2, this.sameCalls)]!;
-    this.say(LUMI, line);
+    const Dir = cap(compass(g.board, w.pos));
+    this.say(LUMI, switchNow ? this.instead.next().replace("{Dir}", Dir) : `Dad. ${Dir} one.`);
     this.calls.push({ wisp: w.id, life: this.lives.get(w.id) ?? 0, at: g.tick, answered: false });
     this.lastCall = g.tick;
-    this.lastCalled = w.id;
   }
 
   /** The wisp to pick out: the crew's latest feed in the relay, Lumi's open call in the crescendo. */
@@ -459,3 +469,5 @@ function cleanAction(raw: unknown, game: Game): Action | undefined {
   }
   return undefined;
 }
+
+const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);

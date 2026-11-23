@@ -76,6 +76,7 @@ describe("Grand Kindling", () => {
   });
 
   it("plays all three movements to an ending that can't be failed", () => {
+    const lumi: string[] = [];
     for (const seed of [11, 12, 13]) {
       const { room, msgs, crewBanks } = playRun(seed);
       const st = room.state;
@@ -86,7 +87,15 @@ describe("Grand Kindling", () => {
       expect(crewBanks).toEqual([]);
       const said = msgs.flatMap((m) => (m.t === "say" ? m.lines : []));
       expect(said.some((l) => l.who === "Lumi" && /^Dad\./.test(l.text))).toBe(true);
+      lumi.push(...said.filter((l) => l.who === "Lumi").map((l) => l.text));
+      // Lumi's calls move on: an ignored call never stays on the same wisp.
+      const marks = msgs.flatMap((m) => (m.t === "room" && m.room.story?.movement === 2 && m.room.phase === "playing" ? [m.room.story.mark?.wisp ?? null] : []));
+      const runs = marks.filter((v, i) => v !== null && v !== marks[i - 1]);
+      expect(new Set(runs).size).toBeGreaterThan(1);
       expect(said.some((l) => l.who === "Hesta" && /Now/.test(l.text))).toBe(true);
     }
+    // When he banks a different wisp she sometimes concedes, and when he leaves one she calls another.
+    expect(lumi.some((t) => /^\.\.\.Fine|^Fine\./.test(t) || /Forget it|Never mind/.test(t))).toBe(true);
+    expect(lumi.some((t) => /not saying it again/.test(t))).toBe(false);
   });
 });
