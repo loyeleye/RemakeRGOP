@@ -7,8 +7,10 @@ import type { StoryLine } from "../engine/protocol.js";
 import { EYE_CUT, EYE_FIX, loadEye, type Eye } from "./eye-rig.js";
 import * as sound from "./sound.js";
 
-/** Seconds from the last bell. Change the timing here. */
-export const ENDING = {
+/** The ending as first built: the music fades slowly from the last bell, the sky holds about 6 s,
+ *  and the wind comes in before the rim. Kept so the emotion test is one switch away: set
+ *  `ENDING_TEST` to false, or open the page with ?ending=old. */
+const ENDING_OLD = {
   /** Lines: Lumi's bell, Hesta's "Look up, Rook.", and Lumi's count over the sky. */
   lineAt: [0.2, 3.4, 15.5],
   lineFor: 4.5,
@@ -29,9 +31,41 @@ export const ENDING = {
   eye: 31,
   title: 44,
   buttons: 46,
+  /** Music: null keeps the old slow fade from the last bell (main.ts, SOUND.endMusicFade). */
+  music: null as null | { duck: number; duckTo: number; duckFor: number; cut: number; cutFor: number },
   /** Lumi's lantern before run 2: how long it holds before play, and its fade. */
   lantern: { hold: 4, fade: 1.2, matchScale: 2.7, beat: 0.5, ease: 2.5 },
 };
+
+/** The emotion test, step 1 (story/cutscene-emotion-brief.md): the music stays at full through
+ *  "Look up, Rook." and the sky, drops to a third just before Lumi's count (1.5 s of no words, then
+ *  her line, then the picture held 2 s), and cuts dead as the view goes over the rim. Wind only from
+ *  there. The sky holds about 9.5 s. Everything from the rim on is 3.5 s later than before. */
+const ENDING_TEST: typeof ENDING_OLD = {
+  ...ENDING_OLD,
+  lineAt: [0.2, 3.4, 19.5],
+  sky: { in: 13, inFor: 1.5, panTo: 25 },
+  underside: { in: 24, inFor: 1.2, to: 29.5 },
+  hearts: { in: 29, inFor: 1, to: 34.5 },
+  descent: { from: 30, to: 34.5, wind: 24 },
+  dark: 34.5,
+  eye: 34.5,
+  title: 47.5,
+  buttons: 49.5,
+  music: { duck: 17.5, duckTo: 0.33, duckFor: 0.5, cut: 24, cutFor: 0.4 },
+};
+
+/** Which ending plays. true: the emotion test. false (or ?ending=old): the ending as first built. */
+const USE_TEST = (() => {
+  try {
+    return new URLSearchParams(location.search).get("ending") !== "old";
+  } catch {
+    return true;
+  }
+})();
+
+/** Seconds from the last bell. Change the timing here. */
+export const ENDING = USE_TEST ? ENDING_TEST : ENDING_OLD;
 
 const SEEN = "lanternfall.kindlingEnd";
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
@@ -229,7 +263,13 @@ export class KindlingEnding {
       e[`cloud${i + 1}`]!.style.transform = `translateY(${(1 - k * speed) * 100}%)`;
       op(`cloud${i + 1}`, k > 0 && k * speed < 2 ? 0.9 : 0);
     });
-    this.once("wind", t, E.descent.wind, () => sound.wind(4));
+    this.once("wind", t, E.descent.wind, () => sound.wind(E.music ? 1.5 : 4));
+    // The emotion test's music: a third under Lumi's count, then cut dead at the rim.
+    if (E.music) {
+      const M = E.music;
+      this.once("duck", t, M.duck, () => sound.duckMusic(M.duckTo, M.duckFor));
+      this.once("cut", t, M.cut, () => sound.stopMusic(M.cutFor));
+    }
     op("black", ramp(t, E.descent.to - 1.5, E.dark));
     // The eye. It draws its own black before and after; the low note lands as it fixes on the islands.
     const et = t - E.eye;

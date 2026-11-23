@@ -1379,10 +1379,12 @@ function homeIslandRows(): string[] {
   block(hh.dx - Math.floor(hh.w / 2), hh.dy, hh.w, hh.h, "R");
   set(hh.dx, hh.dy + hh.h + 1, "C", ".:");
   // The lore spots. The south point: the Willing Girl near the tip, facing out, a bench north of her.
+  // The statue sits a tile east of the spur's line where it's wide enough, so the great brazier is
+  // fully clear of the sightline from Hesta's chair.
   const sp = R.southPoint.dx;
   let ty = 60;
   while (land(sp, ty + 1)) ty++;
-  set(sp, ty - 1, "Z");
+  set(land(sp + 1, ty - 1) ? sp + 1 : sp, ty - 1, "Z");
   set(sp, ty - 4, "N");
   set(sp + 1, ty - 4, "N");
   // The east point: Wick's lookout post near its tip.

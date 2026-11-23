@@ -607,8 +607,11 @@ function storyPhaseSound(was: string | undefined) {
   }
   if (phase === "results" && was !== "results") {
     sound.pullHum(null);
-    // Run 1's music lets go slowly under the ending; run 2's stops.
-    sound.stopMusic(room!.story?.end?.sky !== undefined ? sound.SOUND.endMusicFade : undefined);
+    // Run 1's music plays on under the ending (the emotion test ducks and cuts it there; the old
+    // ending lets it go slowly from here). Run 2's stops.
+    const run1 = room!.story?.end?.sky !== undefined;
+    if (!run1) sound.stopMusic();
+    else if (!ENDING.music) sound.stopMusic(sound.SOUND.endMusicFade);
     sound.handBell(3);
   }
 }

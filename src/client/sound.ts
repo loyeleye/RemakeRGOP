@@ -409,6 +409,11 @@ export function stopMusic(sec = SOUND.musicFade) {
   if (a) fadeTo(a, 0, sec, () => a.pause());
 }
 
+/** Bring the music down to `share` of its usual volume over `sec`, and keep it playing. */
+export function duckMusic(share: number, sec: number) {
+  if (music) fadeTo(music, SOUND.musicGain * share, sec);
+}
+
 function fadeTo(a: HTMLAudioElement, to: number, sec: number, done?: () => void) {
   const from = a.volume, t0 = performance.now();
   const step = () => {
