@@ -45,7 +45,12 @@ export const POND = {
 export function pondSpots(board: Board, starts: readonly Pt[][], house?: { x: number; y: number; w: number; h: number }) {
   const walk = (p: Pt) => board.passable(p, Mover.Walker);
   const water: Pt[] = [];
-  for (let y = 0; y < board.height; y++) for (let x = 0; x < board.width; x++) if (board.tile(pt(x, y)) === Tile.Water) water.push(pt(x, y));
+  // The pond is the water by the brazier: on the horseshoe island, the lesson pond cove, not the lake.
+  const cx = board.center.x, cy = board.center.y;
+  // A lake east of the brazier (the horseshoe): only the cove's rows count.
+  const lakeSide = board.tile(pt(cx + 12, cy)) === Tile.Water && board.tile(pt(cx + 12, cy - 10)) === Tile.Water;
+  for (let y = 0; y < board.height; y++)
+    for (let x = 0; x < board.width; x++) if (board.tile(pt(x, y)) === Tile.Water && Math.abs(x - cx) <= 12 && Math.abs(y - cy) <= (lakeSide ? 5 : 12) && x - cx <= (lakeSide ? 10 : 12)) water.push(pt(x, y));
   const minX = Math.min(...water.map((p) => p.x)), maxX = Math.max(...water.map((p) => p.x));
   const minY = Math.min(...water.map((p) => p.y));
   const midY = Math.round(water.reduce((a, p) => a + p.y, 0) / water.length);
@@ -67,11 +72,13 @@ export function pondSpots(board: Board, starts: readonly Pt[][], house?: { x: nu
   const lumiAt = open(pt(hesta.x - 2, hesta.y), [hesta, nell, sefa]);
   // The way in: up the path from the south, where Hesta lives (on a map without a neck, the north rim).
   const c = board.center;
-  const south = walk(pt(c.x, c.y + 24));
+  // (The horseshoe's basin lies south of the pond brazier: they come up its west shore instead.)
+  const ex = [0, -8].find((dx) => walk(pt(c.x + dx, c.y + 24)));
   let top = 0;
   while (top < board.height && !walk(pt(c.x, top))) top++;
-  const ey = south ? c.y + 24 : top;
-  const enter = [open(pt(c.x - 1, ey)), open(pt(c.x, ey), []), open(pt(c.x + 1, ey))];
+  const ey = ex !== undefined ? c.y + 24 : top;
+  const ec = c.x + (ex ?? 0);
+  const enter = [open(pt(ec - 1, ey)), open(pt(ec, ey), []), open(pt(ec + 1, ey))];
   const rook = open(starts[0]![0]!);
   // Lumi's lantern: by Rook's door if the island has his house (door on its east side), else on the pool's west shore.
   const lantern = house ? open(pt(house.x + house.w, doorY(house) + 1)) : open(pt(minX - 1, midY));
@@ -90,6 +97,15 @@ const LINES: Record<string, string[]> = {
   skiff: ["Not today. Today's for the pond."],
   shrine: ["Mabry's door. Shut, this time of day."],
   stall: ["Orrin's stall. He's off somewhere, arguing."],
+  "orrin-house": ["Orrin's workshop. Panes everywhere, and him nowhere."],
+  "maudie-house": ["Maudie's door. Shut. Geraniums keeping watch."],
+  "moth-house": ["Moth's door. His poles are gone, so he's out."],
+  "mabry-house": ["Mabry's room. Bells, herbs, and a shut door."],
+  "nell-house": ["Nell's family's cottage. Shut."],
+  "sefa-house": ["Sefa's family's cottage. Shut. Somebody's singing inside."],
+  "wick-house": ["Wick's house. The ladder's up, so he's in the loft."],
+  mooring: ["The boat. Nobody takes it out. Not till the Offering."],
+  boat: ["The boat. Nobody takes it out. Not till the Offering."],
   "hesta-house": ["Granny's door. Shut. It always is."],
   chair: ["Her chair. Still warm."],
   kindling: ["The Kindling brazier. Burning steady."],
@@ -282,11 +298,16 @@ export class PondRoom {
         return k ? pt(k.x1 + 2, k.y0) : this.spots.rook;
       }
       case "stall": {
+        // Orrin's open workshop is the stall now (the horseshoe island): before its door, west.
+        const ws = box("orrin-house");
+        if (ws) return pt(ws.x0 - 1, Math.round((ws.y0 + ws.y1) / 2));
         const o = box("stall");
         return o ? pt(o.x0 + 1, o.y1 + 1) : this.spots.rook;
       }
       case "shrine": {
         const sb = box("shrine");
+        // Before its steps: east when the island turns it to face the lake, else south as before.
+        if (sb && sh.turns?.shrine === 0) return pt(sb.x1 + 2, Math.round((sb.y0 + sb.y1) / 2));
         return sb ? pt(mid(sb), sb.y1 + 2) : this.spots.rook;
       }
       case "chair": {

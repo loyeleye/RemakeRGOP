@@ -379,7 +379,7 @@ function noteProgress() {
 }
 
 /**
- * The look across the water, on the first walk (maps thread): the camera eases out and over to
+ * The look across the water, as Rook first steps out of his door (maps thread): the camera eases out and over to
  * frame Rook, the statue and the falls, holds, then comes back to him. Any tap or key ends it.
  */
 const LOOK = { wait: 900, out: 1800, hold: 3200, back: 1400, within: 40 };
@@ -436,8 +436,9 @@ function placeView(place: boolean, leaving: boolean) {
   if (place && !inPlace) {
     cam.scale = Math.min(cam.w, cam.h) / 17;
     cam.follow = true;
-    // The first walk: as Rook steps out, the camera eases out to show the statue across the water.
-    if (room?.story?.pond?.walk === 1) lookBeat = { at: performance.now() + LOOK.wait, from: null };
+    // The first walk that starts at his door (walk 2): as Rook steps out, the camera eases out to
+    // show the statue across the water.
+    if (room?.story?.pond?.walk === 2) lookBeat = { at: performance.now() + LOOK.wait, from: null };
   }
   if (leaving && !placeFade) {
     placeFade = document.createElement("div");

@@ -179,7 +179,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "stall", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "cottage-house", "offering-stone", "offering-boat", "offering-mooring"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -828,7 +828,19 @@ function makeHouse(w: number, d: number, look: { wall?: string; roof?: string; w
  * The shrine's steps face +X as built, turned to face the path to its west; the skiff is moored
  * west of its post.
  */
-const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number }> = {
+const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number; y?: number }> = {
+  // The horseshoe island's houses (doors on +Z; each island turns them), the Offering stone sunk
+  // so about 0.4 shows above the water, the one boat and its mooring.
+  "maudie-house": { model: "maudie-house" },
+  "moth-house": { model: "moth-house" },
+  "mabry-house": { model: "mabry-house" },
+  "orrin-house": { model: "orrin-house" },
+  "wick-house": { model: "wick-house" },
+  "nell-house": { model: "cottage-house" },
+  "sefa-house": { model: "cottage-house" },
+  offering: { model: "offering-stone", y: -0.6 },
+  mooring: { model: "offering-mooring", dx: 0.5 },
+  boat: { model: "offering-boat", y: -0.15 },
   "hesta-house": { model: "hesta-house" },
   chair: { model: "hesta-chair" },
   shrine: { model: "shrine", rot: Math.PI },
@@ -837,6 +849,40 @@ const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number }> = {
   falls: { model: "falls" },
   skiff: { model: "skiff", dx: -1.6 },
 };
+
+/**
+ * Window lights (maps thread): each house model's emissive map with its glass lit warm. On at dusk
+ * and night, off by day; Arc 3 will keep them off. Swapped on the shared material, so every copy follows.
+ */
+const WINDOW_LIT: Record<string, string> = {
+  "rook-house-big": "rook", "maudie-house": "maudie", "moth-house": "moth", "orrin-house": "orrin", "wick-house": "wick",
+  "cottage-house": "cottage", "mabry-house": "mabry", "hesta-house": "hesta",
+};
+const litMaps = new Map<string, THREE.Texture>();
+function setWindows(on: boolean) {
+  for (const [model, file] of Object.entries(WINDOW_LIT)) {
+    const root = models[model];
+    if (!root || root.userData.windows === on) continue;
+    root.userData.windows = on;
+    let lit = litMaps.get(file);
+    if (on && !lit) {
+      lit = new THREE.TextureLoader().load(`models/lit/${file}-lit.webp`);
+      lit.flipY = false;
+      lit.colorSpace = THREE.SRGBColorSpace;
+      litMaps.set(file, lit);
+    }
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mat = m.material as THREE.MeshStandardMaterial;
+      mat.userData.paint ??= { map: mat.emissiveMap, k: mat.emissiveIntensity };
+      mat.emissiveMap = on ? lit! : mat.userData.paint.map;
+      mat.emissiveIntensity = on ? 1 : mat.userData.paint.k;
+      mat.emissive = new THREE.Color("#ffffff");
+      mat.needsUpdate = true;
+    });
+  }
+}
 
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
 const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail"]);
@@ -902,6 +948,14 @@ function makePlace(kind: string, w: number, d: number): THREE.Group {
     const house = makeHouse(d, w, { wall: "#b8b2a6", roof: "#6a6474" });
     house.rotation.y = -Math.PI / 2;
     g.add(house);
+  } else if (kind.endsWith("-house") && kind !== "hesta-house") {
+    g.add(makeHouse(w, d));
+  } else if (kind === "offering") {
+    add(new THREE.BoxGeometry(w, 1, d * 0.8), std("#9a968c"), 0, 0.5, 0);
+  } else if (kind === "mooring") {
+    add(new THREE.BoxGeometry(w + 1, 0.15, 1.2), std("#8a6440"), 0.5, 0.4, 0);
+  } else if (kind === "boat") {
+    add(new THREE.BoxGeometry(w, 0.4, 1.1), std("#efe6d0"), 0, 0.2, 0);
   } else if (kind === "chair") {
     const wood = std("#6a4a30");
     add(new THREE.BoxGeometry(0.6, 0.08, 0.55), wood, 0, 0.5, 0);
@@ -1302,7 +1356,7 @@ export class World {
         bench.add(box(long * 0.95, 0.08, 0.45, wood, 0.45), box(long * 0.95, 0.4, 0.06, wood, 0.7));
         bench.children[1]!.position.z = -0.2;
         const facesStatue = props.some((q) => q.kind === "statue" && q.y > p.y && q.y - p.y <= 5 && Math.abs(q.x - p.x) <= 2);
-        this.placeSlot("bench", bench, wx + (long - 1) / 2, wz, facesStatue ? 0 : Math.PI);
+        this.placeSlot("bench", bench, wx + (long - 1) / 2, wz, shrine.turns?.[`${p.x},${p.y}`] ?? (facesStatue ? 0 : Math.PI));
       } else if (p.kind === "statue") {
         // The Willing Girl, facing south out to the sky. Her ribbons and flowers come with the walks.
         const st = new THREE.Group();
@@ -1310,7 +1364,7 @@ export class World {
         const fig = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.1, 10), new THREE.MeshStandardMaterial({ color: "#c8c0b0", roughness: 1 }));
         fig.position.y = 1.95;
         st.add(fig);
-        this.statueSlot = this.placeSlot("willing-girl", st, wx, wz);
+        this.statueSlot = this.placeSlot("willing-girl", st, wx, wz, shrine.turns?.statue ?? 0);
         this.flowers = this.placeSlot("statue-flowers", box(0.5, 0.3, 0.4, new THREE.MeshStandardMaterial({ color: "#e8d27a", roughness: 1 })), wx, wz + 0.85);
         this.flowers.visible = false;
         this.statueWalk = -1;
@@ -1401,13 +1455,24 @@ export class World {
         post.castShadow = true;
         g.add(post);
       }
-      const drawn = PLACE_OF[kind];
+      // A wide falls (the horseshoe's whole north mouth) stays the drawn sheet: the model is one stream.
+      const drawn = kind === "falls" && w > 4 ? undefined : PLACE_OF[kind];
       if (drawn) {
-        this.placeSlot(drawn.model, obj, at[0] + (drawn.dx ?? 0), at[1], drawn.rot ?? 0);
+        this.placeSlot(drawn.model, obj, at[0] + (drawn.dx ?? 0), at[1], shrine.turns?.[kind] ?? drawn.rot ?? 0, drawn.y ?? 0);
         continue;
       }
       obj.position.set(at[0], 0, at[1]);
       g.add(obj);
+    }
+    // The guide rope from the mooring out to the Offering stone, just over the water.
+    const moor = boxes.get("mooring"), stone = boxes.get("offering");
+    if (moor && stone) {
+      const a = new THREE.Vector3(this.worldX(b, moor.x1) + 1, 0.35, this.worldZ(b, moor.y0));
+      const z = new THREE.Vector3(this.worldX(b, (stone.x0 + stone.x1) / 2), 0.35, this.worldZ(b, stone.y1) + 0.6);
+      const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, a.distanceTo(z), 5), new THREE.MeshStandardMaterial({ color: "#d9c79a", roughness: 1 }));
+      rope.position.copy(a).lerp(z, 0.5);
+      rope.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), z.clone().sub(a).normalize());
+      g.add(rope);
     }
     this.fillHouse();
   }
@@ -1499,8 +1564,10 @@ export class World {
     // the cliff, a grassy terrace and hanging spires.
     const island = makeIsland({
       rx: 1, rz: 1, depth: 24, squareness: 2, seed: W + H,
-      radius: (a) => (coast(a) + 2.1) / 0.95,
-      ledge: 2.4, spires: this.low ? 3 : 6, grass: th.grass, soil: th.soil, rock: th.rock,
+      // A place drawn from its own shape (the horseshoe) keeps its cliff tight to the edge, so the
+      // falls pour off the rim rather than onto a verge.
+      radius: (a) => (coast(a) + (shrine.lobes ? 0.7 : 2.1)) / 0.95,
+      ledge: shrine.lobes ? 0 : 2.4, spires: this.low ? 3 : 6, grass: th.grass, soil: th.soil, rock: th.rock,
       segments: this.low ? 128 : 220,
     });
     island.position.y = -0.03;
@@ -1520,6 +1587,15 @@ export class World {
         g.add(lobe);
       });
     }
+    // Story places with their own shape: plateaus under the parts that stick out of the main one.
+    for (const [i, l] of (shrine.lobes ?? []).entries()) {
+      const lobe = makeIsland({
+        rx: l.r + 1.2, rz: l.r + 1.2, depth: 6 + l.r * 1.6, squareness: 2, seed: i * 11 + 7, ledge: l.r * 0.2,
+        spires: l.r > 5 ? 2 : 0, grass: th.grass, soil: th.soil, rock: th.rock, segments: l.r > 5 ? 72 : 32, rings: 18,
+      });
+      lobe.position.set(l.x, -0.04 - i * 0.002, l.y);
+      g.add(lobe);
+    }
     const edge = island.userData.outline as (a: number) => { x: number; z: number };
     // Lower tiers: smaller plateaus stepping down from the main one, so the whole thing reads as
     // one broken table of land rather than a single slab.
@@ -1534,7 +1610,7 @@ export class World {
       const a = a0 + spin;
       const e = edge(a);
       // Sized by the core, not the board: a tentacle island's board is mostly sky.
-      const r = (shrine.arms ? coast(0) + coast(Math.PI / 2) : Math.min(W, H)) * size;
+      const r = (shrine.lobes ? 40 : shrine.arms ? coast(0) + coast(Math.PI / 2) : Math.min(W, H)) * size;
       const tier = makeIsland({
         rx: r, rz: r * 0.8, depth: 9 + i * 3, squareness: 2.6, seed: W * 7 + i,
         lobes: 0.45, spires: this.low ? 1 : 2, grass: th.grass, soil: th.soil, rock: th.rock, segments: 72, rings: 28,
@@ -1938,7 +2014,10 @@ export class World {
   }
   /** Place models (the house, the yard props): a block-out in each slot until the model loads. */
   private placeSlots: { group: THREE.Group; model: string }[] = [];
+  /** Lit windows for this walk's light (dusk and night). */
+  private windowsOn = false;
   private fillHouse() {
+    setWindows(this.windowsOn);
     for (const s of this.placeSlots) {
       const m = models[s.model];
       if (!m || s.group.userData.filled) continue;
@@ -2303,6 +2382,8 @@ export class World {
       this.lightKey = lk;
       const base = themeFor(st.shrine.id);
       this.applyTheme({ ...base, ...(LIGHTS[st.light ?? ""] ?? {}) });
+      this.windowsOn = st.light === "dusk" || st.light === "night";
+      setWindows(this.windowsOn);
     }
 
     // The free walk: Lumi's lantern by the water, glowing a little.

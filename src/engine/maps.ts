@@ -8,6 +8,7 @@
 //   B  brazier      a  Dawn wisp spawn b  Dusk wisp spawn
 //   1  Dawn start   2  Dusk start
 
+import { HS_CENTRE, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
 import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
 
 export interface ShrineDef {
@@ -337,8 +338,13 @@ export function ringWalls(ring: Ring): Pt[] {
 }
 
 /** Story places: solid things drawn as themselves. Multi-tile ones are one block of their letter. */
-export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling";
-export const PROP_CHARS: Record<string, PropKind> = { F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling" };
+export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling"
+  | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat";
+export const PROP_CHARS: Record<string, PropKind> = {
+  F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling",
+  // The horseshoe island's houses, the Offering stone, and the one boat at its mooring.
+  M: "maudie-house", D: "moth-house", g: "mabry-house", I: "orrin-house", e: "nell-house", f: "sefa-house", X: "wick-house", h: "offering", i: "mooring", j: "boat",
+};
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
 export const GROUND_CHARS: Record<string, "path" | "planks" | "terrace"> = { ",": "path", ";": "planks", ":": "terrace" };
 
@@ -378,6 +384,10 @@ export interface Shrine {
   gimmicks: Gimmicks;
   /** The island's shape in played tiles (scaled), or null. */
   isle: IsleShape | null;
+  /** Story places drawn from their own shape (the horseshoe): extra plateaus under the parts that stick out, in tiles from the centre. */
+  lobes?: { x: number; y: number; r: number }[];
+  /** Story places: model turns (radians) by prop kind, or by tile as "x,y", over the usual. */
+  turns?: Record<string, number>;
 }
 
 /**
@@ -838,6 +848,17 @@ const TILE_OF: Record<string, Tile> = {
   R: Tile.Wall,
   C: Tile.Wall,
   G: Tile.Wall,
+  M: Tile.Wall,
+  D: Tile.Wall,
+  g: Tile.Wall,
+  I: Tile.Wall,
+  e: Tile.Wall,
+  f: Tile.Wall,
+  X: Tile.Wall,
+  h: Tile.Wall,
+  i: Tile.Wall,
+  /** The boat rides on the water: drawn, but the tile stays water. */
+  j: Tile.Water,
   o: Tile.Rock,
   "~": Tile.Water,
   /** Deep water (the law of the water): a pool tile where a plain pull slips. */
@@ -1273,138 +1294,6 @@ function homePondRows(k = 1): string[] {
   return g.map((r) => r.join(""));
 }
 
-/**
- * The home island as a place to walk (the free walk between runs), not an arena. One island with
- * two ends (Ladi): the pond end, with Rook's house in its yard, the falls on the north rim in
- * sight of his door, and the pond brazier; then a neck of ground south with the landing and
- * Rook's skiff on its rim, Orrin's stall and the shrine on the path; and the Kindling ground at
- * the far end, its great brazier, with Hesta's house up the steps on the terrace to its north,
- * as far inland as the end allows (she never stands near an edge). A worn path joins it all.
- * Placeholder layout: everything is placed from (dx, dy) off the pond brazier, so it's easy to move.
- */
-export const HOME_ISLAND = {
-  /** How far south the neck reaches (tiles past the core), and its half-width at each end. */
-  neck: { length: 58, width: [6, 15] as [number, number] },
-  falls: { dx: -6, dy: -21, w: 3 },
-  landing: { dy: 34 },
-  stall: { dx: -4, dy: 27 },
-  shrine: { dx: 4, dy: 42 },
-  hestaHouse: { dx: 0, dy: 58, w: 5, h: 5 },
-  /** Lookout spurs (story/part1-lore-beats.md): angle out from the centre, length, and half-widths along it. */
-  eastPoint: { from: -0.09, length: 14, width: [2.4, 2.1] as [number, number], dy: -2 },
-  southPoint: { from: Math.PI / 2 - 0.066, length: 86, width: [2.6, 1.9] as [number, number], dx: 6 },
-  kindling: { dx: 0, dy: 74, r: 2 },
-};
-
-const HOME_ISLE: IsleShape = {
-  radius: 14.5 * 1.5, squareness: 2.1, coves: 0.06, heads: 0.05, seed: 5, stretch: [1.08, 0.95],
-  arms: [
-    { from: Math.PI / 2, length: HOME_ISLAND.neck.length, curl: 0, width: HOME_ISLAND.neck.width, wiggle: 0.04, clutter: 0 },
-    // Lookouts (the lore beats): the east point off the pond end, and the south point past the
-    // great brazier, run east of centre so the brazier doesn't hide the statue from Hesta's chair.
-    { from: HOME_ISLAND.eastPoint.from, length: HOME_ISLAND.eastPoint.length, curl: 0, width: HOME_ISLAND.eastPoint.width, clutter: 0 },
-    { from: HOME_ISLAND.southPoint.from, length: HOME_ISLAND.southPoint.length, curl: 0, width: HOME_ISLAND.southPoint.width, clutter: 0 },
-  ],
-};
-
-function homeIslandRows(): string[] {
-  // The pond's drawing is 47 wide; it's padded each side so the east point fits on the drawing.
-  const k = 1.5, N0 = 47, c0 = 23, pad = 10, N = N0 + 2 * pad, c = c0 + pad;
-  const R = HOME_ISLAND;
-  // A tall drawing, the pond in the middle third: the neck runs south from it.
-  const H0 = N0 + 2 * 100, cy = (H0 - 1) / 2;
-  const pond = homePondRows(k).map((r) => ".".repeat(pad) + r.replace(/H/g, ".") + ".".repeat(pad));
-  const g = Array.from({ length: H0 }, (_, y) => [...(y >= cy - c0 && y <= cy + c0 ? pond[y - (cy - c0)]! : ".".repeat(N))]);
-  const at = (dx: number, dy: number) => [c + dx, cy + dy] as const;
-  const set = (dx: number, dy: number, ch: string, over = ".") => {
-    const [x, y] = at(dx, dy);
-    if (g[y]?.[x] !== undefined && over.includes(g[y]![x]!)) g[y]![x] = ch;
-  };
-  const block = (dx: number, dy: number, w: number, h: number, ch: string) => {
-    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) set(dx + i, dy + j, ch, ".,:o");
-  };
-  // The path first, so nothing solid lands on it.
-  const line = (x0: number, y0: number, x1: number, y1: number, ch = ",") => {
-    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
-    for (let i = 0; i <= n; i++) {
-      const x = Math.round(x0 + ((x1 - x0) * i) / n), y = Math.round(y0 + ((y1 - y0) * i) / n);
-      set(x, y, ch);
-      set(x + 1, y, ch);
-    }
-  };
-  // Door to the pond brazier, brazier to the pool.
-  line(-7, -6, -3, -1);
-  line(3, -1, 10, -2);
-  // South from the brazier down the neck, round the terrace's east side, to the Kindling ground.
-  line(0, 3, 0, 50);
-  line(0, 50, 8, 56);
-  line(8, 56, 8, 66);
-  line(8, 66, 3, 71);
-  // Spurs: the landing on the west rim, the shrine's door.
-  line(0, R.landing.dy, -4, R.landing.dy);
-  // The house, big (Ladi): 9x9, back in the north-west with room round it. Door on the east side.
-  block(-17, -11, 9, 9, "H");
-  // Its yard: a fence along the south side, west of the path.
-  for (let x = -17; x <= -9; x++) set(x, 0, "F");
-  // A wash line between two posts north of the house.
-  set(-16, -13, "Y");
-  set(-10, -13, "Y");
-  // By the door: a bed of Rosalind's blue flowers and the rain barrel. Behind the fence, the woodpile.
-  set(-8, -8, "L");
-  set(-8, -10, "U");
-  set(-15, -2, "P");
-  // A bench by the water, south-west of the pool.
-  set(8, 6, "N");
-  set(9, 6, "N");
-  // Land, as the coastline will cut it.
-  const land = (dx: number, dy: number) => coastDepth(HOME_ISLE, dx, dy) <= -0.5;
-  // The falls: where a stream goes over the north rim (Lumi's spot), in sight of the door.
-  let fy = -8;
-  while (land(R.falls.dx, fy - 1) && land(R.falls.dx + R.falls.w - 1, fy - 1)) fy--;
-  block(R.falls.dx, fy, R.falls.w, 2, "V");
-  line(R.falls.dx, fy + 2, -7, -8);
-  // The landing: planks out to the west rim of the neck, and the skiff tied up at the end.
-  let lx = 0;
-  while (land(lx - 1, R.landing.dy) && land(lx - 1, R.landing.dy + 1)) lx--;
-  for (let x = lx + 1; x <= lx + 3; x++) for (let y = R.landing.dy - 1; y <= R.landing.dy + 1; y++) set(x, y, ";", ".,");
-  block(lx, R.landing.dy, 1, 2, "K");
-  // Orrin's stall by the path, and the shrine on it.
-  block(R.stall.dx, R.stall.dy, 2, 1, "O");
-  block(R.shrine.dx, R.shrine.dy, 4, 4, "S");
-  // Its yard, as in the glow test scene: a low wall behind it with a shade tree past each end, a
-  // stone lamp before its steps (which face west, to the path) and a spout basin south of the lamp.
-  for (let j = -1; j <= 4; j++) set(R.shrine.dx + 5, R.shrine.dy + j, "W");
-  set(R.shrine.dx + 5, R.shrine.dy - 3, "T");
-  set(R.shrine.dx + 5, R.shrine.dy + 6, "T");
-  set(R.shrine.dx - 2, R.shrine.dy + 1, "A");
-  set(R.shrine.dx - 2, R.shrine.dy + 3, "Q");
-  // Hesta's house on the terrace, the chair before her door (south, facing the brazier), steps down.
-  const hh = R.hestaHouse;
-  for (let j = -1; j <= hh.h + 2; j++) for (let i = -2; i <= hh.w + 1; i++) set(hh.dx - Math.floor(hh.w / 2) + i, hh.dy + j, ":", ".,");
-  block(hh.dx - Math.floor(hh.w / 2), hh.dy, hh.w, hh.h, "R");
-  set(hh.dx, hh.dy + hh.h + 1, "C", ".:");
-  // The lore spots. The south point: the Willing Girl near the tip, facing out, a bench north of her.
-  // The statue sits a tile east of the spur's line where it's wide enough, so the great brazier is
-  // fully clear of the sightline from Hesta's chair.
-  const sp = R.southPoint.dx;
-  let ty = 60;
-  while (land(sp, ty + 1)) ty++;
-  set(land(sp + 1, ty - 1) ? sp + 1 : sp, ty - 1, "Z");
-  set(sp, ty - 4, "N");
-  set(sp + 1, ty - 4, "N");
-  // The east point: Wick's lookout post near its tip.
-  let tx = 10;
-  while (land(tx + 1, R.eastPoint.dy)) tx++;
-  set(tx - 1, R.eastPoint.dy, "J");
-  // A rail along the landing's south edge, where Moth leans.
-  set(lx + 1, R.landing.dy + 2, "E");
-  set(lx + 2, R.landing.dy + 2, "E");
-  // The great brazier of the Kindling ground.
-  const kd = R.kindling;
-  block(kd.dx - kd.r, kd.dy - kd.r, kd.r * 2 + 1, kd.r * 2 + 1, "G");
-  return g.map((r) => r.join(""));
-}
-
 export const STORY_SHRINES: Shrine[] = [
   buildShrine({
     id: "home-pond",
@@ -1429,19 +1318,24 @@ export const STORY_SHRINES: Shrine[] = [
     spawnBand: [15, 21],
     rows: homePondRows(1.5),
   }),
-  // The free walk between runs: the same island, built as a place (see homeIslandRows).
-  buildShrine({
-    id: "home-island",
-    name: "Home island",
-    blurb: "Lumi's island, to walk about on: the house, the pond, the brazier.",
-    full: true,
-    scale: 1,
-    isle: HOME_ISLE,
-    rings: [],
-    spawnBand: [15, 21],
-    rows: homeIslandRows(),
-  }),
+  // The free walk between runs: the home island as a horseshoe round its lake (see horseshoe.ts).
+  homeIsland(),
 ];
+
+/** The home island to walk on: drawn from the maps thread's shapes, not an IsleShape. */
+function homeIsland(): Shrine {
+  const { rows, turns } = horseshoeRows();
+  const def: ShrineDef = { id: "home-island", name: "Home island", blurb: "Lumi's island, to walk about on: the houses round the lake, the falls, the Kindling ground.", full: true, scale: 1, rings: [], spawnBand: [15, 21], rows };
+  const sh = finish(def, rows, 2, null);
+  const at = (dx: number, dy: number) => hsCoast(dx + HS_CENTRE.x, dy + HS_CENTRE.y);
+  // The cliff's outline: how far out the oval's edge is (the bulge and spur have their own plateaus) at each angle from the pond brazier.
+  const outline = (a: number) => {
+    let r = 1;
+    while (r < 200 && hsOval(Math.cos(a) * r + HS_CENTRE.x, Math.sin(a) * r + HS_CENTRE.y) < 0) r += 0.5;
+    return r;
+  };
+  return { ...sh, coast: at, outline, arms: true, lobes: HS_LOBES.map((l) => ({ x: l.x - HS_CENTRE.x, y: l.y - HS_CENTRE.y, r: l.r })), turns };
+}
 
 export function shrineById(id: string): Shrine {
   return SHRINES.find((s) => s.id === id) ?? STORY_SHRINES.find((s) => s.id === id) ?? SHRINES[0]!;
