@@ -163,8 +163,8 @@ export class LessonRoom {
   private opening() {
     const talk = { talk: true };
     if (this.round === 0) {
-      this.say(ROOK, "Three wisps. No rings today.", talk);
-      this.say(LUMI, "I don't need rings.", talk);
+      this.say(ROOK, "Three wisps. I won't point today.", talk);
+      this.say(LUMI, "I don't need pointers.", talk);
     }
     if (this.round === 1 && this.beat === 0) this.say(ROOK, "This one's stuck. Pull with me.", talk);
     if (this.round === 1 && this.beat === 1) this.say(ROOK, "Now you're the boss. Tell me where to stand.", talk);

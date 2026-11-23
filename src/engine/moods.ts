@@ -13,7 +13,7 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Hesta", /^(Hold still|Back to your square|Stay there)/, "firm"],
   ["Lumi", /^(\.\.\.)?Fine\. (That one|I suppose)/, "grudging"],
   ["Lumi", /^(Dad\. I know\.|I didn't ask for any\.|Forget it\.|Never mind|Fine\. Ignore me\.)/, "unimpressed"],
-  ["Lumi", /^(I pulled\.|I don't need rings\.|You didn't miss one)/, "smug"],
+  ["Lumi", /^(I pulled\.|I don't need pointers\.|You didn't miss one)/, "smug"],
   ["Lumi", /^(So I'm coming tomorrow\.|First light!|That's the last bell!)/, "delighted"],
   ["Lumi", /^(Dad\.|Okay\.|[A-Z][a-z]+(-[a-z]+)? one)/, "calling"],
   ["Rook", /^(That's it\.|Just like that\.)/, "proud"],
