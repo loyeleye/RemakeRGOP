@@ -9,6 +9,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Tile, type Board } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, gateOpen, mistBanks, platesHeld, quarterOf, MOSS_HP, type GameSnapshot, type Guild } from "../engine/game.js";
 import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js";
@@ -153,6 +154,8 @@ export const CAST_SCALE: Record<string, number> = { lumi: 0.7, hesta: 0.95, wick
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};
+/** The cast's animation clips (idle, walk, run, pull, push), by model. */
+const clips: Partial<Record<string, THREE.AnimationClip[]>> = {};
 const modelWaiters: (() => void)[] = [];
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
@@ -172,6 +175,7 @@ export function loadModels() {
     loader.load(
       `models/${n}.glb`,
       (g: GLTF) => {
+        clips[n] = g.animations;
         models[n] = normalize(g.scene, n === "monolith");
         modelWaiters.forEach((f) => f());
       },
@@ -183,6 +187,7 @@ export function loadModels() {
           .then((b64) => {
             const bin = Uint8Array.from(atob(b64.trim()), (c) => c.charCodeAt(0));
             plainLoader.parse(bin.buffer, "", (g: GLTF) => {
+              clips[n] = g.animations;
               models[n] = normalize(g.scene, n === "monolith");
               modelWaiters.forEach((f) => f());
             });
@@ -710,14 +715,56 @@ function makeSteps(): THREE.Group {
 }
 
 /** A story character's model, at their height, lit flat-ish: the model's own colours glow a little. */
+/** What a cast member is doing, for their animation. */
+export type CastMove = "idle" | "walk" | "run" | "pull" | "push";
+
+/** One mixer per character: crossfades between its looping clips; push plays once, then back to idle. */
+class CastAnim {
+  private mixer: THREE.AnimationMixer;
+  private actions = new Map<string, THREE.AnimationAction>();
+  private cur: CastMove | null = null;
+  private last = 0;
+  constructor(root: THREE.Object3D, anims: THREE.AnimationClip[]) {
+    this.mixer = new THREE.AnimationMixer(root);
+    for (const c of anims) {
+      const a = this.mixer.clipAction(c);
+      if (c.name === "push") {
+        a.setLoop(THREE.LoopOnce, 1);
+        a.clampWhenFinished = true;
+      }
+      this.actions.set(c.name, a);
+    }
+    this.mixer.addEventListener("finished", () => this.cur === "push" && this.set("idle"));
+  }
+  /** Ask for a move; a push already playing finishes first. */
+  set(move: CastMove) {
+    if (move === this.cur || (this.cur === "push" && move === "idle")) return;
+    const next = this.actions.get(move) ?? this.actions.get("idle");
+    if (!next) return;
+    const prev = this.cur ? this.actions.get(this.cur) : undefined;
+    next.reset().play();
+    if (prev && prev !== next) next.crossFadeFrom(prev, move === "push" ? 0.1 : 0.2, false);
+    this.cur = move;
+  }
+  update(nowSec: number) {
+    const dt = this.last ? Math.min(0.1, nowSec - this.last) : 0;
+    this.last = nowSec;
+    this.mixer.update(dt);
+  }
+}
+
 function castBody(cast: string): THREE.Object3D | null {
   const model = models[cast];
   if (!model) return null;
-  const body = model.clone();
+  // Rigged models need their skeleton cloned with them.
+  const body = cloneSkinned(model);
   body.scale.multiplyScalar(1.8 * (CAST_SCALE[cast] ?? 1));
+  const anims = clips[cast] ?? [];
+  if (anims.length) body.userData.anim = new CastAnim(body, anims);
   body.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
+    if ((m as THREE.SkinnedMesh).isSkinnedMesh) m.frustumCulled = false;
     const mats = (Array.isArray(m.material) ? m.material : [m.material]).map((mt) => {
       const c = mt.clone() as THREE.MeshStandardMaterial;
       if (c.map) {
@@ -1649,6 +1696,8 @@ export class World {
         this.watchers.set(w.cast, o);
       }
       seenWt.add(w.cast);
+      const wa = o.userData.anim as CastAnim | undefined;
+      if (wa) (wa.set("idle"), wa.update(time));
       const wx = this.worldX(b, w.x), wz = this.worldZ(b, w.y);
       o.position.set(wx, 0, wz);
       if (meNow) {
@@ -1694,7 +1743,13 @@ export class World {
         face = Math.atan2(t.x - wx, t.z - wz);
       } else if (moving) face = Math.atan2(p.x - p.px, p.y - p.py);
       rig.facing = lerpAngle(rig.facing, face, 0.18);
-      rig.root.position.set(wx, moving ? Math.abs(Math.sin(time * 9)) * 0.06 : Math.sin(time * 1.6 + p.id) * 0.03, wz);
+      const anim = rig.body?.userData.anim as CastAnim | undefined;
+      if (anim) {
+        // Animated cast: the clips do the moving, so no bob.
+        anim.set(p.beam !== null ? (p.mode === "push" ? "push" : "pull") : moving ? (p.run ? "run" : "walk") : "idle");
+        anim.update(time);
+        rig.root.position.set(wx, 0, wz);
+      } else rig.root.position.set(wx, moving ? Math.abs(Math.sin(time * 9)) * 0.06 : Math.sin(time * 1.6 + p.id) * 0.03, wz);
       if (rig.body) rig.body.rotation.y = rig.facing;
       // Lantern sits up and to the side of the figure, where the staff head is.
       const side = new THREE.Vector3(-0.38, 1.74, 0.07).applyAxisAngle(new THREE.Vector3(0, 1, 0), rig.facing);
