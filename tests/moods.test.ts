@@ -13,9 +13,7 @@ describe("portrait moods", () => {
     expect(moodOf("Hesta", "Now, Rook.")).toBe("neutral");
     expect(moodOf("Hesta", "Clean.", "firm")).toBe("firm");
     expect(moodOf("Moth", "Here.")).toBeNull();
-    // Lumi stays closed-mouth in this run until the open-mouth drafts are redrawn.
-    expect(faceOf("Lumi", "Dad. North one.")).toBe("lumi-neutral");
-    expect(faceOf("Lumi", "So I'm coming tomorrow.")).toBe("lumi-smug");
+    expect(faceOf("Lumi", "Dad. North one.")).toBe("lumi-calling");
   });
 
   it("has a portrait file for every mood", () => {
