@@ -64,6 +64,7 @@ export class GrannyRoom {
   private started = new Set<number>();
   private dropped = new Set<number>();
   private holdTick = 0;
+  private rushing = false;
   /** Lumi's tide pull, seen in front of Hesta (tick), or -1. */
   private tideSeen = -1;
 
@@ -133,7 +134,7 @@ export class GrannyRoom {
     this.game.onReturn = (w) => {
       // Hers come back near her: she only walks, and the board is big.
       if (w.guild === 1) {
-        const spot = this.nearHesta();
+        const spot = this.rushing ? this.nearAltar(w) : this.nearHesta();
         if (spot) moveWisp(w, spot);
         return;
       }
@@ -149,6 +150,7 @@ export class GrannyRoom {
     this.player(HESTA_ID).run = false;
     this.dist = bankDistances(this.game.board);
     this.parked = this.holdWisp = null;
+    this.rushing = false;
     this.parkedAt = this.lastCall = this.pushes = this.baits = this.callTurn = this.leader = this.scoreTurn = 0;
     this.said = new Set();
     this.lastPushedBy = null;
@@ -246,39 +248,43 @@ export class GrannyRoom {
   }
 
   /**
-   * The finish, once theirs are stoned: every `rushEvery` ticks one of her wisps is pulled in
-   * from wherever it is straight onto the rim on her side (a fast slide, not a walk), until she
-   * has ten. Nothing waits on a respawn pause meanwhile.
+   * The finish, once theirs are stoned (Ladi): her pulls run at `rush.pull` times the usual
+   * speed, and every wisp of hers comes back `rush.from` tiles out from the brazier, on her side.
+   * She still pulls each one in herself. Returns true once she has ten and should stand still.
    */
   private rush() {
-    const g = this.game, me = this.player(HESTA_ID);
-    g.respawnPause = 0;
-    g.noBank.clear();
-    for (const [id] of g.away) if (g.wisps[id]!.guild === 1) g.away.set(id, g.tick);
-    const mine = g.wisps.filter((w) => w.guild === 1);
-    // Ten and done: nothing more of hers goes in while the last lines play.
-    if (this.hestaScore() >= GRANNY.target) {
-      for (const w of mine) g.noBank.add(w.id);
-      return;
-    }
-    if ((g.tick - this.holdTick) % GRANNY.rushEvery !== 0) return;
-    const w = mine.filter((q) => !g.board.inBankZone(q.pos) && !g.away.has(q.id)).sort((a, b) => this.stepsOut(a) - this.stepsOut(b))[0];
-    if (!w) return;
-    const b = g.board;
-    let rim: Pt | null = null, best = Infinity;
-    for (let y = b.center.y - 4; y <= b.center.y + 4; y++)
-      for (let x = b.center.x - 4; x <= b.center.x + 4; x++) {
-        const p = pt(x, y);
-        if (!b.inBankZone(p) || b.tile(p) === Tile.Brazier || !b.passable(p, Mover.Wisp)) continue;
-        if (g.wisps.some((o) => samePt(o.pos, p)) || g.players.some((q) => samePt(q.pos, p))) continue;
-        const d = Math.hypot(p.x - me.pos.x, p.y - me.pos.y);
-        if (d < best) (best = d), (rim = p);
+    const g = this.game;
+    if (!this.rushing) {
+      this.rushing = true;
+      g.pullBoost.set(HESTA_ID, GRANNY.rush.pull);
+      g.respawnPause = 0;
+      for (const w of g.wisps) {
+        if (w.guild !== 1) continue;
+        g.away.delete(w.id);
+        const spot = this.nearAltar(w);
+        if (spot) moveWisp(w, spot), (w.prev = w.pos);
       }
-    if (!rim) return;
-    const from = w.pos;
-    moveWisp(w, rim);
-    w.prev = from;
-    g.command(HESTA_ID, { action: { kind: "idle" }, toggleMode: me.mode !== "pull" || undefined });
+    }
+    if (this.hestaScore() < GRANNY.target) return false;
+    // Ten and done: nothing more of hers goes in while the last lines play.
+    for (const w of g.wisps) if (w.guild === 1) g.noBank.add(w.id);
+    return true;
+  }
+
+  /** A free tile `rush.from` tiles out from the brazier, as near Hesta as can be, for a wisp of hers. */
+  private nearAltar(w: Wisp): Pt | null {
+    const g = this.game, b = g.board, me = this.player(HESTA_ID), [lo, hi] = GRANNY.rush.from;
+    let best: Pt | null = null, bestD = Infinity;
+    for (let y = b.center.y - hi; y <= b.center.y + hi; y++)
+      for (let x = b.center.x - hi; x <= b.center.x + hi; x++) {
+        const p = pt(x, y);
+        const r = Math.max(Math.abs(x - b.center.x), Math.abs(y - b.center.y));
+        if (r < lo || r > hi || !b.passable(p, Mover.Wisp) || b.inBankZone(p)) continue;
+        if (g.wisps.some((o) => o !== w && samePt(o.pos, p)) || g.players.some((q) => samePt(q.pos, p))) continue;
+        const d = Math.hypot(x - me.pos.x, y - me.pos.y) + this.rng.next() * 2;
+        if (d < bestD) (bestD = d), (best = p);
+      }
+    return best;
   }
 
   /** A free spawn tile within `hestaNear` of Hesta, for one of her wisps coming back. */
@@ -340,8 +346,11 @@ export class GrannyRoom {
       }
     }
 
-    // After the hold she finishes it fast (Ladi: within about ten seconds): her wisps fly to the rim.
-    if (this.holdWisp !== null) return this.rush();
+    // After the hold she finishes it: faster pulls, and her wisps come back close to the brazier.
+    if (this.holdWisp !== null && this.rush()) {
+      if (me.action.kind !== "idle") cmd({ action: { kind: "idle" }, toggleMode: fix("pull") });
+      return;
+    }
 
     // 2. Her own wisps. One is parked near the rim until the children threaten, or a while passes.
     const live = g.wisps.filter((w) => w.guild === 1 && this.stepsOut(w) > 0);

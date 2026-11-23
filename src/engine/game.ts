@@ -295,6 +295,11 @@ export class Game {
   respawnPause = 0;
   /** Banked wisps that are gone for now, and the tick each comes back. They wait, unseen, on the rim. */
   away = new Map<number, number>();
+  /**
+   * Story: a player whose pulls run faster, by this factor (1.5: an extra tile every other tick).
+   * Only a held wisp being pulled toward its target hurries.
+   */
+  pullBoost = new Map<number, number>();
   /** Story: where a wisp comes back, if not the usual spawn (called after it's placed). */
   onReturn: ((w: Wisp) => void) | null = null;
   /**
@@ -571,6 +576,11 @@ export class Game {
       return;
     }
     this.moveWisp(w, held);
+    const boost = held && w.holder !== null ? this.pullBoost.get(w.holder) : undefined;
+    if (boost && boost > 1 && w.target && !this.board.inBankZone(w.pos)) {
+      const f = boost - 1;
+      if (Math.floor(this.tick * f) > Math.floor((this.tick - 1) * f)) this.moveWisp(w, held);
+    }
     // Petal beds hurry a moving wisp: a second step this tick.
     if (this.board.tile(w.pos) === Tile.Bloom && !samePt(w.pos, w.prev) && (w.target || w.skate) && !this.board.inBankZone(w.pos)) this.moveWisp(w, held);
   }
