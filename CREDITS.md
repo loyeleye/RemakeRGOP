@@ -12,11 +12,9 @@ subscription-only billing so no Spark was spent. Sources are in the project file
 | ui/*.webp (phone stick and buttons) | z_image_turbo_bf16, cropped to a circle with an alpha mask |
 | sprites/brazier.png, sprites/wisp-dawn.png (logo and favicon) | z_image_turbo_bf16, background removed with birefnet_image_background_removal_fp16 |
 | faces/&lt;who&gt;-&lt;mood&gt;.webp (story portraits: Hesta 3 moods, Lumi 6, Rook 4) | Mood faces (Lumi's calling, grudging and delighted redrawn closed-mouth on 2026-11-23) from the cast art thread (project files `sogni/lanternfall/production/<who>/face-*.png`, 2026-11-23), resized to 160 px WebP |
-| models/hesta.glb (Hesta watching run 1) | The cast art thread's `production/hesta/hesta.glb` (image to 3D), 44 MB shrunk to 528 KB with `tools/models.sh`; shown at 0.95 of Rook's height |
-| models/lumi.glb (Lumi's body in run 2) | The cast art thread's `production/lumi/lumi.glb` (image to 3D), 54.7 MB shrunk to 1.4 MB with `tools/models.sh`; shown at 0.7 of Rook's height |
-| story/*.webp (run 1's ending and run 2's opening pictures) | First drafts from the cast art thread (`production/story/slots/`, 2026-11-23), not yet seen by Ladi; converted to WebP |
+| models/rook.glb, lumi.glb, hesta.glb, wick.glb, moth.glb (story characters) | The cast art thread's image-to-3D models (`production/<who>/<who>.glb`), cut to 15k triangles (Rook 30k) with `tools/cast-lite.mjs`: 230 to 450 KB each |
+| story/*.webp (run 1's ending and run 2's opening pictures) | Drafts from the cast and cutscene art threads (`production/story/slots/` and `production/story/v3/`, 2026-11-23), not yet approved by Ladi; converted to WebP |
 | faces/lumi-delight-flash.webp | First draft from the cast art thread; Lumi's one open-mouth face in runs 1 and 2 |
-| models/rook.glb (Rook's body in story runs) | The cast art thread's `production/rook/rook.glb` (image to 3D), 48.5 MB shrunk to 566 KB with `tools/models.sh` (512 px WebP, meshopt, simplified to 2%) |
 
 The sky, cloud sea, fire, embers, light pillar, water and wisps are drawn in code with shaders.
 

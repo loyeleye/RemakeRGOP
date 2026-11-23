@@ -16,15 +16,18 @@ export const ENDING = {
   /** The game camera lifts off the board and tilts up. */
   lift: { from: 4, to: 9 },
   ring: { in: 8, inFor: 1.5 },
-  sky: { in: 13, inFor: 1.5, panTo: 23 },
-  /** Down through the clouds, as the sound thins to wind; then dark. */
-  descent: { from: 22, to: 29, wind: 21.5 },
-  dark: 29,
+  sky: { in: 13, inFor: 1.5, panTo: 21.5 },
+  /** Over Fairy Ring's rim and down its underside, the veins leading to its heart. */
+  underside: { in: 20.5, inFor: 1.2, to: 26 },
+  /** Below it all: the hearts overhead shrink to points as the clouds slide past; then dark. */
+  hearts: { in: 25.5, inFor: 1, to: 31 },
+  descent: { from: 26.5, to: 31, wind: 20 },
+  dark: 31,
   /** The eye: shut, a slit, open (with the low note). */
-  eye: [31, 33.5, 35.5],
-  eyeOut: 40,
-  title: 42,
-  buttons: 44,
+  eye: [33, 35.5, 37.5],
+  eyeOut: 42,
+  title: 44,
+  buttons: 46,
   /** Lumi's lantern before run 2: how long it holds before play, and its fade. */
   lantern: { hold: 3, fade: 1.2 },
 };
@@ -71,6 +74,8 @@ export class KindlingEnding {
   private readonly skippable: boolean;
   /** Fairy Ring's light in the eye: as bright as the score. */
   private glint = 1;
+  /** Fairy Ring's heart: one of the four tiers. */
+  private heart = 1;
 
   constructor(
     readonly end: { sky?: number; lines: StoryLine[] },
@@ -85,6 +90,12 @@ export class KindlingEnding {
     const add = (k: string, el: HTMLElement) => r.appendChild((this.els[k] = el));
     add("ring", card("kindling-ring", "ring", `<div class="lamp"></div>`));
     add("sky", card("kindling-sky", "sky"));
+    add("underside", card("kindling-underside", "underside", `<div class="tip"></div>`));
+    add("heart", card("kindling-heart", "heart", `<div class="spark"></div>`));
+    add("back", Object.assign(document.createElement("div"), { className: "black" }));
+    add("hearts", card("kindling-hearts", "hearts"));
+    // Fairy Ring's heart among them, as bright as the score (the same layer lights it in the eye).
+    add("mine", card("kindling-eye-glint", "hearts-glint"));
     this.els.sky!.style.setProperty("--isles", islands);
     for (const n of [1, 2, 3]) add(`cloud${n}`, card(`kindling-cloud-${n}`, `cloud c${n}`));
     add("black", Object.assign(document.createElement("div"), { className: "black" }));
@@ -124,6 +135,7 @@ export class KindlingEnding {
     // Brightness follows the score: Fairy Ring's painting, and its light in the eye.
     this.els.ring!.style.filter = `brightness(${0.4 + 0.2 * skyTier(sky)}) saturate(${0.7 + 0.1 * skyTier(sky)})`;
     this.glint = 0.25 + 0.75 * sky;
+    this.heart = 0.25 + 0.25 * skyTier(sky);
     document.body.appendChild(r);
     document.body.classList.add("in-ending");
     this.loop();
@@ -189,11 +201,26 @@ export class KindlingEnding {
     this.caption.classList.toggle("fade", t > lastLine + E.lineFor);
     // Fairy Ring, then the sky crossfading over it with a slow pan.
     op("ring", ramp(t, E.ring.in, E.ring.in + E.ring.inFor) * (1 - ramp(t, E.sky.in + E.sky.inFor, E.sky.in + E.sky.inFor + 0.1)));
-    op("sky", ramp(t, E.sky.in, E.sky.in + E.sky.inFor));
+    op("sky", ramp(t, E.sky.in, E.sky.in + E.sky.inFor) * (1 - ramp(t, E.underside.in + E.underside.inFor, E.underside.in + E.underside.inFor + 0.1)));
     const pan = ease(ramp(t, E.sky.in, E.sky.panTo));
     const down = ease(ramp(t, E.descent.from, E.descent.to));
-    e.sky!.style.transform = `translate(${(0.5 - pan) * 12}%, ${-down * 14}%)`;
-    e.sky!.style.filter = `brightness(${1 - down * 0.8})`;
+    e.sky!.style.transform = `translate(${(0.5 - pan) * 12}%, 0)`;
+    // Over the rim and down the underside to the heart, which burns as bright as the score.
+    const U = E.underside, H = E.hearts;
+    const under = ramp(t, U.in, U.in + U.inFor) * (1 - ramp(t, H.in, H.in + H.inFor));
+    op("underside", under);
+    const slide = ease(ramp(t, U.in, U.to));
+    for (const k of ["underside", "heart"]) e[k]!.style.transform = `translateY(${-slide * 37.5}%)`;
+    op("heart", under * this.heart * ramp(t, U.in + 1, U.to - 0.5));
+    // From below: the hearts overhead shrink to points as the view sinks away.
+    const hIn = ramp(t, H.in, H.in + H.inFor);
+    op("back", hIn);
+    op("hearts", hIn);
+    op("mine", hIn * this.heart);
+    for (const k of ["hearts", "mine"]) {
+      e[k]!.style.transform = `scale(${1.5 - ease(ramp(t, H.in, H.to)) * 1.1})`;
+      e[k]!.style.filter = `brightness(${1 - ramp(t, H.to - 2.5, H.to) * 0.6})`;
+    }
     // The clouds slide up past the view at different speeds as it sinks.
     [1.0, 1.5, 2.2].forEach((speed, i) => {
       const k = ramp(t, E.descent.from + i * 0.6, E.descent.to);

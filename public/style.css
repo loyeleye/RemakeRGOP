@@ -206,3 +206,15 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #hint::before { content: ""; position: absolute; top: -6px; right: calc(var(--arrow, 20px) - 6px); border: 6px solid transparent; border-top: 0; border-bottom-color: #ffd36a; }
 #call.nudge { animation: nudge 1.2s ease-in-out infinite; }
 @keyframes nudge { 0%, 100% { box-shadow: 0 0 0 0 #ffd36a00; } 50% { box-shadow: 0 0 0 6px #ffd36a88; } }
+
+/* The descent: Fairy Ring's underside (taller than the screen, slid up to reach the heart at its tip),
+   its heart as its own layer, then the hearts of every island seen from below. */
+#ending .underside, #ending .heart { bottom: -60%; background-size: cover; background-position: 66% top; }
+#ending .underside { background-color: #0b0a1c; background-image: linear-gradient(#1a1530, #0b0a1c); }
+#ending .underside .tip { position: absolute; left: 50%; top: 0; width: 70vmin; height: 100%; transform: translateX(-50%); background: #2a2238; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+#ending .heart .spark { position: absolute; left: 50%; bottom: 2%; width: 6vmin; height: 6vmin; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(circle, #fff3c4 0 15%, #ffb24a 40%, transparent 70%); }
+#ending .heart.real { background-color: transparent; }
+#ending .hearts { background-color: #05040c; background-image: radial-gradient(circle at 50% 50%, #ffd36a 0 1%, transparent 3%), radial-gradient(circle at 30% 35%, #7fd3ff 0 0.6%, transparent 2%), radial-gradient(circle at 70% 30%, #ff7a6b 0 0.6%, transparent 2%), radial-gradient(circle at 65% 70%, #9cf29a 0 0.6%, transparent 2%), radial-gradient(circle at 25% 72%, #d6a8ff 0 0.6%, transparent 2%); background-size: cover; background-position: center; }
+#ending .hearts-glint { background-size: cover; background-position: center; }
+#ending .hearts-glint:not(.real) { background: radial-gradient(circle at 50% 50%, #ffd36a 0 1.5%, #ffb24a66 4%, transparent 8%); }
+#ending .hearts.real, #ending .hearts-glint.real { -webkit-mask-image: radial-gradient(circle, #000 45%, transparent 72%); mask-image: radial-gradient(circle, #000 45%, transparent 72%); }
