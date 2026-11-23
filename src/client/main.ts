@@ -1,7 +1,7 @@
 // Lanternfall client: home screen, lobby, and the round itself.
 
 import { Tile, type Board, type Pt } from "../engine/board.js";
-import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
+import { Game, PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
 import { faceOf as faceFile } from "../engine/moods.js";
 import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg, type StoryLine } from "../engine/protocol.js";
@@ -658,6 +658,7 @@ function storyTickSound(s: GameSnapshot) {
   const was = prev?.players.find((p) => p.id === me);
   if (!mine) return;
   if (mine.slipped && !was?.slipped) sound.slipKnock();
+  if (s.stops?.some((b) => b.player === me)) sound.bankPlop();
   const w = mine.beam !== null ? s.wisps.find((x) => x.id === mine.beam) : undefined;
   const dist = (x: { x: number; y: number }) => Math.hypot(x.x - board.center.x, x.y - board.center.y);
   if (w && room!.phase === "playing") {
@@ -1138,6 +1139,22 @@ $("walk-go").onclick = () => {
   );
   pick.value = endingCut();
   pick.onchange = () => setEndingCut(pick.value);
+}
+{
+  // Testing: walk round water when a wisp is tapped across it (Ladi, judging by feel). Saved per browser.
+  const box = $<HTMLInputElement>("walk-round");
+  const KEY = "lanternfall.walkRound";
+  try {
+    const v = new URLSearchParams(location.search).get("walkround") ?? localStorage.getItem(KEY);
+    if (v !== null) Game.walkRound = v !== "0";
+  } catch {}
+  box.checked = Game.walkRound;
+  box.onchange = () => {
+    Game.walkRound = box.checked;
+    try {
+      localStorage.setItem(KEY, box.checked ? "1" : "0");
+    } catch {}
+  };
 }
 $("progress-reset").onclick = () => {
   resetProgress();

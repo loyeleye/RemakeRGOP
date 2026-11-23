@@ -22,6 +22,8 @@ export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff",
 export const GUILD_NAMES: readonly string[] = ["Dawn", "Dusk", "Tide", "Grove"];
 
 const PITCH = THREE.MathUtils.degToRad(56);
+/** Seconds a pull stopped at the bank shows: the broken beam and the wisp's bump. */
+const STOP_FX = 0.7;
 const FOV = 38;
 
 export interface DrawState {
@@ -1047,6 +1049,9 @@ export class World {
   /** The pond's lantern (see DrawState.lantern). */
   private lantern: THREE.Group | null = null;
   private wisps = new Map<number, WispRig>();
+  /** Pulls stopped at the bank (the laws of water), by wisp: when, by whom, and the water tile it met. */
+  private stopFx = new Map<number, { at: number; player: number; x: number; y: number }>();
+  private stopSnap: GameSnapshot | null = null;
   private brazierLight = new THREE.PointLight("#ff9a4a", 60, 30, 1.6);
   private rim: THREE.LineSegments | null = null;
   private reach: THREE.LineLoop;
@@ -2161,6 +2166,13 @@ export class World {
     }
     const lerp = (a: number, z: number) => a + (z - a) * Math.min(1, st.t);
 
+    // The laws of water: a pull that met the water this tick shows for a moment.
+    if (st.snap !== this.stopSnap) {
+      this.stopSnap = st.snap;
+      for (const f of st.snap.stops ?? []) this.stopFx.set(f.wisp, { at: time, player: f.player, x: f.x, y: f.y });
+    }
+    for (const [id, f] of this.stopFx) if (time - f.at > STOP_FX) this.stopFx.delete(id);
+
     // Wisps.
     const seenW = new Set<number>();
     const wispPos = new Map<number, THREE.Vector3>();
@@ -2229,6 +2241,15 @@ export class World {
       const bob = w.rooted ? -0.3 * stone + Math.sin(time * 2.2 + w.id * 1.7) * 0.12 * (1 - stone) : Math.sin(time * 2.2 + w.id * 1.7) * 0.12;
       const sink = w.rim > 0 ? Math.min(1, w.rim * 0.5 + st.t * 0.5) : 0;
       rig.root.position.set(this.worldX(b, x), 0.75 + bob + sink * 1.4, this.worldZ(b, y));
+      // Stopped at the bank: it lurches at the water and bumps back onto land.
+      const fx = this.stopFx.get(w.id);
+      if (fx) {
+        const k = (time - fx.at) / STOP_FX;
+        const dx = fx.x - w.x, dz = fx.y - w.y, n = Math.hypot(dx, dz) || 1;
+        const lurch = Math.sin(Math.PI * Math.min(1, k * 2)) * 0.28 * (1 - k);
+        rig.root.position.x += (dx / n) * lurch;
+        rig.root.position.z += (dz / n) * lurch;
+      }
       const s = 1 - sink * 0.6;
       const dim = 1 - stone * (2 / 3);
       rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1));
@@ -2338,7 +2359,14 @@ export class World {
       rig.lantern.scale.setScalar(0.9 + Math.sin(time * 7 + p.id) * 0.06);
 
       const beam = rig.beam;
-      const target = p.beam !== null ? wispPos.get(p.beam) : undefined;
+      let target = p.beam !== null ? wispPos.get(p.beam) : undefined;
+      // Stopped at the bank: the beam breaks at the waterline, grey and flickering, short of the wisp.
+      const broke = p.beam !== null ? this.stopFx.get(p.beam) : undefined;
+      const broken = !!broke && broke.player === p.id && !!target;
+      if (broken && target) {
+        const edge = new THREE.Vector3(this.worldX(b, broke!.x), target.y, this.worldZ(b, broke!.y));
+        target = edge.lerp(target, 0.5);
+      }
       if (target) {
         const from = rig.root.position.clone().add(side);
         const mid = from.clone().add(target).multiplyScalar(0.5);
@@ -2354,7 +2382,8 @@ export class World {
         beam.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(dir, up, normal));
         const u = (beam.material as THREE.ShaderMaterial).uniforms;
         u.uTime!.value = time;
-        u.uColor!.value.set(p.slipped ? "#777777" : p.mode === "pull" ? flame : "#ff5a5a");
+        u.uColor!.value.set(p.slipped || broken ? "#777777" : p.mode === "pull" ? flame : "#ff5a5a");
+        if (broken) beam.visible = Math.sin(time * 47) > -0.2;
         u.uDash!.value = p.mode === "push" ? 1 : 0;
       } else beam.visible = false;
     }

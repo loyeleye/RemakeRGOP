@@ -207,6 +207,19 @@ export function slipKnock() {
   thump(0.12);
 }
 
+/** A pull stopped at the water's edge (the laws of water): a soft, low plop with a little splash. */
+let lastPlop = 0;
+export function bankPlop() {
+  const s = out();
+  if (!s || s.c.currentTime - lastPlop < 1.2) return;
+  lastPlop = s.c.currentTime;
+  strike(196, 0.05, 0, [
+    [1, 1, 0.12],
+    [1.5, 0.3, 0.06],
+  ]);
+  noise(0.06, "lowpass", 700, 0.12);
+}
+
 /** Lumi's hand bell; `rings` times, half a second apart. */
 export function handBell(rings = 1) {
   const s = out();

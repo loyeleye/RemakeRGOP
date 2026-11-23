@@ -185,6 +185,8 @@ export interface GameSnapshot {
     walkTo: Pt | null;
   }[];
   banks: BankEvent[];
+  /** Pulls stopped at the bank this tick (the laws of water): who, which wisp, and the water tile it met. */
+  stops?: { player: number; wisp: number; x: number; y: number }[];
 }
 
 /** Small seeded PRNG (mulberry32): wisp respawns must be the same on every replay. */
@@ -318,6 +320,8 @@ export class Game {
   static waterLaw: "all" | "deep" | "off" = "all";
   /** Extend the laws to every board, practice too. */
   static waterLawEverywhere = false;
+  /** Brainstorm, to judge by feel: a pull across water walks you round to a dry line first (off: it stops at the bank). */
+  static walkRound = true;
   waterLawHere = false;
   /** Who carries a water light (Lumi): she holds on any water. The tide puller always does too. */
   waterLight: number | null = null;
@@ -336,7 +340,7 @@ export class Game {
     return !this.hasLight(id) && this.lawWater(at);
   }
   /** Ticks on which a pull without a light was stopped at the bank (for the story runs' lines). */
-  bankStops: { tick: number; player: number; wisp: number }[] = [];
+  bankStops: { tick: number; player: number; wisp: number; water: Pt }[] = [];
   /** The laws of water, law 5: moving water (tide or current) carries a loose wisp about its pool but
    *  never puts it ashore; it stops at the water's edge. On in the story runs that set it (run 4);
    *  every board once the water laws are settled. */
@@ -766,7 +770,7 @@ export class Game {
     const next = pt(w.pos.x + dx, w.pos.y + dy);
     if (this.lawWater(next) && !this.lawWater(w.pos) && !this.hasLight(w.holder) && !w.pullers.some((id) => this.hasLight(id))) {
       w.target = null;
-      if (w.holder != null) this.bankStops.push({ tick: this.tick, player: w.holder, wisp: w.id });
+      if (w.holder != null) this.bankStops.push({ tick: this.tick, player: w.holder, wisp: w.id, water: next });
       return;
     }
     w.pos = next;
@@ -957,6 +961,17 @@ export class Game {
           p.action = { kind: "idle" };
           break;
         }
+        // The laws of water: water is in the way of a pull like any obstacle. Without a water light
+        // you walk round to a spot where the pull won't cross it, then take hold.
+        const round = this.roundWater(p, w);
+        if (round) {
+          p.path = samePt(round, p.pos) ? [] : this.board.walkPath(p.pos, round);
+          p.pathGoal = null;
+          if (p.path.length) {
+            this.walk(p);
+            break;
+          }
+        }
         if (this.inReach(p, w)) {
           p.path = [];
           p.pathGoal = null;
@@ -983,6 +998,42 @@ export class Game {
       // Stepping onto ice ends the step: the slide takes over next tick.
       if (this.board.tile(next) === Tile.Ice) break;
     }
+  }
+
+  /**
+   * The laws of water, for a pull without a water light on a wisp on land: if the straight line
+   * from here to it crosses water, the nearest tile (by walking) where it doesn't, in reach and in
+   * sight, preferring the brazier's side of the wisp. Null when nothing is in the way.
+   */
+  roundWater(p: Lamplighter, w: Wisp): Pt | null {
+    if (!Game.walkRound || p.mode !== "pull" || !this.lawOn() || this.hasLight(p.id) || this.lawWater(w.pos)) return null;
+    if (this.hasLight(w.holder) || w.pullers.some((id) => this.hasLight(id))) return null;
+    const wet = (q: Pt) => this.board.lineTiles(q, w.pos).some((t) => this.lawWater(t));
+    if (!wet(p.pos)) return null;
+    const b = this.board, W = b.width, c = b.center;
+    const seen = new Set<number>([p.pos.y * W + p.pos.x]);
+    let ring: Pt[] = [p.pos];
+    let best: Pt | null = null;
+    let bestCost = Infinity;
+    for (let d = 0; ring.length && d < bestCost; d++) {
+      const next: Pt[] = [];
+      for (const q of ring) {
+        if (cheb(q, w.pos) <= PULL_REACH && !samePt(q, w.pos) && b.canSee(q, w.pos) && !wet(q)) {
+          const cost = d + (cheb(q, c) > cheb(w.pos, c) ? 6 : 0);
+          if (cost < bestCost) (bestCost = cost), (best = q);
+        }
+        for (const dir of DIRS) {
+          if (!b.canStep(q, dir.x, dir.y, Mover.Walker)) continue;
+          const n = pt(q.x + dir.x, q.y + dir.y);
+          const k = n.y * W + n.x;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          next.push(n);
+        }
+      }
+      ring = next;
+    }
+    return best;
   }
 
   /** Pull works on your own guild's wisps; push works on any wisp. */
@@ -1081,6 +1132,7 @@ export class Game {
         walkTo: p.action.kind === "walk" ? p.action.to : null,
       })),
       banks: this.banks,
+      stops: this.bankStops.length ? this.bankStops.map((b) => ({ player: b.player, wisp: b.wisp, x: b.water.x, y: b.water.y })) : undefined,
       moss: this.mossHp.size ? [...this.mossHp].flat() : undefined,
     };
   }

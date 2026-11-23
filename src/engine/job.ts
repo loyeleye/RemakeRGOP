@@ -47,7 +47,7 @@ export const JOB = {
       keeper: "Marit",
       /** Draft (Ladi, 23 Nov: "add more pools"): bank this many in this many ticks, all off the pools. */
       goal: 10,
-      ticks: 380,
+      ticks: 420,
       wisps: 3,
       onWater: 8,
       /**
