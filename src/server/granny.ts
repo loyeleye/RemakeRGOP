@@ -48,6 +48,8 @@ export class GrannyRoom {
   private callTurn = 0;
   private leader = 0;
   private sefaLetGo = -99;
+  /** Who last held each wisp, so a bank can be put down to someone. */
+  private lastHolder = new Map<number, number>();
 
   constructor(
     private clock: Clock = realClock,
@@ -116,9 +118,10 @@ export class GrannyRoom {
     this.lastPushedBy = null;
     this.pushTicks = [];
     this.sefaLetGo = -99;
+    this.lastHolder = new Map();
     this.phase = "countdown";
     this.countdown = GRANNY.bellTicks;
-    this.say(LUMI, PLAYER_IS_ROOK ? "I'm captain. Dad, you're on my team. Do what I say." : "I'm captain.", { talk: true });
+    this.say(LUMI, PLAYER_IS_ROOK ? "I'm captain. I picked Dad first." : "I'm captain.", { talk: true });
     this.endClock();
     this.stop = this.clock.every(TICK_MS, () => this.onTick());
     this.flush();
@@ -169,22 +172,15 @@ export class GrannyRoom {
       if (cmd) g.command(id, cmd);
       if (id === KID_IDS[1] && before !== null && cmd?.action?.kind === "idle") this.sefaLetGo = g.tick;
     }
-    // Lumi calls now and then: barks, no rule. The player is free to ignore her.
-    if (g.tick >= GRANNY.firstPushAfter && g.tick - this.lastCall >= GRANNY.callEvery) {
+    // Lumi calls to Nell and Sefa now and then (never to the player): barks, no rule.
+    const sefa = this.player(KID_IDS[1]);
+    if (g.tick - this.sefaLetGo === 1) this.say(LUMI, `It's fine. Again, ${SEFA}.`, { player: LUMI_ID });
+    else if (g.tick >= GRANNY.firstPushAfter && g.tick - this.lastCall >= GRANNY.callEvery) {
       this.lastCall = g.tick;
-      const lumi = this.player(LUMI_ID);
-      const you = this.player(YOU);
-      const hesta = this.player(HESTA_ID);
-      const mine = g.wisps.filter((w) => w.guild === 0 && this.stepsOut(w) > 0 && !g.rooted.has(w.id));
-      const nearYou = mine.sort((a, b) => Math.hypot(a.pos.x - you.pos.x, a.pos.y - you.pos.y) - Math.hypot(b.pos.x - you.pos.x, b.pos.y - you.pos.y))[0];
-      // A wisp on her far side, out of her reach: the one real hint.
-      const safe = mine.find((w) => !g.inReach({ ...hesta, mode: "push" }, w));
-      const turn = this.callTurn++ % 4;
-      if (g.tick - this.sefaLetGo <= 3) this.say(LUMI, `${SEFA}, hold it. Hold it. ...${SEFA}.`, { player: LUMI_ID });
-      else if (turn === 1 && safe && PLAYER_IS_ROOK) this.say(LUMI, "Other side of her, Dad. She can't reach.", { wisp: safe.id });
-      else if (turn === 3 && Math.hypot(this.player(KID_IDS[0]).pos.x - lumi.pos.x, this.player(KID_IDS[0]).pos.y - lumi.pos.y) < 4) this.say(LUMI, `${NELL}. Stop following me.`, { player: LUMI_ID });
-      else if (nearYou && PLAYER_IS_ROOK) this.say(LUMI, "Dad. That one. No. That one.", { wisp: nearYou.id });
+      if (sefa.beam !== null && this.callTurn++ % 2 === 0) this.say(LUMI, `${SEFA}, hold it. Hold it. ...${SEFA}.`, { player: LUMI_ID });
+      else this.say(LUMI, `${NELL}, go left. Your other left.`, { player: LUMI_ID });
     }
+    for (const p of g.players) if (p.beam !== null) this.lastHolder.set(p.beam, p.id);
   }
 
   // ---------------------------------------------------------------- Hesta
@@ -213,6 +209,8 @@ export class GrannyRoom {
           if (this.pushes === 1) {
             this.say(LUMI, "That's not allowed!", { player: LUMI_ID });
             this.say(HESTA, "Show me where it says.", { player: HESTA_ID });
+          } else if (PLAYER_IS_ROOK && threat.holder === YOU && this.hint("guard")) {
+            this.say(HESTA, "I only have to watch one, Rook. Lucky you only brought one.", { player: HESTA_ID });
           } else if (this.rng.next() < 0.35) this.say(HESTA, "Nearly.", { player: HESTA_ID });
         }
         return cmd({ action: { kind: "staff", wisp: threat.id }, toggleMode: fix("push") });
@@ -244,6 +242,13 @@ export class GrannyRoom {
     if (!release && this.parked === null && near.length) {
       this.parked = near[0]!.id;
       this.parkedAt = g.tick;
+      if (PLAYER_IS_ROOK && this.hint("parked")) this.say(HESTA, "Don't mind that one, Rook. It only goes in when you make me nervous.", { player: HESTA_ID });
+    }
+    // The player working a wisp out of her reach, on her far side.
+    const you = this.player(YOU);
+    if (PLAYER_IS_ROOK && you.beam !== null && g.tick >= GRANNY.firstPushAfter) {
+      const w = g.wisps[you.beam];
+      if (w && w.guild === 0 && !g.inReach({ ...me, mode: "push" }, w) && this.hint("far")) this.say(HESTA, "All the way over there, Rook? At my age?", { player: HESTA_ID });
     }
     // Anything near the rim stays put while she waits; otherwise only the parked one does.
     const free = live.filter((w) => w.id !== this.parked && !(waitForThem && this.stepsOut(w) <= H.parkAt) && !(holdBack && this.stepsOut(w) <= H.parkAt + 1));
@@ -261,6 +266,13 @@ export class GrannyRoom {
     if (!spot || (spot.x === me.pos.x && spot.y === me.pos.y)) return cmd({ action: { kind: "staff", wisp: target.id }, toggleMode: fix("pull") });
     if (me.action.kind === "walk" && me.action.to.x === spot.x && me.action.to.y === spot.y) return;
     cmd({ action: { kind: "walk", to: spot }, toggleMode: fix("pull") });
+  }
+
+  /** Her three hints to the player: each once, the first time he sees the thing. */
+  private hint(k: string) {
+    if (this.said.has(`hint:${k}`)) return false;
+    this.said.add(`hint:${k}`);
+    return true;
   }
 
   // ---------------------------------------------------------------- after each tick
@@ -290,6 +302,7 @@ export class GrannyRoom {
       [12, NELL, "A hundred and ten?", KID_IDS[0]],
       [16, HESTA, "Higher.", HESTA_ID],
       [20, LUMI, "She's distracting you. Eyes on the wisp.", LUMI_ID],
+      [24, HESTA, "Is it working?", HESTA_ID],
       [150, SEFA, "She's not even running!", KID_IDS[1]],
       [154, HESTA, "Why would I run? You're all coming to me.", HESTA_ID],
     ];
@@ -301,7 +314,11 @@ export class GrannyRoom {
         this.baits++;
         this.pushTicks = [];
       }
-      if (this.pushes > 0 && !this.said.has("praise")) {
+      if (PLAYER_IS_ROOK && this.lastHolder.get(b.wisp) === YOU && !this.said.has("my dad")) {
+        this.said.add("my dad");
+        this.say(LUMI, "That's my dad.", { player: LUMI_ID });
+        this.say(HESTA, "So I hear.", { player: HESTA_ID });
+      } else if (this.pushes > 0 && !this.said.has("praise")) {
         this.said.add("praise");
         this.say(HESTA, "Good. Do that again and I'll have to try.", { player: HESTA_ID });
       }
@@ -312,11 +329,12 @@ export class GrannyRoom {
       if (lead > 0 && !this.said.has("winning")) {
         this.said.add("winning");
         this.say(LUMI, "We're winning. Nobody change anything.", { player: LUMI_ID });
+        this.say(HESTA, "I might change one thing.", { player: HESTA_ID });
       }
       if (lead < 0 && this.leader > 0 && !this.said.has("mine again")) {
         this.said.add("mine again");
-        this.say(HESTA, "You've had it long enough. Mine again.", { player: HESTA_ID });
         this.say(LUMI, "It's fine. Nobody panic.", { player: LUMI_ID });
+        this.say(HESTA, "A little panic is fine.", { player: HESTA_ID });
       }
       this.leader = lead;
     }
@@ -335,6 +353,7 @@ export class GrannyRoom {
         { who: HESTA, text: "Winner's prize. I'm giving it to the losers." },
         { who: LUMI, text: "There's three left." },
         { who: HESTA, text: "Three of you. I can count too." },
+        ...(PLAYER_IS_ROOK ? [{ who: LUMI, text: "There were four of us." }] : []),
         { who: LUMI, text: "Best of three. No rocks." },
         { who: HESTA, text: "No promises." },
         ...(this.baits >= GRANNY.baited && PLAYER_IS_ROOK ? [{ who: HESTA, text: "You saw what I was doing. Most don't." }] : []),
