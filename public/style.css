@@ -149,3 +149,5 @@ body.touch .bark.chip { top: 58px; left: 12px; right: auto; }
 @keyframes cap-in-line { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes bark-in { from { opacity: 0; } to { opacity: 1; } }
 #dialog:not([hidden]) ~ .bark.chip { top: 164px; }
+#call.on { background: #ffd36a; color: #201a10; }
+body.calling #board { cursor: crosshair; }

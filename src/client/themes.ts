@@ -113,6 +113,10 @@ export const THEMES: Record<string, Theme> = {
       });
     },
   },
+  // Lumi's home pond (story run 2): the lagoon look for now, as placeholder art.
+  get "home-pond"() {
+    return THEMES["tidepool-steps"]!;
+  },
   "ember-quarry": {
     name: "Volcano",
     floor: "volcano",

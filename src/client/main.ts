@@ -5,6 +5,7 @@ import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
 import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg, type StoryLine } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
+import { LessonRoom } from "../server/lesson.js";
 import { StoryRoom } from "../server/story.js";
 import * as sound from "./sound.js";
 import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
@@ -109,10 +110,11 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-/** A story run (the Grand Kindling) runs in the page too, like Practice. */
-function connectStory(name: string) {
+/** A story run runs in the page too, like Practice: run 1 (the Grand Kindling) or run 2 (Lumi's lesson). */
+function connectStory(name: string, run: 1 | 2 = 1) {
   practice = true;
-  const r = new StoryRoom();
+  callMode = false;
+  const r = run === 2 ? new LessonRoom() : new StoryRoom();
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
   link.send({ t: "hello", name: name || "Rook" });
@@ -141,27 +143,27 @@ interface Bark {
   /** What it points at: a wisp, Hesta's ring, or nothing (the corner chip). */
   wisp?: number;
   ring?: boolean;
+  player?: number;
   last?: { x: number; y: number };
 }
 const barks: Record<"bark" | "chip", Bark | null> = { bark: null, chip: null };
 
 function sayLine(l: StoryLine) {
   if (l.talk || room?.phase !== "playing" || !l.who) return talk(l);
-  const anchored = l.wisp != null || l.ring;
+  const anchored = l.wisp != null || l.ring || l.player != null;
   const el = $(anchored ? "bark" : "chip");
   el.className = `bark${anchored ? "" : " chip"} ${l.who.toLowerCase()}`;
   const img = el.querySelector("img")!;
   img.src = FACES[l.who] ?? "";
   img.hidden = !FACES[l.who];
-  el.querySelector("span")!.innerHTML = lineHtml(l.text);
+  el.querySelector("span")!.innerHTML = (FACES[l.who] ? "" : `<b>${esc(l.who)}</b> `) + lineHtml(l.text);
   el.hidden = false;
   // Restart the fade-in.
   el.style.animation = "none";
   void el.offsetWidth;
   el.style.animation = "";
-  barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60), wisp: l.wisp, ring: l.ring };
-  if (l.who === "Hesta" && l.wisp != null) sound.nowCue();
-  else sound.babble(l.who, l.text);
+  barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60), wisp: l.wisp, ring: l.ring, player: l.player };
+  sound.speak(l.who, l.text, l.who === "Hesta" && l.wisp != null);
   if (!anchored) placeBarks(performance.now());
 }
 
@@ -183,6 +185,9 @@ function placeBarks(now: number) {
     if (b.wisp != null) {
       const w = snap.wisps.find((q) => q.id === b.wisp);
       if (w) at = { x: w.x, y: w.y };
+    } else if (b.player != null) {
+      const q = snap.players.find((p) => p.id === b.player);
+      if (q) at = { x: q.x, y: q.y };
     } else if (b.ring) {
       const st = room?.story;
       const mine = snap.players.find((p) => p.id === me);
@@ -228,7 +233,7 @@ function nextTalk() {
   void el.offsetWidth;
   el.style.animation = "";
   typing = { l, shown: 0, at: performance.now() };
-  if (l.who) sound.babble(l.who, l.text);
+  if (l.who) sound.speak(l.who, l.text);
   typeOn();
 }
 
@@ -689,6 +694,13 @@ const endPointer = (e: PointerEvent) => {
     cam.phoneZoom();
   }
   lastTap = now;
+  if (callMode && room?.story?.canCall && room.phase === "playing") {
+    const t = cam.toTile(x, y);
+    link?.send({ t: "call", x: Math.floor(t.x), y: Math.floor(t.y) });
+    callMode = false;
+    $("call").classList.remove("on");
+    return;
+  }
   const t = targetAt(x, y);
   if (t) act({ action: t.action });
 };
@@ -890,6 +902,13 @@ $("join-form").onsubmit = (e) => {
 };
 $("practice").onclick = () => connectPractice(playerName());
 $("story").onclick = () => connectStory(playerName());
+$("story2").onclick = () => connectStory(playerName(), 2);
+// Run 2: call Rook to a spot. The next tap on the ground is the call.
+let callMode = false;
+$("call").onclick = () => {
+  callMode = !callMode;
+  $("call").classList.toggle("on", callMode);
+};
 sound.unlockOnFirstInput();
 const muteBtn = $("mute");
 const showMute = () => {
@@ -1059,6 +1078,41 @@ function drawStory(g: CanvasRenderingContext2D, t: number, now: number) {
     g.restore();
     edgeArrow(g, cam.toScreen(cx, cy, 0.02), "#ffd36a");
   }
+  // Run 2: the halfway mark between two pulling one wisp, and the spot Rook was called to.
+  const groundRing = (cx: number, cy: number, r: number, color: string, dash: number[]) => {
+    g.save();
+    g.beginPath();
+    for (let i = 0; i <= 32; i++) {
+      const ang = (i / 32) * Math.PI * 2;
+      const p = cam.toScreen(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r, 0.02);
+      if (i) g.lineTo(p.x, p.y);
+      else g.moveTo(p.x, p.y);
+    }
+    g.setLineDash(dash);
+    g.strokeStyle = color;
+    g.lineWidth = 2.5;
+    g.shadowColor = color;
+    g.shadowBlur = 10;
+    g.stroke();
+    g.restore();
+  };
+  if (st.halfway && room!.phase === "playing") {
+    const hx = st.halfway.x + 0.5, hy = st.halfway.y + 0.5;
+    groundRing(hx, hy, 0.35 + 0.1 * pulse, "rgba(140, 220, 255, 0.95)", []);
+    // A cross at the centre: the point the wisp heads for.
+    const c = cam.toScreen(hx, hy, 0.02);
+    g.save();
+    g.strokeStyle = "rgba(140, 220, 255, 0.95)";
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(c.x - 6, c.y);
+    g.lineTo(c.x + 6, c.y);
+    g.moveTo(c.x, c.y - 6);
+    g.lineTo(c.x, c.y + 6);
+    g.stroke();
+    g.restore();
+  }
+  if (st.called && room!.phase === "playing") groundRing(st.called.x + 0.5, st.called.y + 0.5, 0.5, "rgba(255, 255, 255, 0.8)", [5, 5]);
   const cw = st.mark ? snap.wisps.find((w) => w.id === st.mark!.wisp) : null;
   if (cw) {
     // The plain focus circle, at the size of its tap target.

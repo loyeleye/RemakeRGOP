@@ -24,7 +24,9 @@ To play from a phone on the same Wi-Fi, open `http://<your-computer's-LAN-IP>:87
 round in the page against a bot, with no server needed. **Story: the Grand Kindling** (a prototype of
 story run 1) also runs in the page: three movements of about 6 minutes in all, with Hesta's and Lumi's lines as
 captions. Its numbers (movement lengths, wisp counts, spawn bands, how often Lumi calls, Kes's pace) are in
-`KINDLING` at the top of `src/engine/kindling.ts`.
+`KINDLING` at the top of `src/engine/kindling.ts`. **Story: Lumi's lesson** (a prototype of story run 2) is
+the next run: you play Lumi, with Rook as your partner, in three short rounds on her home pond that
+restart at once if you miss the goal. Its numbers are in `LESSON` in `src/engine/lesson.ts`.
 
 ### Controls
 
@@ -51,6 +53,7 @@ setup locally.
 | `src/engine/` | The deterministic tick engine (`game.ts`), the grid (`board.ts`), the shrines (`maps.ts`), the bot (`bot.ts`) and the wire protocol. Shared by the server, the client and the tests. |
 | `src/server/room.ts` | One room (lobby, countdown, round, results), independent of the transport. |
 | `src/server/story.ts`, `src/engine/kindling.ts` | Story run 1, the Grand Kindling: three Games in a row with the story's lines, Hesta's ring, the fetch-only crew and Lumi's calls; in the relay one crewmate fetches for Rook and the other banks from across the brazier. |
+| `src/server/lesson.ts`, `src/engine/lesson.ts` | Story run 2, Lumi's lesson: three rounds with Rook as partner, the pull and call budgets, jammed wisps and the tide pull. |
 | `src/client/sound.ts` | Story sound made in code with WebAudio (bank chimes up a D major pentatonic scale, catch, pull hum, slip, Lumi's bell, the eye), plus the music slot in `public/music/`. |
 | `src/server/node.ts` | Node server: static files plus `ws`. |
 | `cloudflare/worker.ts` | Worker plus the `RoomObject` Durable Object. |

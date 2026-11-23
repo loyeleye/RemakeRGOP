@@ -288,12 +288,14 @@ export class Game {
    */
   heavy = new Set<number>();
   /**
-   * Story runs: the player whose pull is a tide pull (Lumi). While she holds a wisp that's on
-   * water, every loose wisp on that pool drifts a tile a tick toward her.
+   * Story runs: the player whose pull is a tide pull (Lumi). When she takes hold of a wisp on
+   * water, every loose wisp on that pool drifts a tile a tick toward her for as long as she holds.
    */
   tidePuller: number | null = null;
   /** Each water tile's pool (its connected stretch of water), worked out when first needed. */
   private pools: Int32Array | null = null;
+  /** The wisp the tide puller took hold of on water, and its pool, while she holds it. */
+  private tideHold: { wisp: number; pool: number } | null = null;
   /** This tick's tide-pull steps, by wisp. */
   private drift = new Map<number, Pt>();
 
@@ -433,12 +435,20 @@ export class Game {
 
   // ---------------------------------------------------------------- wisps
 
-  /** The tide puller is holding a wisp on water: the loose wisps on that pool drift to her. */
+  /**
+   * The tide puller took hold of a wisp on water: for as long as she holds it, the loose wisps on
+   * that pool drift to her (even once the one she holds has left the water).
+   */
   private tidePull() {
     const p = this.players.find((q) => q.id === this.tidePuller);
     const held = p?.beam != null ? this.wisps[p.beam] : undefined;
-    if (!p || !held || !held.touched || this.board.tile(held.pos) !== Tile.Water) return;
-    const pool = this.poolOf(held.pos);
+    if (!p || !held || !held.touched) {
+      this.tideHold = null;
+      return;
+    }
+    if (this.tideHold?.wisp !== held.id) this.tideHold = this.board.tile(held.pos) === Tile.Water ? { wisp: held.id, pool: this.poolOf(held.pos) } : null;
+    if (!this.tideHold) return;
+    const pool = this.tideHold.pool;
     for (const w of this.wisps) {
       if (w === held || w.touched || w.target || w.skate || this.board.inBankZone(w.pos)) continue;
       if (this.board.tile(w.pos) !== Tile.Water || this.poolOf(w.pos) !== pool) continue;

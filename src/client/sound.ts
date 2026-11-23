@@ -262,13 +262,35 @@ export function pullHum(near: number | null) {
 }
 
 /**
+ * Voiced clips for a few lines, in place of the babble. Empty until the clips are picked: add
+ * { who: "Lumi", match: /^Dad\./, src: "voice/lumi-dad.mp3" } and the line plays the clip.
+ */
+export const VOICE: { who: string; match: RegExp; src: string }[] = [];
+
+/** A line appears: its clip if it has one, else Hesta's "Now" cue or the speaker's babble. */
+export function speak(who: string, text: string, now = false) {
+  const v = VOICE.find((c) => c.who === who && c.match.test(text));
+  if (v) {
+    if (!out()) return;
+    const a = new Audio(v.src);
+    a.volume = SOUND.volume;
+    a.muted = muted;
+    void a.play().catch(() => {});
+    return;
+  }
+  if (now) nowCue();
+  else babble(who, text);
+}
+
+/**
  * Babble: short pitched blips as a line appears, one per word or so, in place of a voice.
  * Hesta's are low and slow; Lumi's high and quick. Quiet, under everything else.
  */
 export function babble(who: string, text: string) {
   const s = out();
   if (!s) return;
-  const hesta = who === "Hesta";
+  // Lumi is high and quick; the grown-ups (Hesta, Rook) low and slow.
+  const hesta = who !== "Lumi";
   const words = text.split(/\s+/).filter(Boolean).length;
   const n = Math.min(hesta ? 5 : 7, Math.max(2, words));
   const gap = hesta ? 0.13 : 0.085;
