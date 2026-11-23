@@ -68,7 +68,7 @@ export const JOB = {
         back: "Now.",
         fireSide: "She's pulling them away from you, Rook. Fire side.",
         /** Drafts (story thread, run4-job-lines.md B2): Rook's first slip on the water, and the first shimmer. */
-        slip: "Water won't hold for you, Rook. Send her.",
+        slip: "It takes water to hold water, Rook. Send her.",
         next: "That pool. It's next.",
         again: "Again. The tide comes back. So can you.",
       },
