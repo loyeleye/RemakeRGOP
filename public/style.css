@@ -218,3 +218,4 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #ending .hearts-glint { background-size: cover; background-position: center; }
 #ending .hearts-glint:not(.real) { background: radial-gradient(circle at 50% 50%, #ffd36a 0 1.5%, #ffb24a66 4%, transparent 8%); }
 #ending .hearts.real, #ending .hearts-glint.real { -webkit-mask-image: radial-gradient(circle, #000 45%, transparent 72%); mask-image: radial-gradient(circle, #000 45%, transparent 72%); }
+#ending canvas.eye { inset: auto; left: 50%; top: 50%; width: var(--eye); height: var(--eye); transform: translate(-50%, -50%); -webkit-mask-image: radial-gradient(closest-side, #000 82%, transparent 100%); mask-image: radial-gradient(closest-side, #000 82%, transparent 100%); }

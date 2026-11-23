@@ -4,6 +4,7 @@
 // card (project files gameplay/run1-ending-cutscene.md).
 
 import type { StoryLine } from "../engine/protocol.js";
+import { EYE_CUT, EYE_FIX, loadEye, type Eye } from "./eye-rig.js";
 import * as sound from "./sound.js";
 
 /** Seconds from the last bell. Change the timing here. */
@@ -23,9 +24,9 @@ export const ENDING = {
   hearts: { in: 25.5, inFor: 1, to: 31 },
   descent: { from: 26.5, to: 31, wind: 20 },
   dark: 31,
-  /** The eye: shut, a slit, open (with the low note). */
-  eye: [33, 35.5, 37.5],
-  eyeOut: 42,
+  /** The eye (client/eye-rig.ts, its own 11.3 s of timing): it starts in the dark, opens, looks
+   *  around, blinks, and fixes on the islands (the low note), then cuts to black. */
+  eye: 31,
   title: 44,
   buttons: 46,
   /** Lumi's lantern before run 2: how long it holds before play, and its fade. */
@@ -72,8 +73,7 @@ export class KindlingEnding {
   private skipAt: number | null = null;
   private skipOffset = 0;
   private readonly skippable: boolean;
-  /** Fairy Ring's light in the eye: as bright as the score. */
-  private glint = 1;
+  private eye: Eye | null = null;
   /** Fairy Ring's heart: one of the four tiers. */
   private heart = 1;
 
@@ -99,8 +99,10 @@ export class KindlingEnding {
     this.els.sky!.style.setProperty("--isles", islands);
     for (const n of [1, 2, 3]) add(`cloud${n}`, card(`kindling-cloud-${n}`, `cloud c${n}`));
     add("black", Object.assign(document.createElement("div"), { className: "black" }));
-    for (const n of [1, 2, 3]) add(`eye${n}`, card(`kindling-eye-${n}`, `eye e${n}`, `<div class="lid"><div class="pupil"></div></div>`));
-    add("glint", card("kindling-eye-glint", "glint", `<div class="spark" style="--glint:1"></div>`));
+    const cv = document.createElement("canvas");
+    cv.className = "eye";
+    add("eye", cv);
+    loadEye("story/eye/").then((eye) => (this.eye = eye)).catch(() => {});
     add("out", Object.assign(document.createElement("div"), { className: "black" }));
     const title = document.createElement("div");
     title.className = "title";
@@ -134,7 +136,6 @@ export class KindlingEnding {
     }
     // Brightness follows the score: Fairy Ring's painting, and its light in the eye.
     this.els.ring!.style.filter = `brightness(${0.4 + 0.2 * skyTier(sky)}) saturate(${0.7 + 0.1 * skyTier(sky)})`;
-    this.glint = 0.25 + 0.75 * sky;
     this.heart = 0.25 + 0.25 * skyTier(sky);
     document.body.appendChild(r);
     document.body.classList.add("in-ending");
@@ -173,7 +174,7 @@ export class KindlingEnding {
     const now = performance.now();
     if (this.skippable && this.skipAt !== null && now - this.skipAt > 800 && this.time(now) < ENDING.title) {
       this.skipOffset += ENDING.title - this.time(now);
-      for (const k of ["descent", "dark", "eye"]) this.fired.add(k);
+      for (const k of ["wind", "eyeStart", "eye"]) this.fired.add(k);
       sound.windOff(0.5);
       sound.stopMusic(0.5);
       this.caption.hidden = true;
@@ -229,17 +230,13 @@ export class KindlingEnding {
     });
     this.once("wind", t, E.descent.wind, () => sound.wind(4));
     op("black", ramp(t, E.descent.to - 1.5, E.dark));
-    // The eye: shut, a slit, open.
-    const [a, b, c] = E.eye as unknown as [number, number, number];
-    op("eye1", ramp(t, a, a + 1) * (1 - ramp(t, b, b + 0.4)));
-    op("eye2", ramp(t, b, b + 0.4) * (1 - ramp(t, c, c + 0.6)));
-    op("eye3", ramp(t, c, c + 0.6));
-    op("glint", ramp(t, c + 0.4, c + 2) * this.glint);
-    this.once("eye", t, c, () => {
-      sound.windOff(2);
-      sound.eyeNote();
-    });
-    op("out", ramp(t, E.eyeOut, E.eyeOut + 1.2));
+    // The eye. It draws its own black before and after; the low note lands as it fixes on the islands.
+    const et = t - E.eye;
+    op("eye", et >= 0 && et < EYE_CUT + 0.5 ? 1 : 0);
+    if (et >= 0 && et < EYE_CUT + 0.5) this.drawEye(et);
+    this.once("eyeStart", t, E.eye, () => sound.windOff(3));
+    this.once("eye", t, E.eye + EYE_FIX, () => sound.eyeNote());
+    op("out", t >= E.eye + EYE_CUT ? 1 : 0);
     op("title", ramp(t, E.title, E.title + 1.5));
     e.title!.classList.toggle("ready", t >= E.buttons);
     if (e.skip) op("skip", t > 1 && t < E.title - 1 ? 0.6 : 0);
@@ -250,6 +247,18 @@ export class KindlingEnding {
         /* private window */
       }
     });
+  }
+
+  /** One frame of the eye, square, as big as the --eye size (black fills the rest). */
+  private drawEye(et: number) {
+    const cv = this.els.eye as HTMLCanvasElement;
+    const css = cv.getBoundingClientRect().width;
+    const px = Math.round(css * Math.min(2, devicePixelRatio || 1));
+    if (cv.width !== px) cv.width = cv.height = px;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    if (this.eye) this.eye.draw(ctx, px, et, this.heart);
+    else (ctx.fillStyle = "#000"), ctx.fillRect(0, 0, px, px);
   }
 
   stop() {

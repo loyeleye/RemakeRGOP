@@ -13,6 +13,7 @@ subscription-only billing so no Spark was spent. Sources are in the project file
 | sprites/brazier.png, sprites/wisp-dawn.png (logo and favicon) | z_image_turbo_bf16, background removed with birefnet_image_background_removal_fp16 |
 | faces/&lt;who&gt;-&lt;mood&gt;.webp (story portraits: Hesta 3 moods, Lumi 6, Rook 4) | Mood faces (Lumi's calling, grudging and delighted redrawn closed-mouth on 2026-11-23) from the cast art thread (project files `sogni/lanternfall/production/<who>/face-*.png`, 2026-11-23), resized to 160 px WebP |
 | models/rook.glb, lumi.glb, hesta.glb, wick.glb, moth.glb (story characters) | The cast art thread's image-to-3D models (`production/<who>/<who>.glb`), cut to 15k triangles (Rook 30k) with `tools/cast-lite.mjs`: 230 to 450 KB each |
+| story/eye/*.webp and src/client/eye-rig.ts (the eye in run 1's ending) | The cutscene art thread's eye rig and layers (`production/story/v3/eye/`), approved by Ladi on 2026-11-22; layers converted to WebP |
 | story/*.webp (run 1's ending and run 2's opening pictures) | Drafts from the cast and cutscene art threads (`production/story/slots/` and `production/story/v3/`, 2026-11-23), not yet approved by Ladi; converted to WebP |
 | faces/lumi-delight-flash.webp | First draft from the cast art thread; Lumi's one open-mouth face in runs 1 and 2 |
 
