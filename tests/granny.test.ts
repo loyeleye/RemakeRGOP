@@ -36,12 +36,13 @@ describe("Run 3: Granny's game", () => {
     for (const seed of [3, 11, 29, 101]) {
       const { room, ticks, said, lead } = playOut(seed);
       const g = room.state.game;
-      console.log(`seed ${seed}: ${g.scores[0]}-${g.scores[1]} in ${ticks} ticks, pushes ${room.state.pushes}, biggest leads ${Math.max(...lead)} / ${Math.min(...lead)}`);
+      console.log(`seed ${seed}: ${g.scores[0]}-${g.scores[1]} in ${ticks} ticks, pushes ${room.state.pushes}, tide at ${room.state.tideSeen}, biggest leads ${Math.max(...lead)} / ${Math.min(...lead)}`);
       expect(room.state.phase).toBe("results");
       expect(g.scores[1]).toBe(GRANNY.target);
       expect(g.scores[0]).toBe(GRANNY.target - 1);
       expect(room.state.holdWisp).not.toBeNull();
       expect(said.some((l) => l.text === "Dad hasn't got one.")).toBe(true);
+      expect(said.some((l) => l.text === "Did you now.")).toBe(true);
       expect(said.some((l) => /element/i.test(l.text))).toBe(false);
     }
   });

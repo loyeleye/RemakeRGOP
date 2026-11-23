@@ -302,6 +302,10 @@ export class Game {
   private tideHold: { wisp: number; pool: number } | null = null;
   /** This tick's tide-pull steps, by wisp. */
   private drift = new Map<number, Pt>();
+  /** How many wisps the tide puller's pull moved this tick (story: noticing it). */
+  get drifting() {
+    return this.drift.size;
+  }
 
   constructor(
     readonly shrine: Shrine,

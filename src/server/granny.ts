@@ -5,9 +5,9 @@
 // and walks her last one in, so it always ends with her winning by one.
 // Numbers are in GRANNY (src/engine/granny.ts).
 
-import { pt, type Pt } from "../engine/board.js";
+import { Tile, pt, samePt, type Pt } from "../engine/board.js";
 import { bankDistances, botCommand, planSpot } from "../engine/bot.js";
-import { Game, Rng, TICK_MS, type Action, type Command, type Guild, type Wisp } from "../engine/game.js";
+import { Game, Grip, Rng, TICK_MS, type Action, type Command, type Guild, type Wisp } from "../engine/game.js";
 import { GRANNY } from "../engine/granny.js";
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
@@ -50,6 +50,8 @@ export class GrannyRoom {
   private sefaLetGo = -99;
   /** Who last held each wisp, so a bank can be put down to someone. */
   private lastHolder = new Map<number, number>();
+  /** Lumi's tide pull, seen in front of Hesta (tick), or -1. */
+  private tideSeen = -1;
 
   constructor(
     private clock: Clock = realClock,
@@ -119,6 +121,7 @@ export class GrannyRoom {
     this.pushTicks = [];
     this.sefaLetGo = -99;
     this.lastHolder = new Map();
+    this.tideSeen = -1;
     this.phase = "countdown";
     this.countdown = GRANNY.bellTicks;
     this.say(LUMI, PLAYER_IS_ROOK ? "I'm captain. I picked Dad first." : "I'm captain.", { talk: true });
@@ -181,6 +184,38 @@ export class GrannyRoom {
       else this.say(LUMI, `${NELL}, go left. Your other left.`, { player: LUMI_ID });
     }
     for (const p of g.players) if (p.beam !== null) this.lastHolder.set(p.beam, p.id);
+    if (this.staging() && LUMI_ID !== YOU) this.stageTide();
+  }
+
+  /** No tide pull yet by about the halfway score: set one up in front of her. */
+  private staging() {
+    return this.tideSeen < 0 && this.kidsScore() + this.hestaScore() >= GRANNY.tideBy;
+  }
+
+  /** Lumi goes for a loose wisp of theirs on the pond while another sits on the same water. */
+  private stageTide() {
+    const g = this.game, lumi = this.player(LUMI_ID);
+    const wet = g.wisps.filter((w) => w.guild === 0 && !w.target && !g.rooted.has(w.id) && g.board.tile(w.pos) === Tile.Water);
+    if (wet.length < 2) return;
+    const w = wet.sort((a, b) => Math.hypot(a.pos.x - lumi.pos.x, a.pos.y - lumi.pos.y) - Math.hypot(b.pos.x - lumi.pos.x, b.pos.y - lumi.pos.y))[0]!;
+    const fix = lumi.mode !== "pull" || undefined;
+    if (g.inReach({ ...lumi, mode: "pull" }, w)) return g.command(LUMI_ID, { action: { kind: "staff", wisp: w.id }, toggleMode: fix });
+    const spot = planSpot(g, LUMI_ID, lumi.pos, w, 0, true);
+    if (spot) g.command(LUMI_ID, { action: { kind: "walk", to: spot }, toggleMode: fix });
+  }
+
+  /** A free pond tile for a wisp coming back while the tide pull is being set up. */
+  private pondSpot(): Pt | null {
+    const g = this.game, b = g.board;
+    const spots: Pt[] = [];
+    for (let y = 0; y < b.height; y++)
+      for (let x = 0; x < b.width; x++) {
+        const p = pt(x, y);
+        if (b.tile(p) !== Tile.Water || b.inBankZone(p)) continue;
+        if (g.wisps.some((w) => samePt(w.pos, p)) || g.players.some((q) => samePt(q.pos, p))) continue;
+        spots.push(p);
+      }
+    return spots.length ? spots[Math.floor(this.rng.next() * spots.length)]! : null;
   }
 
   // ---------------------------------------------------------------- Hesta
@@ -289,12 +324,26 @@ export class GrannyRoom {
         if (this.holdWisp === null) {
           this.holdWisp = w.id;
           this.say(LUMI, "You can't do that!", { talk: true });
-          this.say(HESTA, "You did it to your father on the pond. Yours is water. Mine's rock.", { talk: true });
+          this.say(HESTA, "You did it on the pond. Yours is water. Mine's rock.", { talk: true });
           this.say(LUMI, "Dad hasn't got one.", { talk: true });
           this.say(HESTA, "No. Your father does it the hard way.", { talk: true });
         }
       }
     }
+    // Lumi's tide pull, in front of everyone: Hesta notices.
+    if (this.tideSeen < 0 && g.drifting > 0) {
+      this.tideSeen = g.tick;
+      this.say(SEFA, "How did you do that?", { player: KID_IDS[1] });
+      this.say(LUMI, "I pulled.", { player: LUMI_ID });
+      this.say(HESTA, "Did you now.", { player: HESTA_ID });
+    }
+    // Setting it up: their wisps come back on the pond.
+    if (this.staging())
+      for (const b of g.banks) {
+        if (b.guild !== 0) continue;
+        const spot = this.pondSpot();
+        if (spot) moveWisp(g.wisps[b.wisp]!, spot);
+      }
     // The children guess her age in the opening, before the first push.
     const age: [number, string, string, number][] = [
       [4, SEFA, "Are you a hundred?", KID_IDS[1]],
@@ -428,8 +477,17 @@ export class GrannyRoom {
 
   /** For tests. */
   get state() {
-    return { phase: this.phase, game: this.game, end: this.end, holdWisp: this.holdWisp, parked: this.parked, pushes: this.pushes, baits: this.baits };
+    return { phase: this.phase, game: this.game, end: this.end, holdWisp: this.holdWisp, parked: this.parked, pushes: this.pushes, baits: this.baits, tideSeen: this.tideSeen };
   }
+}
+
+function moveWisp(w: Wisp, at: Pt) {
+  w.pos = w.prev = at;
+  w.target = null;
+  w.holder = null;
+  w.grip = Grip.Free;
+  w.skate = null;
+  w.rimTicks = 0;
 }
 
 function cleanAction(raw: unknown, game: Game): Action | undefined {

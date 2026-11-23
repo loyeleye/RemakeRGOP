@@ -700,6 +700,35 @@ interface WispRig {
   lastY: number;
   /** Run 3's earth hold: a ring of stones risen round a wisp held fast. Made when first needed. */
   stones?: THREE.Group;
+  /** The stone crust that closes over a held wisp, its glow showing only through the cracks. */
+  crust?: THREE.Group;
+  /** When it was first seen held (seconds), for the crust closing over it. */
+  rootedAt?: number;
+}
+
+/** Stone closing over a wisp: a rough shell, and bright cracks where the light gets out. */
+function makeCrust(col: string): THREE.Group {
+  const g = new THREE.Group();
+  const geo = new THREE.DodecahedronGeometry(0.34, 1);
+  // Rough it up so it reads as rock, not a ball.
+  const pos = geo.getAttribute("position");
+  for (let i = 0; i < pos.count; i++) {
+    const k = 1 + Math.sin(i * 12.9898) * 0.09;
+    pos.setXYZ(i, pos.getX(i) * k, pos.getY(i) * k, pos.getZ(i) * k);
+  }
+  geo.computeVertexNormals();
+  const shell = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: "#7a6654", roughness: 1, flatShading: true }));
+  g.add(shell);
+  // A few cracks only: every fifth crease of the shell.
+  const edges = new THREE.EdgesGeometry(geo, 25).getAttribute("position");
+  const keep: number[] = [];
+  for (let i = 0; i < edges.count; i += 2) if ((i / 2) % 5 === 0) keep.push(edges.getX(i), edges.getY(i), edges.getZ(i), edges.getX(i + 1), edges.getY(i + 1), edges.getZ(i + 1));
+  const crackGeo = new THREE.BufferGeometry();
+  crackGeo.setAttribute("position", new THREE.Float32BufferAttribute(keep, 3));
+  const cracks = new THREE.LineSegments(crackGeo, new THREE.LineBasicMaterial({ color: new THREE.Color(col).multiplyScalar(1.4) }));
+  cracks.scale.setScalar(1.01);
+  g.add(cracks);
+  return g;
 }
 
 /** A ring of rough stones pushed up out of the ground (the earth hold's mark; placeholder). */
@@ -1696,13 +1725,34 @@ export class World {
         rig.stones.visible = !!w.rooted;
         rig.stones.position.set(this.worldX(b, w.x), 0, this.worldZ(b, w.y));
       }
-      const bob = w.rooted ? -0.3 : Math.sin(time * 2.2 + w.id * 1.7) * 0.12;
+      // The wisp turns from a light into a stone: a crust closes over it in about a second,
+      // its glow drops to a third and shows only through the cracks, and it sinks and stops
+      // bobbing. Pulled on while held, the stone shudders without moving.
+      let stone = 0;
+      if (w.rooted) {
+        rig.rootedAt ??= time;
+        stone = Math.min(1, (time - rig.rootedAt) / 1.1);
+        stone = stone * stone * (3 - 2 * stone);
+        if (!rig.crust) {
+          rig.crust = makeCrust(GUILD_COLORS[w.guild]!);
+          rig.root.add(rig.crust);
+        }
+        const tugged = st.snap.players.some((p) => p.beam === w.id);
+        const shake = tugged ? 0.035 : stone < 1 ? 0.02 * (1 - stone) : 0;
+        rig.crust.position.set((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+        rig.crust.scale.setScalar(0.4 + 0.6 * stone);
+        rig.crust.rotation.y = w.id;
+      } else rig.rootedAt = undefined;
+      if (rig.crust) rig.crust.visible = !!w.rooted;
+      const bob = w.rooted ? -0.3 * stone + Math.sin(time * 2.2 + w.id * 1.7) * 0.12 * (1 - stone) : Math.sin(time * 2.2 + w.id * 1.7) * 0.12;
       const sink = w.rim > 0 ? Math.min(1, w.rim * 0.5 + st.t * 0.5) : 0;
       rig.root.position.set(this.worldX(b, x), 0.75 + bob + sink * 1.4, this.worldZ(b, y));
       const s = 1 - sink * 0.6;
+      const dim = 1 - stone * (2 / 3);
       rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1));
-      rig.halo.material.opacity = 0.85 * s;
-      rig.light.intensity = 6 * s;
+      rig.halo.material.opacity = 0.85 * s * dim * dim;
+      rig.light.intensity = 6 * s * dim;
+      rig.trail.visible = stone < 0.5;
       if (w.rim > 0) rimPulse = Math.max(rimPulse, 1);
       wispPos.set(w.id, rig.root.position.clone());
     }

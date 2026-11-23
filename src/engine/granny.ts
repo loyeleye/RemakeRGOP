@@ -42,6 +42,8 @@ export const GRANNY = {
   },
   /** Match point: on this many, the children's next wisp to come within `holdAt` steps of the rim is held fast. */
   holdAt: 1,
+  /** Lumi's tide pull, seen by Hesta: if her bot hasn't done one by this combined score (about halfway), it's set up. */
+  tideBy: 10,
   /** Ticks between Lumi's calls, barks only. */
   callEvery: 32,
   /** No late pushes before the age guess is done (ticks into play). */
