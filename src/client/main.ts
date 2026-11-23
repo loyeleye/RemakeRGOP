@@ -402,6 +402,12 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
       if (Math.hypot(c.x - sx, c.y - sy) <= FOCUS_TAP_PX) return { action: { kind: "staff", wisp: f.id }, wisp: f.id };
     }
   }
+  // A wisp the story marks (one the crew left, or Lumi's call) gets the focused wisp's finger-sized target, on any device.
+  const mk = room.story?.mark ? snap.wisps.find((w) => w.id === room!.story!.mark!.wisp) : undefined;
+  if (mk) {
+    const c = cam.toScreen(mk.x + 0.5, mk.y + 0.5, 0.75);
+    if (Math.hypot(c.x - sx, c.y - sy) <= bigTapRadius()) return { action: { kind: "staff", wisp: mk.id }, wisp: mk.id };
+  }
   // Big taps (O on a laptop): every wisp gets a finger-sized circle on screen, nearest wins.
   if (bigTaps) {
     let near: { id: number; d: number } | null = null;
@@ -783,6 +789,12 @@ function frame(now: number) {
   }
   cam.clamp(shrine.board);
   const flames = new Map<number, Flame>(room.players.map((p) => [p.id, p.flame]));
+  const mark = room.story?.mark?.wisp ?? null;
+  if (mark !== null && mark !== lastMark && document.body.classList.contains("touch")) {
+    padWisp = mark;
+    padFocus = true;
+  }
+  lastMark = mark;
   const lit = document.body.classList.contains("touch") ? padTarget() : hoverWisp;
   if (document.body.classList.contains("touch")) {
     const p = snap.players.find((q) => q.id === me);
@@ -819,6 +831,9 @@ function frame(now: number) {
 }
 requestAnimationFrame(frame);
 
+/** The last story mark seen, so a new one takes the phone's focus once. */
+let lastMark: number | null = null;
+
 /** Exposure before the ending lit the sky, to put back afterwards. */
 let skyBase: number | null = null;
 
@@ -849,24 +864,19 @@ function drawStory(g: CanvasRenderingContext2D, t: number, now: number) {
   }
   const cw = st.mark ? snap.wisps.find((w) => w.id === st.mark!.wisp) : null;
   if (cw) {
-    const col = st.mark!.who === "Lumi" ? "#ffd36a" : "#9fd8ff";
+    // The plain focus circle, at the size of its tap target.
     const x = cw.px + (cw.x - cw.px) * t + 0.5, y = cw.py + (cw.y - cw.py) * t + 0.5;
     const c = cam.toScreen(x, y, 0.75);
-    const r = Math.max(18, cam.scale * 0.9) * (1 + 0.15 * pulse);
     g.save();
-    g.strokeStyle = col;
-    g.lineWidth = 3;
-    g.shadowColor = col;
-    g.shadowBlur = 10;
+    g.strokeStyle = "#ffffffcc";
+    g.lineWidth = 2.5;
+    g.setLineDash([6, 5]);
+    g.lineDashOffset = -now / 60;
     g.beginPath();
-    g.arc(c.x, c.y, r, 0, Math.PI * 2);
+    g.arc(c.x, c.y, bigTapRadius(), 0, Math.PI * 2);
     g.stroke();
-    g.font = "700 12px system-ui, sans-serif";
-    g.fillStyle = col;
-    g.textAlign = "center";
-    g.fillText(st.mark!.who === "Lumi" ? "LUMI" : "YOURS", c.x, c.y - r - 6);
     g.restore();
-    edgeArrow(g, c, col);
+    edgeArrow(g, c, "#ffffffcc");
   }
   // The ending: the camera pulls out and the sky brightens with the score.
   const r = world.renderer;
@@ -943,7 +953,9 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   snap: () => snap,
   room: () => room,
   me: () => me,
-  toScreen: (x: number, y: number) => cam.toScreen(x, y),
+  toScreen: (x: number, y: number, h = 0) => cam.toScreen(x, y, h),
+  /** What a click at this screen point would do. */
+  tap: (x: number, y: number) => targetAt(x, y),
 };
 
 // ------------------------------------------------------------------ debug overlay
