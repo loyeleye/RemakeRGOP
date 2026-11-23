@@ -6,6 +6,8 @@ export const MOODS: Record<string, readonly string[]> = {
   Hesta: ["neutral", "approving", "firm"],
   Lumi: ["neutral", "calling", "delighted", "grudging", "smug", "unimpressed", "delight-flash"],
   Rook: ["neutral", "warm", "proud", "baffled"],
+  Nell: ["neutral", "curious", "delighted", "determined", "sheepish", "worried"],
+  Sefa: ["neutral", "awed", "eager", "grin", "impatient", "indignant", "sheepish"],
 };
 
 const RULES: [who: string, match: RegExp, mood: string][] = [
@@ -16,6 +18,15 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Lumi", /^(I pulled\.|I don't need pointers\.|You didn't ignore me once)/, "smug"],
   ["Lumi", /^(So I'm coming tomorrow\.|First light!|That's the last bell!)/, "delighted"],
   ["Lumi", /^(Dad\.|Okay\.|[A-Z][a-z]+(-[a-z]+)? one)/, "calling"],
+  ["Nell", /^(No fair!|I'm on Lumi's side)/, "determined"],
+  ["Nell", /^(A hundred and ten\?|Lumi says you're good|Rematch\?)/, "curious"],
+  ["Nell", /^Are the lamps going to be all right\?/, "worried"],
+  ["Nell", /more!$/, "determined"],
+  ["Sefa", /^(That's cheating!|She's not even running!)/, "indignant"],
+  ["Sefa", /^How did you do that\?/, "awed"],
+  ["Sefa", /^(We need four!|Are you playing\?)/, "impatient"],
+  ["Sefa", /^(Are you a hundred\?|Is it the best of three)/, "grin"],
+  ["Sefa", /more!$/, "eager"],
   ["Rook", /^(That's it\.|Just like that\.)/, "proud"],
   ["Rook", /^How did you do that\?/, "baffled"],
   ["Rook", /^(Yes, ma'am\.|See\?|Now you're the boss|Let's call it)/, "warm"],

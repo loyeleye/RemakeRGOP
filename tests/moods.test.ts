@@ -12,6 +12,8 @@ describe("portrait moods", () => {
     expect(moodOf("Hesta", "Back to your square, Rook.")).toBe("firm");
     expect(moodOf("Hesta", "Now, Rook.")).toBe("neutral");
     expect(moodOf("Hesta", "Clean.", "firm")).toBe("firm");
+    expect(moodOf("Sefa", "How did you do that?")).toBe("awed");
+    expect(moodOf("Nell", "No fair!")).toBe("determined");
     expect(moodOf("Moth", "Here.")).toBeNull();
     expect(faceOf("Lumi", "Dad. North one.")).toBe("lumi-calling");
   });
