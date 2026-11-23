@@ -58,6 +58,10 @@ export class JobRoom {
   /** Lumi re-taps a wisp the moss is holding (a fresh tap tears at it). */
   private lumiStuck = 0;
   private lumiWet = 0;
+  /** Once a run: Hesta on Rook's first slip on the water, Lumi on the first shimmer. */
+  private slipSaid = false;
+  private nextSaid = false;
+  private hestaAt = -99;
   private lastSent = -1;
   /** The Steps' waves: how many have come, the pool the current one is on, how many of it are
    *  still out, and the next one's pool and tick (its pool shimmers until then). */
@@ -120,6 +124,7 @@ export class JobRoom {
   begin() {
     this.end = undefined;
     this.restarts = this.allSends = 0;
+    this.slipSaid = this.nextSaid = false;
     this.rng = new Rng(this.seed());
     this.startStop(0, false);
     this.endClock();
@@ -292,10 +297,24 @@ export class JobRoom {
     const inNow = tideIn(g.tick, tide);
     if (!this.turnSaid && !inNow) {
       this.turnSaid = true;
+      this.hestaAt = g.tick;
       this.say(HESTA, L.turned);
     } else if (this.turnSaid && !this.backSaid && inNow) {
       this.backSaid = true;
+      this.hestaAt = g.tick;
       this.say(HESTA, L.back);
+    }
+    // Rook's first slip on the water: Hesta, once a run.
+    const rook = this.player(ROOK_ID), rw = rook.beam !== null ? g.wisps[rook.beam] : undefined;
+    if (!this.slipSaid && rook.slipped && rw && g.slipsAt(ROOK_ID, rw.pos)) {
+      this.slipSaid = true;
+      this.hestaAt = g.tick;
+      this.say(HESTA, L.slip);
+    }
+    // The first shimmer: Lumi feels it first. Not over Hesta's calls (then the next shimmer).
+    if (!this.nextSaid && this.nextPool && g.tick - this.hestaAt > 6) {
+      this.nextSaid = true;
+      this.say(LUMI, L.next, { player: LUMI_ID });
     }
     // Her tide pull at work: the pool's loose wisps on the move to her.
     const held = me.beam !== null ? g.wisps[me.beam] : undefined;
