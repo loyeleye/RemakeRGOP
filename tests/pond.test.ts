@@ -87,4 +87,20 @@ describe("The later walks", () => {
     expect(room.state.job).toBeTruthy();
     expect(room.state.job!.state.stop).toBe(0);
   });
+  it("from walk 2, Rook's door opens the kitchen (walk 1 just says a line)", () => {
+    const kitchenAfterDoor = (walk: number) => {
+      let s = 7;
+      const msgs: ServerMsg[] = [];
+      const room = new PondRoom(manualClock(), () => (s = (s * 48271) % 2147483647), walk);
+      const conn = room.connect((m) => msgs.push(m));
+      conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+      const h = room.state.game.shrine.house!;
+      conn.message(JSON.stringify({ t: "act", action: { kind: "walk", to: { x: h.x + 1, y: h.y + 1 } } }));
+      for (let i = 0; i < 200; i++) room.onTick();
+      const rooms = msgs.flatMap((m) => (m.t === "room" ? [m.room] : []));
+      return rooms.at(-1)?.story?.pond?.kitchen ?? 0;
+    };
+    expect(kitchenAfterDoor(2)).toBe(1);
+    expect(kitchenAfterDoor(1)).toBe(0);
+  });
 });

@@ -90,7 +90,8 @@ export interface StoryView {
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[] };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */
-  pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "night" | "dusk" };
+  /** kitchen: how many times Rook has gone in his door this walk (from walk 2); a rise opens the kitchen still. */
+  pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "night" | "dusk"; kitchen?: number };
 }
 
 export type ClientMsg =

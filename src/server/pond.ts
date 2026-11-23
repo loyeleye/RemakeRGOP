@@ -133,6 +133,8 @@ export class PondRoom {
   private walkLines = new Map<string, string[]>();
   /** A note for the player once the thing that goes on is tapped, when what's next isn't built. */
   private notBuilt = false;
+  /** From walk 2, Rook's door opens the kitchen still (client side): the times he's gone in. */
+  private kitchen = 0;
 
   connect(send: (m: ServerMsg) => void) {
     return {
@@ -421,6 +423,12 @@ export class PondRoom {
       this.say(thing.name, "Yes! Granny! Rematch!");
       return this.startGame(false);
     }
+    // From walk 2, his door opens the kitchen: a still with three things to tap (client/kitchen.ts).
+    if (W.n >= 2 && thing.name === "house") {
+      this.kitchen++;
+      this.broadcast();
+      return;
+    }
     const lines = this.walkLines.get(thing.name) ?? LINES[thing.name] ?? [];
     if (!lines.length) return;
     const n = this.taps.get(thing.name) ?? 0;
@@ -524,7 +532,7 @@ export class PondRoom {
   }
 
   storyView(): StoryView {
-    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.leavingAt >= 0 ? { leaving: true } : {}) } };
+    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.kitchen ? { kitchen: this.kitchen } : {}), ...(this.leavingAt >= 0 ? { leaving: true } : {}) } };
   }
 
   view(): RoomView {

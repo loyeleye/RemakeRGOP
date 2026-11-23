@@ -226,3 +226,18 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 .fade-black { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.8s; z-index: 50; }
 .fade-black.on { opacity: 1; }
 .fade-black.quick { transition-duration: 0.45s; }
+/* Rook's kitchen (client/kitchen.ts): one still, full screen, three things to tap. */
+#kitchen { position: fixed; inset: 0; z-index: 45; background: #000; opacity: 0; transition: opacity 0.5s; user-select: none; -webkit-user-select: none; }
+#kitchen.in { opacity: 1; }
+#kitchen .pic { position: absolute; left: 50%; top: 50%; width: min(100vw, 100vh); aspect-ratio: 1; transform: translate(-50%, -50%); background-size: cover; background-position: center; background-color: #2a2018; background-image: linear-gradient(#e8cf9a33, transparent 40%), radial-gradient(ellipse 22% 30% at 24% 46%, #bfe4ff55, transparent 70%), linear-gradient(#5a4530 0 62%, #3a2a1c 62%); }
+#kitchen .pic .ph { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: #ffffff80; font-style: normal; }
+#kitchen .spot { position: absolute; padding: 0; background: transparent; border: 1px dashed #ffffff55; border-radius: 10px; cursor: pointer; min-width: 44px; min-height: 44px; }
+#kitchen .spot .ph { position: static; display: block; font-size: 10px; text-align: center; padding: 2px; }
+#kitchen .pic.real > .spot { display: block; border-color: transparent; }
+#kitchen .pic.real .spot .ph { display: none; }
+#kitchen .spot.used { cursor: default; }
+#kitchen .back { position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 12px; }
+#kitchen .kbubble { position: absolute; left: 50%; right: auto; bottom: 28px; top: auto; transform: translateX(-50%); max-width: min(80vw, 420px); animation: none; }
+#kitchen .kbubble[hidden] { display: none; }
+#kitchen .close-up { position: absolute; inset: 0; background: #000 center / contain no-repeat; opacity: 0; transition: opacity 0.6s; }
+#kitchen .close-up.in { opacity: 1; }

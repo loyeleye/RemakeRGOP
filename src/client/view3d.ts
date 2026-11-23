@@ -1432,9 +1432,11 @@ export class World {
     this.mossBits = [];
     this.gates = [];
     this.gimmicks = shrine.gimmicks ?? {};
-    for (const r of this.players.values()) this.scene.remove(r.root);
+    // The staff beams hang off the scene, not the rig: without this, a beam held at the end of one
+    // board stayed lit, frozen, all through the next (run 4's second stop).
+    for (const r of this.players.values()) this.scene.remove(r.root, r.beam);
     this.players.clear();
-    for (const r of this.wisps.values()) this.scene.remove(r.root);
+    for (const r of this.wisps.values()) (this.scene.remove(r.root), r.stones && this.scene.remove(r.stones), r.earth && this.scene.remove(r.earth));
     this.wisps.clear();
     const b = shrine.board;
     const W = b.width;

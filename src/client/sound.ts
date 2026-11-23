@@ -381,6 +381,7 @@ const MUSIC_TYPES = ["mp3", "ogg", "m4a", "wav"];
  */
 export function playMusic(movement: number) {
   stopMusic(SOUND.musicFade);
+  endingPiece = false;
   const a = new Audio();
   a.loop = true;
   a.volume = 0;
@@ -409,9 +410,42 @@ export function stopMusic(sec = SOUND.musicFade) {
   if (a) fadeTo(a, 0, sec, () => a.pause());
 }
 
-/** Bring the music down to `share` of its usual volume over `sec`, and keep it playing. */
+/** Bring the music down to `share` of its usual volume over `sec`, and keep it playing. Not the
+ *  ending piece, which carries its own shape. */
 export function duckMusic(share: number, sec: number) {
-  if (music) fadeTo(music, SOUND.musicGain * share, sec);
+  if (music && !endingPiece) fadeTo(music, SOUND.musicGain * share, sec);
+}
+
+let endingPiece = false;
+/** True while the ending's own piece is playing (it shapes itself: no duck, no cut at the rim). */
+export const endingPieceOn = () => endingPiece && music !== null;
+
+/**
+ * The run 1 ending's own piece, music/kindling-ending (Ladi's, about 60 s: story/cutscene-emotion-brief.md,
+ * section A), from the last bell, once and at full. If the file isn't there, the crescendo track
+ * plays on and the ending ducks and cuts it instead.
+ */
+export function playEndingMusic() {
+  const a = new Audio();
+  a.loop = false;
+  a.muted = muted;
+  let i = 0;
+  const next = () => {
+    if (i >= MUSIC_TYPES.length) return;
+    a.src = `music/kindling-ending.${MUSIC_TYPES[i++]}`;
+    a.load();
+  };
+  a.onerror = next;
+  a.oncanplay = () => {
+    a.oncanplay = null;
+    const old = music;
+    if (old) fadeTo(old, 0, 0.3, () => old.pause());
+    music = a;
+    endingPiece = true;
+    a.volume = SOUND.musicGain;
+    void a.play().catch(() => {});
+  };
+  next();
 }
 
 function fadeTo(a: HTMLAudioElement, to: number, sec: number, done?: () => void) {

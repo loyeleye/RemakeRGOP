@@ -13,6 +13,7 @@ import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
 import { loadProgress, reach, resetProgress } from "./progress.js";
 import { StoryRoom } from "../server/story.js";
+import { Kitchen } from "./kitchen.js";
 import { ENDING, ENDING_CUTS, endingCut, KindlingEnding, lanternCard, setEndingCut } from "./ending.js";
 import * as sound from "./sound.js";
 import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
@@ -57,6 +58,7 @@ function onServer(m: ServerMsg) {
       if (room.phase === "countdown" && was !== "countdown") cam.follow = true;
       if (room.story) storyPhaseSound(was);
       placeView(!!room.story?.pond, !!room.story?.pond?.leaving);
+      openKitchen();
       noteProgress();
       render();
       break;
@@ -549,6 +551,21 @@ function renderResults() {
 }
 
 let shownEnd: unknown = null;
+/** Rook's kitchen (from walk 2): his door raises the pond's count, and each rise opens the still. */
+let kitchen: Kitchen | null = null;
+let kitchenSeen = 0;
+function openKitchen() {
+  const pond = room?.story?.pond;
+  const n = pond?.kitchen ?? 0;
+  if (!pond || n < kitchenSeen) kitchenSeen = 0;
+  if (!pond) {
+    kitchen?.close();
+    return;
+  }
+  if (n > kitchenSeen && !kitchen) kitchen = new Kitchen(pond.walk ?? 2, faceHtml, () => (kitchen = null));
+  kitchenSeen = n;
+}
+
 /** Run 1's ending cutscene, while it plays (and on its title screen). */
 let ending: KindlingEnding | null = null;
 
@@ -612,6 +629,7 @@ function storyPhaseSound(was: string | undefined) {
     const run1 = room!.story?.end?.sky !== undefined;
     if (!run1) sound.stopMusic();
     else if (!ENDING.music) sound.stopMusic(sound.SOUND.endMusicFade);
+    else sound.playEndingMusic();
     sound.handBell(3);
   }
 }

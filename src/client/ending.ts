@@ -121,7 +121,7 @@ const ramp = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
 const ease = (k: number) => k * k * (3 - 2 * k);
 
 /** A picture slot: the painting if it exists, else a placeholder card that says which slot it is. */
-function card(slot: string, cls: string, inner = "") {
+export function card(slot: string, cls: string, inner = "") {
   const el = document.createElement("div");
   el.className = `card ${cls}`;
   el.innerHTML = `${inner}<i class="ph">placeholder · ${slot}</i>`;
@@ -329,11 +329,12 @@ export class KindlingEnding {
       op(`cloud${i + 1}`, k > 0 && k * speed < 2 ? 0.9 : 0);
     });
     this.once("wind", t, E.descent.wind, () => sound.wind(E.music ? 1.5 : 4));
-    // The emotion test's music: a third under Lumi's count, then cut dead at the rim.
+    // The emotion test's music: a third under Lumi's count, then cut dead at the rim. Ladi's ending
+    // piece (music/kindling-ending), once it exists, replaces both: it plays from the bell as made.
     if (E.music) {
       const M = E.music;
       this.once("duck", t, M.duck, () => sound.duckMusic(M.duckTo, M.duckFor));
-      this.once("cut", t, M.cut, () => sound.stopMusic(M.cutFor));
+      this.once("cut", t, M.cut, () => sound.endingPieceOn() || sound.stopMusic(M.cutFor));
     }
     op("black", ramp(t, E.descent.to - 1.5, E.dark));
     // The eye. It draws its own black before and after; the low note lands as it fixes on the islands.
