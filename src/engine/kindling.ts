@@ -72,7 +72,7 @@ export const KINDLING = {
   /** Kes's island: a scripted score, a bank every so many ticks on average, per movement. */
   kesEvery: [16, 12, 12],
   /** Banks for a sky that's fully lit. */
-  skyFull: 40,
+  skyFull: 48,
 } as const;
 
 // ------------------------------------------------------------------ movement 1: the ring
