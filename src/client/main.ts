@@ -8,7 +8,7 @@ import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlaye
 import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
 import { StoryRoom } from "../server/story.js";
-import { KindlingEnding, lanternCard } from "./ending.js";
+import { ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import * as sound from "./sound.js";
 import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
@@ -124,7 +124,11 @@ function connectStory(name: string, run: 1 | 2 = 1) {
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
   const hello = () => link?.send({ t: "hello", name: name || "Rook" });
   // Run 2 opens on Lumi's unlit lantern, where the eye was, before play.
-  if (run === 2) lanternCard(hello);
+  if (run === 2) {
+    lanternCard(hello);
+    // Hold the first lines until the picture has faded, so none plays under it.
+    talkHold = performance.now() + (ENDING.lantern.hold + ENDING.lantern.fade) * 1000;
+  }
   else hello();
 }
 
@@ -147,6 +151,8 @@ const faceHtml = (l: StoryLine) => (faceOf(l) ? `<img class="face" src="${faceOf
 const talkQueue: StoryLine[] = [];
 let talkTimer = 0;
 let typeTimer = 0;
+/** No dialog starts before this time (while run 2's opening picture is up). */
+let talkHold = 0;
 let typing: { l: StoryLine; shown: number; at: number } | null = null;
 
 interface Bark {
@@ -227,6 +233,11 @@ function talk(l: StoryLine) {
 function nextTalk() {
   clearTimeout(talkTimer);
   talkTimer = 0;
+  const wait = talkHold - performance.now();
+  if (wait > 0 && talkQueue.length) {
+    talkTimer = window.setTimeout(nextTalk, wait);
+    return;
+  }
   const el = $("dialog");
   const l = talkQueue.shift();
   if (!l) {
@@ -246,9 +257,18 @@ function nextTalk() {
   el.style.animation = "none";
   void el.offsetWidth;
   el.style.animation = "";
-  typing = { l, shown: 0, at: performance.now() };
-  if (l.who) sound.speak(l.who, l.text);
-  typeOn();
+  // Start the clock on the first frame the box is actually drawn: the first frames of a round can
+  // stall (the scene builds), and a line must not type out and expire unseen behind that.
+  const t = (typing = { l, shown: 0, at: Infinity });
+  $("dialog-text").textContent = "";
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      if (typing !== t) return;
+      t.at = performance.now();
+      if (l.who) sound.speak(l.who, l.text);
+      typeOn();
+    }),
+  );
 }
 
 /** The line types on, then stays a moment and moves on by itself. A tap skips ahead. */
@@ -265,7 +285,8 @@ function typeOn() {
   }
   $("dialog-text").innerHTML = lineHtml(t.l.text);
   typing = null;
-  talkTimer = window.setTimeout(nextTalk, Math.max(1400, t.l.text.length * 35) * (talkQueue.length ? 0.6 : 1));
+  // Time to read it, whether or not another line is waiting (a tap moves on sooner).
+  talkTimer = window.setTimeout(nextTalk, Math.max(1800, t.l.text.length * 45));
 }
 
 $("dialog").onclick = () => {
