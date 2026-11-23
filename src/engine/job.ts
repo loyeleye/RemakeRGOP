@@ -18,7 +18,7 @@ export const JOB = {
     {
       title: "Moss Hollow",
       shrine: "moss-hollow",
-      keeper: "Hobb",
+      keeper: "Garrick",
       /** Draft: bank this many in this many ticks. One send to the thicket should leave about a third. */
       goal: 6,
       ticks: 180,
