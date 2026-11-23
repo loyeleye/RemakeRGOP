@@ -1348,7 +1348,7 @@ function homeIslandRows(): string[] {
   block(lx, R.landing.dy, 1, 2, "K");
   // Orrin's stall by the path, and the shrine on it.
   block(R.stall.dx, R.stall.dy, 2, 1, "O");
-  block(R.shrine.dx, R.shrine.dy, 3, 3, "S");
+  block(R.shrine.dx, R.shrine.dy, 4, 4, "S");
   // Hesta's house on the terrace, the chair before her door (south, facing the brazier), steps down.
   const hh = R.hestaHouse;
   for (let j = -1; j <= hh.h + 2; j++) for (let i = -2; i <= hh.w + 1; i++) set(hh.dx - Math.floor(hh.w / 2) + i, hh.dy + j, ":", ".,");
