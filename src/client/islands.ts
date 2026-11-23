@@ -56,6 +56,8 @@ export interface IslandOptions {
   radius?: (a: number) => number;
   /** How far headlands push out past the base outline (0 = none, 0.5 = up to half again). */
   lobes?: number;
+  /** How far the rounded lip rolls in from the edge, as a share of the radius (0.06 unless given). A very wide island wants less. */
+  lip?: number;
   /** Drop a terrace: a grassy shelf this far below the top, stepping out from the cliff. */
   ledge?: number;
   /** Extra rock spires hanging under the island, so the underside isn't one neat cone. */
@@ -104,9 +106,10 @@ function profile(o: IslandOptions): ProfilePt[] {
   const out: ProfilePt[] = [];
   const RINGS = o.rings ?? 40;
   // Rounded grassy lip.
+  const lip = o.lip ?? 0.06;
   for (let i = 0; i <= 5; i++) {
     const u = i / 5;
-    out.push({ y: -0.35 * (1 - Math.cos(u * Math.PI * 0.5)), s: 0.94 + 0.06 * Math.sin(u * Math.PI * 0.5), kind: 0, wear: 0 });
+    out.push({ y: -0.35 * (1 - Math.cos(u * Math.PI * 0.5)), s: 1 - lip + lip * Math.sin(u * Math.PI * 0.5), kind: 0, wear: 0 });
   }
   let y = -0.35;
   if (o.ledge) {

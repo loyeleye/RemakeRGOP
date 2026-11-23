@@ -847,7 +847,7 @@ const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number; y?: n
   stall: { model: "stall" },
   kindling: { model: "kindling-brazier" },
   falls: { model: "falls" },
-  skiff: { model: "skiff", dx: -1.6 },
+  skiff: { model: "skiff", dx: -0.7 },
 };
 
 /**
@@ -1256,7 +1256,8 @@ export class World {
     // Soft cloud puffs drifting between the islands.
     for (let i = 0; i < (this.low ? 10 : 18); i++) {
       const a = (i / 18) * Math.PI * 2 + i;
-      const r = 30 + ((i * 41) % 60);
+      // Pushed out with the far islands on a big board, so no puff sits inside the island itself.
+      const r = 30 + ((i * 41) % 60) + this.distantPush;
       const c = makeCloud(16 + (i % 4) * 7, th.clouds, th.sky.stars ? 0.25 : 0.45);
       const y = -10 + ((i * 23) % 10);
       c.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
@@ -1423,13 +1424,26 @@ export class World {
       tile.receiveShadow = true;
       (q.kind === "terrace" ? g : deck).add(tile);
     }
+    // The great brazier stands on the Kindling ground's flags, not on a square of grass.
+    if ((shrine.ground ?? []).some((q) => q.kind === "terrace"))
+      for (const p of props) {
+        if (p.kind !== "kindling") continue;
+        const tile = new THREE.Mesh(new THREE.BoxGeometry(1, 0.12, 1), flags);
+        tile.position.set(this.worldX(b, p.x), 0.06, this.worldZ(b, p.y));
+        tile.receiveShadow = true;
+        g.add(tile);
+      }
     if (decks.length) {
       const xs = decks.map((q) => q.x), ys = decks.map((q) => q.y);
       const cx = this.worldX(b, (Math.min(...xs) + Math.max(...xs)) / 2), cz = this.worldZ(b, (Math.min(...ys) + Math.max(...ys)) / 2);
       deck.position.set(-cx, 0, -cz);
       const holder = new THREE.Group();
       holder.add(deck);
-      this.placeSlot("landing", holder, cx, cz, 0, -1);
+      const slot = this.placeSlot("landing", holder, cx, cz, 0, -1);
+      // The model is about 3 tiles square: stretched along a longer landing so it covers every plank
+      // (the block-out planks inside are squeezed back so they still fit their tiles).
+      const long = (Math.max(...xs) - Math.min(...xs) + 1) / 3;
+      if (long > 1.1) (slot.scale.x = long), (holder.scale.x = 1 / long);
     }
     // The bigger places, one block each (placeholders until the maps thread draws them).
     const boxes = new Map<string, { x0: number; y0: number; x1: number; y1: number }>();
@@ -1615,11 +1629,11 @@ export class World {
       rx: 1, rz: 1, depth: 24, squareness: 2, seed: W + H,
       // A place drawn from its own shape (the horseshoe) keeps its cliff tight to the edge, so the
       // falls pour off the rim rather than onto a verge.
-      radius: (a) => (shrine.lobes ? coast(a) + 0.2 : (coast(a) + 2.1) / 0.95),
-      ledge: shrine.lobes ? 0 : 2.4, spires: this.low ? 3 : 6, grass: th.grass, soil: th.soil, rock: th.rock,
+      radius: (a) => (shrine.core ? shrine.core.outline(a) + 0.2 : shrine.lobes ? coast(a) + 0.2 : (coast(a) + 2.1) / 0.95),
+      ledge: shrine.lobes ? 0 : 2.4, ...(shrine.core ? { lip: 0.012 } : {}), spires: this.low ? 3 : 6, grass: th.grass, soil: th.soil, rock: th.rock,
       segments: this.low ? 128 : 220,
     });
-    island.position.y = -0.03;
+    island.position.set(shrine.core?.x ?? 0, -0.03, shrine.core?.y ?? 0);
     g.add(island);
     // Each arm is a chain of overlapping plateaus that shrink toward the tip.
     if (shrine.isle?.arms?.length) {
@@ -1645,7 +1659,8 @@ export class World {
       lobe.position.set(l.x, -0.04 - i * 0.002, l.y);
       g.add(lobe);
     }
-    const edge = island.userData.outline as (a: number) => { x: number; z: number };
+    const edge0 = island.userData.outline as (a: number) => { x: number; z: number };
+    const edge = (a: number) => ((e) => ({ x: e.x + island.position.x, z: e.z + island.position.z }))(edge0(a));
     // Lower tiers: smaller plateaus stepping down from the main one, so the whole thing reads as
     // one broken table of land rather than a single slab.
     const tiers: [number, number, number][] = [[0.9, 0.24, -4.5], [2.6, 0.2, -6.5], [4.3, 0.17, -3.6]];
@@ -1656,7 +1671,8 @@ export class World {
     // Each island turns its tiers a different way so no two look alike.
     const spin = [...shrine.id].reduce((h, ch) => h + ch.charCodeAt(0), 0) * 0.37;
     tiers.forEach(([a0, size, ty], i) => {
-      const a = a0 + spin;
+      // A story place keeps its tiers clear of the landing and the falls: off the west, north-east and east rims.
+      const a = shrine.lobes ? [3.5, 5.5, 0.2][i]! : a0 + spin;
       const e = edge(a);
       // Sized by the core, not the board: a tentacle island's board is mostly sky.
       const r = (shrine.lobes ? 40 : shrine.arms ? coast(0) + coast(Math.PI / 2) : Math.min(W, H)) * size;

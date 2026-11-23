@@ -386,6 +386,8 @@ export interface Shrine {
   isle: IsleShape | null;
   /** Story places drawn from their own shape (the horseshoe): extra plateaus under the parts that stick out, in tiles from the centre. */
   lobes?: { x: number; y: number; r: number }[];
+  /** Where the main plateau is hung from when that isn't the board's centre (the horseshoe's brazier is by its west rim): the middle of the land, in tiles from the centre, and the edge's distance from there at each angle. */
+  core?: { x: number; y: number; outline: (a: number) => number };
   /** Story places: model turns (radians) by prop kind, or by tile as "x,y", over the usual. */
   turns?: Record<string, number>;
 }
@@ -1336,7 +1338,14 @@ function homeIsland(): Shrine {
     while (r < 200 && hsOval(Math.cos(a) * r + HS_CENTRE.x, Math.sin(a) * r + HS_CENTRE.y) < 0) r += 0.5;
     return r;
   };
-  return { ...sh, coast: at, outline, arms: true, lobes: HS_LOBES.map((l) => ({ x: l.x - HS_CENTRE.x, y: l.y - HS_CENTRE.y, r: l.r })), turns };
+  // The plateau hangs from the middle of the land, so its underside tapers under the lake, not out past the west rim.
+  const mid = { x: 0, y: 2 };
+  const fromMid = (a: number) => {
+    let r = 1;
+    while (r < 200 && hsOval(Math.cos(a) * r + mid.x, Math.sin(a) * r + mid.y) < 0) r += 0.25;
+    return r;
+  };
+  return { ...sh, coast: at, outline, arms: true, core: { x: mid.x - HS_CENTRE.x, y: mid.y - HS_CENTRE.y, outline: fromMid }, lobes: HS_LOBES.map((l) => ({ x: l.x - HS_CENTRE.x, y: l.y - HS_CENTRE.y, r: l.r })), turns };
 }
 
 export function shrineById(id: string): Shrine {

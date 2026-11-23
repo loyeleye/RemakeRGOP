@@ -1,22 +1,33 @@
-// The home island as a horseshoe (maps thread, draft 3, approved by Ladi on 23 Nov 2026).
-// Spec: project files sogni/lanternfall/production/places/home-island-horseshoe-spec.md, shapes from
-// home-island-horseshoe-draft-3.py. Coordinates as the spec has them: tiles, x east, y south, the
+// The home island as a horseshoe (maps thread, draft 4, approved by Ladi on 23 Nov 2026).
+// Spec: project files sogni/lanternfall/production/places/home-island-horseshoe-spec-4.md, shapes from
+// home-island-horseshoe-draft-4.py. Coordinates as the spec has them: tiles, x east, y south, the
 // origin in the middle of the lake channel. The board is centred on the pond brazier (the game
 // always puts the brazier at the board's centre), so everything here is placed from spec coordinates.
 
 /** The pond brazier, by the lesson pond cove: the board's centre. */
 export const HS_CENTRE = { x: -17, y: -8 };
 /** Board half-sizes round the centre: wide enough for the east point spur, tall enough for the Kindling ground. */
-const HALF_W = 70, HALF_H = 87;
+const HALF_W = 64, HALF_H = 85;
 export const HS_SIZE = { w: HALF_W * 2 + 1, h: HALF_H * 2 + 1 };
 
 const wob = (a: number, amp: number) => (amp * (Math.sin(3 * a + 0.7) + 0.6 * Math.sin(5 * a + 2.1) + 0.4 * Math.sin(9 * a + 4.0))) / 2;
-/** The outer edge: 41 wide each way, 53 tall to the north and 58 to the south, a gentle wobble. */
-const outerQ = (x: number, y: number) => {
-  const B = y < 0 ? 53 : 58, a = Math.atan2(y, x);
-  return Math.sqrt((x / 41) ** 2 + (y / B) ** 2) / (1 + wob(a, 0.05));
-};
-const outer = (x: number, y: number) => outerQ(x, y) < 1;
+/** The outer edge's half-width at each latitude: the tips as wide as ever, the arms pulled in, widest round the basin, a rounded bottom. */
+const CP: [number, number][] = [[-40, 26.9], [-30, 24.5], [-20, 23.5], [-8, 24], [2, 25], [12, 29], [20, 32.5], [30, 30.5], [40, 27]];
+/** The northmost and southmost latitudes of the outer edge. */
+const NB = -53, SB = 56;
+function halfWidth(y: number) {
+  if (y <= -40) return 41 * Math.sqrt(Math.max(0, 1 - (y / 53) ** 2));
+  if (y >= 40) return 27 * Math.sqrt(Math.max(0, 1 - ((y - 40) / (SB - 40)) ** 2));
+  for (let i = 0; i + 1 < CP.length; i++) {
+    const [y0, e0] = CP[i]!, [y1, e1] = CP[i + 1]!;
+    if (y >= y0 && y <= y1) return e0 + ((e1 - e0) * (1 - Math.cos((Math.PI * (y - y0)) / (y1 - y0)))) / 2;
+  }
+  return 0;
+}
+/** The two arms differ a little, so it isn't a mirror image. */
+const armside = (x: number, y: number) => 1 + 0.05 * (x < 0 ? Math.sin(y * 0.11 + 0.8) : Math.sin(y * 0.09 + 2.6));
+const edgeX = (x: number, y: number) => halfWidth(y) * armside(x, y) * (1 + wob(Math.atan2(y, x), 0.06));
+const outer = (x: number, y: number) => Math.abs(x) < edgeX(x, y) && y > NB && y < SB;
 /** The keyhole lake: a wavy channel out through the north rim, and a round basin at the bottom. */
 export function lake(x: number, y: number) {
   let w = 7.5 + 1.2 * Math.sin(y * 0.21);
@@ -26,45 +37,75 @@ export function lake(x: number, y: number) {
   return ch || basin;
 }
 const cove = (x: number, y: number) => (x + 10) ** 2 / 12 + (y + 8) ** 2 / 9 < 1;
-const kindling = (x: number, y: number) => x * x + (y - 65) ** 2 < 10.5 ** 2;
-const spur = (x: number, y: number) => x >= 37 && x <= 50 && y >= 12 && y <= 15;
+/** The Kindling ground's centre: 7 south of the southmost point. */
+const KY = SB + 7;
+const kindling = (x: number, y: number) => x * x + (y - KY) ** 2 < 10.5 ** 2;
+// (Two tiles longer inland than the spec's 30..43, so it meets the coast with no gap.)
+const spur = (x: number, y: number) => x >= 28 && x <= 43 && y >= 12 && y <= 15;
 export const isLand = (x: number, y: number) => outer(x, y) || kindling(x, y) || spur(x, y);
 export const isWater = (x: number, y: number) => (lake(x, y) || cove(x, y)) && outer(x, y);
 
 /**
- * Roughly how far (x, y) is from the island's edge, in tiles, negative on land, for drawing the
- * coast: the oval, the Kindling bulge and the spur, joined.
+ * Roughly how far (x, y) is from the island's outer edge, in tiles, negative on land, for drawing
+ * the coast: the edge's own shape, without the Kindling bulge or the spur.
  */
 export function hsOval(x: number, y: number) {
-  const B = y < 0 ? 53 : 58, a = Math.atan2(y, x);
-  const r = (1 + wob(a, 0.05)) / Math.sqrt((Math.cos(a) / 41) ** 2 + (Math.sin(a) / B) ** 2);
-  return (outerQ(x, y) - 1) * r - 0.5;
+  const fy = Math.floor(y);
+  let best = Infinity;
+  for (let k = 0; k - 1 <= best && k < 140; k++)
+    for (const row of k ? [fy - k, fy + k] : [fy])
+      for (const p of rim().get(row) ?? []) best = Math.min(best, Math.hypot(p[0] - x, p[1] - y));
+  return (outer(x, y) ? -best : best) - 0.5;
+}
+/** Points along the outer edge, a tenth of a tile apart in latitude, kept by whole latitude. */
+let RIM: Map<number, [number, number][]> | null = null;
+function rim() {
+  if (RIM) return RIM;
+  RIM = new Map();
+  const add = (px: number, py: number) => {
+    const k = Math.floor(py);
+    if (!RIM!.has(k)) RIM!.set(k, []);
+    RIM!.get(k)!.push([px, py]);
+  };
+  let last: number[] = [0, 0];
+  for (let y = NB; y <= SB + 1e-9; y += 0.1)
+    [-1, 1].forEach((side, i) => {
+      // The wobble turns on the angle, which turns on x: a few rounds settle it.
+      let ex = halfWidth(y);
+      for (let n = 0; n < 4; n++) ex = edgeX(side * Math.max(ex, 0.01), y);
+      // Where the width changes fast (the rounded ends), fill in along the edge too.
+      const gap = Math.abs(ex - last[i]!);
+      for (let t = 1; t < gap / 0.2; t++) add(side * (last[i]! + ((ex - last[i]!) * t) / (gap / 0.2)), y - 0.05);
+      add(side * ex, y);
+      last[i] = ex;
+    });
+  return RIM;
 }
 export function hsCoast(x: number, y: number) {
   const oval = hsOval(x, y) + 0.5;
-  const kd = Math.hypot(x, y - 65) - 10.5;
-  const qx = Math.abs(x - 43.5) - 7, qy = Math.abs(y - 13.5) - 2;
+  const kd = Math.hypot(x, y - KY) - 10.5;
+  const qx = Math.abs(x - 35.5) - 8, qy = Math.abs(y - 13.5) - 2;
   const sp = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0);
   return Math.min(oval, kd, sp + 0.5) - 0.5;
 }
 
-/** Extra plateaus under the parts that stick out of the oval: the Kindling ground and the spur (spec coordinates). */
+/** Extra plateaus under the parts that stick out of the edge: the Kindling ground and the spur (spec coordinates). */
 export const HS_LOBES = [
-  { x: 0, y: 66, r: 11.5 },
-  ...[39, 42, 45, 48, 50].map((x) => ({ x, y: 13.5, r: 2.6 })),
+  { x: 0, y: KY + 1, r: 11.5 },
+  ...[29, 32, 35, 38, 41, 43].map((x) => ({ x, y: 13.5, r: 2.6 })),
 ];
 
 /** Houses: where each plot's top-left corner is, its size, its letter, and which way its door faces. */
 export const HS_HOUSES = [
   { kind: "maudie-house", ch: "M", x: -22, y: -20, w: 7, h: 7, door: "e" },
-  { kind: "moth-house", ch: "D", x: -33, y: 4, w: 7, h: 7, door: "e" },
-  { kind: "shrine", ch: "S", x: -28, y: 26, w: 6, h: 5, door: "e" },
-  { kind: "mabry-house", ch: "g", x: -28, y: 32, w: 5, h: 5, door: "e" },
+  { kind: "moth-house", ch: "D", x: -24, y: -1, w: 7, h: 7, door: "e" },
+  { kind: "shrine", ch: "S", x: -29, y: 21, w: 6, h: 5, door: "e" },
+  { kind: "mabry-house", ch: "g", x: -29, y: 26, w: 5, h: 5, door: "e" },
   { kind: "hesta-house", ch: "R", x: -4, y: 38, w: 7, h: 7, door: "n" },
-  { kind: "orrin-house", ch: "I", x: 17, y: 28, w: 7, h: 7, door: "w" },
-  { kind: "nell-house", ch: "e", x: 12, y: -26, w: 6, h: 6, door: "w" },
-  { kind: "sefa-house", ch: "f", x: 13, y: -8, w: 6, h: 6, door: "s" },
-  { kind: "wick-house", ch: "X", x: 26, y: 8, w: 6, h: 6, door: "s" },
+  { kind: "orrin-house", ch: "I", x: 21, y: 27, w: 7, h: 7, door: "w" },
+  { kind: "nell-house", ch: "e", x: 12, y: -28, w: 9, h: 9, door: "w" },
+  { kind: "sefa-house", ch: "f", x: 11, y: -10, w: 9, h: 9, door: "w" },
+  { kind: "wick-house", ch: "X", x: 21, y: 6, w: 6, h: 6, door: "w" },
 ] as const;
 /** Rook and Lumi's house: 9x9, door east, facing the channel and the statue. */
 export const HS_ROOK = { x: -16, y: -42, w: 9, h: 9 };
@@ -146,9 +187,10 @@ export function horseshoeRows(): { rows: string[]; turns: Record<string, number>
   line(4, 37, 5, 46);
   line(5, 46, 1, 52);
   line(-1, 53, -1, 56);
-  // Out to the landing past Moth's, and along the spur to Wick's post.
-  line(-27, 12, -38, 9);
-  line(29, 15, 47, 13);
+  // Out across the open apron to the landing, and past Wick's along the spur to his post.
+  line(-20, 11, -28, 10);
+  line(20, 13, 41, 13);
+  line(20, 14, 41, 14);
   // The pond brazier, by the cove.
   line(-17, -4, -17, 2);
 
@@ -163,8 +205,8 @@ export function horseshoeRows(): { rows: string[]; turns: Record<string, number>
   // Rosalind's blue flowers, between Rook's and Maudie's.
   set(-14, -27, "L", ".,");
   // Rosalind's bench on the outer west rim, facing out to the sky.
-  set(-27, -38, "N");
-  turnAt(-27, -38, -Math.PI / 2);
+  set(-25, -38, "N");
+  turnAt(-25, -38, -Math.PI / 2);
 
   // The houses round the U.
   for (const h of HS_HOUSES) {
@@ -173,11 +215,12 @@ export function horseshoeRows(): { rows: string[]; turns: Record<string, number>
   }
   // The shrine's yard: a wall behind it (west), a shade tree past each end, the lamp before its
   // steps (east) and the spout basin south of the lamp.
-  for (let y = 25; y <= 31; y++) set(-30, y, "W");
-  set(-30, 23, "T");
-  set(-31, 33, "T");
-  set(-21, 27, "A", ".,");
-  set(-21, 29, "Q", ".,");
+  // The yard is x -29..-19, y 20..31, open east of the steps for the glow test's crowd.
+  for (let y = 20; y <= 31; y++) set(-30, y, "W");
+  set(-26, 19, "T");
+  set(-23, 31, "T");
+  set(-22, 22, "A", ".,");
+  set(-22, 24, "Q", ".,");
   // The shrine model's steps are on +X already.
   turns.shrine = 0;
 
@@ -218,17 +261,18 @@ export function horseshoeRows(): { rows: string[]; turns: Record<string, number>
     }
 
   // The landing: planks out over the sky from the west rim beside Moth's, Moth's rail, the skiff at the end.
-  for (let x = -43; x <= -38; x++) for (let y = 8; y <= 10; y++) set(x, y, ";", " .,");
-  set(-44, 8, "K", " ");
-  set(-44, 9, "K", " ");
-  set(-43, 11, "E", " .");
-  set(-42, 11, "E", " .");
+  // The apron inland of the planks (x -27..-20, y 8..14) stays open for the send-off.
+  for (let x = -32; x <= -28; x++) for (let y = 9; y <= 11; y++) set(x, y, ";", " .,");
+  set(-33, 9, "K", " ");
+  set(-33, 10, "K", " ");
+  set(-32, 12, "E", " .");
+  set(-31, 12, "E", " .");
 
   // The Kindling ground: the great brazier in the middle, the north steps up to Hesta's terrace.
-  block(-2, 63, 5, 5, "G", ".,:");
+  block(-2, KY - 2, 5, 5, "G", ".,:");
   block(-1, 53, 3, 3, ":", ".,");
   // Wick's post near the spur's tip.
-  set(49, 13, "J", ".,");
+  set(42, 13, "J", ".,");
 
   // Where the walk starts: Rook and Lumi by the pond brazier.
   set(-17, -3, "1", ".,");
