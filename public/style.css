@@ -163,7 +163,7 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #ending .ring { background-color: #0d1030; background-image: radial-gradient(circle at 50% 50%, #fff3c4 0 1.5%, #ffb24a 3%, #ff8a2a44 10%, transparent 26%), radial-gradient(circle at 50% 50%, transparent 0 30%, #2a2050 31% 33%, transparent 34%), radial-gradient(ellipse at 50% 60%, #241a48, #0d1030 70%); }
 #ending .ring .lamp { position: absolute; left: 50%; top: 50%; width: 46vmin; height: 46vmin; transform: translate(-50%, -50%); border-radius: 50%; background: repeating-conic-gradient(from 10deg, #ffe7a0 0 1deg, transparent 1deg 30deg); mask: radial-gradient(circle, transparent 0 48%, #000 49% 51%, transparent 52%); -webkit-mask: radial-gradient(circle, transparent 0 48%, #000 49% 51%, transparent 52%); }
 /* The whole sky: every island a coloured light. Wider than the screen, for the pan. */
-#ending .sky { right: -30%; bottom: -70%; background-color: #0b0a26; background-image: radial-gradient(circle at 36% 30%, #ffd36a 0 0.8%, #ffb24a88 2%, transparent 6%), var(--isles), linear-gradient(#141040, #2a1d5a 40%, #0b0a26 60%, #020208); }
+#ending .sky { inset: -20% -10%; background-color: #0b0a26; background-image: radial-gradient(circle at 36% 30%, #ffd36a 0 0.8%, #ffb24a88 2%, transparent 6%), var(--isles), linear-gradient(#141040, #2a1d5a 40%, #0b0a26 60%, #020208); }
 #ending .cloud { background-repeat: no-repeat; }
 #ending .c1 { background-image: radial-gradient(ellipse 60% 22% at 30% 50%, #c9c3e8cc, transparent 70%), radial-gradient(ellipse 50% 18% at 80% 40%, #b9b2dcaa, transparent 70%); }
 #ending .c2 { background-image: radial-gradient(ellipse 70% 25% at 60% 55%, #8f88b8cc, transparent 70%), radial-gradient(ellipse 40% 15% at 10% 30%, #a29ccaaa, transparent 70%); }
@@ -192,3 +192,11 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #opening { z-index: 50; opacity: 1; background-color: #e9d2a6; background-image: linear-gradient(#f6e6c4, #e0c08c 58%, #8a5a34 58.5%, #6e4528); }
 #opening .unlit { position: absolute; left: 50%; top: 50%; width: 16vmin; height: 16vmin; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle at 38% 35%, #d8cdb8, #8a8070 60%, #4a4238); box-shadow: 0 2vmin 3vmin #0004; }
 #opening .ph { color: #00000080; }
+/* The paintings, once they exist. The eye, its glint and the lantern share one size and centre, so
+   the lantern's globe lands where the pupil was; black (or a blur of the picture) fills the rest. */
+#ending, #opening { --eye: min(100vmax, 130vmin); }
+#ending .eye.real, #ending .glint.real, #opening.real { background-size: var(--eye) var(--eye); background-repeat: no-repeat; background-position: center; }
+#ending .glint.real { background-color: transparent; }
+#ending .cloud.real { background-size: max(100vw, 160vh) auto; background-repeat: no-repeat; background-position: center 35%; }
+#opening.real::before { content: ""; position: absolute; inset: -40px; background-image: inherit; background-size: cover; background-position: center; filter: blur(28px) brightness(0.8); }
+#opening.real::after { content: ""; position: absolute; inset: 0; background-image: inherit; background-size: var(--eye) var(--eye); background-repeat: no-repeat; background-position: center; }

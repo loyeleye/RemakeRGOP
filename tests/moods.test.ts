@@ -21,3 +21,10 @@ describe("portrait moods", () => {
       for (const m of moods) expect(existsSync(`public/faces/${who.toLowerCase()}-${m}.webp`), `${who}-${m}`).toBe(true);
   });
 });
+
+describe("Lumi's one open-mouth face in runs 1 and 2", () => {
+  it("shows only when a line names it", () => {
+    expect(moodOf("Lumi", "!", "delight-flash")).toBe("delight-flash");
+    for (const t of ["Dad. North one.", "So I'm coming tomorrow.", "I pulled.", "Again."]) expect(moodOf("Lumi", t)).not.toBe("delight-flash");
+  });
+});

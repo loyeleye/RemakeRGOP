@@ -1,8 +1,10 @@
 // Which portrait goes with a line. A line can name its mood; otherwise these rules pick one.
 
+// Lumi's open-mouth faces are rare on purpose (four in the whole game, Ladi, 23 Nov 2026). In runs 1
+// and 2 there is one: "delight-flash", when her tide pull first works, and only a line naming it gets it.
 export const MOODS: Record<string, readonly string[]> = {
   Hesta: ["neutral", "approving", "firm"],
-  Lumi: ["neutral", "calling", "delighted", "grudging", "smug", "unimpressed"],
+  Lumi: ["neutral", "calling", "delighted", "grudging", "smug", "unimpressed", "delight-flash"],
   Rook: ["neutral", "warm", "proud", "baffled"],
 };
 

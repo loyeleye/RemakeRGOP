@@ -143,7 +143,9 @@ export class Camera {
 
 type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
-const CAST_MODELS = ["rook"] as const;
+const CAST_MODELS = ["rook", "lumi"] as const;
+/** Each character's height against Rook's (models come in at one height). Lumi is nine. */
+const CAST_SCALE: Record<string, number> = { lumi: 0.7 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};
@@ -1407,7 +1409,7 @@ export class World {
     let body: THREE.Object3D;
     if (model) {
       body = model.clone();
-      body.scale.multiplyScalar(1.8);
+      body.scale.multiplyScalar(1.8 * (own ? (CAST_SCALE[own] ?? 1) : 1));
       body.userData.real = true;
       body.userData.kind = kind;
       if (own) {

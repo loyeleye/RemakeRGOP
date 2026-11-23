@@ -69,6 +69,8 @@ export class KindlingEnding {
   private skipAt: number | null = null;
   private skipOffset = 0;
   private readonly skippable: boolean;
+  /** Fairy Ring's light in the eye: as bright as the score. */
+  private glint = 1;
 
   constructor(
     readonly end: { sky?: number; lines: StoryLine[] },
@@ -87,7 +89,7 @@ export class KindlingEnding {
     for (const n of [1, 2, 3]) add(`cloud${n}`, card(`kindling-cloud-${n}`, `cloud c${n}`));
     add("black", Object.assign(document.createElement("div"), { className: "black" }));
     for (const n of [1, 2, 3]) add(`eye${n}`, card(`kindling-eye-${n}`, `eye e${n}`, `<div class="lid"><div class="pupil"></div></div>`));
-    add("glint", card("kindling-eye-glint", "glint", `<div class="spark"></div>`));
+    add("glint", card("kindling-eye-glint", "glint", `<div class="spark" style="--glint:1"></div>`));
     add("out", Object.assign(document.createElement("div"), { className: "black" }));
     const title = document.createElement("div");
     title.className = "title";
@@ -120,8 +122,8 @@ export class KindlingEnding {
       addEventListener("keyup", up);
     }
     // Brightness follows the score: Fairy Ring's painting, and its light in the eye.
-    this.els.ring!.style.filter = `brightness(${0.45 + 0.25 * skyTier(sky)}) saturate(${0.8 + 0.1 * skyTier(sky)})`;
-    this.els.glint!.style.setProperty("--glint", String(0.25 + 0.75 * sky));
+    this.els.ring!.style.filter = `brightness(${0.4 + 0.2 * skyTier(sky)}) saturate(${0.7 + 0.1 * skyTier(sky)})`;
+    this.glint = 0.25 + 0.75 * sky;
     document.body.appendChild(r);
     document.body.classList.add("in-ending");
     this.loop();
@@ -190,7 +192,7 @@ export class KindlingEnding {
     op("sky", ramp(t, E.sky.in, E.sky.in + E.sky.inFor));
     const pan = ease(ramp(t, E.sky.in, E.sky.panTo));
     const down = ease(ramp(t, E.descent.from, E.descent.to));
-    e.sky!.style.transform = `translate(${-pan * 22}%, ${-down * 60}%)`;
+    e.sky!.style.transform = `translate(${(0.5 - pan) * 12}%, ${-down * 14}%)`;
     e.sky!.style.filter = `brightness(${1 - down * 0.8})`;
     // The clouds slide up past the view at different speeds as it sinks.
     [1.0, 1.5, 2.2].forEach((speed, i) => {
@@ -205,7 +207,7 @@ export class KindlingEnding {
     op("eye1", ramp(t, a, a + 1) * (1 - ramp(t, b, b + 0.4)));
     op("eye2", ramp(t, b, b + 0.4) * (1 - ramp(t, c, c + 0.6)));
     op("eye3", ramp(t, c, c + 0.6));
-    op("glint", ramp(t, c + 0.4, c + 2));
+    op("glint", ramp(t, c + 0.4, c + 2) * this.glint);
     this.once("eye", t, c, () => {
       sound.windOff(2);
       sound.eyeNote();

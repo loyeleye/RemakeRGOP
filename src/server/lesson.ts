@@ -302,7 +302,11 @@ export class LessonRoom {
     // The first time her tide pull moves something, Rook notices.
     const held = lumi.beam !== null ? g.wisps[lumi.beam] : undefined;
     const tide = held && held.touched && g.board.tile(held.pos) === Tile.Water && g.wisps.some((o) => o !== held && o.guild === 0 && g.board.tile(o.pos) === Tile.Water && !samePt(o.pos, o.prev) && !o.target);
-    if (tide && this.tideSeen < 0) this.tideSeen = g.tick;
+    if (tide && this.tideSeen < 0) {
+      this.tideSeen = g.tick;
+      // One flash of open delight, without words, then she reins it into "I pulled." (smug).
+      this.say(LUMI, "!", { player: LUMI_ID, mood: "delight-flash" });
+    }
     if (this.tideSeen >= 0 && g.tick === this.tideSeen + 4) {
       this.say(ROOK, "How did you do that?");
       this.say(LUMI, "I pulled.", { player: LUMI_ID });
