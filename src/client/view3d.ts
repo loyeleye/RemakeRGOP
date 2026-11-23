@@ -16,7 +16,7 @@ import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js
 import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeIsland, makeWaterfall } from "./islands.js";
-import { ambientParticles, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
+import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
 export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff", "#6fe07a"];
 export const GUILD_NAMES: readonly string[] = ["Dawn", "Dusk", "Tide", "Grove"];
@@ -41,6 +41,8 @@ export interface DrawState {
   steps?: { x: number; y: number };
   /** The free walk on the pond: Lumi's lantern, left by the water (tile coords). Something to find and tap. */
   lantern?: { x: number; y: number };
+  /** The walks: time of day on the island (see LIGHTS). */
+  light?: string;
 }
 
 // ------------------------------------------------------------------ camera
@@ -1308,6 +1310,7 @@ export class World {
     this.shrineGroup.clear();
     this.houseSlot = null;
     this.isPlace = !!themeFor(shrine.id).place;
+    this.lightKey = "";
     this.propSlots = [];
     this.vents = [];
     this.plates = [];
@@ -1797,6 +1800,8 @@ export class World {
   }
 
   /** Rook's house: the art thread's model once it has loaded, the block-out until then. */
+  /** The time of day applied over the island's theme, if any. */
+  private lightKey = "";
   /** A place to walk (see Theme.place): no banking rim, no reach square. */
   private isPlace = false;
   private houseSlot: { group: THREE.Group; model: string } | null = null;
@@ -2128,6 +2133,14 @@ export class World {
     if (this.steps) {
       this.steps.visible = !!st.steps;
       if (st.steps) this.steps.position.set(this.worldX(b, st.steps.x), 0, this.worldZ(b, st.steps.y));
+    }
+
+    // The walks' time of day, over the island's own look.
+    const lk = `${st.shrine.id}~${st.light ?? ""}`;
+    if (lk !== this.lightKey) {
+      this.lightKey = lk;
+      const base = themeFor(st.shrine.id);
+      this.applyTheme({ ...base, ...(LIGHTS[st.light ?? ""] ?? {}) });
     }
 
     // The free walk: Lumi's lantern by the water, glowing a little.

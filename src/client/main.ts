@@ -9,6 +9,8 @@ import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
 import { GrannyRoom } from "../server/granny.js";
 import { PondRoom } from "../server/pond.js";
+import { WALKS } from "../engine/walks.js";
+import { loadProgress, reach, resetProgress } from "./progress.js";
 import { StoryRoom } from "../server/story.js";
 import { ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import * as sound from "./sound.js";
@@ -54,6 +56,7 @@ function onServer(m: ServerMsg) {
       if (room.phase === "countdown" && was !== "countdown") cam.follow = true;
       if (room.story) storyPhaseSound(was);
       placeView(!!room.story?.pond, !!room.story?.pond?.leaving);
+      noteProgress();
       render();
       break;
     }
@@ -118,10 +121,11 @@ function connectPractice(name: string) {
 let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | null = null;
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | "pond" = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | "pond" = 1, walk = 1) {
   practice = true;
+  jumped = false;
   callMode = false;
-  const r = run === "pond" ? new PondRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
@@ -333,6 +337,7 @@ function leave() {
   snap = prevSnap = null;
   clearCaptions();
   inPlace = false;
+  jumped = false;
   placeFade?.remove();
   placeFade = null;
   skyBase = null;
@@ -346,6 +351,26 @@ function leave() {
 }
 
 // ------------------------------------------------------------------ screens
+
+/** Set while a walk opened from the testing menu is up: it doesn't count as progress. */
+let jumped = false;
+
+/** Saved progress from what's on screen: a walk reached, or a run finished. */
+function noteProgress() {
+  const st = room?.story;
+  if (!st || jumped) return;
+  const w = st.pond?.walk;
+  if (w) {
+    const walk = WALKS.find((x) => x.n === w)!;
+    reach({ walk: w, next: walk.after + 1 });
+  }
+  if (room!.phase === "results" && st.end) {
+    if (st.run === "The Grand Kindling") reach({ next: 2 });
+    else if (st.end.lines[0]?.text === "So I'm coming tomorrow.") reach({ next: 3 });
+    else if (storyRoom instanceof GrannyRoom || st.run === "Granny's game") reach({ next: 4 });
+  }
+  renderProgress();
+}
 
 /** The walking map: a closer camera that follows Rook, and a short fade out when Hesta's game starts. */
 let inPlace = false;
@@ -1052,6 +1077,39 @@ $("story").onclick = () => connectStory(playerName());
 $("story2").onclick = () => connectStory(playerName(), 2);
 $("story3").onclick = () => connectStory(playerName(), 3);
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
+// Saved progress: continue from where this browser got to, jump to any walk, or start over.
+function renderProgress() {
+  const p = loadProgress();
+  const nextWalk = WALKS.find((w) => w.after === p.next - 1 && w.n > p.walk);
+  $("story-continue").textContent = p.walk === 0 && p.next === 1 ? "Story: start" : nextWalk ? `Story: continue (walk ${nextWalk.n})` : `Story: continue (run ${p.next})`;
+  $("progress-note").textContent = `Saved here: walk ${p.walk || "none yet"}, next run ${p.next}.`;
+}
+$("story-continue").onclick = () => {
+  const p = loadProgress();
+  const nextWalk = WALKS.find((w) => w.after === p.next - 1 && w.n > p.walk);
+  if (nextWalk) return connectStory(playerName(), "pond", nextWalk.n);
+  if (p.next === 1 || p.next === 2 || p.next === 3) return connectStory(playerName(), p.next as 1 | 2 | 3);
+  // Runs 4 on aren't built: the latest walk reached.
+  connectStory(playerName(), "pond", Math.max(1, p.walk));
+};
+$<HTMLSelectElement>("walk-pick").replaceChildren(
+  ...WALKS.map((w) => {
+    const o = document.createElement("option");
+    o.value = String(w.n);
+    o.textContent = `Walk ${w.n}: ${w.title} (after run ${w.after})`;
+    return o;
+  }),
+);
+$("walk-go").onclick = () => {
+  connectStory(playerName(), "pond", Number($<HTMLSelectElement>("walk-pick").value) || 1);
+  // A jump to test a walk doesn't move saved progress on.
+  jumped = true;
+};
+$("progress-reset").onclick = () => {
+  resetProgress();
+  renderProgress();
+};
+renderProgress();
 // Run 2: call Rook to a spot. The next tap on the ground is the call.
 let callMode = false;
 function setCallMode(on: boolean) {
@@ -1203,7 +1261,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.

@@ -45,3 +45,20 @@ describe("The pond, between runs", () => {
     expect(granny.state.phase).toBe("countdown");
   });
 });
+
+describe("The later walks", () => {
+  it("places each walk's people on open ground and says what's not built yet", () => {
+    for (const n of [2, 3, 4, 5]) {
+      const msgs: ServerMsg[] = [];
+      let s = 3;
+      const room = new PondRoom(manualClock(), () => (s = (s * 48271) % 2147483647), n);
+      const conn = room.connect((m) => msgs.push(m));
+      conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+      const g = room.state.game;
+      expect(g.players.length).toBe(1 + room.walkDef.people.length);
+      expect(new Set(g.players.map((p) => `${p.pos.x},${p.pos.y}`)).size).toBe(g.players.length);
+      for (const p of g.players) expect(g.board.passable(p.pos, 2)).toBe(true);
+      room.onTick();
+    }
+  });
+});

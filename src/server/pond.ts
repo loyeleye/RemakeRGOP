@@ -11,6 +11,7 @@ import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
 import { GrannyRoom } from "./granny.js";
 import { realClock, type Clock } from "./room.js";
+import { walkByN, type Anchor, type Walk } from "../engine/walks.js";
 
 // Same ids as Granny's game, so the handover keeps everyone where they stand.
 const ROOK_ID = 1, LUMI_ID = 2, NELL_ID = 3, SEFA_ID = 4, HESTA_ID = 5;
@@ -113,8 +114,16 @@ export class PondRoom {
   constructor(
     private clock: Clock = realClock,
     private seed: () => number = () => Math.floor(Math.random() * 2 ** 31),
-    private from: { rook?: Pt; lumi?: Pt } = {},
-  ) {}
+    /** Which walk (1 to 5): its light, who is about, and what's next. */
+    walkN = 1,
+  ) {
+    this.walkDef = walkByN(walkN);
+  }
+  readonly walkDef: Walk;
+  /** Lines for this walk's people, by name. */
+  private walkLines = new Map<string, string[]>();
+  /** A note for the player once the thing that goes on is tapped, when what's next isn't built. */
+  private notBuilt = false;
 
   connect(send: (m: ServerMsg) => void) {
     return {
@@ -150,6 +159,7 @@ export class PondRoom {
   }
 
   begin() {
+    if (this.walkDef.n !== 1) return this.beginWalk();
     const shrine = shrineById(POND.shrine);
     const roster = [
       { id: ROOK_ID, guild: 0 as Guild, name: "Rook" },
@@ -165,8 +175,8 @@ export class PondRoom {
       const p = this.player(id);
       p.pos = p.prev = at;
     };
-    place(ROOK_ID, this.free(this.from.rook) ?? S.rook);
-    place(LUMI_ID, this.free(this.from.lumi) ?? S.lumi);
+    place(ROOK_ID, S.rook);
+    place(LUMI_ID, S.lumi);
     place(NELL_ID, S.enter[0]!);
     place(HESTA_ID, S.enter[1]!);
     place(SEFA_ID, S.enter[2]!);
@@ -175,6 +185,89 @@ export class PondRoom {
     this.endClock();
     this.stop = this.clock.every(TICK_MS, () => this.onTick());
     this.broadcast();
+  }
+
+  /** Walks 2 to 5: everyone already where they are, nothing scripted. */
+  private beginWalk() {
+    const W = this.walkDef;
+    const shrine = shrineById(POND.shrine);
+    const roster = [{ id: ROOK_ID, guild: 0 as Guild, name: "Rook" }, ...W.people.map((p, i) => ({ id: 10 + i, guild: (p.name === "Hesta" ? 1 : 0) as Guild, name: p.name }))];
+    this.game = new Game(shrine, roster, this.seed(), [0, 0], 1e9);
+    this.spots = pondSpots(this.game.board, shrine.starts, shrine.house);
+    this.gatheredAt = 1e9;
+    const taken: Pt[] = [];
+    const put = (id: number, a: Anchor) => {
+      const at = this.openNear(this.anchor(a), taken);
+      taken.push(at);
+      const p = this.player(id);
+      p.pos = p.prev = at;
+      p.run = id === ROOK_ID;
+    };
+    W.people.forEach((p, i) => {
+      put(10 + i, p.at);
+      this.walkLines.set(p.name, p.lines);
+    });
+    put(ROOK_ID, W.start);
+    this.endClock();
+    this.stop = this.clock.every(TICK_MS, () => this.onTick());
+    this.broadcast();
+  }
+
+  /** A named place on the island, as a tile to stand on (see walks.ts). */
+  private anchor(a: Anchor): Pt {
+    const sh = this.game.shrine, b = this.game.board, c = b.center;
+    const box = (kind: string) => {
+      const ps = (sh.props ?? []).filter((p) => p.kind === kind);
+      if (!ps.length) return null;
+      const xs = ps.map((p) => p.x), ys = ps.map((p) => p.y);
+      return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+    };
+    const mid = (v: { x0: number; x1: number }) => Math.round((v.x0 + v.x1) / 2);
+    switch (a) {
+      case "door":
+        return sh.house ? pt(sh.house.x + sh.house.w + 1, doorY(sh.house)) : this.spots.rook;
+      case "falls": {
+        const f = box("falls");
+        return f ? pt(mid(f), f.y1 + 2) : this.spots.rook;
+      }
+      case "landing": {
+        const k = box("skiff");
+        return k ? pt(k.x1 + 2, k.y0) : this.spots.rook;
+      }
+      case "stall": {
+        const o = box("stall");
+        return o ? pt(o.x0 + 1, o.y1 + 1) : this.spots.rook;
+      }
+      case "shrine": {
+        const sb = box("shrine");
+        return sb ? pt(mid(sb), sb.y1 + 2) : this.spots.rook;
+      }
+      case "chair": {
+        const ch = box("chair");
+        return ch ? pt(ch.x0 + 1, ch.y0) : this.spots.rook;
+      }
+      case "kindling": {
+        const k = box("kindling");
+        return k ? pt(mid(k), k.y0 - 2) : c;
+      }
+      case "pond":
+        return this.spots.gather.hesta;
+      case "path":
+        return pt(c.x + 1, c.y + 14);
+    }
+  }
+
+  /** The nearest open tile to `at` that isn't taken. */
+  private openNear(at: Pt, taken: Pt[]): Pt {
+    const b = this.game.board;
+    for (let r = 0; r < 10; r++)
+      for (let dy = -r; dy <= r; dy++)
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const q = pt(at.x + dx, at.y + dy);
+          if (b.inside(q) && b.passable(q, Mover.Walker) && !taken.some((t) => t.x === q.x && t.y === q.y)) return q;
+        }
+    return at;
   }
 
   onTick() {
@@ -186,6 +279,11 @@ export class PondRoom {
       return this.broadcast();
     }
     const t = g.tick;
+    if (this.walkDef.n !== 1) {
+      g.step();
+      this.arrive();
+      return this.broadcast();
+    }
     if (t === POND.enterAt) {
       this.walk(HESTA_ID, this.spots.gather.hesta);
       this.walk(NELL_ID, this.spots.gather.nell);
@@ -194,18 +292,24 @@ export class PondRoom {
     if (t === POND.lumiAt) this.walk(LUMI_ID, this.spots.gather.lumi);
     g.step();
     const rook = this.player(ROOK_ID);
-    if (this.going && near(rook.pos, this.going.at(), POND.reach)) {
-      const thing = this.going;
-      this.going = null;
-      this.game.command(ROOK_ID, { action: { kind: "idle" } });
-      this.answer(thing);
-    }
+    this.arrive();
     if (this.gatheredAt < 0 && near(this.player(SEFA_ID).pos, this.spots.gather.sefa, 0) && near(this.player(HESTA_ID).pos, this.spots.gather.hesta, 0)) this.gatheredAt = g.tick;
     if (!this.granny && this.gatheredAt >= 0 && g.tick - this.lastSefa >= POND.sefaEvery && g.tick - this.gatheredAt >= 8 && !near(rook.pos, this.player(SEFA_ID).pos, 4)) {
       this.lastSefa = g.tick;
       this.say(SEFA, "We need four!");
     }
     if (!this.granny) this.broadcast();
+  }
+
+  /** Rook reached what he was walking up to: they answer. */
+  private arrive() {
+    const rook = this.player(ROOK_ID);
+    if (this.going && near(rook.pos, this.going.at(), POND.reach)) {
+      const thing = this.going;
+      this.going = null;
+      this.game.command(ROOK_ID, { action: { kind: "idle" } });
+      this.answer(thing);
+    }
   }
 
   private act(msg: Extract<ClientMsg, { t: "act" }>) {
@@ -256,19 +360,30 @@ export class PondRoom {
   }
 
   private answer(thing: Thing) {
-    if (thing.name === "Hesta") return this.startGame();
-    const lines = LINES[thing.name] ?? [];
+    const W = this.walkDef;
+    if (W.n === 1 && thing.name === "Hesta") return this.startGame();
+    // Walk 2: Nell or Sefa, asked twice, starts the rematch (the optional run).
+    if (W.n === 2 && (thing.name === NELL || thing.name === SEFA) && (this.taps.get(thing.name) ?? 0) >= 1) {
+      this.say(thing.name, "Yes! Granny! Rematch!");
+      return this.startGame(false);
+    }
+    const lines = this.walkLines.get(thing.name) ?? LINES[thing.name] ?? [];
     if (!lines.length) return;
     const n = this.taps.get(thing.name) ?? 0;
     this.taps.set(thing.name, n + 1);
     // Lines about things are Rook's own; people say theirs over their heads.
     const person = this.game.players.some((p) => p.name === thing.name);
     this.say(person ? thing.name : "Rook", lines[n % lines.length]!);
+    // What goes on from here isn't built yet: say so, once per tap.
+    if (W.n !== 1 && thing.name === W.go) {
+      this.notBuilt = true;
+      this.lines.push({ who: "", text: `(This is where run ${W.next} would start. It isn't built yet.)`, talk: true });
+    }
   }
 
   /** Hesta, tapped: her line, a short fade, then Granny's game. */
-  private startGame() {
-    this.say("Hesta", LINES.Hesta![0]!);
+  private startGame(line = true) {
+    if (line) this.say("Hesta", LINES.Hesta![0]!);
     this.going = null;
     this.leavingAt = this.game.tick;
     this.broadcast();
@@ -346,7 +461,7 @@ export class PondRoom {
   }
 
   storyView(): StoryView {
-    return { run: POND.title, movement: 0, title: POND.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, ...(this.leavingAt >= 0 ? { leaving: true } : {}) } };
+    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.leavingAt >= 0 ? { leaving: true } : {}) } };
   }
 
   view(): RoomView {
@@ -357,7 +472,7 @@ export class PondRoom {
       host: ROOK_ID,
       shrine: POND.shrine,
       teams: 2,
-      players: [kid(ROOK_ID, "Rook"), kid(LUMI_ID, "Lumi"), kid(NELL_ID, NELL), kid(SEFA_ID, SEFA), { id: HESTA_ID, name: "Hesta", guild: 1, flame: "frost", connected: true, bot: true }],
+      players: this.game.players.map((p) => (p.guild === 1 ? { id: p.id, name: p.name, guild: 1 as Guild, flame: "frost" as const, connected: true, bot: true } : kid(p.id, p.name))),
       countdown: 0,
       lastScores: null,
       roundTicks: this.game.roundTicks,

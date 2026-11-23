@@ -1258,3 +1258,31 @@ export function ambientParticles(kind: Particles, radius: number, low: boolean, 
   pts.frustumCulled = false;
   return pts;
 }
+
+/** The walks' times of day: what each changes on the island's own look (afternoon is the island as it is). */
+export const LIGHTS: Record<string, Partial<Theme>> = {
+  afternoon: {},
+  morning: {
+    sky: { zenith: "#3a6ec8", sky: "#9cc4ee", haze: "#fbe2c0", below: "#7a9ee0", stars: 0 },
+    fog: "#d8e4f0",
+    hemi: ["#fff0dc", "#8a7a60", 1.1],
+    sun: ["#ffe2b8", 2.6],
+    exposure: 1,
+  },
+  dusk: {
+    sky: { zenith: "#2a2f6a", sky: "#c8785a", haze: "#f0a070", below: "#5a4a7a", stars: 0.3 },
+    fog: "#a07a7a",
+    clouds: "#f0b090",
+    hemi: ["#f0b48a", "#3a2a3a", 0.8],
+    sun: ["#ff9a5a", 1.8],
+    exposure: 1.05,
+  },
+  night: {
+    sky: { zenith: "#050a24", sky: "#142a5c", haze: "#2a3e78", below: "#0c1840", stars: 1 },
+    fog: "#1a2a52",
+    clouds: "#3a4a7a",
+    hemi: ["#5a78c8", "#1a2030", 0.5],
+    sun: ["#a8c0ff", 0.9],
+    exposure: 1.3,
+  },
+};
