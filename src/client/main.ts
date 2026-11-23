@@ -1270,7 +1270,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, walk: room?.story?.pond?.walk };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.

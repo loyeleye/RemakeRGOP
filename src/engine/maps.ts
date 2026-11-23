@@ -336,8 +336,8 @@ export function ringWalls(ring: Ring): Pt[] {
 }
 
 /** Story places: solid things drawn as themselves. Multi-tile ones are one block of their letter. */
-export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling";
-export const PROP_CHARS: Record<string, PropKind> = { F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling" };
+export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling";
+export const PROP_CHARS: Record<string, PropKind> = { F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling" };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
 export const GROUND_CHARS: Record<string, "path" | "planks" | "terrace"> = { ",": "path", ";": "planks", ":": "terrace" };
 
@@ -827,6 +827,9 @@ const TILE_OF: Record<string, Tile> = {
   T: Tile.Wall,
   A: Tile.Wall,
   Q: Tile.Wall,
+  Z: Tile.Wall,
+  J: Tile.Wall,
+  E: Tile.Wall,
   V: Tile.Wall,
   K: Tile.Wall,
   S: Tile.Wall,
@@ -1282,21 +1285,31 @@ export const HOME_ISLAND = {
   stall: { dx: -4, dy: 27 },
   shrine: { dx: 4, dy: 42 },
   hestaHouse: { dx: 0, dy: 58, w: 5, h: 5 },
+  /** Lookout spurs (story/part1-lore-beats.md): angle out from the centre, length, and half-widths along it. */
+  eastPoint: { from: -0.09, length: 14, width: [2.4, 2.1] as [number, number], dy: -2 },
+  southPoint: { from: Math.PI / 2 - 0.066, length: 86, width: [2.6, 1.9] as [number, number], dx: 6 },
   kindling: { dx: 0, dy: 74, r: 2 },
 };
 
 const HOME_ISLE: IsleShape = {
   radius: 14.5 * 1.5, squareness: 2.1, coves: 0.06, heads: 0.05, seed: 5, stretch: [1.08, 0.95],
-  arms: [{ from: Math.PI / 2, length: HOME_ISLAND.neck.length, curl: 0, width: HOME_ISLAND.neck.width, wiggle: 0.04, clutter: 0 }],
+  arms: [
+    { from: Math.PI / 2, length: HOME_ISLAND.neck.length, curl: 0, width: HOME_ISLAND.neck.width, wiggle: 0.04, clutter: 0 },
+    // Lookouts (the lore beats): the east point off the pond end, and the south point past the
+    // great brazier, run east of centre so the brazier doesn't hide the statue from Hesta's chair.
+    { from: HOME_ISLAND.eastPoint.from, length: HOME_ISLAND.eastPoint.length, curl: 0, width: HOME_ISLAND.eastPoint.width, clutter: 0 },
+    { from: HOME_ISLAND.southPoint.from, length: HOME_ISLAND.southPoint.length, curl: 0, width: HOME_ISLAND.southPoint.width, clutter: 0 },
+  ],
 };
 
 function homeIslandRows(): string[] {
-  const k = 1.5, N = 47, c = 23;
+  // The pond's drawing is 47 wide; it's padded each side so the east point fits on the drawing.
+  const k = 1.5, N0 = 47, c0 = 23, pad = 10, N = N0 + 2 * pad, c = c0 + pad;
   const R = HOME_ISLAND;
   // A tall drawing, the pond in the middle third: the neck runs south from it.
-  const H0 = N + 2 * 100, cy = (H0 - 1) / 2;
-  const pond = homePondRows(k).map((r) => r.replace(/H/g, "."));
-  const g = Array.from({ length: H0 }, (_, y) => [...(y >= cy - c && y <= cy + c ? pond[y - (cy - c)]! : ".".repeat(N))]);
+  const H0 = N0 + 2 * 100, cy = (H0 - 1) / 2;
+  const pond = homePondRows(k).map((r) => ".".repeat(pad) + r.replace(/H/g, ".") + ".".repeat(pad));
+  const g = Array.from({ length: H0 }, (_, y) => [...(y >= cy - c0 && y <= cy + c0 ? pond[y - (cy - c0)]! : ".".repeat(N))]);
   const at = (dx: number, dy: number) => [c + dx, cy + dy] as const;
   const set = (dx: number, dy: number, ch: string, over = ".") => {
     const [x, y] = at(dx, dy);
@@ -1365,6 +1378,20 @@ function homeIslandRows(): string[] {
   for (let j = -1; j <= hh.h + 2; j++) for (let i = -2; i <= hh.w + 1; i++) set(hh.dx - Math.floor(hh.w / 2) + i, hh.dy + j, ":", ".,");
   block(hh.dx - Math.floor(hh.w / 2), hh.dy, hh.w, hh.h, "R");
   set(hh.dx, hh.dy + hh.h + 1, "C", ".:");
+  // The lore spots. The south point: the Willing Girl near the tip, facing out, a bench north of her.
+  const sp = R.southPoint.dx;
+  let ty = 60;
+  while (land(sp, ty + 1)) ty++;
+  set(sp, ty - 1, "Z");
+  set(sp, ty - 4, "N");
+  set(sp + 1, ty - 4, "N");
+  // The east point: Wick's lookout post near its tip.
+  let tx = 10;
+  while (land(tx + 1, R.eastPoint.dy)) tx++;
+  set(tx - 1, R.eastPoint.dy, "J");
+  // A rail along the landing's south edge, where Moth leans.
+  set(lx + 1, R.landing.dy + 2, "E");
+  set(lx + 2, R.landing.dy + 2, "E");
   // The great brazier of the Kindling ground.
   const kd = R.kindling;
   block(kd.dx - kd.r, kd.dy - kd.r, kd.r * 2 + 1, kd.r * 2 + 1, "G");

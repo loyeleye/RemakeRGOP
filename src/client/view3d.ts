@@ -43,6 +43,8 @@ export interface DrawState {
   lantern?: { x: number; y: number };
   /** The walks: time of day on the island (see LIGHTS). */
   light?: string;
+  /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
+  walk?: number;
 }
 
 // ------------------------------------------------------------------ camera
@@ -175,7 +177,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "stall", "brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "stall", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -829,13 +831,13 @@ const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number }> = {
   chair: { model: "hesta-chair" },
   shrine: { model: "shrine", rot: Math.PI },
   stall: { model: "stall" },
-  kindling: { model: "brazier" },
+  kindling: { model: "kindling-brazier" },
   falls: { model: "falls" },
   skiff: { model: "skiff", dx: -1.6 },
 };
 
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
-const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin"]);
+const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail"]);
 
 function makePlace(kind: string, w: number, d: number): THREE.Group {
   const g = new THREE.Group();
@@ -1289,11 +1291,30 @@ export class World {
       } else if (p.kind === "bench") {
         if (has(p.x - 1, p.y, "bench")) continue;
         const long = has(p.x + 1, p.y, "bench") ? 2 : 1;
-        // The model's back is on -Z; turned round, it looks north over the water.
+        // The model's back is on -Z, so it faces south: toward the Willing Girl if she's just south
+        // of it; otherwise turned round to look north over the water.
         const bench = new THREE.Group();
         bench.add(box(long * 0.95, 0.08, 0.45, wood, 0.45), box(long * 0.95, 0.4, 0.06, wood, 0.7));
         bench.children[1]!.position.z = -0.2;
-        this.placeSlot("bench", bench, wx + (long - 1) / 2, wz, Math.PI);
+        const facesStatue = props.some((q) => q.kind === "statue" && q.y > p.y && q.y - p.y <= 5 && Math.abs(q.x - p.x) <= 2);
+        this.placeSlot("bench", bench, wx + (long - 1) / 2, wz, facesStatue ? 0 : Math.PI);
+      } else if (p.kind === "statue") {
+        // The Willing Girl, facing south out to the sky. Her ribbons and flowers come with the walks.
+        const st = new THREE.Group();
+        st.add(box(1.1, 0.9, 1.1, new THREE.MeshStandardMaterial({ color: "#b9b2a4", roughness: 1 })));
+        const fig = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.1, 10), new THREE.MeshStandardMaterial({ color: "#c8c0b0", roughness: 1 }));
+        fig.position.y = 1.95;
+        st.add(fig);
+        this.statueSlot = this.placeSlot("willing-girl", st, wx, wz);
+        this.flowers = this.placeSlot("statue-flowers", box(0.5, 0.3, 0.4, new THREE.MeshStandardMaterial({ color: "#e8d27a", roughness: 1 })), wx, wz + 0.85);
+        this.flowers.visible = false;
+        this.statueWalk = -1;
+      } else if (p.kind === "lookout") {
+        this.placeSlot("lookout-post", box(0.2, 1.9, 0.2, wood), wx, wz);
+      } else if (p.kind === "rail") {
+        if (has(p.x - 1, p.y, "rail")) continue;
+        const two = has(p.x + 1, p.y, "rail");
+        this.placeSlot("landing-rail", box(two ? 2 : 1, 1, 0.12, wood), wx + (two ? 0.5 : 0), wz);
       } else if (p.kind === "barrel") {
         const m = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.9, 12), wood);
         m.position.y = 0.45;
@@ -1399,6 +1420,7 @@ export class World {
     this.shrineId = shrine.id + "~" + shrine.teams;
     this.shrineGroup.clear();
     this.placeSlots = [];
+    this.statueSlot = this.flowers = null;
     this.isPlace = !!themeFor(shrine.id).place;
     this.lightKey = "";
     this.propSlots = [];
@@ -1890,6 +1912,23 @@ export class World {
   private lightKey = "";
   /** A place to walk (see Theme.place): no banking rim, no reach square. */
   private isPlace = false;
+  /** The Willing Girl's slot, the flowers at her foot, and the walk they were last dressed for. */
+  private statueSlot: THREE.Group | null = null;
+  private flowers: THREE.Group | null = null;
+  private statueWalk = -1;
+  /** Ribbons from walk 3 on, fresh flowers in walk 5. */
+  private dressStatue(walk: number) {
+    if (!this.statueSlot || walk === this.statueWalk) return;
+    this.statueWalk = walk;
+    const slot = this.placeSlots.find((q) => q.group === this.statueSlot);
+    const want = walk >= 3 ? "willing-girl-ribbons" : "willing-girl";
+    if (slot && slot.model !== want) {
+      slot.model = want;
+      slot.group.userData.filled = false;
+      this.fillHouse();
+    }
+    if (this.flowers) this.flowers.visible = walk === 5;
+  }
   /** Place models (the house, the yard props): a block-out in each slot until the model loads. */
   private placeSlots: { group: THREE.Group; model: string }[] = [];
   private fillHouse() {
@@ -2234,6 +2273,7 @@ export class World {
       if (st.steps) this.steps.position.set(this.worldX(b, st.steps.x), 0, this.worldZ(b, st.steps.y));
     }
 
+    this.dressStatue(st.walk ?? 1);
     // The walks' time of day, over the island's own look.
     const lk = `${st.shrine.id}~${st.light ?? ""}`;
     if (lk !== this.lightKey) {
