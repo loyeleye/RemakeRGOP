@@ -189,13 +189,18 @@ export function crewCommand(game: Game, id: number, rookId: number, state: CrewS
       state.wisp = null;
       return { action: { kind: "idle" } };
     }
-    // Where it is now, or where it's heading: as soon as Rook can bank it, let go and leave it there.
-    if (live(w) && (ready(w.pos) || ready(rest(w)))) {
+    // As soon as Rook can bank it from where it is, let go and leave it there. (Letting go
+    // stops it dead, so judge where it is, not where it's heading: otherwise it stops short,
+    // gets fetched again and stops again, and never moves.) If its next step would land on
+    // the rim, let go anyway rather than bank it himself.
+    const next = w.target ? wispMove(board, w.pos, Math.sign(w.target.x - w.pos.x), Math.sign(w.target.y - w.pos.y), Math.abs(w.target.x - w.pos.x), Math.abs(w.target.y - w.pos.y)) : null;
+    const rimNext = !!next && board.inBankZone(pt(w.pos.x + next.step[0], w.pos.y + next.step[1]));
+    if (live(w) && (ready(w.pos) || rimNext)) {
       state.fed = state.drop = w.id;
       state.wisp = null;
       return { action: { kind: "idle" } };
     }
-    if (live(w) && cheb(rest(w), fin) <= KINDLING.relay.leaveNear) {
+    if (live(w) && cheb(w.pos, fin) <= KINDLING.relay.leaveNear) {
       state.drop = w.id;
       state.wisp = null;
       return { action: { kind: "idle" } };
@@ -206,9 +211,9 @@ export function crewCommand(game: Game, id: number, rookId: number, state: CrewS
 
   const taken = new Set(others.map((o) => o.wisp).filter((v): v is number => v !== null));
   // Not one that's already at Rook's feet, or one this bot gave up on a moment ago.
-  const near = (w: Wisp) => cheb(rest(w), fin) <= KINDLING.relay.leaveNear;
+  const near = (w: Wisp) => cheb(w.pos, fin) <= KINDLING.relay.leaveNear && !w.target;
   const skipped = (w: Wisp) => (state.skip.get(w.id) ?? -1) > game.tick;
-  const targets = game.wisps.filter((w) => live(w) && scope(w) && w.id !== rookOn && !taken.has(w.id) && !ready(rest(w)) && !near(w) && !skipped(w));
+  const targets = game.wisps.filter((w) => live(w) && scope(w) && w.id !== rookOn && !taken.has(w.id) && !(ready(w.pos) && !w.target) && !near(w) && !skipped(w));
   let target = targets.find((w) => w.id === state.wisp);
   if (!target) {
     target = targets.sort((a, b) => cheb(a.pos, me.pos) - cheb(b.pos, me.pos))[0];

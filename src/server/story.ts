@@ -65,7 +65,7 @@ export class StoryRoom {
   private strayFor = 0;
   private lastHesta = -99;
   // Movement 2: the crew.
-  private crew: { id: number; name: string; state: CrewState }[] = [];
+  private crew: { id: number; name: string; state: CrewState; forRook?: boolean }[] = [];
   /** The wisp the crew last left for Rook, while it's still his to bank. */
   private fed: number | null = null;
   /** Coording: Rook's side of the brazier, the partner's post across from him, whether they're coording, and when Rook changed sides. */
@@ -220,16 +220,29 @@ export class StoryRoom {
     this.crew.forEach((c, i) => {
       const others = this.crew.filter((o) => o !== c).map((o) => o.state);
       const half = this.half, post = this.post;
-      // Coording: the second holds a post across the brazier and banks the wisps on Rook's
-      // side, fetching them into his own reach first when they're far out. The first fetches
-      // the rest for Rook. When they aren't coording, both fetch for Rook.
+      // Coording: both fetch for Rook. The second also holds a post across the brazier and banks
+      // the wisps on Rook's side, the ones Rook isn't in position for. When they aren't
+      // coording, both just fetch for Rook.
       const rookSide = (w: Wisp) => !!half && depthIn(g.board, half, w.target ?? w.pos) >= 0;
       let cmd: ReturnType<typeof crewCommand> | undefined;
       if (this.split && post && i === 1) {
         const his = (w: Wisp) => rookSide(w) && w.id !== this.fed;
+        // First, bank one on Rook's side from his post. Then, like Wick, bring Rook one on the
+        // far side. Only with neither does he fetch one on Rook's side into his own reach.
+        c.forRook = false;
         cmd = partnerCommand(g, c.id, ROOK, c.state, post, his);
-        if (cmd === undefined) cmd = crewCommand(g, c.id, ROOK, c.state, others, his, post);
-      } else cmd = crewCommand(g, c.id, ROOK, c.state, others, this.split && post ? (w) => !rookSide(w) : undefined);
+        if (cmd === undefined) {
+          c.forRook = true;
+          cmd = crewCommand(g, c.id, ROOK, c.state, others, (w) => !rookSide(w));
+          if (c.state.wisp === null && c.state.drop == null && c.state.fed == null) {
+            c.forRook = false;
+            cmd = crewCommand(g, c.id, ROOK, c.state, others, his, post);
+          }
+        }
+      } else {
+        c.forRook = true;
+        cmd = crewCommand(g, c.id, ROOK, c.state, others, this.split && post ? (w) => !rookSide(w) : undefined);
+      }
       if (cmd) g.command(c.id, cmd);
       // A wisp the crew leave for Rook stops where it is, and is his: a fresh touch takes it.
       if (c.state.drop != null) {
@@ -357,8 +370,8 @@ export class StoryRoom {
       const his = rook.action.kind === "staff" && rook.action.wisp === w.id;
       if (banked || his || !banksFrom(g.board, rook.pos, w.target ?? w.pos)) this.fed = null;
     }
-    // While coording, the partner's feeds are for himself: only feeds for Rook get a line.
-    for (const c of this.split && this.post ? this.crew.slice(0, 1) : this.crew) {
+    // Only feeds for Rook get a line (not the partner bringing one into his own reach).
+    for (const c of this.crew.filter((q) => q.forRook)) {
       const fed = c.state.fed;
       if (fed !== null && this.fed === null) this.fed = fed;
       if (fed === null || g.tick - this.lastHesta < 8) continue;

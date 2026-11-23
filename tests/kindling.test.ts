@@ -20,6 +20,8 @@ function playRun(seed: number, lumi: "answer" | "ignore" | "bot" = "bot") {
   const bankers: (number | null)[] = [];
   /** Each wisp Lumi has called, in order. */
   const called: number[] = [];
+  /** Who held each wisp banked in the relay. */
+  const relayBankers: (number | null)[] = [];
   for (let i = 0; i < 2000 && room.state.phase !== "results"; i++) {
     const { game, phase, movement, ring } = room.state;
     if (phase === "playing") {
@@ -30,7 +32,10 @@ function playRun(seed: number, lumi: "answer" | "ignore" | "bot" = "bot") {
         if (ring && !samePt(rook.pos, ring)) cmd = rook.action.kind === "walk" ? null : { action: { kind: "walk", to: ring } };
         else if (rook.action.kind !== "staff") cmd = { action: { kind: "staff", wisp: w.id } };
       } else if (movement === 1) {
-        const w = game.wisps.find((q) => banksFrom(game.board, rook.pos, q.target ?? q.pos));
+        // Keep pulling while it's coming home; otherwise take a resting wisp he can bank from here.
+        const cur = rook.action.kind === "staff" ? game.wisps[rook.action.wisp] : undefined;
+        const curOk = cur && banksFrom(game.board, rook.pos, cur.pos) && !(samePt(cur.pos, cur.prev) && rook.beam === cur.id && !cur.target);
+        const w = curOk ? cur : game.wisps.find((q) => q !== cur && !q.target && banksFrom(game.board, rook.pos, q.pos));
         if (ring && !samePt(rook.pos, ring)) cmd = rook.action.kind === "walk" ? null : { action: { kind: "walk", to: ring } };
         else if (w && !(rook.action.kind === "staff" && rook.action.wisp === w.id)) cmd = { action: { kind: "staff", wisp: w.id } };
       } else {
@@ -53,10 +58,11 @@ function playRun(seed: number, lumi: "answer" | "ignore" | "bot" = "bot") {
       const g = room.state.game;
       for (const b of g.banks) {
         bankers.push(before.get(b.wisp) ?? null);
+        if (room.state.movement === 1) relayBankers.push(before.get(b.wisp) ?? null);
       }
     }
   }
-  return { room, msgs, bankers, called };
+  return { room, msgs, bankers, called, relayBankers };
 }
 
 describe("Game options for story runs", () => {
@@ -90,7 +96,7 @@ describe("Grand Kindling", () => {
   it("plays all three movements to an ending that can't be failed", () => {
     const lumi: string[] = [];
     for (const seed of [11, 12, 13]) {
-      const { room, msgs, bankers, called } = playRun(seed);
+      const { room, msgs, bankers, called, relayBankers } = playRun(seed);
       const st = room.state;
       expect(st.phase).toBe("results");
       expect(st.end).toBeDefined();
@@ -99,6 +105,10 @@ describe("Grand Kindling", () => {
       // Wick feeds Rook and never banks for himself; Moth banks the far side.
       expect(bankers.filter((b) => b === 2)).toEqual([]);
       expect(bankers.filter((b) => b === 3).length).toBeGreaterThan(0);
+      // Rook banks the most: the crew bring them to him, and Moth only banks what he can't reach.
+      const rookRelay = relayBankers.filter((b) => b === 1).length;
+      expect(rookRelay).toBeGreaterThan(relayBankers.filter((b) => b === 3).length);
+      expect(rookRelay).toBeGreaterThanOrEqual(10);
       if (process.env.STATS) console.log(seed, "rook", bankers.filter((b) => b === 1).length, "moth", bankers.filter((b) => b === 3).length, "other", bankers.filter((b) => b !== 1 && b !== 3).length, "total", room.state.end!.banked);
       const said = msgs.flatMap((m) => (m.t === "say" ? m.lines : []));
       expect(said.some((l) => l.who === "Lumi" && /^Dad\./.test(l.text))).toBe(true);
