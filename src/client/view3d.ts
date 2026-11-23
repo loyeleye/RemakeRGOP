@@ -147,7 +147,7 @@ type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
 const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth"] as const;
 /** Each character's height against Rook's (models come in at one height). Lumi is nine. */
-const CAST_SCALE: Record<string, number> = { lumi: 0.7, hesta: 0.95, wick: 1.05, moth: 0.95 };
+export const CAST_SCALE: Record<string, number> = { lumi: 0.7, hesta: 0.95, wick: 1.05, moth: 0.95 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};

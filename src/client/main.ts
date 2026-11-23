@@ -10,7 +10,7 @@ import { LessonRoom } from "../server/lesson.js";
 import { StoryRoom } from "../server/story.js";
 import { ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import * as sound from "./sound.js";
-import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
+import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -162,13 +162,17 @@ interface Bark {
   wisp?: number;
   ring?: boolean;
   player?: number;
+  /** A line about nothing in particular, over its speaker's model (Lumi or Hesta on the rim, or a player). */
+  speaker?: string;
   last?: { x: number; y: number };
 }
 const barks: Record<"bark" | "chip", Bark | null> = { bark: null, chip: null };
 
 function sayLine(l: StoryLine) {
   if (l.talk || room?.phase !== "playing" || !l.who) return talk(l);
-  const anchored = l.wisp != null || l.ring || l.player != null;
+  // A line about nothing in particular sits over its speaker's model when they're on the field.
+  const speaker = l.wisp == null && !l.ring && l.player == null ? speakerAt(l.who) && l.who.toLowerCase() : undefined;
+  const anchored = l.wisp != null || l.ring || l.player != null || !!speaker;
   const el = $(anchored ? "bark" : "chip");
   el.className = `bark${anchored ? "" : " chip"} ${l.who.toLowerCase()}`;
   const img = el.querySelector("img")!;
@@ -181,7 +185,7 @@ function sayLine(l: StoryLine) {
   el.style.animation = "none";
   void el.offsetWidth;
   el.style.animation = "";
-  barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60), wisp: l.wisp, ring: l.ring, player: l.player };
+  barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60), wisp: l.wisp, ring: l.ring, player: l.player, speaker: speaker || undefined };
   sound.speak(l.who, l.text, l.who === "Hesta" && l.wisp != null);
   if (!anchored) placeBarks(performance.now());
 }
@@ -207,6 +211,8 @@ function placeBarks(now: number) {
     } else if (b.player != null) {
       const q = snap.players.find((p) => p.id === b.player);
       if (q) at = { x: q.x, y: q.y };
+    } else if (b.speaker) {
+      at = speakerAt(b.speaker);
     } else if (b.ring) {
       const st = room?.story;
       const mine = snap.players.find((p) => p.id === me);
@@ -214,8 +220,8 @@ function placeBarks(now: number) {
     }
     at ??= b.last ?? null;
     if (!at) continue;
-    b.last = at;
-    const c = cam.toScreen(at.x + 0.5, at.y + 0.5, 1.4);
+    b.last = { ...at };
+    const c = "h" in at ? cam.toScreen(at.x, at.y, at.h as number) : cam.toScreen(at.x + 0.5, at.y + 0.5, 1.4);
     // Keep it on screen, even when what it points at isn't.
     const r = b.el.getBoundingClientRect();
     const x = Math.max(r.width / 2 + 8, Math.min(innerWidth - r.width / 2 - 8, c.x));
@@ -1108,7 +1114,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: watchersFor(shrine.board) };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)) };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.
@@ -1138,6 +1144,19 @@ function frame(now: number) {
 requestAnimationFrame(frame);
 
 /** Run 1: Lumi and Hesta stand at the island's north edge, facing the camera, watching Rook's kindling. */
+/** The watchers drawn last frame (Lumi and Hesta on the rim in run 1). */
+let lastWatchers: DrawState["watchers"];
+/** Where a speaker's head is on the field, for a bubble over them: a watcher, else a player playing them. */
+function speakerAt(who: string): { x: number; y: number; h: number } | null {
+  const cast = who.toLowerCase();
+  const head = 2.1 * (CAST_SCALE[cast] ?? 1);
+  const w = lastWatchers?.find((q) => q.cast === cast);
+  if (w) return { x: w.x, y: w.y, h: head };
+  const id = [...(castOf() ?? [])].find(([, c]) => c === cast)?.[0];
+  const p = id != null && id !== me ? snap?.players.find((q) => q.id === id) : undefined;
+  return p ? { x: p.x + 0.5, y: p.y + 0.5, h: head } : null;
+}
+
 function watchersFor(b: Board): DrawState["watchers"] {
   if (!(storyRoom instanceof StoryRoom) || !room?.story) return undefined;
   // Just past the northernmost floor tile in their column, on the island's rim.
