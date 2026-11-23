@@ -13,6 +13,11 @@ export interface WalkPerson {
   at: Anchor;
   /** Lines when tapped, in turn. */
   lines: string[];
+  /**
+   * Stays put at their place (Ladi: the ones the story needs, or who'd sit or keep a stall).
+   * Everyone else wanders about near it. The walk's `go` person always stays.
+   */
+  stay?: true;
 }
 
 export interface Walk {
@@ -37,7 +42,7 @@ export const WALKS: Walk[] = [
     people: [
       { name: "Lumi", at: "door", lines: ["I won. So I'm coming.", "I packed. Don't look in the bag."] },
       { name: "Moth", at: "landing", lines: ["Two islands called for you. Granny has the route."] },
-      { name: "Hesta", at: "chair", lines: ["I was resting my eyes.", "East, then the long way round the reef. Don't argue."] },
+      { name: "Hesta", at: "chair", stay: true, lines: ["I was resting my eyes.", "East, then the long way round the reef. Don't argue."] },
       { name: "Nell", at: "pond", lines: ["Rematch? Lumi says no rocks this time."] },
       { name: "Sefa", at: "pond", lines: ["Is it the best of three now?"] },
     ],
@@ -47,8 +52,8 @@ export const WALKS: Walk[] = [
     people: [
       { name: "Lumi", at: "path", lines: ["Do I look bright? Don't answer that."] },
       { name: "Maudie", at: "door", lines: ["Hold still, your collar's all wrong."] },
-      { name: "Orrin", at: "stall", lines: ["More panes in. She says they're crooked."] },
-      { name: "Hesta", at: "stall", lines: ["They're crooked, Orrin."] },
+      { name: "Orrin", at: "stall", stay: true, lines: ["More panes in. She says they're crooked."] },
+      { name: "Hesta", at: "stall", stay: true, lines: ["They're crooked, Orrin."] },
       { name: "Kes", at: "path", lines: ["Good luck today, Sparkbug."] },
       { name: "Mabry", at: "shrine", lines: ["Come in, both of you."] },
     ],
@@ -61,11 +66,11 @@ export const WALKS: Walk[] = [
     n: 5, title: "Dusk", light: "dusk", after: 8, next: 9, go: "Mabry", start: "door",
     people: [
       { name: "Mabry", at: "shrine", lines: ["We will speak of the Offering. Not here."] },
-      { name: "Kes", at: "shrine", lines: ["Old men arguing. Don't worry about it."] },
+      { name: "Kes", at: "shrine", stay: true, lines: ["Old men arguing. Don't worry about it."] },
       { name: "Maudie", at: "door", lines: ["Keep her close tonight."] },
       { name: "Lumi", at: "door", lines: ["Are the lamps going to be all right?"] },
-      { name: "Orrin", at: "stall", lines: ["No jokes tonight, Rook."] },
-      { name: "Hesta", at: "chair", lines: ["..."] },
+      { name: "Orrin", at: "stall", stay: true, lines: ["No jokes tonight, Rook."] },
+      { name: "Hesta", at: "chair", stay: true, lines: ["..."] },
       { name: "Nell", at: "pond", lines: ["Are the lamps going to be all right?"] },
     ],
   },

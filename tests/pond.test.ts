@@ -61,4 +61,19 @@ describe("The later walks", () => {
       room.onTick();
     }
   });
+  it("in a later walk, people the story doesn't need wander; the rest stay put", () => {
+    let s = 7;
+    const room = new PondRoom(manualClock(), () => (s = (s * 48271) % 2147483647), 2);
+    room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const at = (name: string) => ({ ...room.state.game.players.find((p) => p.name === name)!.pos });
+    const nell0 = at("Nell"), hesta0 = at("Hesta");
+    let moved = false;
+    for (let i = 0; i < 80; i++) {
+      room.onTick();
+      const n = at("Nell");
+      if (n.x !== nell0.x || n.y !== nell0.y) moved = true;
+    }
+    expect(moved).toBe(true);
+    expect(at("Hesta")).toEqual(hesta0);
+  });
 });

@@ -32,6 +32,8 @@ export const POND = {
   leaveTicks: 2,
   /** Sefa's "We need four!", every this many ticks once they've gathered (and not while Rook is with them). */
   sefaEvery: 60,
+  /** Wanderers in walks 2 to 5: ticks between strolls (min, max), how far from their place, and how near Rook stops them. */
+  wander: { every: [8, 22] as const, range: 5, stopNear: 3 },
 };
 
 /**
@@ -206,11 +208,47 @@ export class PondRoom {
     W.people.forEach((p, i) => {
       put(10 + i, p.at);
       this.walkLines.set(p.name, p.lines);
+      // Anyone the story doesn't need where they are wanders about near their place.
+      if (!p.stay && p.name !== W.go) {
+        this.wanderers.set(10 + i, { home: this.player(10 + i).pos, next: 3 + Math.floor(this.rand() * POND.wander.every[1]) });
+      }
     });
     put(ROOK_ID, W.start);
     this.endClock();
     this.stop = this.clock.every(TICK_MS, () => this.onTick());
     this.broadcast();
+  }
+
+  /** People wandering in this walk: their place, and the tick they next set off. */
+  private wanderers = new Map<number, { home: Pt; next: number }>();
+  private rand() {
+    return (this.seed() % 100000) / 100000;
+  }
+
+  /**
+   * Wanderers stroll to an open tile near their place every so often. Not while Rook is close
+   * or walking up to them, so they're easy to talk to, and they stop when he gets near.
+   */
+  private wander() {
+    const g = this.game, rook = this.player(ROOK_ID), Wd = POND.wander;
+    for (const [id, w] of this.wanderers) {
+      const p = this.player(id);
+      const close = near(rook.pos, p.pos, Wd.stopNear) || this.going?.name === p.name;
+      if (close) {
+        if (p.action.kind === "walk") g.command(id, { action: { kind: "idle" } });
+        w.next = Math.max(w.next, g.tick + Wd.every[0]);
+        continue;
+      }
+      if (g.tick < w.next) continue;
+      w.next = g.tick + Wd.every[0] + Math.floor(this.rand() * (Wd.every[1] - Wd.every[0]));
+      const b = g.board;
+      for (let tries = 0; tries < 12; tries++) {
+        const to = pt(w.home.x + Math.round((this.rand() * 2 - 1) * Wd.range), w.home.y + Math.round((this.rand() * 2 - 1) * Wd.range));
+        if (!b.inside(to) || !b.passable(to, Mover.Walker) || g.players.some((q) => q.pos.x === to.x && q.pos.y === to.y)) continue;
+        this.walk(id, to);
+        break;
+      }
+    }
   }
 
   /** A named place on the island, as a tile to stand on (see walks.ts). */
@@ -280,6 +318,7 @@ export class PondRoom {
     }
     const t = g.tick;
     if (this.walkDef.n !== 1) {
+      this.wander();
       g.step();
       this.arrive();
       return this.broadcast();
