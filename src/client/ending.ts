@@ -82,13 +82,15 @@ const ENDING_ORDER: typeof ENDING_OLD = {
 
 /** The three cuts, for the testing menu on the home screen. */
 export const ENDING_CUTS = [
-  { id: "order", name: "New order (faces, sky, count, ring)", cut: ENDING_ORDER },
   { id: "test", name: "Music test (old order, music held)", cut: ENDING_TEST },
+  { id: "order", name: "New order (faces, sky, count, ring; faces are placeholders)", cut: ENDING_ORDER },
   { id: "old", name: "As first built", cut: ENDING_OLD },
 ] as const;
 const CUT_KEY = "lanternfall.endingCut";
 
-/** Which ending plays: ?ending=old|test|order, else the one picked on the home screen, else the new order. */
+/** Which ending plays: ?ending=old|test|order, else the one picked on the home screen, else the music
+ *  test. The new order becomes the default once kindling-faces-1 and -2 are painted (two labelled
+ *  placeholder cards mid-ending read worse than the original). */
 export function endingCut(): (typeof ENDING_CUTS)[number]["id"] {
   let id: string | null = null;
   try {
@@ -96,7 +98,7 @@ export function endingCut(): (typeof ENDING_CUTS)[number]["id"] {
   } catch {
     /* private window */
   }
-  return ENDING_CUTS.find((c) => c.id === id)?.id ?? "order";
+  return ENDING_CUTS.find((c) => c.id === id)?.id ?? "test";
 }
 
 /** Seconds from the last bell. Change the timing here. */
