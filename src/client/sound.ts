@@ -25,6 +25,8 @@ export const SOUND = {
   /** The ending: wind under the descent, and how slowly the music lets go after the last bell. */
   windGain: 0.12,
   endMusicFade: 16,
+  /** The eye's drone, before it swells into the fix. */
+  eyeGain: 0.09,
 };
 
 /** D major pentatonic from D4 upward: D E F# A B, then the next octave. */
@@ -468,4 +470,94 @@ export function windOff(sec = 1) {
   windFade = sec;
   windStop?.();
   windStop = null;
+}
+
+let eyeStop: ((sec: number) => void) | null = null;
+
+/**
+ * Under the eye, while it searches: a low, beating drone (two sines a little out of tune), a thin
+ * high tone that wavers in and out, and a slow breath of noise. Swells toward the moment it fixes.
+ */
+export function eyeDrone(sec = 2.5) {
+  eyeDroneOff(0.05);
+  const s = out();
+  if (!s) return;
+  const { c, o } = s;
+  const t = c.currentTime;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(SOUND.eyeGain, t + sec);
+  // Swell a little into the fix (EYE_FIX is ~8.9 s in).
+  g.gain.setValueAtTime(SOUND.eyeGain, t + 6);
+  g.gain.exponentialRampToValueAtTime(SOUND.eyeGain * 1.6, t + 8.8);
+  g.connect(o);
+  const stops: AudioScheduledSourceNode[] = [];
+  const osc = (type: OscillatorType, f: number, gain: number, dest: AudioNode = g) => {
+    const x = c.createOscillator();
+    x.type = type;
+    x.frequency.value = f;
+    const xg = c.createGain();
+    xg.gain.value = gain;
+    x.connect(xg).connect(dest);
+    x.start(t);
+    stops.push(x);
+    return { x, xg };
+  };
+  // The drone: D1-ish and a hair sharp of it, so it beats slowly; a tritone above, very quiet.
+  osc("sine", 36.71, 0.9);
+  osc("sine", 37.3, 0.7);
+  osc("triangle", 51.91, 0.18);
+  // The thin high tone, drifting in pitch and coming and going.
+  const hi = osc("sine", 1174.7, 0.0);
+  const wob = c.createOscillator();
+  wob.frequency.value = 0.23;
+  const wobD = c.createGain();
+  wobD.gain.value = 14;
+  wob.connect(wobD).connect(hi.x.frequency);
+  wob.start(t);
+  stops.push(wob);
+  const trem = c.createOscillator();
+  trem.frequency.value = 0.31;
+  const tremD = c.createGain();
+  tremD.gain.value = 0.035;
+  trem.connect(tremD).connect(hi.xg.gain);
+  trem.start(t);
+  stops.push(trem);
+  // A slow breath of low noise.
+  const len = c.sampleRate * 3;
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  let b = 0;
+  for (let i = 0; i < len; i++) d[i] = b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+  const n = c.createBufferSource();
+  n.buffer = buf;
+  n.loop = true;
+  const bp = c.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = 160;
+  bp.Q.value = 1.5;
+  const ng = c.createGain();
+  ng.gain.value = 0.5;
+  const breath = c.createOscillator();
+  breath.frequency.value = 0.17;
+  const breathD = c.createGain();
+  breathD.gain.value = 0.45;
+  breath.connect(breathD).connect(ng.gain);
+  n.connect(bp).connect(ng).connect(g);
+  n.start(t);
+  breath.start(t);
+  stops.push(n, breath);
+  eyeStop = (fade) => {
+    const now = c.currentTime;
+    g.gain.cancelScheduledValues(now);
+    g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+    for (const x of stops) x.stop(now + fade + 0.05);
+  };
+}
+
+/** The eye's drone stops: a hard cut at the cut to black, or a short fade on skip. */
+export function eyeDroneOff(sec = 0.05) {
+  eyeStop?.(sec);
+  eyeStop = null;
 }

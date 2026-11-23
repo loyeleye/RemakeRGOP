@@ -174,8 +174,9 @@ export class KindlingEnding {
     const now = performance.now();
     if (this.skippable && this.skipAt !== null && now - this.skipAt > 800 && this.time(now) < ENDING.title) {
       this.skipOffset += ENDING.title - this.time(now);
-      for (const k of ["wind", "eyeStart", "eye"]) this.fired.add(k);
+      for (const k of ["wind", "eyeStart", "eye", "eyeCut"]) this.fired.add(k);
       sound.windOff(0.5);
+      sound.eyeDroneOff(0.5);
       sound.stopMusic(0.5);
       this.caption.hidden = true;
     }
@@ -234,7 +235,8 @@ export class KindlingEnding {
     const et = t - E.eye;
     op("eye", et >= 0 && et < EYE_CUT + 0.5 ? 1 : 0);
     if (et >= 0 && et < EYE_CUT + 0.5) this.drawEye(et);
-    this.once("eyeStart", t, E.eye, () => sound.windOff(3));
+    this.once("eyeStart", t, E.eye, () => (sound.windOff(3), sound.eyeDrone()));
+    this.once("eyeCut", t, E.eye + EYE_CUT, () => sound.eyeDroneOff());
     this.once("eye", t, E.eye + EYE_FIX, () => sound.eyeNote());
     op("out", t >= E.eye + EYE_CUT ? 1 : 0);
     op("title", ramp(t, E.title, E.title + 1.5));
@@ -265,6 +267,7 @@ export class KindlingEnding {
     cancelAnimationFrame(this.raf);
     removeEventListener("keydown", this.onKey);
     sound.windOff(0.5);
+    sound.eyeDroneOff(0.5);
     this.root.remove();
     document.body.classList.remove("in-ending");
   }
