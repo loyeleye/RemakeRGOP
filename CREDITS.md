@@ -36,3 +36,12 @@ returned 404. The homepage (https://www.mureka.ai) offers "full commercial right
 "enjoy commercial licensing", but it doesn't say what the free plan allows or whether rights depend on
 being subscribed when a track is made. Before the game is sold, the actual terms need reading, and it
 needs checking which plan these tracks were made on.
+
+## Voice
+
+Voiced lines are Gemini text-to-speech stock voices, picked by Ladi and rendered by the design thread.
+They are stand-ins until the game is distributed, and will be replaced or cleared before then.
+
+| File | Voice | Line |
+|---|---|---|
+| voice/hesta-now.mp3 | Gacrux (Gemini TTS), from `gameplay/voice/run1/final/hesta-now.wav`, loudness-matched and encoded to MP3 | Hesta's "Now." |

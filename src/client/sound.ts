@@ -265,7 +265,10 @@ export function pullHum(near: number | null) {
  * Voiced clips for a few lines, in place of the babble. Empty until the clips are picked: add
  * { who: "Lumi", match: /^Dad\./, src: "voice/lumi-dad.mp3" } and the line plays the clip.
  */
-export const VOICE: { who: string; match: RegExp; src: string }[] = [];
+export const VOICE: { who: string; match: RegExp; src: string }[] = [
+  // Hesta's "Now." in place of her two-note cue ("Now.", "Now, Rook.", "...left you one. Now."), not "Now pull."
+  { who: "Hesta", match: /(^|\. )Now[.,]/, src: "voice/hesta-now.mp3" },
+];
 
 /** A line appears: its clip if it has one, else Hesta's "Now" cue or the speaker's babble. */
 export function speak(who: string, text: string, now = false) {
