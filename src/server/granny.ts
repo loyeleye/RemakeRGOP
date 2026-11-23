@@ -5,12 +5,13 @@
 // and walks her last one in, so it always ends with her winning by one.
 // Numbers are in GRANNY (src/engine/granny.ts).
 
-import { Tile, pt, samePt, type Pt } from "../engine/board.js";
+import { Mover, Tile, pt, samePt, type Pt } from "../engine/board.js";
 import { bankDistances, botCommand, planSpot } from "../engine/bot.js";
 import { Game, Grip, Rng, TICK_MS, type Action, type Command, type Guild, type Wisp } from "../engine/game.js";
 import { GRANNY } from "../engine/granny.js";
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
+import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { realClock, type Clock } from "./room.js";
 
 // The player is always id 1: Rook or Lumi, as GRANNY.player says.
@@ -53,9 +54,15 @@ export class GrannyRoom {
   /** Who last held each wisp, so a bank can be put down to someone. */
   private lastHolder = new Map<number, number>();
   /** Barks waiting their turn, when the next may play, and when the last story line played. */
-  private queue: { at: number; line: StoryLine }[] = [];
-  private nextBarkAt = 0;
+  /** Lines waiting their turn: one plays at a time. `key` lines always wait; a quip that can't start soon is dropped. */
+  private queue: Pending[] = [];
+  /** The tick the line now playing is done, and whether it's a key line. */
+  private busyUntil = 0;
+  private busyKey = false;
   private lastKey = -99;
+  /** Groups (lines said together on one tick) that have started, so the rest of them always play; and dropped ones. */
+  private started = new Set<number>();
+  private dropped = new Set<number>();
   private holdTick = 0;
   /** Lumi's tide pull, seen in front of Hesta (tick), or -1. */
   private tideSeen = -1;
@@ -63,6 +70,8 @@ export class GrannyRoom {
   constructor(
     private clock: Clock = realClock,
     private seed: () => number = () => Math.floor(Math.random() * 2 ** 31),
+    /** Where each player stands when the game starts (from the free walk on the pond), by id. */
+    private starts?: ReadonlyMap<number, Pt>,
   ) {
     this.rng = new Rng(this.seed());
   }
@@ -118,6 +127,24 @@ export class GrannyRoom {
     ].sort((a, b) => a.id - b.id);
     this.game = new Game(shrine, roster, this.seed(), GRANNY.wisps, GRANNY.ticks);
     this.game.tidePuller = LUMI_ID;
+    // A banked wisp is gone a moment before it comes back, so every point takes a little longer.
+    this.game.respawnPause = GRANNY.respawnPause;
+    // Setting up the tide pull: their wisps come back on the pond.
+    this.game.onReturn = (w) => {
+      // Hers come back near her: she only walks, and the board is big.
+      if (w.guild === 1) {
+        const spot = this.nearHesta();
+        if (spot) moveWisp(w, spot);
+        return;
+      }
+      if (!this.staging()) return;
+      const spot = this.pondSpot();
+      if (spot) moveWisp(w, spot);
+    };
+    for (const [id, at] of this.starts ?? []) {
+      const p = this.game.players.find((q) => q.id === id);
+      if (p && this.game.board.passable(at, Mover.Walker)) p.pos = p.prev = at;
+    }
     // She walks: that's her whole handicap.
     this.player(HESTA_ID).run = false;
     this.dist = bankDistances(this.game.board);
@@ -130,8 +157,11 @@ export class GrannyRoom {
     this.lastHolder = new Map();
     this.tideSeen = -1;
     this.queue = [];
-    this.nextBarkAt = 0;
+    this.busyUntil = 0;
+    this.busyKey = false;
     this.lastKey = -99;
+    this.started = new Set();
+    this.dropped = new Set();
     this.phase = "countdown";
     this.countdown = GRANNY.bellTicks;
     this.say(LUMI, PLAYER_IS_ROOK ? "I'm captain. I picked Dad first." : "I'm captain.", { talk: true });
@@ -188,11 +218,11 @@ export class GrannyRoom {
     }
     // Lumi calls to Nell and Sefa now and then (never to the player): barks, no rule.
     const sefa = this.player(KID_IDS[1]);
-    if (g.tick - this.sefaLetGo === 1) this.say(LUMI, `It's fine. Again, ${SEFA}.`, { player: LUMI_ID }, true);
+    if (g.tick - this.sefaLetGo === 1) this.say(LUMI, `It's fine. Again, ${SEFA}.`, { player: LUMI_ID }, "chatter");
     else if (g.tick >= GRANNY.firstPushAfter && g.tick - this.lastCall >= GRANNY.callEvery) {
       this.lastCall = g.tick;
-      if (sefa.beam !== null && this.callTurn++ % 2 === 0) this.say(LUMI, `${SEFA}, hold it. Hold it. ...${SEFA}.`, { player: LUMI_ID }, true);
-      else this.say(LUMI, `${NELL}, go left. Your other left.`, { player: LUMI_ID }, true);
+      if (sefa.beam !== null && this.callTurn++ % 2 === 0) this.say(LUMI, `${SEFA}, hold it. Hold it. ...${SEFA}.`, { player: LUMI_ID }, "chatter");
+      else this.say(LUMI, `${NELL}, go left. Your other left.`, { player: LUMI_ID }, "chatter");
     }
     for (const p of g.players) if (p.beam !== null) this.lastHolder.set(p.beam, p.id);
     if (this.staging() && LUMI_ID !== YOU) this.stageTide();
@@ -213,6 +243,15 @@ export class GrannyRoom {
     if (g.inReach({ ...lumi, mode: "pull" }, w)) return g.command(LUMI_ID, { action: { kind: "staff", wisp: w.id }, toggleMode: fix });
     const spot = planSpot(g, LUMI_ID, lumi.pos, w, 0, true);
     if (spot) g.command(LUMI_ID, { action: { kind: "walk", to: spot }, toggleMode: fix });
+  }
+
+  /** A free spawn tile within `hestaNear` of Hesta, for one of her wisps coming back. */
+  private nearHesta(): Pt | null {
+    const g = this.game, me = this.player(HESTA_ID);
+    const spots = g.shrine.spawnField.filter(
+      (p) => Math.max(Math.abs(p.x - me.pos.x), Math.abs(p.y - me.pos.y)) <= GRANNY.hesta.near && !g.wisps.some((w) => samePt(w.pos, p)) && !g.players.some((q) => samePt(q.pos, p)),
+    );
+    return spots.length ? spots[Math.floor(this.rng.next() * spots.length)]! : null;
   }
 
   /** A free pond tile for a wisp coming back while the tide pull is being set up. */
@@ -239,7 +278,9 @@ export class GrannyRoom {
     const fix = (mode: "pull" | "push") => me.mode !== mode || undefined;
 
     // 1. Late push: only once their wisp is about to bank, and only as give and take allows.
-    if (!matchPoint && lead < H.calmLead && g.tick >= GRANNY.firstPushAfter) {
+    // Her scripted beats wait for any key exchange to finish, so none is cut off.
+    const quiet = !this.keyTalking();
+    if (!matchPoint && lead < H.calmLead && g.tick >= GRANNY.firstPushAfter && (this.pushes > 0 || quiet)) {
       const threats = g.wisps
         .filter((w) => w.guild === 0 && !g.rooted.has(w.id) && this.stepsOut(w) > 0 && this.stepsOut(w) <= H.latePushAt && g.inReach({ ...me, mode: "push" }, w))
         .sort((a, b) => this.stepsOut(a) - this.stepsOut(b));
@@ -253,10 +294,10 @@ export class GrannyRoom {
           this.pushTicks.push(g.tick);
           this.lastPushedBy = threat.holder;
           if (this.pushes === 1) {
-            this.say(LUMI, "That's not allowed!", { player: LUMI_ID });
-            this.say(HESTA, "Show me where it says.", { player: HESTA_ID });
-          } else if (PLAYER_IS_ROOK && threat.holder === YOU && this.hint("guard")) {
-            this.say(HESTA, "I only have to watch one, Rook. Lucky you only brought one.", { player: HESTA_ID });
+            this.say(LUMI, "That's not allowed!", { player: LUMI_ID }, "key");
+            this.say(HESTA, "Show me where it says.", { player: HESTA_ID }, "key");
+          } else if (PLAYER_IS_ROOK && threat.holder === YOU && quiet && this.hint("guard")) {
+            this.say(HESTA, "I only have to watch one, Rook. Lucky you only brought one.", { player: HESTA_ID }, "key");
           } else if (this.rng.next() < 0.35) this.say(HESTA, "Nearly.", { player: HESTA_ID });
         }
         return cmd({ action: { kind: "staff", wisp: threat.id }, toggleMode: fix("push") });
@@ -275,7 +316,7 @@ export class GrannyRoom {
     if (hers >= GRANNY.target - 1) {
       const mine = g.wisps.filter((w) => w.guild === 1).sort((a, b) => this.stepsOut(a) - this.stepsOut(b));
       // ...and not before the exchange at the hold has had its moment.
-      const talking = this.holdWisp !== null && g.tick < this.holdTick + GRANNY.holdTalk;
+      const talking = this.holdWisp !== null && this.talking();
       for (const w of this.holdWisp === null || talking ? mine : mine.slice(1)) g.noBank.add(w.id);
     }
     // Give and take: leading by enough, she brings hers close but not in, and lets them catch up.
@@ -290,13 +331,13 @@ export class GrannyRoom {
     if (!release && this.parked === null && near.length) {
       this.parked = near[0]!.id;
       this.parkedAt = g.tick;
-      if (PLAYER_IS_ROOK && this.hint("parked")) this.say(HESTA, "Don't mind that one, Rook. It only goes in when you make me nervous.", { player: HESTA_ID });
+      if (PLAYER_IS_ROOK && quiet && this.hint("parked")) this.say(HESTA, "Don't mind that one, Rook. It only goes in when you make me nervous.", { player: HESTA_ID }, "key");
     }
     // The player working a wisp out of her reach, on her far side.
     const you = this.player(YOU);
     if (PLAYER_IS_ROOK && you.beam !== null && g.tick >= GRANNY.firstPushAfter) {
       const w = g.wisps[you.beam];
-      if (w && w.guild === 0 && !g.inReach({ ...me, mode: "push" }, w) && this.hint("far")) this.say(HESTA, "All the way over there, Rook? At my age?", { player: HESTA_ID });
+      if (w && w.guild === 0 && quiet && !g.inReach({ ...me, mode: "push" }, w) && this.hint("far")) this.say(HESTA, "All the way over there, Rook? At my age?", { player: HESTA_ID }, "key");
     }
     // Anything near the rim stays put while she waits; otherwise only the parked one does.
     const free = live.filter((w) => w.id !== this.parked && !(waitForThem && this.stepsOut(w) <= H.parkAt) && !(holdBack && this.stepsOut(w) <= H.parkAt + 1));
@@ -341,8 +382,11 @@ export class GrannyRoom {
         {
           this.holdWisp = near.id;
           this.holdTick = g.tick;
-          this.say(NELL, "No fair!", { player: KID_IDS[0] });
-          this.say(SEFA, "That's cheating!", { player: KID_IDS[1] });
+          // Everything still waiting goes, so the hold plays clean.
+          this.queue = [];
+          this.busyUntil = Math.min(this.busyUntil, g.tick + 2);
+          this.say(NELL, "No fair!", { player: KID_IDS[0] }, "key");
+          this.say(SEFA, "That's cheating!", { player: KID_IDS[1] }, "key");
           this.say(LUMI, "You can't do that!", { talk: true });
           this.say(HESTA, "You did it on the pond. Yours is water. Mine's rock.", { talk: true });
           this.say(LUMI, "Dad hasn't got one.", { talk: true });
@@ -353,29 +397,26 @@ export class GrannyRoom {
     // Lumi's tide pull, in front of everyone: Hesta notices.
     if (this.tideSeen < 0 && g.drifting > 0) {
       this.tideSeen = g.tick;
-      this.say(SEFA, "How did you do that?", { player: KID_IDS[1] });
-      this.say(LUMI, "I pulled.", { player: LUMI_ID });
-      this.say(HESTA, "Did you now.", { player: HESTA_ID });
+      this.say(SEFA, "How did you do that?", { player: KID_IDS[1] }, "key");
+      this.say(LUMI, "I pulled.", { player: LUMI_ID }, "key");
+      this.say(HESTA, "Did you now.", { player: HESTA_ID }, "key");
     }
-    // Setting it up: their wisps come back on the pond.
-    if (this.staging())
-      for (const b of g.banks) {
-        if (b.guild !== 0) continue;
-        const spot = this.pondSpot();
-        if (spot) moveWisp(g.wisps[b.wisp]!, spot);
-      }
     // The children guess her age in the opening, before the first push.
-    const age: [number, string, string, number][] = [
-      [4, SEFA, "Are you a hundred?", KID_IDS[1]],
-      [8, HESTA, "Higher.", HESTA_ID],
-      [12, NELL, "A hundred and ten?", KID_IDS[0]],
-      [16, HESTA, "Higher.", HESTA_ID],
-      [20, LUMI, "She's distracting you. Eyes on the wisp.", LUMI_ID],
-      [24, HESTA, "Is it working?", HESTA_ID],
-      [150, SEFA, "She's not even running!", KID_IDS[1]],
-      [154, HESTA, "Why would I run? You're all coming to me.", HESTA_ID],
+    // One exchange each, line after line: nothing else scripted starts until it's done.
+    const age: [string, string, number][] = [
+      [SEFA, "Are you a hundred?", KID_IDS[1]],
+      [HESTA, "Higher.", HESTA_ID],
+      [NELL, "A hundred and ten?", KID_IDS[0]],
+      [HESTA, "Higher.", HESTA_ID],
+      [LUMI, "She's distracting you. Eyes on the wisp.", LUMI_ID],
+      [HESTA, "Is it working?", HESTA_ID],
     ];
-    for (const [t, who, text, id] of age) if (g.tick === t) this.say(who, text, { player: id });
+    if (g.tick === GRANNY.ageAt) for (const [who, text, id] of age) this.say(who, text, { player: id }, "key");
+    if (g.tick >= GRANNY.runningAt && !this.said.has("running") && !this.keyTalking()) {
+      this.said.add("running");
+      this.say(SEFA, "She's not even running!", { player: KID_IDS[1] }, "key");
+      this.say(HESTA, "Why would I run? You're all coming to me.", { player: HESTA_ID }, "key");
+    }
     // Their banks: drawn pushes (bait), and her one line of real praise.
     // Nell and Sefa call how many they still need.
     if (g.banks.some((b) => b.guild === 0)) {
@@ -393,8 +434,8 @@ export class GrannyRoom {
       }
       if (PLAYER_IS_ROOK && this.lastHolder.get(b.wisp) === YOU && !this.said.has("my dad")) {
         this.said.add("my dad");
-        this.say(LUMI, "That's my dad.", { player: LUMI_ID });
-        this.say(HESTA, "So I hear.", { player: HESTA_ID });
+        this.say(LUMI, "That's my dad.", { player: LUMI_ID }, "key");
+        this.say(HESTA, "So I hear.", { player: HESTA_ID }, "key");
       } else if (this.pushes > 0 && !this.said.has("praise")) {
         this.said.add("praise");
         this.say(HESTA, "Good. Do that again and I'll have to try.", { player: HESTA_ID });
@@ -420,8 +461,7 @@ export class GrannyRoom {
   }
 
   private finish() {
-    // Anything still waiting its turn plays now, before the end.
-    for (const q of this.queue) this.lines.push(q.line);
+    // Nothing waiting plays after the end: the closing lines are the end's own.
     this.queue = [];
     this.phase = "results";
     const g = this.game;
@@ -447,34 +487,51 @@ export class GrannyRoom {
   // ---------------------------------------------------------------- wire
 
   /**
-   * A line. Dialog lines queue in the box; barks over a speaker are spaced out so none wipes the
-   * one before. Chatter (Lumi bossing the children) is dropped when it would crowd a story line.
+   * A line. One plays at a time, paced by how long it takes to say (its voice clip, or reading
+   * time), so nothing talks over anything else. Lines said together on one tick are an exchange:
+   * once its first line starts, the rest follow. `kind`:
+   * - "key": always plays, however long it waits (the dialog, and the scripted exchanges).
+   * - "quip": dropped if it can't start within `quipWait` ticks, so nothing plays late.
+   * - "chatter": Lumi's calls to the others: only into silence, and never near a key line.
    */
-  private say(who: string, text: string, how: Omit<StoryLine, "who" | "text"> = {}, chatter = false) {
+  private say(who: string, text: string, how: Omit<StoryLine, "who" | "text"> = {}, kind: "key" | "quip" | "chatter" = how.talk ? "key" : "quip") {
     const line = { who, text, ...how };
-    const now = this.game?.tick ?? 0;
     if (this.phase !== "playing") return void this.lines.push(line);
-    // Dialog waits for any barks queued before it, so the exchange plays in order.
-    if (how.talk) {
-      const at = Math.max(now, this.nextBarkAt);
-      if (at <= now) this.lines.push(line);
-      else this.queue.push({ at, line });
-      return;
-    }
-    const at = Math.max(now, this.nextBarkAt);
-    if (chatter && (at > now || now - this.lastKey < GRANNY.quietAround)) return;
-    this.nextBarkAt = at + GRANNY.barkGap;
-    if (!chatter) this.lastKey = at;
-    if (at <= now) this.lines.push(line);
-    else this.queue.push({ at, line });
+    const now = this.game.tick;
+    if (kind === "chatter" && (this.talking() || now - this.lastKey < GRANNY.quietAround)) return;
+    const last = this.queue[this.queue.length - 1];
+    const group = last && last.trigger === now ? last.group : ++this.groupN;
+    this.queue.push({ line, trigger: now, key: kind === "key", group });
+    this.due();
+  }
+  private groupN = 0;
+
+  /** Is a line playing, or waiting to? */
+  private talking() {
+    return this.queue.length > 0 || this.game.tick < this.busyUntil;
   }
 
-  /** Barks whose turn has come. */
+  /** Is a key line playing or waiting? Her scripted beats hold off until it's done. */
+  private keyTalking() {
+    return this.queue.some((q) => q.key) || (this.busyKey && this.game.tick < this.busyUntil);
+  }
+
+  /** Start the next line, if the last is done. */
   private due() {
     const now = this.game.tick;
-    const ready = this.queue.filter((q) => q.at <= now);
-    this.queue = this.queue.filter((q) => q.at > now);
-    for (const q of ready) this.lines.push(q.line);
+    while (this.queue.length && now >= this.busyUntil) {
+      const q = this.queue.shift()!;
+      const late = !q.key && !this.started.has(q.group) && now - q.trigger > GRANNY.quipWait;
+      if (late || this.dropped.has(q.group)) {
+        this.dropped.add(q.group);
+        continue;
+      }
+      this.started.add(q.group);
+      this.lines.push(q.line);
+      this.busyUntil = now + lineTicks(q.line);
+      this.busyKey = q.key;
+      if (q.key) this.lastKey = now;
+    }
   }
 
   private flush() {
@@ -537,6 +594,16 @@ export class GrannyRoom {
   get state() {
     return { phase: this.phase, game: this.game, end: this.end, holdWisp: this.holdWisp, parked: this.parked, pushes: this.pushes, baits: this.baits, tideSeen: this.tideSeen };
   }
+}
+
+type Pending = { line: StoryLine; trigger: number; key: boolean; group: number };
+
+/** Ticks a line takes: its voice clip if it has one, or the time the box or bubble shows it, and a breath. */
+export function lineTicks(l: StoryLine) {
+  const voice = VOICE_SECONDS[`${l.who}|${l.text}`] ?? 0;
+  const n = l.text.length;
+  const read = l.talk ? n / 50 + Math.max(1.8, n * 0.045) : Math.max(2, n * 0.06);
+  return Math.ceil((Math.max(voice + 0.4, read) * 1000) / TICK_MS);
 }
 
 function moveWisp(w: Wisp, at: Pt) {

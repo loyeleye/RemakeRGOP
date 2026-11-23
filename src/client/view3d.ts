@@ -39,6 +39,8 @@ export interface DrawState {
   watchers?: { cast: string; x: number; y: number }[];
   /** Story run 1 only: a flight of steps leaving the island at this spot (tile coords), heading north. For looks: nobody walks them. */
   steps?: { x: number; y: number };
+  /** The free walk on the pond: Lumi's lantern, left by the water (tile coords). Something to find and tap. */
+  lantern?: { x: number; y: number };
 }
 
 // ------------------------------------------------------------------ camera
@@ -148,9 +150,9 @@ export class Camera {
 
 type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
-const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell"] as const;
+const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell", "sefa"] as const;
 /** Each character's height against Rook's (models come in at one height). Lumi is nine. */
-export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, hesta: 0.95, wick: 1.05, moth: 0.95 };
+export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};
@@ -752,6 +754,60 @@ function makeStones(): THREE.Group {
 }
 
 /** A solid stone stair about an arch wide, climbing north (toward -z) from where it's placed. */
+/** A block-out cottage, w by d tiles: plaster walls, a pitched thatch roof, a door and a lit window on the east side (+x). */
+function makeHouse(w: number, d: number): THREE.Group {
+  const g = new THREE.Group();
+  const wallH = 1.9, roofH = 1.4;
+  const plaster = new THREE.MeshStandardMaterial({ color: "#e6d6b8", roughness: 0.9 });
+  const thatch = new THREE.MeshStandardMaterial({ color: "#9a7444", roughness: 1 });
+  const wood = new THREE.MeshStandardMaterial({ color: "#5a3a22", roughness: 0.8 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w - 0.2, wallH, d - 0.2), plaster);
+  body.position.y = wallH / 2;
+  // The roof: a ridge running north-south, overhanging a little.
+  const roofShape = new THREE.Shape();
+  roofShape.moveTo(-w / 2 - 0.25, 0);
+  roofShape.lineTo(w / 2 + 0.25, 0);
+  roofShape.lineTo(0, roofH);
+  roofShape.closePath();
+  const roofGeo = new THREE.ExtrudeGeometry(roofShape, { depth: d + 0.3, bevelEnabled: false });
+  roofGeo.translate(0, 0, -(d + 0.3) / 2);
+  const roof = new THREE.Mesh(roofGeo, thatch);
+  roof.position.y = wallH;
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.2, 0.7), wood);
+  door.position.set(w / 2 - 0.08, 0.6, 0.5);
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.45, 0.55), new THREE.MeshBasicMaterial({ color: "#ffd27a" }));
+  win.position.set(w / 2 - 0.08, 1.15, -0.8);
+  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.1, 0.4), new THREE.MeshStandardMaterial({ color: "#7d6a5a", roughness: 0.9 }));
+  chimney.position.set(-w / 4, wallH + roofH * 0.6, -d / 4);
+  for (const m of [body, roof, door, chimney]) (m.castShadow = true), (m.receiveShadow = true);
+  g.add(body, roof, door, win, chimney);
+  return g;
+}
+
+/** A small hand lantern standing on the ground: a dark frame round a warm glow, with a ring handle. */
+function makeLantern(): THREE.Group {
+  const g = new THREE.Group();
+  const frame = new THREE.MeshStandardMaterial({ color: "#3b2a1c", roughness: 0.7 });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.06, 8), frame);
+  base.position.y = 0.03;
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.12, 8), frame);
+  cap.position.y = 0.42;
+  const glowMat = new THREE.MeshBasicMaterial({ color: "#ffc76a", transparent: true, opacity: 0.85 });
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.3, 8), glowMat);
+  glass.position.y = 0.21;
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.015, 6, 16), frame);
+  handle.position.y = 0.53;
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ color: "#ffb24a", transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.scale.setScalar(1.1);
+  halo.position.y = 0.22;
+  const light = new THREE.PointLight("#ffb24a", 1.2, 3.5, 2);
+  light.position.y = 0.3;
+  for (const m of [base, cap, glass, handle]) m.castShadow = true;
+  g.add(base, cap, glass, handle, halo, light);
+  g.userData.glow = glowMat;
+  return g;
+}
+
 function makeSteps(): THREE.Group {
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color: "#c9bda8", roughness: 0.85 });
@@ -851,6 +907,8 @@ export class World {
   private watchers = new Map<string, THREE.Object3D>();
   /** Story run 1's steps off the island (see DrawState.steps). */
   private steps: THREE.Group | null = null;
+  /** The pond's lantern (see DrawState.lantern). */
+  private lantern: THREE.Group | null = null;
   private wisps = new Map<number, WispRig>();
   private brazierLight = new THREE.PointLight("#ff9a4a", 60, 30, 1.6);
   private rim: THREE.LineSegments | null = null;
@@ -1200,6 +1258,14 @@ export class World {
       this.addProp(th.wall, p.x, p.z, 4.2, 1.3, k);
     }
 
+    // Rook's house (story islands): a placeholder block-out until the art thread designs it.
+    if (shrine.house) {
+      const hs = shrine.house;
+      const house = makeHouse(hs.w, hs.h);
+      house.position.set(this.worldX(b, hs.x + (hs.w - 1) / 2), 0, this.worldZ(b, hs.y + (hs.h - 1) / 2));
+      this.shrineGroup.add(house);
+    }
+
     // Tiles. Walls and boulders are props; pools and ice are painted as soft shapes over the
     // floor from a blurred mask of their tiles, so they read as natural pools, not squares.
     const waterU = { value: 0 };
@@ -1213,6 +1279,8 @@ export class World {
         const wz = this.worldZ(b, y);
         seed++;
         if (t === Tile.Wall && ringSet.has(`${x - b.center.x},${y - b.center.y}`)) continue;
+        const hs = shrine.house;
+        if (hs && x >= hs.x && x < hs.x + hs.w && y >= hs.y && y < hs.y + hs.h) continue;
         if (t === Tile.Wall) this.addProp(th.wall, wx, wz, 2.8, 2.2, seed);
         else if (t === Tile.Rock) {
           // Deflector stones inside the archways can have their own look.
@@ -1817,6 +1885,20 @@ export class World {
     if (this.steps) {
       this.steps.visible = !!st.steps;
       if (st.steps) this.steps.position.set(this.worldX(b, st.steps.x), 0, this.worldZ(b, st.steps.y));
+    }
+
+    // The free walk: Lumi's lantern by the water, glowing a little.
+    if (st.lantern && !this.lantern) {
+      this.lantern = makeLantern();
+      this.scene.add(this.lantern);
+    }
+    if (this.lantern) {
+      this.lantern.visible = !!st.lantern;
+      if (st.lantern) {
+        this.lantern.position.set(this.worldX(b, st.lantern.x), 0, this.worldZ(b, st.lantern.y));
+        const glow = this.lantern.userData.glow as THREE.MeshBasicMaterial;
+        glow.opacity = 0.75 + 0.2 * Math.sin(st.now / 420);
+      }
     }
 
     // Lamplighters.

@@ -8,6 +8,7 @@ import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlaye
 import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
 import { GrannyRoom } from "../server/granny.js";
+import { PondRoom } from "../server/pond.js";
 import { StoryRoom } from "../server/story.js";
 import { ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import * as sound from "./sound.js";
@@ -113,13 +114,13 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | null = null;
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | "pond" = 1) {
   practice = true;
   callMode = false;
-  const r = run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "pond" ? new PondRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
@@ -342,6 +343,34 @@ function leave() {
 
 // ------------------------------------------------------------------ screens
 
+/** Run 2 won: Lumi's last line plays over the pond, then a short fade, and Rook is free to walk it. */
+let toPond: unknown = null;
+function lessonToPond(): boolean {
+  const end = room?.story?.end;
+  if (!end || !(storyRoom instanceof LessonRoom) || end.lines[0]?.text !== "So I'm coming tomorrow.") return false;
+  if (toPond === end) return true;
+  toPond = end;
+  clearCaptions();
+  talk(end.lines[0]!);
+  const fade = document.createElement("div");
+  fade.className = "fade-black";
+  document.body.appendChild(fade);
+  requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => fade.classList.add("on"), 2600)));
+  setTimeout(() => {
+    const l = link;
+    link = null;
+    l?.close();
+    clearCaptions();
+    stopStorySound();
+    connectStory(playerName(), "pond");
+    setTimeout(() => {
+      fade.classList.remove("on");
+      setTimeout(() => fade.remove(), 900);
+    }, 300);
+  }, 3600);
+  return true;
+}
+
 function render() {
   const phase = room?.phase;
   if (ending && phase !== "results") {
@@ -353,6 +382,12 @@ function render() {
   $("play").hidden = !room || phase === "lobby";
   $("results").hidden = phase !== "results";
   if (!room) return;
+  // Run 2 won goes straight on to the free walk, with no results panel in between.
+  if (phase === "results" && lessonToPond()) {
+    $("results").hidden = true;
+    $("play").hidden = false;
+    return renderHud();
+  }
   if (phase === "lobby") renderLobby();
   if (phase === "results") renderResults();
   if (ending) $("results").hidden = true;
@@ -574,6 +609,12 @@ function renderHud() {
   if (story) {
     const rv = story.rival;
     $("score-1").hidden = !rv;
+    // The free walk on the pond: no score and no clock, just the place's name.
+    if (story.pond) {
+      $("score-0").hidden = true;
+      $("ticks").textContent = story.title;
+      return renderPad(s);
+    }
     if (rv) $("score-1").textContent = `${cam.compact ? rv.short : rv.name} ${rv.score}`;
     if (room.phase === "countdown") {
       $("ticks").textContent = `🔔 ${story.title}`;
@@ -680,6 +721,18 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
     if (d <= radius && (!best || score < best.d)) best = { id: w.id, d: score };
   }
   if (best) return { action: { kind: "staff", wisp: best.id }, wisp: best.id };
+  // The free walk on the pond: people (and Lumi's lantern) can be tapped. A tap on one sends their tile.
+  const pond = room.story?.pond;
+  if (pond) {
+    let hit: { at: Pt; d: number } | null = null;
+    const things = [...snap.players.filter((q) => q.id !== me).map((q) => ({ at: { x: q.x, y: q.y }, h: 0.9 })), { at: pond.lantern, h: 0.3 }];
+    for (const th of things) {
+      const c = cam.toScreen(th.at.x + 0.5, th.at.y + 0.5, th.h);
+      const d = Math.hypot(c.x - sx, c.y - sy);
+      if (d <= Math.max(bigTapRadius(), cam.scale * 0.9) && (!hit || d < hit.d)) hit = { at: th.at, d };
+    }
+    if (hit) return { action: { kind: "walk", to: hit.at }, wisp: null };
+  }
   const tile: Pt = { x: Math.floor(t.x), y: Math.floor(t.y) };
   const board = shrineFor(room.shrine, room.teams).board;
   if (!board.inside(tile)) return null;
@@ -965,6 +1018,7 @@ $("practice").onclick = () => connectPractice(playerName());
 $("story").onclick = () => connectStory(playerName());
 $("story2").onclick = () => connectStory(playerName(), 2);
 $("story3").onclick = () => connectStory(playerName(), 3);
+$("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Run 2: call Rook to a spot. The next tap on the ground is the call.
 let callMode = false;
 function setCallMode(on: boolean) {
@@ -1116,7 +1170,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board) };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.

@@ -160,7 +160,7 @@ export interface GameSnapshot {
   moss?: number[];
   /** One score per team in the round. */
   scores: number[];
-  wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null; rooted?: number }[];
+  wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null; rooted?: number; away?: boolean }[];
   players: {
     id: number;
     guild: Guild;
@@ -291,6 +291,12 @@ export class Game {
   rooted = new Map<number, number>();
   /** Story: wisps that sit on the rim without banking for now (Hesta waiting on her match point). */
   noBank = new Set<number>();
+  /** Ticks a banked wisp stays gone before it comes back (0: straight back, as in a match). */
+  respawnPause = 0;
+  /** Banked wisps that are gone for now, and the tick each comes back. They wait, unseen, on the rim. */
+  away = new Map<number, number>();
+  /** Story: where a wisp comes back, if not the usual spawn (called after it's placed). */
+  onReturn: ((w: Wisp) => void) | null = null;
   /**
    * Story runs: the player whose pull is a tide pull (Lumi). When she takes hold of a wisp on
    * water, every loose wisp on that pool drifts a tile a tick toward her for as long as she holds.
@@ -505,6 +511,16 @@ export class Game {
       w.target = null;
       return;
     }
+    const back = this.away.get(w.id);
+    if (back !== undefined) {
+      w.target = null;
+      if (this.tick < back) return;
+      this.away.delete(w.id);
+      this.placeWisp(w, new Set(this.wisps.filter((o) => o !== w).map((o) => key(o.pos))));
+      w.prev = w.pos;
+      this.onReturn?.(w);
+      return;
+    }
     if (this.board.inBankZone(w.pos)) {
       w.target = null;
       if (this.noBank.has(w.id)) {
@@ -517,8 +533,14 @@ export class Game {
       if (w.rimTicks >= BANK_TICKS) {
         this.scores[w.guild]!++;
         this.banks.push({ tick: this.tick, wisp: w.id, guild: w.guild });
+        if (this.respawnPause > 0) {
+          w.rimTicks = 0;
+          this.away.set(w.id, this.tick + this.respawnPause);
+          return;
+        }
         this.placeWisp(w, new Set(this.wisps.filter((o) => o !== w).map((o) => key(o.pos))));
         w.prev = w.pos;
+        this.onReturn?.(w);
       }
       return;
     }
@@ -874,7 +896,7 @@ export class Game {
       // Round the midpoint toward the wisp, so it never aims past where they meet.
       const mid = pt(base.x + Math.trunc(mx - base.x), base.y + Math.trunc(my - base.y));
       const off = samePt(mid, base) ? pt(0, 0) : flingOffset(mid, base, "pull");
-      w.target = (off.x === 0 && off.y === 0) || this.rooted.has(w.id) ? null : pt(base.x + off.x, base.y + off.y);
+      w.target = (off.x === 0 && off.y === 0) || this.rooted.has(w.id) || this.away.has(w.id) ? null : pt(base.x + off.x, base.y + off.y);
       return;
     }
     if (!p.slipped && this.loses(p, w)) p.slipped = true;
@@ -883,7 +905,7 @@ export class Game {
     const off = flingOffset(p.pos, w.pos, p.mode);
     // Already right in front of the puller: the touch holds it but it doesn't move. A jammed
     // wisp doesn't move for one staff either; a second puller joining moves it (above).
-    w.target = (off.x === 0 && off.y === 0) || (this.heavy.has(w.id) && p.mode === "pull") || this.rooted.has(w.id) ? null : pt(w.pos.x + off.x, w.pos.y + off.y);
+    w.target = (off.x === 0 && off.y === 0) || (this.heavy.has(w.id) && p.mode === "pull") || this.rooted.has(w.id) || this.away.has(w.id) ? null : pt(w.pos.x + off.x, w.pos.y + off.y);
     w.holder = p.id;
     w.grip = Grip.Held;
     w.touched = true;
@@ -917,6 +939,7 @@ export class Game {
         rim: w.rimTicks,
         holder: w.holder,
         ...(this.rooted.has(w.id) ? { rooted: this.rooted.get(w.id)! } : {}),
+        ...(this.away.has(w.id) ? { away: true } : {}),
       })),
       players: this.players.map((p) => ({
         id: p.id,

@@ -7,12 +7,14 @@ import { BOT_CHILD, type BotStyle } from "./bot.js";
 export const GRANNY = {
   run: "Granny's game",
   title: "Granny's game",
-  shrine: "home-pond",
+  shrine: "home-pond-big",
   bellTicks: 7,
   /** First to this many. Hesta always wins it by one. */
   target: 10,
   /** Long enough never to run out in practice. */
   ticks: 900,
+  /** Ticks a banked wisp is gone before it comes back (0: straight back). */
+  respawnPause: 8,
   /** Wisps in play: the children's team, and Hesta's. Each comes back when banked. */
   wisps: [2, 2] as [number, number],
   /** Who the player is: Rook (Lumi is a bot and calls to him) or Lumi (Rook is a bot). Ladi is still choosing. */
@@ -39,19 +41,24 @@ export const GRANNY = {
     /** ...until a children's wisp gets this close to scoring, or this many ticks pass. */
     releaseWhen: 2,
     parkMax: 45,
+    /** Her wisps come back within this many tiles of her (0: anywhere, like theirs). */
+    near: 6,
   },
   /** Match point: on this many, the children's next wisp to come within `holdAt` steps of the rim is held fast. */
   holdAt: 1,
-  /** Ticks after the hold before her last wisp may go in, so the exchange plays first. */
-  holdTalk: 14,
   /** Lumi's tide pull, seen by Hesta: if her bot hasn't done one by this combined score (about halfway), it's set up. */
   tideBy: 10,
-  /** Ticks between Lumi's calls, barks only. */
-  callEvery: 60,
-  /** Ticks between barks, so none wipes the one before; and Lumi's chatter keeps this far from any story line. */
-  barkGap: 3,
+  /** Ticks between Lumi's calls, barks only: once every 30 seconds (Ladi). */
+  callEvery: 50,
+  /** A quip (a bark that isn't a key line) that can't start within this many ticks of what set it off is dropped. */
+  quipWait: 4,
+  /** Lumi's chatter keeps this many ticks clear of any key line. */
   quietAround: 8,
-  /** No late pushes before the age guess is done (ticks into play). */
+  /** The children guess her age this many ticks into play (one exchange, line after line). */
+  ageAt: 4,
+  /** "She's not even running!", once there's a quiet moment after this tick. */
+  runningAt: 150,
+  /** No late pushes before this tick, nor while a key exchange (the age guess) is still playing. */
   firstPushAfter: 26,
   /** The quiet "You saw what I was doing" at the end: this many late pushes drawn while another of their wisps banked (within `baitWindow` ticks). */
   baited: 2,

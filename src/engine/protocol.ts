@@ -87,6 +87,8 @@ export interface StoryView {
   called?: { x: number; y: number } | null;
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[] };
+  /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */
+  pond?: { lantern: { x: number; y: number } };
 }
 
 export type ClientMsg =

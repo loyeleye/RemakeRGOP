@@ -117,6 +117,9 @@ export const THEMES: Record<string, Theme> = {
   get "home-pond"() {
     return THEMES["tidepool-steps"]!;
   },
+  get "home-pond-big"() {
+    return THEMES["tidepool-steps"]!;
+  },
   "ember-quarry": {
     name: "Volcano",
     floor: "volcano",

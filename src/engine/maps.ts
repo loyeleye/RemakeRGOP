@@ -338,6 +338,8 @@ export interface Shrine {
   name: string;
   blurb: string;
   board: Board;
+  /** Story: a house on the island (Rook's), drawn as a building over its tiles, which nobody walks through. Door on the east side. */
+  house?: { x: number; y: number; w: number; h: number };
   /** Teams this layout seats: 2, or up to 4 on a four-way island. */
   teams: number;
   /** Per team: the drawn spawn marks (kept for the map's look and as a fallback). */
@@ -799,6 +801,8 @@ const TILE_OF: Record<string, Tile> = {
   " ": Tile.Edge,
   "*": Tile.Ice,
   "#": Tile.Wall,
+  // A house (story islands): solid like a wall, drawn as a building.
+  H: Tile.Wall,
   o: Tile.Rock,
   "~": Tile.Water,
   B: Tile.Brazier,
@@ -848,6 +852,7 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   const tiles: Tile[] = [];
   const wispSpawns: Pt[][] = Array.from({ length: teams }, () => []);
   const starts: Pt[][] = Array.from({ length: teams }, () => []);
+  const house: Pt[] = [];
   rows.forEach((row, y) => {
     if (row.length !== width) throw new Error(`${def.id}: row ${y} is ${row.length} wide, expected ${width}`);
     [...row].forEach((ch, x) => {
@@ -855,6 +860,7 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
       const sp = SPAWN_TEAM[ch], st = START_TEAM[ch];
       if (sp !== undefined && sp < teams) wispSpawns[sp]!.push(pt(x, y));
       if (st !== undefined && st < teams) starts[st]!.push(pt(x, y));
+      if (ch === "H") house.push(pt(x, y));
     });
   });
   // The brazier is always a 3x3 block at the centre, whatever the ASCII shows.
@@ -867,7 +873,9 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
     const d = board.bankFlow();
     for (let i = 0; i < tiles.length; i++) if (tiles[i] === Tile.Floor && d[i]! >= 2 * every && d[i]! % every === 0) tiles[i] = Tile.Glyph;
   }
-  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0, poolField: def.poolSpawns ? spawnField(board, def.poolSpawns.band, Tile.Water) : [], poolShare: def.poolSpawns?.share ?? 0 };
+  const hx = house.map((p) => p.x), hy = house.map((p) => p.y);
+  const houseBox = house.length ? { x: Math.min(...hx), y: Math.min(...hy), w: Math.max(...hx) - Math.min(...hx) + 1, h: Math.max(...hy) - Math.min(...hy) + 1 } : undefined;
+  return { id: def.id, name: def.name, blurb: def.blurb, board, ...(houseBox ? { house: houseBox } : {}), teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0, poolField: def.poolSpawns ? spawnField(board, def.poolSpawns.band, Tile.Water) : [], poolShare: def.poolSpawns?.share ?? 0 };
 }
 
 /**
@@ -1197,19 +1205,23 @@ const FOUR_WAY = new Map<string, Shrine>();
  * east side (far enough out that nobody can pull a wisp on it straight into the brazier from
  * across the fire), and a few boulders round the jams. Not symmetric, and not in the lobby.
  */
-function homePondRows(): string[] {
-  const N = 31, c = 15;
+/** Lumi's home pond, at `k` times the size across (1 for runs 1 and 2; Granny's game plays it bigger). */
+function homePondRows(k = 1): string[] {
+  const N = Math.round(31 * k) | 1, c = (N - 1) / 2;
   const g = Array.from({ length: N }, () => Array<string>(N).fill("."));
   for (let y = 0; y < N; y++)
     for (let x = 0; x < N; x++) {
-      // The pool: an oval east of the brazier, 8 to 12 tiles out.
-      const px = (x - (c + 10)) / 2.6, py = (y - c) / 5.2;
+      // The pool: an oval east of the brazier, 8 to 12 tiles out (times k).
+      const px = (x - (c + 10 * k)) / (2.6 * k), py = (y - c) / (5.2 * k);
       if (px * px + py * py <= 1) g[y]![x] = "~";
     }
   // Boulders by the jams (north and west), and a couple out in the open.
-  for (const [x, y] of [[13, 6], [17, 6], [6, 12], [6, 18], [9, 24], [21, 24], [10, 9]] as const) g[y]![x] = "o";
-  g[22]![15] = "1";
-  g[22]![16] = "2";
+  for (const [x, y] of [[13, 6], [17, 6], [6, 12], [6, 18], [9, 24], [21, 24], [10, 9]] as const) g[Math.round(c + (y - 15) * k)]![Math.round(c + (x - 15) * k)] = "o";
+  // Rook's house, on the big pond only for now: a block-out by the west shore, door facing the brazier.
+  if (k > 1) for (let y = c - 1; y <= c + 2; y++) for (let x = c - 16; x <= c - 13; x++) g[y]![x] = "H";
+  const sy = Math.round(c + 7 * k);
+  g[sy]![c] = "1";
+  g[sy]![c + 1] = "2";
   return g.map((r) => r.join(""));
 }
 
@@ -1224,6 +1236,18 @@ export const STORY_SHRINES: Shrine[] = [
     rings: [],
     spawnBand: [6, 9],
     rows: homePondRows(),
+  }),
+  // Granny's game: the same pond half as big again across, so every point is longer walks and longer pulls.
+  buildShrine({
+    id: "home-pond-big",
+    name: "Home pond",
+    blurb: "Lumi's island, played big: the brazier in the middle and a pool to the east.",
+    full: true,
+    scale: 1,
+    isle: { radius: 14.5 * 1.5, squareness: 2.1, coves: 0.06, heads: 0.05, seed: 5, stretch: [1.08, 0.95] },
+    rings: [],
+    spawnBand: [15, 21],
+    rows: homePondRows(1.5),
   }),
 ];
 

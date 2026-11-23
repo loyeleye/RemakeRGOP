@@ -1,5 +1,5 @@
 // Whole-line voice clips for Hesta and Lumi, keyed by speaker and the exact text the server sends.
-// Generated from the design thread's manifests (project files gameplay/voice/final/run1, run2).
+// Generated from the design thread's manifests (project files gameplay/voice/final/run1, run2, run3).
 export const VOICE_LINES: Record<string, string> = {
   "Hesta|That's the where of it. Stand across from it, and it comes home.": "voice/hesta-where-of-it.mp3",
   "Hesta|Good. You heard the crew and you finished. That's the when.": "voice/hesta-the-when.mp3",
@@ -107,4 +107,28 @@ export const VOICE_LINES: Record<string, string> = {
   "Lumi|...Best of fifteen.": "voice/lumi-best-of-fifteen.mp3",
   "Lumi|Again.": "voice/lumi-again.mp3",
   "Lumi|So I'm coming tomorrow.": "voice/lumi-coming-tomorrow.mp3",
+  // Run 3, Granny's game (gameplay/voice/final/run3).
+  "Hesta|Higher.": "voice/hesta-higher.mp3",
+  "Hesta|Is it working?": "voice/hesta-is-it-working.mp3",
+  "Hesta|Show me where it says.": "voice/hesta-show-me.mp3",
+  "Hesta|I only have to watch one, Rook. Lucky you only brought one.": "voice/hesta-hint-one.mp3",
+  "Hesta|Don't mind that one, Rook. It only goes in when you make me nervous.": "voice/hesta-hint-parked.mp3",
+  "Hesta|All the way over there, Rook? At my age?": "voice/hesta-hint-far.mp3",
+  "Hesta|Did you now.": "voice/hesta-did-you-now.mp3",
+  "Hesta|You did it on the pond. Yours is water. Mine's rock.": "voice/hesta-water-rock.mp3",
+  "Hesta|No. Your father does it the hard way.": "voice/hesta-hard-way.mp3",
+  "Hesta|Winner's prize. I'm giving it to the losers.": "voice/hesta-winners-prize.mp3",
+  "Hesta|Three of you. I can count too.": "voice/hesta-three-of-you.mp3",
+  "Hesta|No promises.": "voice/hesta-no-promises.mp3",
+  "Hesta|You saw what I was doing. Most don't.": "voice/hesta-most-dont.mp3",
+  "Hesta|So I hear.": "voice/hesta-so-i-hear.mp3",
+  "Lumi|I'm captain. I picked Dad first.": "voice/lumi-captain.mp3",
+  "Lumi|That's not allowed!": "voice/lumi-not-allowed.mp3",
+  "Lumi|You can't do that!": "voice/lumi-cant-do-that.mp3",
+  "Lumi|Dad hasn't got one.": "voice/lumi-dad-hasnt.mp3",
+  "Lumi|There's three left.": "voice/lumi-three-left.mp3",
+  "Lumi|There were four of us.": "voice/lumi-four-of-us.mp3",
+  "Lumi|Best of three. No rocks.": "voice/lumi-best-of-three.mp3",
+  "Lumi|That's my dad.": "voice/lumi-my-dad.mp3",
+  "Lumi|She's distracting you. Eyes on the wisp.": "voice/lumi-eyes-on-wisp.mp3",
 };
