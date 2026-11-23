@@ -3,6 +3,7 @@
 // with Dawn and Dusk swapped, so neither guild ever gets the better side.
 //
 //   .  floor        #  shrine wall     o  boulder       ~  pool     (space) open sky
+//   ≈  deep pool (a plain pull slips over it; only a water light holds)
 //   *  ice (slides you the way you face)
 //   B  brazier      a  Dawn wisp spawn b  Dusk wisp spawn
 //   1  Dawn start   2  Dusk start
@@ -448,13 +449,13 @@ export const SHRINE_DEFS: ShrineDef[] = [
       "                                     ",
       "          .........  .....           ",
       "         ..................          ",
-      "        ..........~.....b.....       ",
-      "       ..o...a...~~~...........      ",
-      "    .........~~..~o~..~~........     ",
-      "  ....a.....~~~~..~..~~~~.....b..    ",
+      "        ..........≈.....b.....       ",
+      "       ..o...a...≈≈≈...........      ",
+      "    .........~~..≈o≈..~~........     ",
+      "  ....a.....~~~~..≈..~~~~.....b..    ",
       "  ...........~~.......~~o........    ",
-      " ......~~~.................~~~....   ",
-      "  ..1..~~~.................~~~..2..  ",
+      " ......≈≈≈.................≈≈≈....   ",
+      "  ..1..≈≈≈.................≈≈≈..2..  ",
       "  .................",
     ],
   },
@@ -839,6 +840,8 @@ const TILE_OF: Record<string, Tile> = {
   G: Tile.Wall,
   o: Tile.Rock,
   "~": Tile.Water,
+  /** Deep water (the law of the water): a pool tile where a plain pull slips. */
+  "≈": Tile.Water,
   B: Tile.Brazier,
   "%": Tile.Rime,
   "+": Tile.Bloom,
@@ -906,6 +909,8 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   });
   // The brazier is always a 3x3 block at the centre, whatever the ASCII shows.
   const board = new Board(width, height, tiles);
+  const deep = rows.flatMap((row, y) => [...row].flatMap((ch, x) => (ch === "≈" ? [y * width + x] : [])));
+  if (deep.length) board.deep = new Set(deep);
   for (let dy = -1; dy <= 1; dy++)
     for (let dx = -1; dx <= 1; dx++) tiles[(board.center.y + dy) * width + board.center.x + dx] = Tile.Brazier;
   const every = def.gimmicks?.glyphs;

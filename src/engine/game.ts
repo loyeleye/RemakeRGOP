@@ -305,16 +305,25 @@ export class Game {
    * Only a held wisp being pulled toward its target hurries.
    */
   pullBoost = new Map<number, number>();
-  /** Story (run 4's Steps): lamplighters whose pull can't take hold of a wisp out on the water (it
-   *  slips): Rook, so the pools are Lumi's work. */
-  dryHands = new Set<number>();
-  /** Where dry hands slip: these water tiles (board index), or every water tile if null. */
-  deepWater: Set<number> | null = null;
-  /** Whether this lamplighter's pull slips on a wisp at `at` (dry hands, deep water). */
+  /**
+   * The laws of water (gameplay thread's events doc; Ladi, 23 Nov: "Rook should not be able to pull
+   * over pools"): a plain pull slips on a wisp over water (the grey beam), for everyone without a
+   * water light; the water light (the tide puller, Lumi) holds on any water. Pushing works over any
+   * water. Switch: "all" water (Ladi's lean, waiting on the gameplay and story threads), "deep" only
+   * (the ≈ tiles: today only the Steps' big pools, so it plays as before), or "off".
+   */
+  static waterLaw: "all" | "deep" | "off" = "deep";
+  /** Where the law holds: the story runs (they set waterLawHere), or every board (practice too). */
+  static waterLawEverywhere = false;
+  waterLawHere = false;
+  /** Whether this lamplighter's pull slips on a wisp at `at`. */
   slipsAt(id: number, at: Pt) {
-    return this.dryHands.has(id) && this.board.tile(at) === Tile.Water && (!this.deepWater || this.deepWater.has(at.y * this.board.width + at.x));
+    if (Game.waterLaw === "off" || !(this.waterLawHere || Game.waterLawEverywhere) || id === this.tidePuller || this.board.tile(at) !== Tile.Water) return false;
+    return Game.waterLaw === "all" || this.board.isDeep(at);
   }
-  /** Story (run 4): the tide moves loose wisps about a pool but never washes one out onto the ground. */
+  /** The laws of water, law 5: moving water (tide or current) carries a loose wisp about its pool but
+   *  never puts it ashore; it stops at the water's edge. On in the story runs that set it (run 4);
+   *  every board once the water laws are settled. */
   tideStaysWet = false;
   /** Story: where a wisp comes back, if not the usual spawn (called after it's placed). */
   onReturn: ((w: Wisp) => void) | null = null;
@@ -489,21 +498,34 @@ export class Game {
       if (this.board.tile(w.pos) !== Tile.Water || this.poolOf(w.pos) !== pool) continue;
       const to = this.tideStep(w.pos, p.pos);
       if (!to) continue;
-      // On a shrine with a clocked tide the two drifts add up: with the tide (toward the brazier
-      // while it comes in, away while it goes out) she draws them two tiles a tick; against it,
-      // they barely move. Across the tide, she draws them as usual.
-      const tide = this.shrine.gimmicks.tide;
+      // Moving water and her pull add up (laws of water, 6): with the flow she draws them two tiles
+      // a tick; against it, they barely move; across it, as usual. The flow is the tide (toward the
+      // brazier while it comes in, away while it goes out) or the current (round the brazier).
+      const flow = this.flowAt(w.pos);
       let at = to;
-      if (tide) {
-        const c = this.board.center, inward = cheb(to, c) - cheb(w.pos, c);
-        const run = tideIn(this.tick, tide) ? -1 : 1;
-        if (inward === run) {
+      if (flow) {
+        const along = (to.x - w.pos.x) * flow.x + (to.y - w.pos.y) * flow.y;
+        if (along > 0) {
           const more = this.tideStep(to, p.pos, w);
           if (more && this.board.tile(more) === Tile.Water) at = more;
-        } else if (inward === -run && this.tick % TIDE_AGAINST !== 0) continue;
+        } else if (along < 0 && this.tick % TIDE_AGAINST !== 0) continue;
       }
       this.drift.set(w.id, at);
     }
+  }
+
+  /** Which way the water runs at `at` this tick (a unit step), or null where it's still. The same
+   *  directions the loose-wisp drift uses. */
+  private flowAt(at: Pt): Pt | null {
+    const { tide, current } = this.shrine.gimmicks;
+    if (!tide && !current) return null;
+    const c = this.board.center;
+    if (tide) {
+      const dir = tideIn(this.tick, tide) ? 1 : -1;
+      return pt(dir * sign(c.x - at.x), dir * sign(c.y - at.y));
+    }
+    const ox = at.x - c.x, oy = at.y - c.y;
+    return Math.abs(oy) >= Math.abs(ox) ? pt(-sign(oy), 0) : pt(0, sign(ox));
   }
 
   /** One tile from `from` toward the tide puller at `to`, over open water or ground, or null. */

@@ -56,8 +56,6 @@ export const JOB = {
        * its pool shimmers for those ticks first. Pools: the big ones on each side (see stepsPools).
        */
       waves: { sizes: [3, 3, 2, 2] as readonly number[], gap: 6, firstAt: 6 },
-      /** Rook's pull slips on a wisp out on the water: only Lumi's tide pull brings them off a pool. */
-      dryRook: true,
       /** Hesta's far-bank hint: Lumi this much further out than the wave's pool's fire side. */
       farBy: 4,
       rook: { x: 4, y: 3 },

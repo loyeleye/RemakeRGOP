@@ -149,8 +149,11 @@ export class JobRoom {
     ];
     // The clock is the stop's own; the game's never runs out first.
     this.game = new Game(shrine, roster, this.seed(), [S.wisps, 0], S.ticks + 10);
+    // The laws of water hold in every story run.
+    this.game.waterLawHere = true;
     const g = this.game;
     g.tideStaysWet = true;
+    g.tidePuller = LUMI_ID;
     this.sentTo = null;
     this.sends = this.fromWater = this.lumiStuck = 0;
     this.wet.clear();
@@ -178,11 +181,6 @@ export class JobRoom {
     if (n === 1) {
       // The Steps: all of them wait off the board, and come on in waves (see wave()).
       g.respawnPause = 1e6;
-      // Rook's pull slips out on the big pools (not the little arcs close in, where he can reach).
-      if (JOB.stops[1].dryRook) {
-        g.dryHands.add(ROOK_ID);
-        g.deepWater = new Set(stepsPools(g.board).flatMap((p) => p.tiles.map((q) => q.y * g.board.width + q.x)));
-      }
       for (const w of g.wisps) if (w.guild === 0) g.away.set(w.id, 1e9);
       this.nextPool = this.pickPool();
       this.nextAt = JOB.stops[1].waves.firstAt;

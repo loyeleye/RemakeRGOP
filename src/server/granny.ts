@@ -127,6 +127,8 @@ export class GrannyRoom {
       { id: HESTA_ID, guild: 1 as Guild, name: HESTA },
     ].sort((a, b) => a.id - b.id);
     this.game = new Game(shrine, roster, this.seed(), GRANNY.wisps, GRANNY.ticks);
+    // The laws of water hold in every story run.
+    this.game.waterLawHere = true;
     this.game.tidePuller = LUMI_ID;
     // A banked wisp is gone a moment before it comes back, so every point takes a little longer.
     this.game.respawnPause = GRANNY.respawnPause;

@@ -130,6 +130,8 @@ export class LessonRoom {
     ];
     const T = LESSON.firstToThree;
     this.game = new Game(shrine, roster, this.seed(), rival ? [T.wisps, T.rookWisps] : [1, 0], rival ? T.ticks : FOREVER);
+    // The laws of water hold in every story run.
+    this.game.waterLawHere = true;
     const g = this.game;
     const rook = this.player(ROOK_ID);
     this.pulls = this.banked = this.quietFor = this.outFor = this.calls = 0;

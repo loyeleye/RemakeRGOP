@@ -170,6 +170,8 @@ export class StoryRoom {
         this.crew.push({ id, name, state: { wisp: null, fed: null, skip: new Map() } });
       });
     this.game = new Game(shrine, roster, this.seed(), [mv.wisps, 0], mv.ticks);
+    // The laws of water hold in every story run.
+    this.game.waterLawHere = true;
     // Rook stays where he was when the bell went.
     const rook = this.game.players.find((p) => p.id === ROOK)!;
     if (rookAt) rook.pos = rook.prev = rookAt;

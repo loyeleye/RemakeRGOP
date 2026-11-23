@@ -80,6 +80,12 @@ export class Board {
     this.center = pt(Math.floor(width / 2), Math.floor(height / 2));
   }
 
+  /** Deep water: pool tiles (by index) where a plain pull slips. The rest of the water is shallow. */
+  deep: Set<number> | null = null;
+  isDeep(p: Pt) {
+    return !!this.deep && this.tile(p) === Tile.Water && this.deep.has(p.y * this.width + p.x);
+  }
+
   /** Bumped whenever the tiles change during a round (portcullises), so caches know. */
   version = 0;
 
