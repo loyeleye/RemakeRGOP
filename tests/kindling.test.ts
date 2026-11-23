@@ -10,7 +10,7 @@ import { StoryRoom } from "../src/server/story.js";
 const manualClock = () => ({ every: () => () => {} });
 
 /** Plays the whole run with a simple Rook: walk to the ring, pull; hold the home square; then play like a Medium bot. */
-function playRun(seed: number) {
+function playRun(seed: number, lumi: "answer" | "ignore" | "bot" = "bot") {
   const msgs: ServerMsg[] = [];
   let s = seed;
   const room = new StoryRoom(manualClock(), () => (s = (s * 48271) % 2147483647));
@@ -18,6 +18,8 @@ function playRun(seed: number) {
   conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
   /** Who held each banked wisp: 1 is Rook, 2 is Wick (feeds Rook), 3 is Moth (owns the far side). */
   const bankers: (number | null)[] = [];
+  /** Each wisp Lumi has called, in order. */
+  const called: number[] = [];
   for (let i = 0; i < 2000 && room.state.phase !== "results"; i++) {
     const { game, phase, movement, ring } = room.state;
     if (phase === "playing") {
@@ -31,11 +33,22 @@ function playRun(seed: number) {
         const w = game.wisps.find((q) => banksFrom(game.board, rook.pos, q.target ?? q.pos));
         if (ring && !samePt(rook.pos, ring)) cmd = rook.action.kind === "walk" ? null : { action: { kind: "walk", to: ring } };
         else if (w && !(rook.action.kind === "staff" && rook.action.wisp === w.id)) cmd = { action: { kind: "staff", wisp: w.id } };
-      } else cmd = botCommand(game, 1, BOT_MEDIUM, () => 0.5);
+      } else {
+        cmd = botCommand(game, 1, BOT_MEDIUM, () => 0.5);
+        const call = room.state.call;
+        // A Rook who answers takes her call at once; one who ignores her never touches it.
+        if (call !== null && lumi === "answer" && !(rook.action.kind === "staff" && rook.action.wisp === call)) cmd = { action: { kind: "staff", wisp: call } };
+        if (call !== null && lumi === "ignore") {
+          if (cmd?.action?.kind === "staff" && cmd.action.wisp === call) cmd = { action: { kind: "idle" } };
+          if (rook.action.kind === "staff" && rook.action.wisp === call) cmd = { action: { kind: "idle" } };
+        }
+      }
       if (cmd) conn.message(JSON.stringify({ t: "act", ...cmd }));
     }
     const before = new Map(room.state.game.wisps.map((w) => [w.id, w.holder]));
     room.onTick();
+    const c = room.state.call;
+    if (c !== null && c !== called.at(-1)) called.push(c);
     if (room.state.phase === "playing" || room.state.phase === "countdown") {
       const g = room.state.game;
       for (const b of g.banks) {
@@ -43,7 +56,7 @@ function playRun(seed: number) {
       }
     }
   }
-  return { room, msgs, bankers };
+  return { room, msgs, bankers, called };
 }
 
 describe("Game options for story runs", () => {
@@ -77,7 +90,7 @@ describe("Grand Kindling", () => {
   it("plays all three movements to an ending that can't be failed", () => {
     const lumi: string[] = [];
     for (const seed of [11, 12, 13]) {
-      const { room, msgs, bankers } = playRun(seed);
+      const { room, msgs, bankers, called } = playRun(seed);
       const st = room.state;
       expect(st.phase).toBe("results");
       expect(st.end).toBeDefined();
@@ -91,13 +104,24 @@ describe("Grand Kindling", () => {
       expect(said.some((l) => l.who === "Lumi" && /^Dad\./.test(l.text))).toBe(true);
       lumi.push(...said.filter((l) => l.who === "Lumi").map((l) => l.text));
       // Lumi's calls move on: an ignored call never stays on the same wisp.
-      const marks = msgs.flatMap((m) => (m.t === "room" && m.room.story?.movement === 2 && m.room.phase === "playing" ? [m.room.story.mark?.wisp ?? null] : []));
-      const runs = marks.filter((v, i) => v !== null && v !== marks[i - 1]);
-      expect(new Set(runs).size).toBeGreaterThan(1);
+      expect(new Set(called).size).toBeGreaterThan(1);
       expect(said.some((l) => l.who === "Hesta" && /Now/.test(l.text))).toBe(true);
     }
     // When he banks a different wisp she sometimes concedes, and when he leaves one she calls another.
     expect(lumi.some((t) => /^\.\.\.Fine|^Fine\./.test(t) || /Forget it|Never mind/.test(t))).toBe(true);
     expect(lumi.some((t) => /not saying it again/.test(t))).toBe(false);
+  });
+
+  it("keeps Lumi's calls few, and her complaints to three or four a round", () => {
+    for (const style of ["answer", "ignore", "bot"] as const) {
+      for (const seed of [11, 12, 13, 14, 15]) {
+        const { room, msgs } = playRun(seed, style);
+        const said = msgs.flatMap((m) => (m.t === "say" ? m.lines : [])).filter((l) => l.who === "Lumi");
+        const nudges = said.filter((l) => /\*/.test(l.text)).length;
+        if (process.env.STATS) console.log(style, seed, "calls", room.state.calls, "misses", room.state.strikes, "nudges", nudges, "lumi lines", said.length);
+        expect(room.state.calls).toBeLessThanOrEqual(9);
+        expect(room.state.strikes).toBeLessThanOrEqual(4);
+      }
+    }
   });
 });

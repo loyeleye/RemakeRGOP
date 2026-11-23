@@ -80,13 +80,22 @@ export class StoryRoom {
   /** Wisps she gave up calling, and until which tick she leaves them be. */
   private ignored = new Map<number, number>();
   private missed = 0;
+  /** Full misses this run: each one doubles her patience. Reset only when the run starts. */
+  private strikes = 0;
+  /** No calls before this tick (her quiet spell after a miss). */
+  private quietUntil = -99;
+  /** Calls made this run, for tuning. */
+  private callCount = 0;
+  /** Her next call follows a miss, so it's worded as moving on. */
+  private switching = false;
   private lives = new Map<number, number>();
   private missedLives = new Set<string>();
 
   private readonly there = new Turns(["There. Stand there.", "That one. Stand in the ring.", "Across the brazier from it. There.", "Stand there, Rook."]);
   private readonly banked = new Turns(["That's it.", "Clean.", "Good. Again.", "That's the way."]);
   private readonly concede = new Turns(["...Fine. That one.", "...Fine. That one works too.", "Fine. I suppose that counts."]);
-  private readonly instead = new Turns(["Forget it. {Dir} one, then.", "Never mind that one. {Dir}!", "Fine. {Dir} one. Dad."]);
+  private readonly giveUp = new Turns(["Forget it.", "Never mind, then.", "Fine. Ignore me."]);
+  private readonly instead = new Turns(["{Dir} one, then.", "Okay. {Dir} one. Dad.", "Dad. {Dir} one?"]);
   private readonly now = new Turns(["Now, Rook.", "That one's yours. Now.", "{crew} left you one, {dir}. Now.", "Now."]);
 
   constructor(
@@ -139,7 +148,7 @@ export class StoryRoom {
 
   /** Start (or restart) the run from the first bell. */
   begin() {
-    this.carried = this.kes = this.missed = 0;
+    this.carried = this.kes = this.missed = this.strikes = this.callCount = 0;
     this.end = undefined;
     this.rng = new Rng(this.seed());
     this.startMovement(0, null);
@@ -181,6 +190,8 @@ export class StoryRoom {
     this.lives = new Map();
     this.missedLives = new Set();
     this.lastCall = -99;
+    this.quietUntil = -99;
+    this.switching = false;
     this.ignored = new Map();
     this.lastHesta = -99;
     this.phase = "countdown";
@@ -371,34 +382,45 @@ export class StoryRoom {
     // Lumi's call is an opinion, not an order. Answered when he touches it. If he banks a
     // different wisp instead, she concedes (sometimes out loud) and moves on; if he just
     // leaves it, she says it once more with feeling, then gives up on it and calls another.
+    // Each full miss doubles how long she waits, and after one she goes quiet for a while.
+    const window = K.answerWithin * 2 ** this.strikes;
     const cur = this.calls.find((c) => !c.answered);
-    let switchNow = false;
     if (cur) {
       const age = g.tick - cur.at;
       const other = g.banks.find((b) => b.wisp !== cur.wisp);
       if ((this.lastTouch.get(cur.wisp) ?? 0) >= cur.at) cur.answered = true;
-      else if (other || age >= K.answerWithin) {
+      else if (other || age >= window) {
         cur.answered = true;
-        this.ignored.set(cur.wisp, g.tick + K.neglectAfter);
         const k = `${cur.wisp}@${cur.life}`;
         if (!this.missedLives.has(k)) {
           this.missedLives.add(k);
           this.missed++;
         }
-        if (other && this.rng.next() < K.concede) this.say(LUMI, this.concede.next());
-        switchNow = !other;
-      } else if (age === K.repeatAfter) {
+        this.quietUntil = g.tick + K.quietAfterMiss * 2 ** this.strikes;
+        // She moves on: that wisp is left alone through the quiet spell and a while after.
+        this.ignored.set(cur.wisp, this.quietUntil + K.neglectAfter);
+        this.strikes++;
+        this.switching = true;
+        if (other) {
+          if (this.rng.next() < K.concede) this.say(LUMI, this.concede.next());
+        } else this.say(LUMI, this.giveUp.next());
+      } else if (age === Math.round(window * K.repeatAt)) {
         const Dir = cap(compass(g.board, g.wisps[cur.wisp]!.pos));
         this.say(LUMI, `Dad. ${Dir} one. *${Dir}.*`);
       }
     }
     if (this.calls.some((c) => !c.answered)) return;
-    if (!switchNow && g.tick - this.lastCall < K.callEvery) return;
-    const w = neglected(g, ROOK, this.lastTouch, K.neglectAfter, (id) => (this.ignored.get(id) ?? -1) > g.tick);
+    if (g.tick < this.quietUntil || g.tick - this.lastCall < K.callEvery) return;
+    // She doesn't name a wisp he's already pulling or walking to.
+    const to = rook.action.kind === "walk" ? rook.action.to : null;
+    const heading = (id: number) => !!to && Math.hypot(g.wisps[id]!.pos.x - to.x, g.wisps[id]!.pos.y - to.y) <= 3;
+    const w = neglected(g, ROOK, this.lastTouch, K.neglectAfter, (id) => (this.ignored.get(id) ?? -1) > g.tick || heading(id));
     if (!w) return;
     const Dir = cap(compass(g.board, w.pos));
-    this.say(LUMI, switchNow ? this.instead.next().replace("{Dir}", Dir) : `Dad. ${Dir} one.`);
+    this.say(LUMI, this.switching ? this.instead.next().replace("{Dir}", Dir) : `Dad. ${Dir} one.`);
+    this.switching = false;
     this.calls.push({ wisp: w.id, life: this.lives.get(w.id) ?? 0, at: g.tick, answered: false });
+    this.callCount++;
     this.lastCall = g.tick;
   }
 
@@ -503,7 +525,7 @@ export class StoryRoom {
 
   /** For tests. */
   get state() {
-    return { phase: this.phase, movement: this.movement, game: this.game, banked: this.carried + (this.phase === "results" ? 0 : this.game.scores[0]!), missed: this.missed, end: this.end, ring: this.ring, crew: this.crew };
+    return { phase: this.phase, movement: this.movement, game: this.game, banked: this.carried + (this.phase === "results" ? 0 : this.game.scores[0]!), missed: this.missed, calls: this.callCount, strikes: this.strikes, call: this.calls.find((c) => !c.answered)?.wisp ?? null, end: this.end, ring: this.ring, crew: this.crew };
   }
 }
 

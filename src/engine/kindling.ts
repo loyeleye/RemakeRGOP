@@ -48,14 +48,24 @@ export const KINDLING = {
     wisps: 3,
     band: [6, 10] as [number, number],
     ticks: 200,
-    /** Lumi calls at most this often. */
-    callEvery: 8,
+    /** Lumi calls at most this often (ticks between one call ending and the next). */
+    callEvery: 24,
     /** A wisp counts as neglected once he hasn't touched it for this many ticks. */
     neglectAfter: 16,
-    /** A call he hasn't answered (touched the wisp) within this many ticks is a miss: she gives up on that wisp and calls another. She counts each wisp once. */
+    /**
+     * Ticks he has to answer her first call (touch the wisp). Each full miss (the call runs out,
+     * or he banks a different wisp) doubles it for the rest of the run: 12, 24, 48, 96. Her
+     * patience grows, so she can't complain more than three or four times a round.
+     */
     answerWithin: 12,
-    /** Ticks into an unanswered call when she says it again, with feeling. */
-    repeatAfter: 6,
+    /**
+     * After a full miss she says nothing for this many ticks (12 ticks is about 7 seconds). It
+     * doubles with each miss too (12, 24, 48), because a bank elsewhere ends a call at once and
+     * would otherwise let her complain again and again.
+     */
+    quietAfterMiss: 12,
+    /** She says it again, with feeling, this far into a call (a half: 6, 12, 24...). Once per call. */
+    repeatAt: 0.5,
     /** Chance she concedes out loud ("...Fine. That one.") when he banks a different wisp. A bank elsewhere also counts her call as missed. */
     concede: 0.6,
   },
