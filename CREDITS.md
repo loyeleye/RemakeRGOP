@@ -11,10 +11,10 @@ subscription-only billing so no Spark was spent. Sources are in the project file
 | sprites/wall.png | krea2_turbo_fp8_scaled (seamless stone) |
 | ui/*.webp (phone stick and buttons) | z_image_turbo_bf16, cropped to a circle with an alpha mask |
 | sprites/brazier.png, sprites/wisp-dawn.png (logo and favicon) | z_image_turbo_bf16, background removed with birefnet_image_background_removal_fp16 |
+| faces/hesta.webp, faces/lumi.webp (story portraits) | Draft crops from the art thread's character sheets (project files `gameplay/faces/`), resized to 160 px WebP |
 
 The sky, cloud sea, fire, embers, light pillar, water and wisps are drawn in code with shaders.
 
-| faces/hesta.webp, faces/lumi.webp (story portraits) | Draft crops from the art thread's character sheets (project files `gameplay/faces/`), resized to 160 px WebP |
 
 ## Music
 
