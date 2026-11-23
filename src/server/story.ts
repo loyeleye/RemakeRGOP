@@ -21,7 +21,6 @@ const ROOK = 1;
 const HESTA = "Hesta";
 const LUMI = "Lumi";
 /** Lines with no speaker are narration. */
-const TELL = "";
 
 const MOVES = [KINDLING.first, KINDLING.relay, KINDLING.crescendo] as const;
 
@@ -451,21 +450,12 @@ export class StoryRoom {
   private finish() {
     const banked = this.carried;
     const sky = Math.min(1, banked / KINDLING.skyFull);
-    const glow =
-      sky >= 0.9
-        ? "Every island is lit, and Fairy Ring burns the brightest."
-        : sky >= 0.55
-          ? "The sky over Fairy Ring is bright with your light."
-          : sky >= 0.25
-            ? "Fairy Ring's light rises to meet the others."
-            : "A small, steady light rises over Fairy Ring.";
     const m = this.missed;
+    // The ending is pictures (client/ending.ts): these are its only words. No narrator.
     const lines: StoryLine[] = [
       { who: LUMI, text: "That's the last bell!" },
       { who: HESTA, text: "Look up, Rook." },
-      { who: TELL, text: glow },
       { who: LUMI, text: m === 0 ? "You didn't miss one. I counted anyway." : `You missed ${numberWord(m)}. I counted.` },
-      { who: TELL, text: "Far below the clouds, something opens an eye." },
     ];
     this.end = { banked, kes: this.kes, sky, lines };
     this.ring = null;

@@ -19,6 +19,21 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Rook", /^(Yes, ma'am\.|See\?|Now you're the boss)/, "warm"],
 ];
 
+/**
+ * Portraits held back until they're redrawn, and what shows in their place. Ladi, 23 Nov 2026: in
+ * this run Lumi's faces are all closed-mouth and quiet, a small smile at most; barking orders may
+ * have a small open mouth. The drafts of "calling" (a shout) and "delighted" (a grin) are too open.
+ */
+export const FACE_STANDIN: Record<string, string> = { "lumi-calling": "lumi-neutral", "lumi-delighted": "lumi-smug" };
+
+/** The portrait file's name for a line ("lumi-smug"), or null if the speaker has none. */
+export function faceOf(who: string, text: string, mood?: string): string | null {
+  const m = moodOf(who, text, mood);
+  if (!m) return null;
+  const f = `${who.toLowerCase()}-${m}`;
+  return FACE_STANDIN[f] ?? f;
+}
+
 /** The mood for a line, or null if the speaker has no portraits. */
 export function moodOf(who: string, text: string, mood?: string): string | null {
   const moods = MOODS[who];

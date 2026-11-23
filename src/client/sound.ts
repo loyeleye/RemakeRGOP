@@ -20,6 +20,9 @@ export const SOUND = {
   /** Music volume, and how long it fades under Lumi's bell. */
   musicGain: 0.45,
   musicFade: 1.5,
+  /** The ending: wind under the descent, and how slowly the music lets go after the last bell. */
+  windGain: 0.12,
+  endMusicFade: 16,
 };
 
 /** D major pentatonic from D4 upward: D E F# A B, then the next octave. */
@@ -388,4 +391,56 @@ function fadeTo(a: HTMLAudioElement, to: number, sec: number, done?: () => void)
     else done?.();
   };
   step();
+}
+
+// ------------------------------------------------------------------ the ending
+
+let windStop: (() => void) | null = null;
+
+/** Wind under the descent: soft looping noise through a slow, wandering lowpass. Fades in over `sec`. */
+export function wind(sec = 4) {
+  windOff(0.1);
+  const s = out();
+  if (!s) return;
+  const { c, o } = s;
+  const len = c.sampleRate * 4;
+  const buf = c.createBuffer(2, len, c.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    let b = 0;
+    // Brown-ish noise: a soft rush rather than hiss.
+    for (let i = 0; i < len; i++) d[i] = b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+  }
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  const lp = c.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 420;
+  const lfo = c.createOscillator();
+  lfo.frequency.value = 0.13;
+  const depth = c.createGain();
+  depth.gain.value = 260;
+  lfo.connect(depth).connect(lp.frequency);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(SOUND.windGain, c.currentTime + sec);
+  src.connect(lp).connect(g).connect(o);
+  src.start();
+  lfo.start();
+  windStop = () => {
+    const t = c.currentTime;
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + windFade);
+    src.stop(t + windFade + 0.1);
+    lfo.stop(t + windFade + 0.1);
+  };
+}
+
+let windFade = 1;
+export function windOff(sec = 1) {
+  windFade = sec;
+  windStop?.();
+  windStop = null;
 }

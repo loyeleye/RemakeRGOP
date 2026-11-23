@@ -3,11 +3,12 @@
 import type { Pt } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
-import { moodOf } from "../engine/moods.js";
+import { faceOf as faceFile } from "../engine/moods.js";
 import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg, type StoryLine } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
 import { StoryRoom } from "../server/story.js";
+import { KindlingEnding, lanternCard } from "./ending.js";
 import * as sound from "./sound.js";
 import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
@@ -111,14 +112,20 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
+let storyRoom: LessonRoom | StoryRoom | null = null;
+
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling) or run 2 (Lumi's lesson). */
 function connectStory(name: string, run: 1 | 2 = 1) {
   practice = true;
   callMode = false;
   const r = run === 2 ? new LessonRoom() : new StoryRoom();
+  storyRoom = r;
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
-  link.send({ t: "hello", name: name || "Rook" });
+  const hello = () => link?.send({ t: "hello", name: name || "Rook" });
+  // Run 2 opens on Lumi's unlit lantern, where the eye was, before play.
+  if (run === 2) lanternCard(hello);
+  else hello();
 }
 
 // ------------------------------------------------------------------ story dialog and barks
@@ -132,8 +139,8 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => `&${({ "&": "amp", "<": "
 const lineHtml = (t: string) => esc(t).replace(/\*([^*]+)\*/g, "<em>$1</em>");
 /** The portrait for a line, by speaker and mood, or "" for speakers without one. */
 const faceOf = (l: { who: string; text: string; mood?: string }) => {
-  const m = moodOf(l.who, l.text, l.mood);
-  return m ? `faces/${l.who.toLowerCase()}-${m}.webp` : "";
+  const f = faceFile(l.who, l.text, l.mood);
+  return f ? `faces/${f}.webp` : "";
 };
 const faceHtml = (l: StoryLine) => (faceOf(l) ? `<img class="face" src="${faceOf(l)}" alt="" />` : "");
 
@@ -308,6 +315,10 @@ function leave() {
 
 function render() {
   const phase = room?.phase;
+  if (ending && phase !== "results") {
+    ending.stop();
+    ending = null;
+  }
   $("home").hidden = !!room;
   $("lobby").hidden = phase !== "lobby";
   $("play").hidden = !room || phase === "lobby";
@@ -315,6 +326,7 @@ function render() {
   if (!room) return;
   if (phase === "lobby") renderLobby();
   if (phase === "results") renderResults();
+  if (ending) $("results").hidden = true;
   renderHud();
 }
 
@@ -414,12 +426,28 @@ function renderResults() {
 }
 
 let shownEnd: unknown = null;
+/** Run 1's ending cutscene, while it plays (and on its title screen). */
+let ending: KindlingEnding | null = null;
 
 /** The Kindling's ending: the total, how bright the sky got, and the last lines, one by one. */
 function renderStoryEnd() {
   const st = room!.story!, end = st.end;
   $("again").textContent = "Play again";
   $("again").hidden = false;
+  // Run 1 ends on the cutscene in place of this panel.
+  if (end && end.sky !== undefined) {
+    if (ending?.end !== end) {
+      ending?.stop();
+      clearCaptions();
+      ending = new KindlingEnding(end, {
+        html: (l) => `${faceHtml(l)}<span><b class="${l.who.toLowerCase()}">${esc(l.who)}</b> ${lineHtml(l.text)}</span>`,
+        speak: (l) => sound.speak(l.who, l.text, false),
+        playAgain: () => link?.send({ t: "lobby" }),
+        leave,
+      });
+    }
+    return;
+  }
   if (!end || shownEnd === end) return;
   shownEnd = end;
   clearCaptions();
@@ -439,14 +467,10 @@ function renderStoryEnd() {
       return li;
     }),
   );
-  // The eye: the last line is the narration, and it lands on one held low note.
-  clearTimeout(eyeTimer);
-  eyeTimer = setTimeout(() => room?.story && sound.eyeNote(), (0.6 + (end.lines.length - 1) * 1.8) * 1000);
 }
 
 // ------------------------------------------------------------------ story sound
 
-let eyeTimer: ReturnType<typeof setTimeout> | undefined;
 let musicFor = -1;
 let pullFrom = 0;
 
@@ -460,7 +484,8 @@ function storyPhaseSound(was: string | undefined) {
   }
   if (phase === "results" && was !== "results") {
     sound.pullHum(null);
-    sound.stopMusic();
+    // Run 1's music lets go slowly under the ending; run 2's stops.
+    sound.stopMusic(room!.story?.end?.sky !== undefined ? sound.SOUND.endMusicFade : undefined);
     sound.handBell(3);
   }
 }
@@ -499,7 +524,6 @@ function storyTickSound(s: GameSnapshot) {
 }
 
 function stopStorySound() {
-  clearTimeout(eyeTimer);
   sound.pullHum(null);
   sound.stopMusic(0.3);
   musicFor = -1;
@@ -1024,7 +1048,20 @@ function frame(now: number) {
     const reach = p?.mode === "push" ? PUSH_REACH : PULL_REACH;
     $("staff").classList.toggle("far", !p || !w || Math.max(Math.abs(w.x - p.x), Math.abs(w.y - p.y)) > reach);
   }
-  const st: DrawState = { shrine, prev: prevSnap, snap, t, me, flames, cast: castOf(), hoverWisp: lit, now };
+  // The ending: leftover wisps lift off and stream into the brazier, and the camera looks up.
+  let drawSnap = snap, drawPrev = prevSnap;
+  cam.lift = ending?.lift(now) ?? 0;
+  if (ending) {
+    const c = shrine.board.center, e = ending;
+    const wisps = snap.wisps.flatMap((w, i) => {
+      const k = e.stream(i, now);
+      if (k >= 1) return [];
+      const x = w.x + (c.x - w.x) * k, y = w.y + (c.y - w.y) * k;
+      return [{ ...w, x, y, px: x, py: y, holder: null }];
+    });
+    drawSnap = drawPrev = { ...snap, wisps };
+  }
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.
@@ -1045,7 +1082,7 @@ function frame(now: number) {
   }
   if (bigTaps) drawBigTaps(g, mine?.mode === "push", mine?.guild, lit, t, now);
   if (room.story) drawStory(g, t, now);
-  if (cam.compact) {
+  if (cam.compact && !ending) {
     const w = Math.min(120, cam.w * 0.3);
     minimapRect = { x: cam.w - w - 10, y: 64, w, h: w };
     drawMinimap(g, cam, st, minimapRect);
@@ -1229,6 +1266,8 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   say: (l: StoryLine) => sayLine(l),
   /** What a click at this screen point would do. */
   tap: (x: number, y: number) => targetAt(x, y),
+  /** The story run in the page, for jumping to its end in tests. */
+  story: () => storyRoom,
 };
 
 // ------------------------------------------------------------------ debug overlay

@@ -151,3 +151,44 @@ body.touch .bark.chip { top: 58px; left: 12px; right: auto; }
 #dialog:not([hidden]) ~ .bark.chip { top: 164px; }
 #call.on { background: #ffd36a; color: #201a10; }
 body.calling #board { cursor: crosshair; }
+
+/* ---------------------------------------------------------------- run 1's ending, run 2's opening */
+body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, body.in-ending #chip, body.in-ending #dialog { visibility: hidden; }
+#ending { position: fixed; inset: 0; z-index: 50; overflow: hidden; user-select: none; -webkit-user-select: none; }
+#ending > *, #opening { position: absolute; inset: 0; opacity: 0; }
+#ending .card, #opening { background-size: cover; background-position: center; }
+#ending .card .ph, #opening .ph { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: #ffffff80; font-style: normal; letter-spacing: 0.05em; }
+.card.real > :not(.ph), .card.real .ph { display: none; }
+/* Placeholders, drawn so the timing reads: Fairy Ring from above, its brazier lit. */
+#ending .ring { background-color: #0d1030; background-image: radial-gradient(circle at 50% 50%, #fff3c4 0 1.5%, #ffb24a 3%, #ff8a2a44 10%, transparent 26%), radial-gradient(circle at 50% 50%, transparent 0 30%, #2a2050 31% 33%, transparent 34%), radial-gradient(ellipse at 50% 60%, #241a48, #0d1030 70%); }
+#ending .ring .lamp { position: absolute; left: 50%; top: 50%; width: 46vmin; height: 46vmin; transform: translate(-50%, -50%); border-radius: 50%; background: repeating-conic-gradient(from 10deg, #ffe7a0 0 1deg, transparent 1deg 30deg); mask: radial-gradient(circle, transparent 0 48%, #000 49% 51%, transparent 52%); -webkit-mask: radial-gradient(circle, transparent 0 48%, #000 49% 51%, transparent 52%); }
+/* The whole sky: every island a coloured light. Wider than the screen, for the pan. */
+#ending .sky { right: -30%; bottom: -70%; background-color: #0b0a26; background-image: radial-gradient(circle at 36% 30%, #ffd36a 0 0.8%, #ffb24a88 2%, transparent 6%), var(--isles), linear-gradient(#141040, #2a1d5a 40%, #0b0a26 60%, #020208); }
+#ending .cloud { background-repeat: no-repeat; }
+#ending .c1 { background-image: radial-gradient(ellipse 60% 22% at 30% 50%, #c9c3e8cc, transparent 70%), radial-gradient(ellipse 50% 18% at 80% 40%, #b9b2dcaa, transparent 70%); }
+#ending .c2 { background-image: radial-gradient(ellipse 70% 25% at 60% 55%, #8f88b8cc, transparent 70%), radial-gradient(ellipse 40% 15% at 10% 30%, #a29ccaaa, transparent 70%); }
+#ending .c3 { background-image: radial-gradient(ellipse 80% 30% at 45% 50%, #4a4570dd, transparent 72%); }
+#ending .black { background: #000; }
+/* The eye: shut, a slit, open. One eye, nothing else. */
+#ending .eye { background-color: #000; }
+#ending .eye .lid { position: absolute; left: 50%; top: 50%; width: 64vmin; height: 30vmin; transform: translate(-50%, -50%) scaleY(var(--open)); border-radius: 50%; background: radial-gradient(circle, #050308 0 18%, #6b3a10 19%, #c98a2a 30%, #3a1d08 44%, #0a0604 50%); box-shadow: 0 0 6vmin #c98a2a22; }
+#ending .e1 .lid { --open: 0.02; }
+#ending .e2 .lid { --open: 0.22; }
+#ending .e3 .lid { --open: 1; }
+#ending .eye .pupil { position: absolute; left: 50%; top: 50%; width: 12vmin; height: 12vmin; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle at 30% 40%, #7fd3ff 0 2%, transparent 4%), radial-gradient(circle at 62% 35%, #9cf29a 0 2%, transparent 4%), radial-gradient(circle at 70% 62%, #ff7a6b 0 2%, transparent 4%), radial-gradient(circle at 38% 68%, #d6a8ff 0 2%, transparent 4%); opacity: 0.8; }
+#ending .glint .spark { position: absolute; left: calc(50% - 0.4vmin); top: calc(50% - 0.6vmin); width: 2.2vmin; height: 2.2vmin; border-radius: 50%; transform: translate(-50%, -50%); background: radial-gradient(circle, #fff3c4 0 20%, #ffb24a 45%, transparent 70%); opacity: var(--glint); box-shadow: 0 0 calc(3vmin * var(--glint)) #ffb24a; }
+#ending .glint .ph { left: auto; right: 12px; }
+#ending .title { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; background: #000; }
+#ending .title h1 { margin: 0; font-size: clamp(40px, 9vw, 84px); letter-spacing: 0.06em; color: #ffe7a0; font-weight: 600; }
+#ending .title .btns { display: flex; flex-direction: column; gap: 10px; opacity: 0; transition: opacity 1s; pointer-events: none; }
+#ending .title.ready .btns { opacity: 1; pointer-events: auto; }
+#ending .caption { opacity: 1; inset: auto 16px 40px; margin: 0 auto; width: max-content; max-width: min(92vw, 560px); display: flex; gap: 10px; align-items: center; background: #120f1ce0; border: 1px solid #ffffff2a; border-radius: 14px; padding: 8px 14px 8px 8px; font-size: 17px; line-height: 1.3; animation: cap-in 0.25s ease-out; transition: opacity 0.6s; }
+#ending .caption[hidden], #ending .caption:empty { display: none; }
+#ending .caption.fade { opacity: 0; }
+#ending .caption img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; flex: none; }
+#ending .caption b { margin-right: 4px; }
+#ending .skip { inset: auto 14px 12px auto; font-size: 12px; color: #fff; transition: opacity 0.4s; }
+/* Run 2's first picture: the lantern sits where the eye was. */
+#opening { z-index: 50; opacity: 1; background-color: #e9d2a6; background-image: linear-gradient(#f6e6c4, #e0c08c 58%, #8a5a34 58.5%, #6e4528); }
+#opening .unlit { position: absolute; left: 50%; top: 50%; width: 16vmin; height: 16vmin; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle at 38% 35%, #d8cdb8, #8a8070 60%, #4a4238); box-shadow: 0 2vmin 3vmin #0004; }
+#opening .ph { color: #00000080; }

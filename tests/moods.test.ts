@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { MOODS, moodOf } from "../src/engine/moods.js";
+import { MOODS, faceOf, moodOf } from "../src/engine/moods.js";
 
 describe("portrait moods", () => {
   it("picks a mood from the line", () => {
@@ -13,6 +13,9 @@ describe("portrait moods", () => {
     expect(moodOf("Hesta", "Now, Rook.")).toBe("neutral");
     expect(moodOf("Hesta", "Clean.", "firm")).toBe("firm");
     expect(moodOf("Moth", "Here.")).toBeNull();
+    // Lumi stays closed-mouth in this run until the open-mouth drafts are redrawn.
+    expect(faceOf("Lumi", "Dad. North one.")).toBe("lumi-neutral");
+    expect(faceOf("Lumi", "So I'm coming tomorrow.")).toBe("lumi-smug");
   });
 
   it("has a portrait file for every mood", () => {

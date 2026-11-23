@@ -47,6 +47,8 @@ export class Camera {
   cx = 13;
   cy = 13;
   follow = true;
+  /** The ending: 0 on the board, 1 lifted off it and tilted up at the sky. */
+  lift = 0;
   w = 1;
   h = 1;
   readonly three = new THREE.PerspectiveCamera(FOV, 1, 0.1, 1300);
@@ -105,8 +107,8 @@ export class Camera {
     const cam = this.three;
     cam.aspect = this.w / this.h;
     const pitch = this.pitch;
-    cam.position.set(target.x, Math.sin(pitch) * d, target.z + Math.cos(pitch) * d);
-    cam.lookAt(target);
+    cam.position.set(target.x, Math.sin(pitch) * d + this.lift * d * 0.6, target.z + Math.cos(pitch) * d);
+    cam.lookAt(target.x, target.y + this.lift * d * 1.2, target.z);
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
   }

@@ -100,7 +100,7 @@ describe("Grand Kindling", () => {
       const st = room.state;
       expect(st.phase).toBe("results");
       expect(st.end).toBeDefined();
-      expect(st.end!.lines.at(-2)!.text).toMatch(/I counted/);
+      expect(st.end!.lines.at(-1)!.text).toMatch(/I counted/);
       // The crew feed Rook: they don't bank for themselves.
       // Wick feeds Rook and never banks for himself; Moth banks the far side.
       expect(bankers.filter((b) => b === 2)).toEqual([]);
