@@ -7,6 +7,7 @@ import { faceOf as faceFile } from "../engine/moods.js";
 import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg, type StoryLine } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
+import { GrannyRoom } from "../server/granny.js";
 import { StoryRoom } from "../server/story.js";
 import { ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import * as sound from "./sound.js";
@@ -112,13 +113,13 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | null = null;
 
-/** A story run runs in the page too, like Practice: run 1 (the Grand Kindling) or run 2 (Lumi's lesson). */
-function connectStory(name: string, run: 1 | 2 = 1) {
+/** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
+function connectStory(name: string, run: 1 | 2 | 3 = 1) {
   practice = true;
   callMode = false;
-  const r = run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
@@ -963,6 +964,7 @@ $("join-form").onsubmit = (e) => {
 $("practice").onclick = () => connectPractice(playerName());
 $("story").onclick = () => connectStory(playerName());
 $("story2").onclick = () => connectStory(playerName(), 2);
+$("story3").onclick = () => connectStory(playerName(), 3);
 // Run 2: call Rook to a spot. The next tap on the ground is the call.
 let callMode = false;
 function setCallMode(on: boolean) {

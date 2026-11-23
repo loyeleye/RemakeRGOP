@@ -40,7 +40,20 @@ export interface BotStyle {
   coop?: boolean;
   /** Chance per decision to forget the team and play alone. */
   coopLapse?: number;
+  /**
+   * Beginner's mistakes (story children: weak but busy, never standing still to think).
+   * earlyRelease: chance per tick of a pull in flight that it lets go too soon, so the wisp
+   * stops short. poorSpot: chance per decision it walks to the second-best spot. wrongWisp:
+   * chance, each time it picks a wisp, that it goes for a random one of its own instead of
+   * the nearest, and sticks with it.
+   */
+  earlyRelease?: number;
+  poorSpot?: number;
+  wrongWisp?: number;
 }
+
+/** Story children (run 3): Medium's straight pulls, never waiting, with beginner's mistakes mixed in. Tune per child. */
+export const BOT_CHILD: BotStyle = { pushy: 0, sloppiness: 0.12, straightOnly: true, earlyRelease: 0.15, poorSpot: 0.3, wrongWisp: 0.2 };
 
 /** Easy: Medium's straight pulls, but it stops to think for 3 to 12 ticks before each new move. */
 export const BOT_EASY: BotStyle = { pushy: 0, sloppiness: 0.3, straightOnly: true, wait: [3, 12] };
@@ -135,6 +148,7 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
     if (r >= style.pick[0] + style.pick[1]) taps = false;
     else if (r >= style.pick[0]) rank = 1;
   }
+  if (style.poorSpot && rand() < style.poorSpot) rank = 1;
   if (taps && !me.moved && rand() >= style.sloppiness) {
     const tap = pickTap(game, me, rank);
     if (tap !== null) {
@@ -147,15 +161,21 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
   if (me.action.kind === "staff" && !fixMode) {
     const w = game.wisps[me.action.wisp];
     const stuck = me.beam === w?.id && w && w.prev.x === w.pos.x && w.prev.y === w.pos.y;
-    if (w && w.guild === me.guild && live(w) && !me.slipped && !stuck && (w.target || me.beam !== w.id)) return null;
+    if (w && w.guild === me.guild && live(w) && !me.slipped && !stuck && (w.target || me.beam !== w.id)) {
+      if (style.earlyRelease && me.beam === w.id && w.target && rand() < style.earlyRelease) {
+        note(game, id, { intent: `let go of wisp ${w.id} too soon` });
+        return { action: { kind: "idle" } };
+      }
+      return null;
+    }
   }
   if (rand() < style.sloppiness) return fixMode ? { toggleMode: true } : null;
 
   const dist = bankDistances(game.board);
   const W = game.board.width;
-  const target = game.wisps
-    .filter((w) => w.guild === me.guild && live(w))
-    .sort((a, b) => (dist[a.pos.y * W + a.pos.x] ?? 0) - (dist[b.pos.y * W + b.pos.x] ?? 0))[0];
+  const mine = game.wisps.filter((w) => w.guild === me.guild && live(w));
+  let target = mine.sort((a, b) => (dist[a.pos.y * W + a.pos.x] ?? 0) - (dist[b.pos.y * W + b.pos.x] ?? 0))[0];
+  if (style.wrongWisp && target) target = stickyChoice(game, id, mine, target, style.wrongWisp, rand);
   if (!target) return fixMode ? { toggleMode: true, action: { kind: "idle" } } : null;
 
   const spot = planSpot(game, me.id, me.pos, target, rank, !!style.straightOnly);
@@ -167,6 +187,22 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
     return { action: { kind: "walk", to: spot }, toggleMode: fixMode || undefined };
   }
   return { action: { kind: "staff", wisp: target.id }, toggleMode: fixMode || undefined };
+}
+
+/** Per game, the wisp each mistake-prone bot has set its heart on (see wrongWisp). */
+const chosen = new WeakMap<Game, Map<number, { wisp: number; wrong: boolean; at: number }>>();
+
+function stickyChoice(game: Game, id: number, mine: Wisp[], best: Wisp, chance: number, rand: () => number): Wisp {
+  let m = chosen.get(game);
+  if (!m) chosen.set(game, (m = new Map()));
+  const had = m.get(id);
+  // A banked wisp comes back elsewhere under the same id: that's a fresh choice.
+  const still = had && !game.banks.some((b) => b.wisp === had.wisp) && mine.find((w) => w.id === had.wisp);
+  if (still) return had!.wrong ? still : best;
+  const wrong = mine.length > 1 && rand() < chance;
+  const pick = wrong ? mine.filter((w) => w !== best)[Math.floor(rand() * (mine.length - 1))]! : best;
+  m.set(id, { wisp: pick.id, wrong, at: game.tick });
+  return pick;
 }
 
 /** Per game, each slow bot's tick to act on (and the move it's thinking about). */
@@ -285,7 +321,7 @@ const plans = new WeakMap<Game, Map<number, Plan>>();
  * The tile to pull this wisp from: the one that gets it closest to banking soonest, counting
  * the walk there. Kept until the wisp moves.
  */
-function planSpot(game: Game, id: number, me: Pt, wisp: Wisp, rank = 0, straightOnly = false): Pt | null {
+export function planSpot(game: Game, id: number, me: Pt, wisp: Wisp, rank = 0, straightOnly = false): Pt | null {
   const board = game.board;
   const W = board.width;
   let mine = plans.get(game);

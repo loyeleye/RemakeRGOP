@@ -698,6 +698,23 @@ interface WispRig {
   trail: THREE.Points;
   lastX: number;
   lastY: number;
+  /** Run 3's earth hold: a ring of stones risen round a wisp held fast. Made when first needed. */
+  stones?: THREE.Group;
+}
+
+/** A ring of rough stones pushed up out of the ground (the earth hold's mark; placeholder). */
+function makeStones(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: "#7d6a58", roughness: 0.95, flatShading: true });
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2;
+    const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16 + (i % 3) * 0.04, 0), mat);
+    st.position.set(Math.cos(a) * 0.42, 0.12 + (i % 2) * 0.06, Math.sin(a) * 0.42);
+    st.rotation.set(i, i * 1.3, i * 0.7);
+    st.scale.y = 1.4;
+    g.add(st);
+  }
+  return g;
 }
 
 /** A solid stone stair about an arch wide, climbing north (toward -z) from where it's placed. */
@@ -1670,7 +1687,16 @@ export class World {
       const jump = !pw || Math.abs(pw.x - w.x) > 2 || Math.abs(pw.y - w.y) > 2;
       const x = jump ? w.x : lerp(w.px, w.x);
       const y = jump ? w.y : lerp(w.py, w.y);
-      const bob = Math.sin(time * 2.2 + w.id * 1.7) * 0.12;
+      // Held fast in the ground: no bob, sunk low in its ring of stones.
+      if (w.rooted && !rig.stones) {
+        rig.stones = makeStones();
+        this.scene.add(rig.stones);
+      }
+      if (rig.stones) {
+        rig.stones.visible = !!w.rooted;
+        rig.stones.position.set(this.worldX(b, w.x), 0, this.worldZ(b, w.y));
+      }
+      const bob = w.rooted ? -0.3 : Math.sin(time * 2.2 + w.id * 1.7) * 0.12;
       const sink = w.rim > 0 ? Math.min(1, w.rim * 0.5 + st.t * 0.5) : 0;
       rig.root.position.set(this.worldX(b, x), 0.75 + bob + sink * 1.4, this.worldZ(b, y));
       const s = 1 - sink * 0.6;
@@ -1680,7 +1706,7 @@ export class World {
       if (w.rim > 0) rimPulse = Math.max(rimPulse, 1);
       wispPos.set(w.id, rig.root.position.clone());
     }
-    for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), this.wisps.delete(id));
+    for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), rig.stones && this.scene.remove(rig.stones), this.wisps.delete(id));
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
     // Watchers: story figures standing off the plaza, turning slowly to keep you in view.

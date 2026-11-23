@@ -160,7 +160,7 @@ export interface GameSnapshot {
   moss?: number[];
   /** One score per team in the round. */
   scores: number[];
-  wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null }[];
+  wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null; rooted?: boolean }[];
   players: {
     id: number;
     guild: Guild;
@@ -287,6 +287,10 @@ export class Game {
    * when two pull together (toward the point between them).
    */
   heavy = new Set<number>();
+  /** Story: wisps held fast in the ground (run 3's earth hold). Nothing moves them while they're here. */
+  rooted = new Set<number>();
+  /** Story: wisps that sit on the rim without banking for now (Hesta waiting on her match point). */
+  noBank = new Set<number>();
   /**
    * Story runs: the player whose pull is a tide pull (Lumi). When she takes hold of a wisp on
    * water, every loose wisp on that pool drifts a tile a tick toward her for as long as she holds.
@@ -493,8 +497,16 @@ export class Game {
     const held = w.touched;
     w.touched = false;
     w.prev = w.pos;
+    if (this.rooted.has(w.id)) {
+      w.target = null;
+      return;
+    }
     if (this.board.inBankZone(w.pos)) {
       w.target = null;
+      if (this.noBank.has(w.id)) {
+        w.rimTicks = 0;
+        return;
+      }
       w.rimTicks++;
       // Nobody can keep tugging a wisp that's already on the rim.
       if (w.rimTicks >= 1) this.letGo(w);
@@ -858,7 +870,7 @@ export class Game {
       // Round the midpoint toward the wisp, so it never aims past where they meet.
       const mid = pt(base.x + Math.trunc(mx - base.x), base.y + Math.trunc(my - base.y));
       const off = samePt(mid, base) ? pt(0, 0) : flingOffset(mid, base, "pull");
-      w.target = off.x === 0 && off.y === 0 ? null : pt(base.x + off.x, base.y + off.y);
+      w.target = (off.x === 0 && off.y === 0) || this.rooted.has(w.id) ? null : pt(base.x + off.x, base.y + off.y);
       return;
     }
     if (!p.slipped && this.loses(p, w)) p.slipped = true;
@@ -867,7 +879,7 @@ export class Game {
     const off = flingOffset(p.pos, w.pos, p.mode);
     // Already right in front of the puller: the touch holds it but it doesn't move. A jammed
     // wisp doesn't move for one staff either; a second puller joining moves it (above).
-    w.target = (off.x === 0 && off.y === 0) || (this.heavy.has(w.id) && p.mode === "pull") ? null : pt(w.pos.x + off.x, w.pos.y + off.y);
+    w.target = (off.x === 0 && off.y === 0) || (this.heavy.has(w.id) && p.mode === "pull") || this.rooted.has(w.id) ? null : pt(w.pos.x + off.x, w.pos.y + off.y);
     w.holder = p.id;
     w.grip = Grip.Held;
     w.touched = true;
@@ -900,6 +912,7 @@ export class Game {
         py: w.prev.y,
         rim: w.rimTicks,
         holder: w.holder,
+        ...(this.rooted.has(w.id) ? { rooted: true } : {}),
       })),
       players: this.players.map((p) => ({
         id: p.id,
