@@ -41,3 +41,17 @@ describe("voice clips", () => {
     for (const t of rook) expect(clips.some((r) => r.test(t)), t).toBe(true);
   });
 });
+
+describe("Hesta and Lumi voice clips", () => {
+  it("every clip exists, and every plain Hesta or Lumi line has one", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { VOICE_LINES } = await import("../src/client/voice-lines.js");
+    for (const f of Object.values(VOICE_LINES)) expect(existsSync(`public/${f}`), f).toBe(true);
+    const src = readFileSync("src/server/story.ts", "utf8") + readFileSync("src/server/lesson.ts", "utf8");
+    for (const m of src.matchAll(/say\((HESTA|LUMI), "([^"]+)"/g)) {
+      const who = m[1] === "HESTA" ? "Hesta" : "Lumi";
+      if (m[2] === "!") continue;
+      expect(VOICE_LINES[`${who}|${m[2]}`], `${who}: ${m[2]}`).toBeDefined();
+    }
+  });
+});

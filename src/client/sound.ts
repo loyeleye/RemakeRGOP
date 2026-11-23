@@ -4,6 +4,8 @@
 // Browsers only allow sound after a tap or key press, so nothing plays before the first one.
 // All the numbers that set the feel are in SOUND.
 
+import { VOICE_LINES } from "./voice-lines.js";
+
 export const SOUND = {
   /** Master volume, 0 to 1. */
   volume: 0.8,
@@ -269,8 +271,6 @@ export function pullHum(near: number | null) {
  * { who: "Lumi", match: /^Dad\./, src: "voice/lumi-dad.mp3" } and the line plays the clip.
  */
 export const VOICE: { who: string; match: RegExp; src: string }[] = [
-  // Hesta's "Now." in place of her two-note cue ("Now.", "Now, Rook.", "...left you one. Now."), not "Now pull."
-  { who: "Hesta", match: /(^|\. )Now[.,]/, src: "voice/hesta-now.mp3" },
   // Rook's run 2 lines, whole: Umbriel, lowered a semitone (Ladi's pick).
   { who: "Rook", match: /^Three wisps\. I won't point today\.$/, src: "voice/rook-three-wisps.mp3" },
   { who: "Rook", match: /^Where would I stand\?$/, src: "voice/rook-where-stand.mp3" },
@@ -288,10 +288,11 @@ export const VOICE: { who: string; match: RegExp; src: string }[] = [
 
 /** A line appears: its clip if it has one, else Hesta's "Now" cue or the speaker's babble. */
 export function speak(who: string, text: string, now = false) {
-  const v = VOICE.find((c) => c.who === who && c.match.test(text));
-  if (v) {
+  // An exact whole-line clip wins; then a pattern; else the babble.
+  const src = VOICE_LINES[`${who}|${text}`] ?? VOICE.find((c) => c.who === who && c.match.test(text))?.src;
+  if (src) {
     if (!out()) return;
-    const a = new Audio(v.src);
+    const a = new Audio(src);
     a.volume = SOUND.volume;
     a.muted = muted;
     void a.play().catch(() => {});

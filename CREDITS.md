@@ -48,5 +48,5 @@ They are stand-ins until the game is distributed, and will be replaced or cleare
 
 | File | Voice | Line |
 |---|---|---|
-| voice/hesta-now.mp3 | Gacrux (Gemini TTS), from `gameplay/voice/run1/final/hesta-now.wav`, loudness-matched and encoded to MP3 | Hesta's "Now." |
+| voice/hesta-*.mp3, voice/lumi-*.mp3 (106 lines in runs 1 and 2) | Sogni speech in copies of the Gacrux voice (Hesta) and the Autonoe voice raised 2 semitones (Lumi), Ladi's picks on 2026-11-23; from `gameplay/voice/final/run1`, `run2` and their manifest.json, 0 Spark. Terms for copied voices not yet checked: ❓ | One clip per line; Lumi's three "Fine" concessions share one "Ugh" |
 | voice/rook-*.mp3 (12 clips) | Sogni speech in a copy of the Umbriel voice, lowered 1 semitone (Ladi's pick for Rook, 2026-11-23); from `gameplay/voice/run2/rook-umbriel/` as delivered (trimmed and levelled by the design thread), 2026-11-23. Terms for a copied voice not yet checked: ❓ | Rook's run 2 lines, one clip per line |
