@@ -175,7 +175,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -1312,7 +1312,14 @@ export class World {
     for (const [kind, bx] of boxes) {
       const w = bx.x1 - bx.x0 + 1, d = bx.y1 - bx.y0 + 1;
       const obj = makePlace(kind, w, d);
-      obj.position.set(this.worldX(b, bx.x0 + (w - 1) / 2), 0, this.worldZ(b, bx.y0 + (d - 1) / 2));
+      const at = [this.worldX(b, bx.x0 + (w - 1) / 2), this.worldZ(b, bx.y0 + (d - 1) / 2)] as const;
+      // Drawn ones: the maps thread's model in a slot, the block-out until it loads.
+      const model = { "hesta-house": "hesta-house", chair: "hesta-chair" }[kind];
+      if (model) {
+        this.placeSlot(model, obj, at[0], at[1]);
+        continue;
+      }
+      obj.position.set(at[0], 0, at[1]);
       if (kind === "kindling") {
         const light = new THREE.PointLight("#ff9a3a", 3, 14, 1.6);
         light.position.y = 2.5;
@@ -1320,6 +1327,7 @@ export class World {
       }
       g.add(obj);
     }
+    this.fillHouse();
   }
 
   private worldX(b: Board, x: number) {

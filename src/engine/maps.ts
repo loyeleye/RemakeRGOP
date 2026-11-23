@@ -1277,7 +1277,7 @@ export const HOME_ISLAND = {
   landing: { dy: 34 },
   stall: { dx: -4, dy: 27 },
   shrine: { dx: 4, dy: 42 },
-  hestaHouse: { dx: 0, dy: 58, w: 5, h: 4 },
+  hestaHouse: { dx: 0, dy: 58, w: 5, h: 5 },
   kindling: { dx: 0, dy: 74, r: 2 },
 };
 
