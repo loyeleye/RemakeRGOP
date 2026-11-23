@@ -1170,7 +1170,7 @@ function watchersFor(b: Board): DrawState["watchers"] {
     { cast: "hesta", ...edge(b.center.x + 2) },
   ];
 }
-/** Run 1 only: the steps Hesta leaves by, off the north rim by the bell's lamp post. For looks: not walkable. */
+/** Run 1 only: the stair Hesta leaves by, from the middle of the plaza's north edge. For looks: not walkable. */
 function stepsFor(b: Board): DrawState["steps"] {
   if (!(storyRoom instanceof StoryRoom) || !room?.story) return undefined;
   const x = b.center.x;
@@ -1179,7 +1179,7 @@ function stepsFor(b: Board): DrawState["steps"] {
   return { x: x + 0.5, y: y - STEPS_EDGE };
 }
 /** How far past the plaza's edge (in tiles) the steps start. */
-const STEPS_EDGE = 2.3;
+const STEPS_EDGE = 0.6;
 
 /** How far past the plaza's edge (in tiles) Lumi and Hesta stand. */
 const WATCH_EDGE = 1.7;
