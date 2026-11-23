@@ -23,6 +23,12 @@ export const POND = {
   lumiAt: 12,
   /** Tap reach: within this many tiles (either way, diagonals count as one) they answer at once. */
   reach: 2,
+  /** Granny's game starts with everyone this many tiles from the brazier's centre. */
+  ring: 5,
+  /** The walking map: the same island built as a place, not Granny's board. */
+  shrine: "home-island",
+  /** Ticks of fade between tapping Hesta and the cut to Granny's board. */
+  leaveTicks: 2,
   /** Sefa's "We need four!", every this many ticks once they've gathered (and not while Rook is with them). */
   sefaEvery: 60,
 };
@@ -62,7 +68,7 @@ export function pondSpots(board: Board, starts: readonly Pt[][], house?: { x: nu
   const enter = [open(pt(c - 1, top)), open(pt(c, top)), open(pt(c + 1, top))];
   const rook = open(starts[0]![0]!);
   // Lumi's lantern: by Rook's door if the island has his house (door on its east side), else on the pool's west shore.
-  const lantern = house ? open(pt(house.x + house.w, house.y + Math.floor(house.h / 2) + 1)) : open(pt(minX - 1, midY));
+  const lantern = house ? open(pt(house.x + house.w, doorY(house) + 1)) : open(pt(minX - 1, midY));
   return { rook, lumi: open(pt(rook.x - 1, rook.y), [rook]), enter, gather: { hesta, nell, sefa, lumi: lumiAt }, lantern };
 }
 
@@ -90,6 +96,8 @@ export class PondRoom {
   private lastSefa = -99;
   /** Once Hesta is tapped: Granny's game, which this room hands everything to. */
   private granny: { room: GrannyRoom; conn: ReturnType<GrannyRoom["connect"]> } | null = null;
+  /** The tick Hesta was tapped: the screen fades, then the cut to her game. */
+  private leavingAt = -1;
   /** Where everything is (see pondSpots). */
   spots!: ReturnType<typeof pondSpots>;
 
@@ -133,7 +141,7 @@ export class PondRoom {
   }
 
   begin() {
-    const shrine = shrineById(GRANNY.shrine);
+    const shrine = shrineById(POND.shrine);
     const roster = [
       { id: ROOK_ID, guild: 0 as Guild, name: "Rook" },
       { id: LUMI_ID, guild: 0 as Guild, name: "Lumi" },
@@ -163,6 +171,11 @@ export class PondRoom {
   onTick() {
     if (this.granny) return;
     const g = this.game;
+    if (this.leavingAt >= 0) {
+      if (g.tick - this.leavingAt >= POND.leaveTicks) return this.cut();
+      g.tick++;
+      return this.broadcast();
+    }
     const t = g.tick;
     if (t === POND.enterAt) {
       this.walk(HESTA_ID, this.spots.gather.hesta);
@@ -187,7 +200,7 @@ export class PondRoom {
   }
 
   private act(msg: Extract<ClientMsg, { t: "act" }>) {
-    if (this.granny) return;
+    if (this.granny || this.leavingAt >= 0) return;
     const g = this.game;
     const action = cleanAction(msg.action, g);
     const to = action?.kind === "walk" ? action.to : null;
@@ -212,7 +225,7 @@ export class PondRoom {
     if (at.x === this.spots.lantern.x && at.y === this.spots.lantern.y) return { name: "lantern", at: () => this.spots.lantern };
     const h = this.game.shrine.house;
     if (h && at.x >= h.x && at.x < h.x + h.w && at.y >= h.y && at.y < h.y + h.h) {
-      const door = pt(h.x + h.w, h.y + Math.floor(h.h / 2));
+      const door = pt(h.x + h.w, doorY(h));
       return { name: "house", at: () => door };
     }
     for (const p of this.game.players) if (p.id !== ROOK_ID && p.pos.x === at.x && p.pos.y === at.y) return { name: p.name, at: () => this.player(p.id).pos };
@@ -229,11 +242,29 @@ export class PondRoom {
     this.say(thing.name === "lantern" || thing.name === "house" ? "Rook" : thing.name, lines[n % lines.length]!);
   }
 
-  /** Hesta, tapped: Granny's game, from where everyone stands. No menu, no cutscene: the bell rings and the wisps arrive. */
+  /** Hesta, tapped: her line, a short fade, then Granny's game. */
   private startGame() {
     this.say("Hesta", LINES.Hesta![0]!);
-    this.flush();
-    const starts = new Map(this.game.players.map((p) => [p.id, p.pos] as const));
+    this.going = null;
+    this.leavingAt = this.game.tick;
+    this.broadcast();
+  }
+
+  /**
+   * The cut to Granny's board: everyone in a proper starting place, spaced evenly round the
+   * brazier (Hesta on her own at the top, the four of them round the rest), then the bell.
+   */
+  private cut() {
+    const shrine = shrineById(GRANNY.shrine);
+    const board = shrine.board;
+    const order = [HESTA_ID, NELL_ID, ROOK_ID, LUMI_ID, SEFA_ID];
+    const starts = new Map<number, Pt>();
+    order.forEach((id, i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / order.length;
+      let at = pt(Math.round(board.center.x + Math.cos(a) * POND.ring), Math.round(board.center.y + Math.sin(a) * POND.ring));
+      for (let r = 1; !board.passable(at, Mover.Walker) && r < 4; r++) at = pt(Math.round(board.center.x + Math.cos(a) * (POND.ring + r)), Math.round(board.center.y + Math.sin(a) * (POND.ring + r)));
+      starts.set(id, at);
+    });
     const room = new GrannyRoom(this.clock, this.seed, starts);
     this.endClock();
     const send = this.send;
@@ -291,7 +322,7 @@ export class PondRoom {
   }
 
   storyView(): StoryView {
-    return { run: POND.title, movement: 0, title: POND.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern } };
+    return { run: POND.title, movement: 0, title: POND.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, ...(this.leavingAt >= 0 ? { leaving: true } : {}) } };
   }
 
   view(): RoomView {
@@ -300,7 +331,7 @@ export class PondRoom {
       code: "STORY",
       phase: "playing",
       host: ROOK_ID,
-      shrine: GRANNY.shrine,
+      shrine: POND.shrine,
       teams: 2,
       players: [kid(ROOK_ID, "Rook"), kid(LUMI_ID, "Lumi"), kid(NELL_ID, NELL), kid(SEFA_ID, SEFA), { id: HESTA_ID, name: "Hesta", guild: 1, flame: "frost", connected: true, bot: true }],
       countdown: 0,
@@ -312,9 +343,12 @@ export class PondRoom {
 
   /** For tests. */
   get state() {
-    return { game: this.game, granny: this.granny?.room ?? null, going: this.going };
+    return { game: this.game, granny: this.granny?.room ?? null, going: this.going, leaving: this.leavingAt >= 0 };
   }
 }
+
+/** The row of the house's door, on its east side: a little south of the middle (the model's door). */
+export const doorY = (h: { y: number; h: number }) => h.y + Math.round(h.h / 2);
 
 const near = (a: Pt, b: Pt, r: number) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) <= r;
 

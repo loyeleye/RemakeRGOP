@@ -172,7 +172,37 @@ const plainLoader = new GLTFLoader().register((parser) => {
   return { name: "plain_textures" };
 });
 
+/** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
+const PLACE_MODELS = ["rook-house", "rook-house-big"];
+
 export function loadModels() {
+  for (const n of PLACE_MODELS) {
+    const done = (g: GLTF) => {
+      g.scene.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = m.receiveShadow = true;
+        const mat = m.material as THREE.MeshStandardMaterial;
+        mat.metalness = 0;
+        mat.roughness = 0.9;
+        if (mat.map) {
+          mat.emissiveMap = mat.map;
+          mat.emissive = new THREE.Color("#ffffff");
+          mat.emissiveIntensity = 0.15;
+        }
+      });
+      models[n] = g.scene;
+      modelWaiters.forEach((f) => f());
+    };
+    loader.load(`models/${n}.glb`, done, undefined, () => {
+      fetch(`models/${n}.glb.txt`)
+        .then((r) => (r.ok ? r.text() : Promise.reject()))
+        .then((b64) => plainLoader.parse(Uint8Array.from(atob(b64.trim()), (c) => c.charCodeAt(0)).buffer, "", done))
+        .catch(() => {
+          /* missing: the block-out stays */
+        });
+    });
+  }
   for (const n of ["dawn", "dusk", "brazier", "monolith", "boulder", ...CAST_MODELS] as string[]) {
     loader.load(
       `models/${n}.glb`,
@@ -1080,6 +1110,80 @@ export class World {
     this.bloom.resolution.set(w * (this.low ? 0.5 : 1), h * (this.low ? 0.5 : 1));
   }
 
+  /** A story place's own things: worn paths on the grass, a fence, a wash line between posts, a bench. */
+  private addPlace(shrine: Shrine, b: Board) {
+    const g = this.shrineGroup;
+    const dirt = new THREE.MeshStandardMaterial({ color: "#b89a6a", roughness: 1, transparent: true, opacity: 0.85 });
+    const disc = new THREE.CircleGeometry(0.85, 14);
+    for (const [i, p] of (shrine.paths ?? []).entries()) {
+      const m = new THREE.Mesh(disc, dirt);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(this.worldX(b, p.x) + Math.sin(i * 1.7) * 0.15, 0.02 + (i % 3) * 0.001, this.worldZ(b, p.y) + Math.cos(i * 2.3) * 0.15);
+      m.receiveShadow = true;
+      g.add(m);
+    }
+    const wood = new THREE.MeshStandardMaterial({ color: "#7a5434", roughness: 0.85 });
+    const props = shrine.props ?? [];
+    const has = (x: number, y: number, kind: string) => props.some((q) => q.kind === kind && q.x === x && q.y === y);
+    for (const p of props) {
+      const wx = this.worldX(b, p.x), wz = this.worldZ(b, p.y);
+      if (p.kind === "fence") {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.9, 0.14), wood);
+        post.position.set(wx, 0.45, wz);
+        g.add(post);
+        // Rails to the next fence tile east and south.
+        for (const [dx, dy] of [[1, 0], [0, 1]] as const) {
+          if (!has(p.x + dx, p.y + dy, "fence")) continue;
+          for (const h of [0.35, 0.7]) {
+            const rail = new THREE.Mesh(new THREE.BoxGeometry(dx ? 1 : 0.07, 0.08, dy ? 1 : 0.07), wood);
+            rail.position.set(wx + dx * 0.5, h, wz + dy * 0.5);
+            rail.castShadow = true;
+            g.add(rail);
+          }
+        }
+        post.castShadow = true;
+      } else if (p.kind === "post") {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 2, 8), wood);
+        post.position.set(wx, 1, wz);
+        post.castShadow = true;
+        g.add(post);
+        // The line runs east to the next post on this row, with a few things pegged out.
+        const other = props.find((q) => q.kind === "post" && q.y === p.y && q.x > p.x);
+        if (other) {
+          const len = other.x - p.x;
+          const line = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, len, 4), new THREE.MeshStandardMaterial({ color: "#eee6d6" }));
+          line.rotation.z = Math.PI / 2;
+          line.position.set(wx + len / 2, 1.85, wz);
+          g.add(line);
+          const cloths = ["#e8d7b0", "#9fc4e8", "#e8a0a0", "#f4f0e6"];
+          for (let k = 1; k < len; k++) {
+            const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.7), new THREE.MeshStandardMaterial({ color: cloths[k % cloths.length], side: THREE.DoubleSide, roughness: 1 }));
+            cloth.position.set(wx + k, 1.5, wz);
+            cloth.castShadow = true;
+            g.add(cloth);
+          }
+        }
+      } else if (p.kind === "bench") {
+        if (has(p.x - 1, p.y, "bench")) continue;
+        const long = has(p.x + 1, p.y, "bench") ? 2 : 1;
+        const bench = new THREE.Group();
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(long * 0.95, 0.08, 0.45), wood);
+        seat.position.y = 0.45;
+        const back = new THREE.Mesh(new THREE.BoxGeometry(long * 0.95, 0.4, 0.06), wood);
+        back.position.set(0, 0.7, 0.2);
+        bench.add(seat, back);
+        for (const sx of [-1, 1]) {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.45, 0.4), wood);
+          leg.position.set((sx * long * 0.95) / 2 - sx * 0.08, 0.22, 0);
+          bench.add(leg);
+        }
+        bench.traverse((o) => ((o as THREE.Mesh).castShadow = true));
+        bench.position.set(wx + (long - 1) / 2, 0, wz);
+        g.add(bench);
+      }
+    }
+  }
+
   private worldX(b: Board, x: number) {
     return x - b.width / 2 + 0.5;
   }
@@ -1092,6 +1196,8 @@ export class World {
   private buildShrine(shrine: Shrine) {
     this.shrineId = shrine.id + "~" + shrine.teams;
     this.shrineGroup.clear();
+    this.houseSlot = null;
+    this.isPlace = !!themeFor(shrine.id).place;
     this.propSlots = [];
     this.vents = [];
     this.plates = [];
@@ -1229,43 +1335,50 @@ export class World {
     const amb = ambientParticles(th.particles, Math.max(W, H) * 0.65, this.low, (u) => this.timeUniforms.push(u));
     if (amb) g.add(amb);
 
-    // A low rounded parapet runs round the edge of the flagstones: the limit of play.
-    const curbPts: THREE.Vector3[] = [];
-    const curbMat = new THREE.MeshStandardMaterial({ map: wallTex, color: "#c9bda8", roughness: 0.85 });
-    if (coastField) {
-      // One parapet per loop: round the outside and round each gap.
-      const [outer, ...holes] = traced(0.45);
-      (outer ?? []).forEach((p, i) => i % 2 === 0 && curbPts.push(new THREE.Vector3(p.x, 0.12, p.y)));
-      for (const h of holes) {
-        const pts = h.filter((_, i) => i % 2 === 0).map((p) => new THREE.Vector3(p.x, 0.12, p.y));
-        if (pts.length < 4) continue;
-        const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), pts.length * 2, 0.26, 10, true), curbMat);
-        tube.castShadow = tube.receiveShadow = true;
-        g.add(tube);
+    // A place to walk has no parapet and no monoliths: its paths, fence, wash line and bench instead.
+    if (th.place) this.addPlace(shrine, b);
+    else {
+      // A low rounded parapet runs round the edge of the flagstones: the limit of play.
+      const curbPts: THREE.Vector3[] = [];
+      const curbMat = new THREE.MeshStandardMaterial({ map: wallTex, color: "#c9bda8", roughness: 0.85 });
+      if (coastField) {
+        // One parapet per loop: round the outside and round each gap.
+        const [outer, ...holes] = traced(0.45);
+        (outer ?? []).forEach((p, i) => i % 2 === 0 && curbPts.push(new THREE.Vector3(p.x, 0.12, p.y)));
+        for (const h of holes) {
+          const pts = h.filter((_, i) => i % 2 === 0).map((p) => new THREE.Vector3(p.x, 0.12, p.y));
+          if (pts.length < 4) continue;
+          const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), pts.length * 2, 0.26, 10, true), curbMat);
+          tube.castShadow = tube.receiveShadow = true;
+          g.add(tube);
+        }
+      } else
+        for (let i = 0; i < 240; i++) {
+          const p = ring((i / 240) * Math.PI * 2, 0.45);
+          curbPts.push(new THREE.Vector3(p.x, 0.12, p.z));
+        }
+      const curb = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curbPts, true), Math.max(480, curbPts.length * 2), 0.26, 14, true),
+        new THREE.MeshStandardMaterial({ map: wallTex, color: "#c9bda8", roughness: 0.85 }),
+      );
+      curb.castShadow = curb.receiveShadow = true;
+      g.add(curb);
+      // Four tall monoliths stand on the verge for scale.
+      for (let k = 0; k < 4; k++) {
+        const p = ring(Math.PI / 4 + (k * Math.PI) / 2, 1.2);
+        this.addProp(th.wall, p.x, p.z, 4.2, 1.3, k);
       }
-    } else
-      for (let i = 0; i < 240; i++) {
-        const p = ring((i / 240) * Math.PI * 2, 0.45);
-        curbPts.push(new THREE.Vector3(p.x, 0.12, p.z));
-      }
-    const curb = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curbPts, true), Math.max(480, curbPts.length * 2), 0.26, 14, true),
-      new THREE.MeshStandardMaterial({ map: wallTex, color: "#c9bda8", roughness: 0.85 }),
-    );
-    curb.castShadow = curb.receiveShadow = true;
-    g.add(curb);
-    // Four tall monoliths stand on the verge for scale.
-    for (let k = 0; k < 4; k++) {
-      const p = ring(Math.PI / 4 + (k * Math.PI) / 2, 1.2);
-      this.addProp(th.wall, p.x, p.z, 4.2, 1.3, k);
     }
 
     // Rook's house (story islands): a placeholder block-out until the art thread designs it.
     if (shrine.house) {
       const hs = shrine.house;
-      const house = makeHouse(hs.w, hs.h);
-      house.position.set(this.worldX(b, hs.x + (hs.w - 1) / 2), 0, this.worldZ(b, hs.y + (hs.h - 1) / 2));
-      this.shrineGroup.add(house);
+      const slot = new THREE.Group();
+      slot.add(makeHouse(hs.w, hs.h));
+      slot.position.set(this.worldX(b, hs.x + (hs.w - 1) / 2), 0, this.worldZ(b, hs.y + (hs.h - 1) / 2));
+      this.shrineGroup.add(slot);
+      this.houseSlot = { group: slot, model: hs.w >= 8 ? "rook-house-big" : "rook-house" };
+      this.fillHouse();
     }
 
     // Tiles. Walls and boulders are props; pools and ice are painted as soft shapes over the
@@ -1274,6 +1387,7 @@ export class World {
     this.timeUniforms.push(waterU);
     let seed = 1;
     const ringSet = new Set(shrine.rings.flatMap(ringWalls).map((p) => `${p.x},${p.y}`));
+    const propAt = new Set((shrine.props ?? []).map((p) => `${p.x},${p.y}`));
     for (let y = 1; y < H - 1; y++)
       for (let x = 1; x < W - 1; x++) {
         const t = b.tiles[y * W + x];
@@ -1283,6 +1397,7 @@ export class World {
         if (t === Tile.Wall && ringSet.has(`${x - b.center.x},${y - b.center.y}`)) continue;
         const hs = shrine.house;
         if (hs && x >= hs.x && x < hs.x + hs.w && y >= hs.y && y < hs.y + hs.h) continue;
+        if (t === Tile.Wall && propAt.has(`${x},${y}`)) continue;
         if (t === Tile.Wall) this.addProp(th.wall, wx, wz, 2.8, 2.2, seed);
         else if (t === Tile.Rock) {
           // Deflector stones inside the archways can have their own look.
@@ -1383,6 +1498,7 @@ export class World {
       new THREE.BufferGeometry().setFromPoints(pts),
       new THREE.LineBasicMaterial({ color: "#ffcf8a", transparent: true, opacity: 0.8 }),
     );
+    this.rim.visible = !this.isPlace;
     g.add(this.rim);
     const rimFill = new THREE.Mesh(
       new THREE.PlaneGeometry(5, 5),
@@ -1570,7 +1686,21 @@ export class World {
     }
   }
 
+  /** Rook's house: the art thread's model once it has loaded, the block-out until then. */
+  /** A place to walk (see Theme.place): no banking rim, no reach square. */
+  private isPlace = false;
+  private houseSlot: { group: THREE.Group; model: string } | null = null;
+  private fillHouse() {
+    const s = this.houseSlot;
+    const m = s && models[s.model];
+    if (!s || !m || s.group.userData.filled) return;
+    s.group.clear();
+    s.group.add(m.clone());
+    s.group.userData.filled = true;
+  }
+
   private refreshProps() {
+    this.fillHouse();
     for (const p of this.propSlots) this.fillProp(p.kind, p.group, p.seed);
     this.refreshBrazier();
     for (const r of this.players.values()) this.dressPlayer(r);
@@ -1987,7 +2117,7 @@ export class World {
       pos.needsUpdate = true;
       this.reach.computeLineDistances();
       (this.reach.material as THREE.LineDashedMaterial).color.set(me.mode === "pull" ? "#fff3c4" : "#ff9a9a");
-      this.reach.visible = true;
+      this.reach.visible = !this.isPlace;
       this.walkMark.visible = !!me.walkTo;
       if (me.walkTo) {
         this.walkMark.position.set(this.worldX(b, me.walkTo.x), 0.05, this.worldZ(b, me.walkTo.y));

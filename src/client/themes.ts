@@ -25,6 +25,8 @@ export interface Theme {
   wall: PropKind;
   boulder: PropKind;
   particles: Particles;
+  /** A place to walk, not an arena: grass, no parapet round the edge, no monoliths. */
+  place?: boolean;
   /** Tint for the plain wall/boulder models, if the island wants them darker or paler. */
   tint?: string;
   /** What deflector stones inside the archways look like, if not the island's boulders. */
@@ -119,6 +121,10 @@ export const THEMES: Record<string, Theme> = {
   },
   get "home-pond-big"() {
     return THEMES["tidepool-steps"]!;
+  },
+  // The home island as a place to walk: the lagoon's sky and falls, on grass.
+  get "home-island"() {
+    return { ...THEMES["tidepool-steps"]!, name: "Home island", floor: "home-island", grass: "#7fb352", place: true };
   },
   "ember-quarry": {
     name: "Volcano",

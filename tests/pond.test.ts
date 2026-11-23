@@ -38,8 +38,10 @@ describe("The pond, between runs", () => {
     for (let i = 0; i < 40 && !room.state.granny; i++) room.onTick();
     const granny = room.state.granny!;
     expect(granny).toBeTruthy();
-    // Everyone starts the game where they stood.
-    expect(granny.state.game.players.find((p) => p.name === "Hesta")!.pos).toEqual(h);
+    // Everyone starts in a proper place, spread round the brazier, and nobody shares a tile.
+    const g = granny.state.game, c = g.board.center;
+    for (const p of g.players) expect(Math.hypot(p.pos.x - c.x, p.pos.y - c.y)).toBeLessThan(8);
+    expect(new Set(g.players.map((p) => `${p.pos.x},${p.pos.y}`)).size).toBe(5);
     expect(granny.state.phase).toBe("countdown");
   });
 });

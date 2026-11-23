@@ -224,3 +224,4 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 /* Run 2 into the free walk on the pond: a short fade through black. */
 .fade-black { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.8s; z-index: 50; }
 .fade-black.on { opacity: 1; }
+.fade-black.quick { transition-duration: 0.45s; }

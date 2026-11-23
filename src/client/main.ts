@@ -53,6 +53,7 @@ function onServer(m: ServerMsg) {
       }
       if (room.phase === "countdown" && was !== "countdown") cam.follow = true;
       if (room.story) storyPhaseSound(was);
+      placeView(!!room.story?.pond, !!room.story?.pond?.leaving);
       render();
       break;
     }
@@ -331,6 +332,9 @@ function leave() {
   room = null;
   snap = prevSnap = null;
   clearCaptions();
+  inPlace = false;
+  placeFade?.remove();
+  placeFade = null;
   skyBase = null;
   stopStorySound();
   try {
@@ -342,6 +346,34 @@ function leave() {
 }
 
 // ------------------------------------------------------------------ screens
+
+/** The walking map: a closer camera that follows Rook, and a short fade out when Hesta's game starts. */
+let inPlace = false;
+let placeFade: HTMLElement | null = null;
+function placeView(place: boolean, leaving: boolean) {
+  if (place && !inPlace) {
+    cam.scale = Math.min(cam.w, cam.h) / 17;
+    cam.follow = true;
+  }
+  if (leaving && !placeFade) {
+    placeFade = document.createElement("div");
+    placeFade.className = "fade-black quick";
+    document.body.appendChild(placeFade);
+    const f = placeFade;
+    requestAnimationFrame(() => requestAnimationFrame(() => f.classList.add("on")));
+  }
+  if (!place && inPlace) {
+    // Back to fitting the board for the game, and the fade lifts on it.
+    cam.scale = 0;
+    const f = placeFade;
+    placeFade = null;
+    if (f) {
+      setTimeout(() => f.classList.remove("on"), 150);
+      setTimeout(() => f.remove(), 900);
+    }
+  }
+  inPlace = place;
+}
 
 /** Run 2 won: Lumi's last line plays over the pond, then a short fade, and Rook is free to walk it. */
 let toPond: unknown = null;
