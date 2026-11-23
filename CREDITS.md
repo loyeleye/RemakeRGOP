@@ -13,3 +13,24 @@ subscription-only billing so no Spark was spent. Sources are in the project file
 | sprites/brazier.png, sprites/wisp-dawn.png (logo and favicon) | z_image_turbo_bf16, background removed with birefnet_image_background_removal_fp16 |
 
 The sky, cloud sea, fire, embers, light pillar, water and wisps are drawn in code with shaders.
+
+## Music
+
+The Grand Kindling's music was generated with Mureka by Ladi and added on 2026-11-22. Each track was
+loudness-matched to -18 LUFS and encoded to 160 kbps MP3 with ffmpeg. Sources are in the project files:
+`kindling-run-1.wav`, `kindling-run-1 (1).wav`, `kindling-run-1 (2).wav` and an upload named
+`kindling-run-1 3.wav`.
+
+| File | Source render | Movement |
+|---|---|---|
+| music/kindling-1.mp3 | kindling-run-1 (2).wav | First light |
+| music/kindling-2.mp3 | kindling-run-1 3.wav | The relay |
+| music/kindling-3.mp3 | kindling-run-1 (1).wav | The crescendo |
+
+`kindling-run-1.wav` is not used.
+
+Licence: ❓ not confirmed. On 2026-11-23 Mureka's terms page (https://www.mureka.ai/terms-of-service)
+returned 404. The homepage (https://www.mureka.ai) offers "full commercial rights" and says paid plans
+"enjoy commercial licensing", but it doesn't say what the free plan allows or whether rights depend on
+being subscribed when a track is made. Before the game is sold, the actual terms need reading, and it
+needs checking which plan these tracks were made on.

@@ -16,7 +16,7 @@ export const SOUND = {
   humGain: 0.05,
   pullCue: 1.1,
   /** Music volume, and how long it fades under Lumi's bell. */
-  musicGain: 0.5,
+  musicGain: 0.45,
   musicFade: 1.5,
 };
 
