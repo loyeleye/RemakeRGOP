@@ -61,11 +61,13 @@ export function pondSpots(board: Board, starts: readonly Pt[][], house?: { x: nu
   const nell = open(pt(hesta.x - 1, hesta.y + 1), [hesta]);
   const sefa = open(pt(hesta.x + 1, hesta.y + 1), [hesta, nell]);
   const lumiAt = open(pt(hesta.x - 2, hesta.y), [hesta, nell, sefa]);
-  // The way in: the north rim, above the brazier.
-  const c = Math.floor(board.width / 2);
+  // The way in: up the path from the south, where Hesta lives (on a map without a neck, the north rim).
+  const c = board.center;
+  const south = walk(pt(c.x, c.y + 24));
   let top = 0;
-  while (top < board.height && !walk(pt(c, top))) top++;
-  const enter = [open(pt(c - 1, top)), open(pt(c, top)), open(pt(c + 1, top))];
+  while (top < board.height && !walk(pt(c.x, top))) top++;
+  const ey = south ? c.y + 24 : top;
+  const enter = [open(pt(c.x - 1, ey)), open(pt(c.x, ey), []), open(pt(c.x + 1, ey))];
   const rook = open(starts[0]![0]!);
   // Lumi's lantern: by Rook's door if the island has his house (door on its east side), else on the pool's west shore.
   const lantern = house ? open(pt(house.x + house.w, doorY(house) + 1)) : open(pt(minX - 1, midY));
@@ -80,6 +82,13 @@ const LINES: Record<string, string[]> = {
   [SEFA]: ["We need four!", "Are you playing? Say yes."],
   lantern: ["Lumi's lantern. Still warm.", "She left it by the door. Again."],
   house: ["Home. Later.", "The kettle can wait."],
+  falls: ["Just a dream."],
+  skiff: ["Not today. Today's for the pond."],
+  shrine: ["Mabry's door. Shut, this time of day."],
+  stall: ["Orrin's stall. He's off somewhere, arguing."],
+  "hesta-house": ["Granny's door. Shut. It always is."],
+  chair: ["Her chair. Still warm."],
+  kindling: ["The Kindling brazier. Burning steady."],
 };
 
 type Thing = { name: string; at: () => Pt };
@@ -223,6 +232,20 @@ export class PondRoom {
   /** The person or thing on this tile (a tap on their tile, from the client's hit test), if any. */
   private thingAt(at: Pt): Thing | null {
     if (at.x === this.spots.lantern.x && at.y === this.spots.lantern.y) return { name: "lantern", at: () => this.spots.lantern };
+    // A place on the island (the falls, the skiff, the shrine...): Rook walks to its nearest open side.
+    const props = this.game.shrine.props ?? [];
+    const hit = props.find((p) => p.x === at.x && p.y === at.y && LINES[p.kind]);
+    if (hit) {
+      const tiles = props.filter((p) => p.kind === hit.kind);
+      const rook = this.player(ROOK_ID).pos;
+      let best: Pt = at, bestD = Infinity;
+      for (const t of tiles) {
+        const q = this.beside(t, rook);
+        const d = Math.hypot(q.x - rook.x, q.y - rook.y);
+        if (this.game.board.passable(q, Mover.Walker) && d < bestD) (best = q), (bestD = d);
+      }
+      return { name: hit.kind, at: () => best };
+    }
     const h = this.game.shrine.house;
     if (h && at.x >= h.x && at.x < h.x + h.w && at.y >= h.y && at.y < h.y + h.h) {
       const door = pt(h.x + h.w, doorY(h));
@@ -238,8 +261,9 @@ export class PondRoom {
     if (!lines.length) return;
     const n = this.taps.get(thing.name) ?? 0;
     this.taps.set(thing.name, n + 1);
-    // The lantern's and the house's lines are Rook's own; the rest say theirs over their heads.
-    this.say(thing.name === "lantern" || thing.name === "house" ? "Rook" : thing.name, lines[n % lines.length]!);
+    // Lines about things are Rook's own; people say theirs over their heads.
+    const person = this.game.players.some((p) => p.name === thing.name);
+    this.say(person ? thing.name : "Rook", lines[n % lines.length]!);
   }
 
   /** Hesta, tapped: her line, a short fade, then Granny's game. */

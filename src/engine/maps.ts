@@ -101,6 +101,8 @@ export interface Arm {
   wiggle?: number;
   /** Side routes that leave this arm and rejoin it further out. */
   forks?: Fork[];
+  /** Clutter scale on this arm (default 1; 0 keeps it clear, for a place to walk). */
+  clutter?: number;
 }
 
 /**
@@ -164,7 +166,7 @@ export function armSamples(s: IsleShape): ArmSample[] {
   const out: ArmSample[] = [];
   for (const arm of s.arms ?? []) {
     const n = Math.ceil(arm.length * 2);
-    for (let i = 0; i <= n; i++) out.push({ ...armPoint(s, arm, i / n), c: 1 });
+    for (let i = 0; i <= n; i++) out.push({ ...armPoint(s, arm, i / n), c: arm.clutter ?? 1 });
     for (const f of arm.forks ?? []) out.push(...bowed(armPoint(s, arm, f.from), armPoint(s, arm, f.to), f.bend, f.width, f.clutter));
   }
   for (const l of s.links ?? []) {
@@ -333,6 +335,12 @@ export function ringWalls(ring: Ring): Pt[] {
   return out;
 }
 
+/** Story places: solid things drawn as themselves. Multi-tile ones are one block of their letter. */
+export type PropKind = "fence" | "post" | "bench" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling";
+export const PROP_CHARS: Record<string, PropKind> = { F: "fence", Y: "post", N: "bench", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling" };
+/** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
+export const GROUND_CHARS: Record<string, "path" | "planks" | "terrace"> = { ",": "path", ";": "planks", ":": "terrace" };
+
 export interface Shrine {
   id: string;
   name: string;
@@ -341,8 +349,10 @@ export interface Shrine {
   /** Story: a house on the island (Rook's), drawn as a building over its tiles, which nobody walks through. Door on the east side. */
   house?: { x: number; y: number; w: number; h: number };
   /** Story places: things to walk round (solid tiles, drawn as themselves), and worn-path tiles to draw on the grass. */
-  props?: { kind: "fence" | "post" | "bench"; x: number; y: number }[];
+  props?: { kind: PropKind; x: number; y: number }[];
   paths?: Pt[];
+  /** Story places: planks (the landing) and terrace flags, drawn over the grass. */
+  ground?: { kind: "planks" | "terrace"; x: number; y: number }[];
   /** Teams this layout seats: 2, or up to 4 on a four-way island. */
   teams: number;
   /** Per team: the drawn spawn marks (kept for the map's look and as a fallback). */
@@ -810,6 +820,13 @@ const TILE_OF: Record<string, Tile> = {
   F: Tile.Wall,
   Y: Tile.Wall,
   N: Tile.Wall,
+  V: Tile.Wall,
+  K: Tile.Wall,
+  S: Tile.Wall,
+  O: Tile.Wall,
+  R: Tile.Wall,
+  C: Tile.Wall,
+  G: Tile.Wall,
   o: Tile.Rock,
   "~": Tile.Water,
   B: Tile.Brazier,
@@ -862,7 +879,7 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   const house: Pt[] = [];
   const props: NonNullable<Shrine["props"]> = [];
   const paths: Pt[] = [];
-  const PROP: Record<string, "fence" | "post" | "bench"> = { F: "fence", Y: "post", N: "bench" };
+  const ground: NonNullable<Shrine["ground"]> = [];
   rows.forEach((row, y) => {
     if (row.length !== width) throw new Error(`${def.id}: row ${y} is ${row.length} wide, expected ${width}`);
     [...row].forEach((ch, x) => {
@@ -871,8 +888,10 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
       if (sp !== undefined && sp < teams) wispSpawns[sp]!.push(pt(x, y));
       if (st !== undefined && st < teams) starts[st]!.push(pt(x, y));
       if (ch === "H") house.push(pt(x, y));
-      if (PROP[ch]) props.push({ kind: PROP[ch]!, x, y });
-      if (ch === ",") paths.push(pt(x, y));
+      if (PROP_CHARS[ch]) props.push({ kind: PROP_CHARS[ch]!, x, y });
+      const gk = GROUND_CHARS[ch];
+      if (gk === "path") paths.push(pt(x, y));
+      else if (gk) ground.push({ kind: gk, x, y });
     });
   });
   // The brazier is always a 3x3 block at the centre, whatever the ASCII shows.
@@ -887,7 +906,7 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   }
   const hx = house.map((p) => p.x), hy = house.map((p) => p.y);
   const houseBox = house.length ? { x: Math.min(...hx), y: Math.min(...hy), w: Math.max(...hx) - Math.min(...hx) + 1, h: Math.max(...hy) - Math.min(...hy) + 1 } : undefined;
-  return { id: def.id, name: def.name, blurb: def.blurb, board, ...(houseBox ? { house: houseBox } : {}), ...(props.length ? { props } : {}), ...(paths.length ? { paths } : {}), teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0, poolField: def.poolSpawns ? spawnField(board, def.poolSpawns.band, Tile.Water) : [], poolShare: def.poolSpawns?.share ?? 0 };
+  return { id: def.id, name: def.name, blurb: def.blurb, board, ...(houseBox ? { house: houseBox } : {}), ...(props.length ? { props } : {}), ...(paths.length ? { paths } : {}), ...(ground.length ? { ground } : {}), teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0, poolField: def.poolSpawns ? spawnField(board, def.poolSpawns.band, Tile.Water) : [], poolShare: def.poolSpawns?.share ?? 0 };
 }
 
 /**
@@ -1145,7 +1164,9 @@ function scatterArms(g: string[][], cx: number, cy: number, isle: IsleShape) {
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       if (!land(x, y)) continue;
-      const r = hash(x, y, 1) / clutter(x - cx, y - cy);
+      const cl = clutter(x - cx, y - cy);
+      if (cl <= 0) continue;
+      const r = hash(x, y, 1) / cl;
       if (r < 0.028) g[y]![x] = "o";
       else if (r < 0.036) {
         // A short wall, two or three tiles, along x or y.
@@ -1238,38 +1259,97 @@ function homePondRows(k = 1): string[] {
 }
 
 /**
- * The home island as a place to walk (the free walk between runs), not an arena: the same pond,
- * brazier and house as Granny's board, the house set back in its own yard with a fence and a wash
- * line, a bench by the water, and a worn path from the door to the brazier and on to the pond.
+ * The home island as a place to walk (the free walk between runs), not an arena. One island with
+ * two ends (Ladi): the pond end, with Rook's house in its yard, the falls on the north rim in
+ * sight of his door, and the pond brazier; then a neck of ground south with the landing and
+ * Rook's skiff on its rim, Orrin's stall and the shrine on the path; and the Kindling ground at
+ * the far end, its great brazier, with Hesta's house up the steps on the terrace to its north,
+ * as far inland as the end allows (she never stands near an edge). A worn path joins it all.
+ * Placeholder layout: everything is placed from (dx, dy) off the pond brazier, so it's easy to move.
  */
+export const HOME_ISLAND = {
+  /** How far south the neck reaches (tiles past the core), and its half-width at each end. */
+  neck: { length: 58, width: [6, 15] as [number, number] },
+  falls: { dx: -6, dy: -21, w: 3 },
+  landing: { dy: 34 },
+  stall: { dx: -4, dy: 27 },
+  shrine: { dx: 4, dy: 42 },
+  hestaHouse: { dx: 0, dy: 58, w: 5, h: 4 },
+  kindling: { dx: 0, dy: 74, r: 2 },
+};
+
+const HOME_ISLE: IsleShape = {
+  radius: 14.5 * 1.5, squareness: 2.1, coves: 0.06, heads: 0.05, seed: 5, stretch: [1.08, 0.95],
+  arms: [{ from: Math.PI / 2, length: HOME_ISLAND.neck.length, curl: 0, width: HOME_ISLAND.neck.width, wiggle: 0.04, clutter: 0 }],
+};
+
 function homeIslandRows(): string[] {
   const k = 1.5, N = 47, c = 23;
-  const g = homePondRows(k).map((r) => [...r.replace(/H/g, ".")]);
-  const set = (x: number, y: number, ch: string) => {
-    if (g[y]?.[x] === ".") g[y]![x] = ch;
+  const R = HOME_ISLAND;
+  // A tall drawing, the pond in the middle third: the neck runs south from it.
+  const H0 = N + 2 * 100, cy = (H0 - 1) / 2;
+  const pond = homePondRows(k).map((r) => r.replace(/H/g, "."));
+  const g = Array.from({ length: H0 }, (_, y) => [...(y >= cy - c && y <= cy + c ? pond[y - (cy - c)]! : ".".repeat(N))]);
+  const at = (dx: number, dy: number) => [c + dx, cy + dy] as const;
+  const set = (dx: number, dy: number, ch: string, over = ".") => {
+    const [x, y] = at(dx, dy);
+    if (g[y]?.[x] !== undefined && over.includes(g[y]![x]!)) g[y]![x] = ch;
   };
-  // The path first, so nothing solid lands on it: door to brazier, brazier to the pool.
-  const line = (x0: number, y0: number, x1: number, y1: number) => {
-    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+  const block = (dx: number, dy: number, w: number, h: number, ch: string) => {
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) set(dx + i, dy + j, ch, ".,:o");
+  };
+  // The path first, so nothing solid lands on it.
+  const line = (x0: number, y0: number, x1: number, y1: number, ch = ",") => {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
     for (let i = 0; i <= n; i++) {
       const x = Math.round(x0 + ((x1 - x0) * i) / n), y = Math.round(y0 + ((y1 - y0) * i) / n);
-      set(x, y, ",");
-      set(x, y + 1, ",");
+      set(x, y, ch);
+      set(x + 1, y, ch);
     }
   };
-  line(c - 7, c - 6, c - 3, c - 1);
-  line(c + 3, c - 1, c + 10, c - 2);
-  // The house, big here (Ladi): 9x9, back in the north-west with room round it. Door on the east side.
-  for (let y = c - 11; y <= c - 3; y++) for (let x = c - 17; x <= c - 9; x++) g[y]![x] = "H";
+  // Door to the pond brazier, brazier to the pool.
+  line(-7, -6, -3, -1);
+  line(3, -1, 10, -2);
+  // South from the brazier down the neck, round the terrace's east side, to the Kindling ground.
+  line(0, 3, 0, 50);
+  line(0, 50, 8, 56);
+  line(8, 56, 8, 66);
+  line(8, 66, 3, 71);
+  // Spurs: the landing on the west rim, the shrine's door.
+  line(0, R.landing.dy, -4, R.landing.dy);
+  // The house, big (Ladi): 9x9, back in the north-west with room round it. Door on the east side.
+  block(-17, -11, 9, 9, "H");
   // Its yard: a fence along the south side, west of the path.
-  for (let x = c - 17; x <= c - 9; x++) set(x, c, "F");
+  for (let x = -17; x <= -9; x++) set(x, 0, "F");
   // A wash line between two posts north of the house.
-  set(c - 16, c - 13, "Y");
-  set(c - 10, c - 13, "Y");
+  set(-16, -13, "Y");
+  set(-10, -13, "Y");
   // A bench by the water, south-west of the pool.
-  set(c + 8, c + 6, "N");
-  set(c + 9, c + 6, "N");
-  void N;
+  set(8, 6, "N");
+  set(9, 6, "N");
+  // Land, as the coastline will cut it.
+  const land = (dx: number, dy: number) => coastDepth(HOME_ISLE, dx, dy) <= -0.5;
+  // The falls: where a stream goes over the north rim (Lumi's spot), in sight of the door.
+  let fy = -8;
+  while (land(R.falls.dx, fy - 1) && land(R.falls.dx + R.falls.w - 1, fy - 1)) fy--;
+  block(R.falls.dx, fy, R.falls.w, 1, "V");
+  line(R.falls.dx, fy + 1, -7, -8);
+  // The landing: planks out to the west rim of the neck, and the skiff tied up at the end.
+  let lx = 0;
+  while (land(lx - 1, R.landing.dy) && land(lx - 1, R.landing.dy + 1)) lx--;
+  for (let x = lx + 1; x <= lx + 3; x++) for (let y = R.landing.dy - 1; y <= R.landing.dy + 2; y++) set(x, y, ";", ".,");
+  block(lx, R.landing.dy, 1, 2, "K");
+  // Orrin's stall by the path, and the shrine on it.
+  block(R.stall.dx, R.stall.dy, 2, 1, "O");
+  block(R.shrine.dx, R.shrine.dy, 3, 3, "S");
+  // Hesta's house on the terrace, the chair before her door (south, facing the brazier), steps down.
+  const hh = R.hestaHouse;
+  for (let j = -1; j <= hh.h + 2; j++) for (let i = -2; i <= hh.w + 1; i++) set(hh.dx - Math.floor(hh.w / 2) + i, hh.dy + j, ":", ".,");
+  block(hh.dx - Math.floor(hh.w / 2), hh.dy, hh.w, hh.h, "R");
+  set(hh.dx, hh.dy + hh.h + 1, "C", ".:");
+  // The great brazier of the Kindling ground.
+  const kd = R.kindling;
+  block(kd.dx - kd.r, kd.dy - kd.r, kd.r * 2 + 1, kd.r * 2 + 1, "G");
   return g.map((r) => r.join(""));
 }
 
@@ -1304,7 +1384,7 @@ export const STORY_SHRINES: Shrine[] = [
     blurb: "Lumi's island, to walk about on: the house, the pond, the brazier.",
     full: true,
     scale: 1,
-    isle: { radius: 14.5 * 1.5, squareness: 2.1, coves: 0.06, heads: 0.05, seed: 5, stretch: [1.08, 0.95] },
+    isle: HOME_ISLE,
     rings: [],
     spawnBand: [15, 21],
     rows: homeIslandRows(),

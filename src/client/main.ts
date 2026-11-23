@@ -757,7 +757,8 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
   const pond = room.story?.pond;
   if (pond) {
     let hit: { at: Pt; d: number } | null = null;
-    const things = [...snap.players.filter((q) => q.id !== me).map((q) => ({ at: { x: q.x, y: q.y }, h: 0.9 })), { at: pond.lantern, h: 0.3 }];
+    const places = (shrineFor(room.shrine, room.teams).props ?? []).filter((q) => !["fence", "post", "bench"].includes(q.kind));
+    const things = [...snap.players.filter((q) => q.id !== me).map((q) => ({ at: { x: q.x, y: q.y }, h: 0.9 })), { at: pond.lantern, h: 0.3 }, ...places.map((q) => ({ at: { x: q.x, y: q.y }, h: 0.6 }))];
     for (const th of things) {
       const c = cam.toScreen(th.at.x + 0.5, th.at.y + 0.5, th.h);
       const d = Math.hypot(c.x - sx, c.y - sy);

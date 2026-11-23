@@ -787,11 +787,11 @@ function makeStones(): THREE.Group {
 
 /** A solid stone stair about an arch wide, climbing north (toward -z) from where it's placed. */
 /** A block-out cottage, w by d tiles: plaster walls, a pitched thatch roof, a door and a lit window on the east side (+x). */
-function makeHouse(w: number, d: number): THREE.Group {
+function makeHouse(w: number, d: number, look: { wall?: string; roof?: string; wallH?: number } = {}): THREE.Group {
   const g = new THREE.Group();
-  const wallH = 1.9, roofH = 1.4;
-  const plaster = new THREE.MeshStandardMaterial({ color: "#e6d6b8", roughness: 0.9 });
-  const thatch = new THREE.MeshStandardMaterial({ color: "#9a7444", roughness: 1 });
+  const wallH = look.wallH ?? 1.9, roofH = 1.4;
+  const plaster = new THREE.MeshStandardMaterial({ color: look.wall ?? "#e6d6b8", roughness: 0.9 });
+  const thatch = new THREE.MeshStandardMaterial({ color: look.roof ?? "#9a7444", roughness: 1 });
   const wood = new THREE.MeshStandardMaterial({ color: "#5a3a22", roughness: 0.8 });
   const body = new THREE.Mesh(new THREE.BoxGeometry(w - 0.2, wallH, d - 0.2), plaster);
   body.position.y = wallH / 2;
@@ -813,6 +813,89 @@ function makeHouse(w: number, d: number): THREE.Group {
   chimney.position.set(-w / 4, wallH + roofH * 0.6, -d / 4);
   for (const m of [body, roof, door, chimney]) (m.castShadow = true), (m.receiveShadow = true);
   g.add(body, roof, door, win, chimney);
+  return g;
+}
+
+/** Story places on the walking island, as block-outs: w by d tiles, centred. */
+function makePlace(kind: string, w: number, d: number): THREE.Group {
+  const g = new THREE.Group();
+  const std = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, ...extra });
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.castShadow = m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  if (kind === "falls") {
+    // A stream over the north rim: a bright channel on the ground, and a sheet of water dropping away.
+    const water = new THREE.MeshStandardMaterial({ color: "#7fd0f0", emissive: "#3aa0d0", emissiveIntensity: 0.35, transparent: true, opacity: 0.85, roughness: 0.2 });
+    add(new THREE.BoxGeometry(w, 0.06, d + 0.6), water, 0, 0.04, 0.3);
+    const sheet = add(new THREE.PlaneGeometry(w * 0.9, 12), water, 0, -6, -d / 2 - 0.6);
+    sheet.material = water.clone();
+    (sheet.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+    const mist = glowSprite("#dff4ff", 4, 0.5);
+    mist.position.set(0, -1.5, -d / 2 - 1);
+    g.add(mist);
+  } else if (kind === "skiff") {
+    // Rook's skiff, moored just off the rim (west), with a mooring post.
+    const hull = std("#6b4a2c");
+    const boat = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.45, d + 1.2), hull);
+    body.position.y = 0.1;
+    const bow = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.9, 4), hull);
+    bow.rotation.x = -Math.PI / 2;
+    bow.position.set(0, 0.1, -(d + 1.2) / 2 - 0.4);
+    const sail = new THREE.Mesh(new THREE.PlaneGeometry(1, 1.6), std("#efe6d0", { side: THREE.DoubleSide }));
+    sail.position.set(0, 1.3, 0);
+    sail.rotation.y = Math.PI / 2;
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.2), hull);
+    mast.position.y = 1.1;
+    boat.add(body, bow, mast, sail);
+    boat.position.set(-1.6, -0.2, 0);
+    g.add(boat);
+    add(new THREE.CylinderGeometry(0.1, 0.12, 1.1), hull, 0, 0.55, 0);
+  } else if (kind === "shrine") {
+    // A small open shrine: a stone base, four pillars, a pointed roof, a light inside.
+    const stone = std("#d8d0c0");
+    add(new THREE.BoxGeometry(w, 0.3, d), stone, 0, 0.15, 0);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.CylinderGeometry(0.14, 0.16, 2.2), stone, sx * (w / 2 - 0.35), 1.4, sz * (d / 2 - 0.35));
+    const roof = add(new THREE.ConeGeometry(Math.max(w, d) * 0.78, 1.4, 4), std("#5a6e8a"), 0, 3.2, 0);
+    roof.rotation.y = Math.PI / 4;
+    const orb = glowSprite("#ffe0a0", 1.4);
+    orb.position.y = 1.3;
+    g.add(orb);
+  } else if (kind === "stall") {
+    // Orrin's stall: a table under an awning.
+    const wood = std("#7a5434");
+    add(new THREE.BoxGeometry(w, 0.1, d * 0.8), wood, 0, 0.8, 0);
+    for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.1, 1.9, 0.1), wood, sx * (w / 2 - 0.1), 0.95, -d * 0.35);
+    add(new THREE.BoxGeometry(w + 0.3, 0.06, d + 0.3), std("#c75a4a"), 0, 1.9, 0);
+    const pane = add(new THREE.BoxGeometry(0.3, 0.4, 0.05), new THREE.MeshBasicMaterial({ color: "#ffe6a0" }), 0.2, 1.05, 0);
+    pane.castShadow = false;
+  } else if (kind === "hesta-house") {
+    // Her house: grey stone, a dark roof, the door to the south (toward her chair and the brazier). Always shut.
+    const house = makeHouse(d, w, { wall: "#b8b2a6", roof: "#6a6474" });
+    house.rotation.y = -Math.PI / 2;
+    g.add(house);
+  } else if (kind === "chair") {
+    const wood = std("#6a4a30");
+    add(new THREE.BoxGeometry(0.6, 0.08, 0.55), wood, 0, 0.5, 0);
+    add(new THREE.BoxGeometry(0.6, 0.7, 0.08), wood, 0, 0.85, -0.25);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.06, 0.5, 0.06), wood, sx * 0.25, 0.25, sz * 0.22);
+  } else if (kind === "kindling") {
+    // The great brazier of the Kindling ground: a wide stone bowl on a stepped base, and its fire.
+    const stone = std("#8a7a6a");
+    add(new THREE.CylinderGeometry(w / 2, w / 2 + 0.2, 0.5, 24), stone, 0, 0.25, 0);
+    add(new THREE.CylinderGeometry(w / 2 - 0.6, w / 2 - 0.4, 0.5, 24), stone, 0, 0.75, 0);
+    add(new THREE.CylinderGeometry(w / 2 - 0.2, w / 2 - 1.1, 0.9, 24, 1, true), std("#5e5048", { side: THREE.DoubleSide }), 0, 1.45, 0);
+    const fire = glowSprite("#ff9a3a", w * 0.8, 0.7);
+    fire.position.y = 2.2;
+    g.add(fire);
+    const core = glowSprite("#ffe0a0", w * 0.35, 0.8);
+    core.position.y = 2;
+    g.add(core);
+  }
   return g;
 }
 
@@ -1181,6 +1264,33 @@ export class World {
         bench.position.set(wx + (long - 1) / 2, 0, wz);
         g.add(bench);
       }
+    }
+    // Ground that isn't grass: the landing's planks, the terrace's flags.
+    const planks = new THREE.MeshStandardMaterial({ color: "#8a6440", roughness: 0.9 });
+    const flags = new THREE.MeshStandardMaterial({ color: "#b9b2a4", roughness: 0.95 });
+    for (const q of shrine.ground ?? []) {
+      const tile = new THREE.Mesh(new THREE.BoxGeometry(0.98, q.kind === "terrace" ? 0.12 : 0.08, 0.98), q.kind === "terrace" ? flags : planks);
+      tile.position.set(this.worldX(b, q.x), q.kind === "terrace" ? 0.06 : 0.04, this.worldZ(b, q.y));
+      tile.receiveShadow = true;
+      g.add(tile);
+    }
+    // The bigger places, one block each (placeholders until the maps thread draws them).
+    const boxes = new Map<string, { x0: number; y0: number; x1: number; y1: number }>();
+    for (const p of props) {
+      if (p.kind === "fence" || p.kind === "post" || p.kind === "bench") continue;
+      const bx = boxes.get(p.kind) ?? { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+      boxes.set(p.kind, { x0: Math.min(bx.x0, p.x), y0: Math.min(bx.y0, p.y), x1: Math.max(bx.x1, p.x), y1: Math.max(bx.y1, p.y) });
+    }
+    for (const [kind, bx] of boxes) {
+      const w = bx.x1 - bx.x0 + 1, d = bx.y1 - bx.y0 + 1;
+      const obj = makePlace(kind, w, d);
+      obj.position.set(this.worldX(b, bx.x0 + (w - 1) / 2), 0, this.worldZ(b, bx.y0 + (d - 1) / 2));
+      if (kind === "kindling") {
+        const light = new THREE.PointLight("#ff9a3a", 3, 14, 1.6);
+        light.position.y = 2.5;
+        obj.add(light);
+      }
+      g.add(obj);
     }
   }
 
