@@ -30,7 +30,7 @@ export const ENDING = {
   title: 44,
   buttons: 46,
   /** Lumi's lantern before run 2: how long it holds before play, and its fade. */
-  lantern: { hold: 3, fade: 1.2 },
+  lantern: { hold: 4, fade: 1.2, matchScale: 2.7, beat: 0.5, ease: 2.5 },
 };
 
 const SEEN = "lanternfall.kindlingEnd";
@@ -274,10 +274,20 @@ export class KindlingEnding {
 export function lanternCard(then: () => void) {
   const el = card("lesson-lantern", "lantern", `<div class="table"></div><div class="unlit"></div>`);
   el.id = "opening";
+  // A match cut from the eye: it opens close on the globe, sitting where the locked pupil was
+  // (pupil ~0.44 of the eye's frame, globe ~0.164 of the lantern's), then eases out to the table.
+  el.style.transform = `scale(${ENDING.lantern.matchScale})`;
   document.body.appendChild(el);
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      el.style.transition = `transform ${ENDING.lantern.ease}s ease-in-out ${ENDING.lantern.beat}s`;
+      el.style.transform = "scale(1)";
+    }),
+  );
   setTimeout(() => {
     then();
     el.style.transition = `opacity ${ENDING.lantern.fade}s`;
+    el.style.transform = "scale(1)";
     el.style.opacity = "0";
     setTimeout(() => el.remove(), ENDING.lantern.fade * 1000 + 50);
   }, ENDING.lantern.hold * 1000);
