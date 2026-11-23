@@ -118,45 +118,156 @@ function connectStory(name: string) {
   link.send({ t: "hello", name: name || "Rook" });
 }
 
-// ------------------------------------------------------------------ story captions
+// ------------------------------------------------------------------ story dialog and barks
 
-const captions: StoryLine[] = [];
-let captionTimer = 0;
+// Lines at the bells (play is stopped) get a dialog box with a portrait. Lines during play are
+// barks that never block: by the wisp they're about, by Hesta's ring, or in a corner chip. A bark
+// shows the moment it's said and replaces the one before; a late "Now." is worse than none.
+
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => `&${({ "&": "amp", "<": "lt", ">": "gt", '"': "quot" } as Record<string, string>)[c]};`);
 /** Lines are plain text; *word* is said with weight. */
 const lineHtml = (t: string) => esc(t).replace(/\*([^*]+)\*/g, "<em>$1</em>");
+const FACES: Record<string, string> = { Hesta: "faces/hesta.webp", Lumi: "faces/lumi.webp" };
+const faceHtml = (who: string) => (FACES[who] ? `<img class="face" src="${FACES[who]}" alt="" />` : "");
+
+const talkQueue: StoryLine[] = [];
+let talkTimer = 0;
+let typeTimer = 0;
+let typing: { l: StoryLine; shown: number; at: number } | null = null;
+
+interface Bark {
+  el: HTMLElement;
+  until: number;
+  /** What it points at: a wisp, Hesta's ring, or nothing (the corner chip). */
+  wisp?: number;
+  ring?: boolean;
+  last?: { x: number; y: number };
+}
+const barks: Record<"bark" | "chip", Bark | null> = { bark: null, chip: null };
 
 function sayLine(l: StoryLine) {
-  captions.push(l);
-  // Don't let lines pile up: keep the newest few.
-  if (captions.length > 3) captions.splice(0, captions.length - 3);
-  if (!captionTimer) nextCaption();
-}
-
-function nextCaption() {
-  const el = $("caption");
-  const l = captions.shift();
-  if (!l) {
-    el.hidden = true;
-    captionTimer = 0;
-    return;
-  }
+  if (l.talk || room?.phase !== "playing" || !l.who) return talk(l);
+  const anchored = l.wisp != null || l.ring;
+  const el = $(anchored ? "bark" : "chip");
+  el.className = `bark${anchored ? "" : " chip"} ${l.who.toLowerCase()}`;
+  const img = el.querySelector("img")!;
+  img.src = FACES[l.who] ?? "";
+  img.hidden = !FACES[l.who];
+  el.querySelector("span")!.innerHTML = lineHtml(l.text);
   el.hidden = false;
-  el.className = l.who ? "" : "tell";
-  el.innerHTML = (l.who ? `<b class="${l.who.toLowerCase()}">${esc(l.who)}</b>` : "") + lineHtml(l.text);
   // Restart the fade-in.
   el.style.animation = "none";
   void el.offsetWidth;
   el.style.animation = "";
-  const ms = Math.max(2200, l.text.length * 60) * (captions.length ? 0.7 : 1);
-  captionTimer = window.setTimeout(nextCaption, ms);
+  barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60), wisp: l.wisp, ring: l.ring };
+  if (l.who === "Hesta" && l.wisp != null) sound.nowCue();
+  else sound.babble(l.who, l.text);
+  if (!anchored) placeBarks(performance.now());
 }
 
+/** Each frame: keep barks on what they point at, and fade them when their time is up. */
+function placeBarks(now: number) {
+  for (const k of ["bark", "chip"] as const) {
+    const b = barks[k];
+    if (!b) continue;
+    if (now > b.until) {
+      b.el.classList.add("fade");
+      if (now > b.until + 350) {
+        b.el.hidden = true;
+        barks[k] = null;
+      }
+      continue;
+    }
+    if (k === "chip" || !snap) continue;
+    let at: { x: number; y: number } | null = null;
+    if (b.wisp != null) {
+      const w = snap.wisps.find((q) => q.id === b.wisp);
+      if (w) at = { x: w.x, y: w.y };
+    } else if (b.ring) {
+      const st = room?.story;
+      const mine = snap.players.find((p) => p.id === me);
+      at = st?.ring ?? (mine ? { x: mine.x, y: mine.y } : null);
+    }
+    at ??= b.last ?? null;
+    if (!at) continue;
+    b.last = at;
+    const c = cam.toScreen(at.x + 0.5, at.y + 0.5, 1.4);
+    // Keep it on screen, even when what it points at isn't.
+    const r = b.el.getBoundingClientRect();
+    const x = Math.max(r.width / 2 + 8, Math.min(innerWidth - r.width / 2 - 8, c.x));
+    const y = Math.max(r.height + 60, Math.min(innerHeight - 8, c.y - 10));
+    b.el.style.left = `${x}px`;
+    b.el.style.top = `${y}px`;
+  }
+}
+
+function talk(l: StoryLine) {
+  talkQueue.push(l);
+  if (!talkTimer && !typing) nextTalk();
+}
+
+function nextTalk() {
+  clearTimeout(talkTimer);
+  talkTimer = 0;
+  const el = $("dialog");
+  const l = talkQueue.shift();
+  if (!l) {
+    el.hidden = true;
+    typing = null;
+    return;
+  }
+  el.hidden = false;
+  el.className = l.who ? "" : "tell";
+  const face = $<HTMLImageElement>("dialog-face");
+  face.hidden = !FACES[l.who];
+  if (FACES[l.who]) face.src = FACES[l.who]!;
+  const name = $("dialog-name");
+  name.textContent = l.who;
+  name.className = l.who.toLowerCase();
+  el.style.animation = "none";
+  void el.offsetWidth;
+  el.style.animation = "";
+  typing = { l, shown: 0, at: performance.now() };
+  if (l.who) sound.babble(l.who, l.text);
+  typeOn();
+}
+
+/** The line types on, then stays a moment and moves on by itself. A tap skips ahead. */
+function typeOn() {
+  const t = typing;
+  if (!t) return;
+  // About 50 letters a second, by the clock, so a slow frame doesn't slow the text.
+  t.shown = Math.min(t.l.text.length, Math.max(t.shown, Math.floor(((performance.now() - t.at) / 1000) * 50)));
+  const shown = t.l.text.slice(0, t.shown);
+  $("dialog-text").innerHTML = lineHtml(shown).replace(/\*/g, "");
+  if (t.shown < t.l.text.length) {
+    typeTimer = window.setTimeout(typeOn, 30);
+    return;
+  }
+  $("dialog-text").innerHTML = lineHtml(t.l.text);
+  typing = null;
+  talkTimer = window.setTimeout(nextTalk, Math.max(1400, t.l.text.length * 35) * (talkQueue.length ? 0.6 : 1));
+}
+
+$("dialog").onclick = () => {
+  if (typing) {
+    clearTimeout(typeTimer);
+    typing.shown = typing.l.text.length - 1;
+    typeOn();
+  } else nextTalk();
+};
+
 function clearCaptions() {
-  captions.length = 0;
-  clearTimeout(captionTimer);
-  captionTimer = 0;
-  $("caption").hidden = true;
+  talkQueue.length = 0;
+  clearTimeout(talkTimer);
+  clearTimeout(typeTimer);
+  talkTimer = 0;
+  typing = null;
+  $("dialog").hidden = true;
+  for (const k of ["bark", "chip"] as const) {
+    barks[k] = null;
+    $(k).hidden = true;
+  }
 }
 
 function botLevel(): "easy" | "medium" | "hard" {
@@ -309,7 +420,7 @@ function renderStoryEnd() {
     ...end.lines.map((l, i) => {
       const li = document.createElement("li");
       if (!l.who) li.className = "tell";
-      li.innerHTML = (l.who ? `<b class="${l.who.toLowerCase()}">${esc(l.who)}</b>` : "") + lineHtml(l.text);
+      li.innerHTML = (l.who ? `${faceHtml(l.who)}<b class="${l.who.toLowerCase()}">${esc(l.who)}</b>` : "") + lineHtml(l.text);
       li.style.animationDelay = `${0.6 + i * 1.8}s`;
       return li;
     }),
@@ -919,6 +1030,7 @@ let skyBase: number | null = null;
 
 /** Story marks: Hesta's ring on the ground, the wisp Lumi is calling, and the sky lighting at the end. */
 function drawStory(g: CanvasRenderingContext2D, t: number, now: number) {
+  placeBarks(performance.now());
   const st = room?.story;
   if (!st || !snap || !world) return;
   const pulse = 0.5 + 0.5 * Math.sin(now / 260);
@@ -1034,6 +1146,8 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   room: () => room,
   me: () => me,
   toScreen: (x: number, y: number, h = 0) => cam.toScreen(x, y, h),
+  /** Show a story line as if the run said it (for checking dialog and barks). */
+  say: (l: StoryLine) => sayLine(l),
   /** What a click at this screen point would do. */
   tap: (x: number, y: number) => targetAt(x, y),
 };

@@ -118,16 +118,26 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 .guild li .bot-coop { display: inline-flex; gap: 4px; white-space: nowrap; align-items: center; cursor: pointer; }
 .guild li .bot-coop.off { opacity: 0.45; cursor: not-allowed; }
 
-/* Story runs: captions, the sky meter and the ending. */
+/* Story runs: the dialog box at the bells, barks during play, the sky meter and the ending. */
+#dialog { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); width: min(94vw, 600px); display: flex; gap: 12px; align-items: center; background: #120f1ce8; border: 1px solid #ffffff2a; border-radius: 14px; padding: 10px 14px 10px 10px; z-index: 9; animation: cap-in 0.25s ease-out; cursor: pointer; }
+#dialog img { width: 72px; height: 72px; border-radius: 10px; flex: none; border: 2px solid #ffffff33; object-fit: cover; }
+#dialog img[hidden] { display: none; }
+#dialog .say { flex: 1; min-width: 0; }
+#dialog b { display: block; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 3px; }
+#dialog p { margin: 0; font-size: 17px; line-height: 1.35; min-height: 2.7em; }
+#dialog.tell p { font-style: italic; color: #e8e0ff; }
+b.hesta, .bark.hesta span b { color: #9fd8ff; }
+b.lumi, .bark.lumi span b { color: #ffd36a; }
+.bark { position: fixed; z-index: 8; pointer-events: none; display: flex; align-items: center; gap: 6px; background: #120f1ce0; border: 1px solid #ffffff2a; border-radius: 999px; padding: 3px 12px 3px 3px; font-size: 15px; line-height: 1.2; width: max-content; max-width: min(70vw, 320px); transform: translate(-50%, -100%); transition: opacity 0.3s; animation: bark-in 0.2s ease-out; }
+.bark img { width: 30px; height: 30px; border-radius: 50%; flex: none; object-fit: cover; }
+.bark.lumi { border-color: #ffd36a88; }
+.bark.hesta { border-color: #9fd8ff88; }
+.bark.fade { opacity: 0; }
+.bark.chip { top: 64px; right: 12px; left: auto; transform: none; }
+body.touch .bark.chip { top: 58px; left: 12px; right: auto; }
+#end-lines img.face { width: 28px; height: 28px; border-radius: 50%; vertical-align: middle; margin-right: 6px; object-fit: cover; }
 .soon { font-size: 11px; opacity: 0.7; border: 1px solid currentColor; border-radius: 6px; padding: 0 4px; margin-left: 4px; vertical-align: middle; }
-#caption { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); width: min(92vw, 560px); background: #120f1cd8; border: 1px solid #ffffff22; border-radius: 12px; padding: 10px 14px; text-align: center; font-size: 17px; line-height: 1.35; z-index: 8; pointer-events: none; animation: cap-in 0.25s ease-out; }
-#caption b { display: block; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 2px; }
-#caption b.hesta { color: #9fd8ff; }
-#caption b.lumi { color: #ffd36a; }
-#caption.tell { font-style: italic; color: #e8e0ff; }
 @keyframes cap-in { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
-body:not(.touch) #caption { bottom: 40px; }
-body.touch #caption { bottom: 240px; font-size: 16px; }
 .score.kes { font-size: 15px; }
 #story-end .sky { height: 10px; border-radius: 6px; background: #ffffff18; margin: 10px 0 12px; overflow: hidden; }
 #sky-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffb347, #fff2b0); transition: width 3s ease-out; }
@@ -137,3 +147,5 @@ body.touch #caption { bottom: 240px; font-size: 16px; }
 #end-lines li b.hesta { color: #9fd8ff; }
 #end-lines li.tell { font-style: italic; color: #d9d0f5; }
 @keyframes cap-in-line { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes bark-in { from { opacity: 0; } to { opacity: 1; } }
+#dialog:not([hidden]) ~ .bark.chip { top: 164px; }

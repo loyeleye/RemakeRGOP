@@ -15,6 +15,8 @@ export const SOUND = {
   /** The pull cue: how loud, and how many seconds it takes to fade. */
   humGain: 0.05,
   pullCue: 1.1,
+  /** The speakers' babble blips. */
+  babbleGain: 0.05,
   /** Music volume, and how long it fades under Lumi's bell. */
   musicGain: 0.45,
   musicFade: 1.5,
@@ -257,6 +259,37 @@ export function pullHum(near: number | null) {
   ag.gain.value = 0.25;
   src.connect(air).connect(ag).connect(g);
   src.start(t);
+}
+
+/**
+ * Babble: short pitched blips as a line appears, one per word or so, in place of a voice.
+ * Hesta's are low and slow; Lumi's high and quick. Quiet, under everything else.
+ */
+export function babble(who: string, text: string) {
+  const s = out();
+  if (!s) return;
+  const hesta = who === "Hesta";
+  const words = text.split(/\s+/).filter(Boolean).length;
+  const n = Math.min(hesta ? 5 : 7, Math.max(2, words));
+  const gap = hesta ? 0.13 : 0.085;
+  // Hesta: A3 to E4. Lumi: D5 to B5. Both from the pentatonic, so they sit in the music.
+  const pool = hesta ? [220.0, 246.94, 293.66, 329.63] : [587.33, 659.25, 739.99, 880.0, 987.77];
+  for (let k = 0; k < n; k++) {
+    const f = pool[Math.floor(Math.random() * pool.length)]!;
+    strike(f, SOUND.babbleGain * (hesta ? 1.3 : 1), hesta ? 0.15 : -0.15, [
+      [1, 1, hesta ? 0.09 : 0.06],
+      [2, 0.2, 0.04],
+    ], undefined, s.c.currentTime + k * gap);
+  }
+}
+
+/** Hesta's "Now": its own two rising notes, so the ear learns it. */
+export function nowCue() {
+  const s = out();
+  if (!s) return;
+  const t = s.c.currentTime;
+  strike(440.0, 0.12, 0.15, [[1, 1, 0.18], [2, 0.25, 0.08]], undefined, t);
+  strike(587.33, 0.14, 0.15, [[1, 1, 0.35], [2, 0.25, 0.12]], undefined, t + 0.12);
 }
 
 /** The eye opens: everything else cuts out, and one low note is held. */

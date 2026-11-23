@@ -196,7 +196,7 @@ export class StoryRoom {
     this.lastHesta = -99;
     this.phase = "countdown";
     this.countdown = KINDLING.bellTicks;
-    this.say(LUMI, ["First light! That's the bell. I ring it, you light it. Go on, Dad.", "Second bell! The crew bring them in and you finish. That's the important job.", "Last bell! Everyone's watching, Dad. I'm calling it now."][m]!);
+    this.say(LUMI, ["First light! That's the bell. I ring it, you light it. Go on, Dad.", "Second bell! The crew bring them in and you finish. That's the important job.", "Last bell! Everyone's watching, Dad. I'm calling it now."][m]!, { talk: true });
     this.flush();
     this.broadcastRoom();
     this.broadcastTick();
@@ -263,17 +263,17 @@ export class StoryRoom {
     if (!done) return;
     const rook = g.players.find((p) => p.id === ROOK)!;
     this.carried += g.scores[0]!;
-    if (this.movement === 0) this.say(HESTA, "That's the where of it. Stand across from it, and it comes home.");
-    if (this.movement === 1) this.say(HESTA, "Good. You heard the crew and you finished. That's the when.");
+    if (this.movement === 0) this.say(HESTA, "That's the where of it. Stand across from it, and it comes home.", { talk: true });
+    if (this.movement === 1) this.say(HESTA, "Good. You heard the crew and you finished. That's the when.", { talk: true });
     if (this.movement < 2) return this.startMovement(this.movement + 1, rook.pos);
     this.finish();
   }
 
   /** Lines as play begins in each movement. */
   private opening() {
-    if (this.movement === 0) this.say(HESTA, "One at a time tonight, Rook. Stand in the ring and pull.");
-    if (this.movement === 1) this.say(HESTA, `Hold your side, Rook. ${KINDLING.relay.crew[0]} brings them in, and ${KINDLING.relay.crew[1]} has your back, across the fire.`);
-    if (this.movement === 2) this.say(HESTA, "It's yours, Rook. I'll be quiet now.");
+    if (this.movement === 0) this.say(HESTA, "One at a time tonight, Rook. Stand in the ring and pull.", { talk: true });
+    if (this.movement === 1) this.say(HESTA, `Hold your side, Rook. ${KINDLING.relay.crew[0]} brings them in, and ${KINDLING.relay.crew[1]} has your back, across the fire.`, { talk: true });
+    if (this.movement === 2) this.say(HESTA, "It's yours, Rook. I'll be quiet now.", { talk: true });
   }
 
   private rook() {
@@ -301,7 +301,7 @@ export class StoryRoom {
           this.ringWisp = w.id;
           this.ringSaid = false;
           this.onRingFor = 0;
-          if (g.tick > 1) this.say(HESTA, this.there.next());
+          if (g.tick > 1) this.say(HESTA, this.there.next(), { ring: true });
         }
       }
     }
@@ -309,9 +309,9 @@ export class StoryRoom {
       this.onRingFor++;
       const pulling = rook.action.kind === "staff" && rook.action.wisp === w.id;
       if (!this.ringSaid && !pulling) {
-        this.say(HESTA, "Now pull.");
+        this.say(HESTA, "Now pull.", { ring: true });
         this.ringSaid = true;
-      } else if (this.onRingFor === 6 && !pulling) this.say(HESTA, "Pull, Rook. Tap the wisp.");
+      } else if (this.onRingFor === 6 && !pulling) this.say(HESTA, "Pull, Rook. Tap the wisp.", { ring: true });
     }
   }
 
@@ -352,14 +352,14 @@ export class StoryRoom {
         if (samePt(rook.pos, home)) {
           this.ringSaid = true;
           this.ring = null;
-          this.say(HESTA, "Stay there. They'll come to you.");
+          this.say(HESTA, "Stay there. They'll come to you.", { ring: true });
         }
       } else {
         this.strayFor = away > 3 ? this.strayFor + 1 : 0;
         // Moving about his own side is fine while the crew split the island.
         if (this.strayFor === 8 && !this.split && g.tick - this.lastHesta > 25) {
           this.ring = home;
-          this.say(HESTA, "Back to your square, Rook. Let them bring it.");
+          this.say(HESTA, "Back to your square, Rook. Let them bring it.", { ring: true });
         }
         if (away === 0) this.ring = null;
       }
@@ -376,7 +376,7 @@ export class StoryRoom {
       if (fed !== null && this.fed === null) this.fed = fed;
       if (fed === null || g.tick - this.lastHesta < 8) continue;
       const w = g.wisps[fed]!;
-      this.say(HESTA, this.now.next().replace("{crew}", c.name).replace("{dir}", compass(g.board, w.target ?? w.pos)));
+      this.say(HESTA, this.now.next().replace("{crew}", c.name).replace("{dir}", compass(g.board, w.target ?? w.pos)), { wisp: w.id });
       break;
     }
     if (g.banks.length && g.tick - this.lastHesta > 12) this.say(HESTA, this.banked.next());
@@ -419,7 +419,7 @@ export class StoryRoom {
         } else this.say(LUMI, this.giveUp.next());
       } else if (age === Math.round(window * K.repeatAt)) {
         const Dir = cap(compass(g.board, g.wisps[cur.wisp]!.pos));
-        this.say(LUMI, `Dad. ${Dir} one. *${Dir}.*`);
+        this.say(LUMI, `Dad. ${Dir} one. *${Dir}.*`, { wisp: cur.wisp });
       }
     }
     if (this.calls.some((c) => !c.answered)) return;
@@ -430,7 +430,7 @@ export class StoryRoom {
     const w = neglected(g, ROOK, this.lastTouch, K.neglectAfter, (id) => (this.ignored.get(id) ?? -1) > g.tick || heading(id));
     if (!w) return;
     const Dir = cap(compass(g.board, w.pos));
-    this.say(LUMI, this.switching ? this.instead.next().replace("{Dir}", Dir) : `Dad. ${Dir} one.`);
+    this.say(LUMI, this.switching ? this.instead.next().replace("{Dir}", Dir) : `Dad. ${Dir} one.`, { wisp: w.id });
     this.switching = false;
     this.calls.push({ wisp: w.id, life: this.lives.get(w.id) ?? 0, at: g.tick, answered: false });
     this.callCount++;
@@ -476,8 +476,8 @@ export class StoryRoom {
 
   // ---------------------------------------------------------------- wire
 
-  private say(who: string, text: string) {
-    this.lines.push({ who, text });
+  private say(who: string, text: string, how: Omit<StoryLine, "who" | "text"> = {}) {
+    this.lines.push({ who, text, ...how });
     if (who === HESTA) this.lastHesta = this.game?.tick ?? 0;
   }
 

@@ -14,6 +14,8 @@ subscription-only billing so no Spark was spent. Sources are in the project file
 
 The sky, cloud sea, fire, embers, light pillar, water and wisps are drawn in code with shaders.
 
+| faces/hesta.webp, faces/lumi.webp (story portraits) | Draft crops from the art thread's character sheets (project files `gameplay/faces/`), resized to 160 px WebP |
+
 ## Music
 
 The Grand Kindling's music was generated with Mureka by Ladi and added on 2026-11-22. Each track had its

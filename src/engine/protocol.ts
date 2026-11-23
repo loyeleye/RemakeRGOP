@@ -49,6 +49,14 @@ export interface RoomView {
 export interface StoryLine {
   who: string;
   text: string;
+  /**
+   * How it's shown. "talk": a dialog box with a portrait, at the bells, when play is stopped.
+   * Otherwise it's a bark during play: by the wisp `wisp`, by Hesta's ring (`ring`), or in a
+   * small chip in the corner.
+   */
+  talk?: boolean;
+  wisp?: number;
+  ring?: boolean;
 }
 
 export interface StoryView {

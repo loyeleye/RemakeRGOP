@@ -13,7 +13,7 @@ export const KINDLING = {
   /** The island the run is played on. */
   shrine: "fairy-ring",
   /** Ticks of bell and title before each movement. */
-  bellTicks: 5,
+  bellTicks: 7,
   first: {
     title: "First light",
     /** One wisp at a time. */
