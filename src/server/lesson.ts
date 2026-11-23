@@ -314,9 +314,11 @@ export class LessonRoom {
     if (g.scores[0]! >= T.target) return this.finish();
     // Rook to three first, or the clock runs out: she goes again.
     if (g.finished || g.scores[1]! >= T.target) {
+      // She won't take a loss: each one moves the goalposts. Best of five, of seven, ...up to
+      // fifteen. Lose that one too and Rook calls it for the night.
+      if (this.games >= LESSON.firstToThree.games) return this.finish(false);
       this.games++;
-      // She won't take a loss: each one moves the goalposts. Best of five, of seven, ...of nine.
-      const n = ["three", "five", "seven", "nine", "eleven", "thirteen"][Math.min(5, this.games - 1)];
+      const n = ["three", "five", "seven", "nine", "eleven", "thirteen", "fifteen"][this.games - 1];
       this.say(LUMI, `${this.games > 3 ? "..." : ""}Best of ${n}.`, { talk: true });
       this.startRound(2, true);
     }
@@ -345,14 +347,14 @@ export class LessonRoom {
     this.startRound(this.round, true, this.beat);
   }
 
-  private finish() {
+  private finish(won = true) {
     this.phase = "results";
     const g = this.game;
     this.end = {
       banked: g.scores[0]!,
       kes: g.scores[1]!,
       summary: `First to three: Lumi ${g.scores[0]}, Rook ${g.scores[1]}${this.games > 1 ? ` (game ${this.games})` : ""}.`,
-      lines: [{ who: LUMI, text: "So I'm coming tomorrow." }],
+      lines: won ? [{ who: LUMI, text: "So I'm coming tomorrow." }] : [{ who: ROOK, text: "Let's call it for now. We can try again tomorrow." }],
     };
     this.endClock();
     this.broadcastRoom();

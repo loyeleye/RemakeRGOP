@@ -184,6 +184,18 @@ describe("Lumi's lesson", () => {
     expect(r.room.state.end!.lines.at(-1)!.text).toBe("So I'm coming tomorrow.");
   });
 
+  it("after best of fifteen, Rook calls it for the night", () => {
+    const r = newRoom(5);
+    const room = r.room as unknown as { startRound(n: number, again: boolean): void; games: number };
+    room.startRound(2, false);
+    room.games = LESSON.firstToThree.games;
+    r.play();
+    r.room.state.game.scores[1] = LESSON.firstToThree.target;
+    r.room.onTick();
+    expect(r.room.state.phase).toBe("results");
+    expect(r.room.state.end!.lines.at(-1)!.text).toMatch(/call it for now/);
+  });
+
   it("a call too many restarts the second jam", () => {
     const r = newRoom(9);
     const room = r.room as unknown as { startRound(n: number, again: boolean, beat: number): void };

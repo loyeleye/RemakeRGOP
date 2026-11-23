@@ -38,6 +38,8 @@ export const LESSON = {
     /** Rook plays a real game (medium bot) up to this score, then an easy one; first to three wins. */
     rookStops: 2,
     ticks: 150,
+    /** Games she gets: each loss moves her goalposts (best of five ... best of fifteen); losing the last ends the run. */
+    games: 7,
     /** Lumi's wisps in play, and how many start on the pool (the rest come back on it once banked). */
     wisps: 3,
     onPool: 2,

@@ -18,7 +18,7 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Lumi", /^(Dad\.|Okay\.|[A-Z][a-z]+(-[a-z]+)? one)/, "calling"],
   ["Rook", /^(That's it\.|Just like that\.)/, "proud"],
   ["Rook", /^How did you do that\?/, "baffled"],
-  ["Rook", /^(Yes, ma'am\.|See\?|Now you're the boss)/, "warm"],
+  ["Rook", /^(Yes, ma'am\.|See\?|Now you're the boss|Let's call it)/, "warm"],
 ];
 
 /**
