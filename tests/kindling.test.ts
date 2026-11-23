@@ -16,8 +16,8 @@ function playRun(seed: number) {
   const room = new StoryRoom(manualClock(), () => (s = (s * 48271) % 2147483647));
   const conn = room.connect((m) => msgs.push(m));
   conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
-  const crewBanks: number[] = [];
-  const holderAtBank = new Map<number, number | null>();
+  /** Who held each banked wisp: 1 is Rook, 2 is Wick (feeds Rook), 3 is Moth (owns the far side). */
+  const bankers: (number | null)[] = [];
   for (let i = 0; i < 2000 && room.state.phase !== "results"; i++) {
     const { game, phase, movement, ring } = room.state;
     if (phase === "playing") {
@@ -39,12 +39,11 @@ function playRun(seed: number) {
     if (room.state.phase === "playing" || room.state.phase === "countdown") {
       const g = room.state.game;
       for (const b of g.banks) {
-        holderAtBank.set(b.wisp, before.get(b.wisp) ?? null);
-        if (before.get(b.wisp) !== 1) crewBanks.push(g.tick);
+        bankers.push(before.get(b.wisp) ?? null);
       }
     }
   }
-  return { room, msgs, crewBanks };
+  return { room, msgs, bankers };
 }
 
 describe("Game options for story runs", () => {
@@ -78,13 +77,16 @@ describe("Grand Kindling", () => {
   it("plays all three movements to an ending that can't be failed", () => {
     const lumi: string[] = [];
     for (const seed of [11, 12, 13]) {
-      const { room, msgs, crewBanks } = playRun(seed);
+      const { room, msgs, bankers } = playRun(seed);
       const st = room.state;
       expect(st.phase).toBe("results");
       expect(st.end).toBeDefined();
       expect(st.end!.lines.at(-2)!.text).toMatch(/I counted/);
       // The crew feed Rook: they don't bank for themselves.
-      expect(crewBanks).toEqual([]);
+      // Wick feeds Rook and never banks for himself; Moth banks the far side.
+      expect(bankers.filter((b) => b === 2)).toEqual([]);
+      expect(bankers.filter((b) => b === 3).length).toBeGreaterThan(0);
+      if (process.env.STATS) console.log(seed, "rook", bankers.filter((b) => b === 1).length, "moth", bankers.filter((b) => b === 3).length, "other", bankers.filter((b) => b !== 1 && b !== 3).length, "total", room.state.end!.banked);
       const said = msgs.flatMap((m) => (m.t === "say" ? m.lines : []));
       expect(said.some((l) => l.who === "Lumi" && /^Dad\./.test(l.text))).toBe(true);
       lumi.push(...said.filter((l) => l.who === "Lumi").map((l) => l.text));

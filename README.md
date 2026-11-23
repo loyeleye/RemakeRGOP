@@ -50,7 +50,8 @@ setup locally.
 |---|---|
 | `src/engine/` | The deterministic tick engine (`game.ts`), the grid (`board.ts`), the shrines (`maps.ts`), the bot (`bot.ts`) and the wire protocol. Shared by the server, the client and the tests. |
 | `src/server/room.ts` | One room (lobby, countdown, round, results), independent of the transport. |
-| `src/server/story.ts`, `src/engine/kindling.ts` | Story run 1, the Grand Kindling: three Games in a row with the story's lines, Hesta's ring, the fetch-only crew and Lumi's calls. |
+| `src/server/story.ts`, `src/engine/kindling.ts` | Story run 1, the Grand Kindling: three Games in a row with the story's lines, Hesta's ring, the fetch-only crew and Lumi's calls; in the relay one crewmate fetches for Rook and the other banks from across the brazier. |
+| `src/client/sound.ts` | Story sound made in code with WebAudio (bank chimes up a D major pentatonic scale, catch, pull hum, slip, Lumi's bell, the eye), plus the music slot in `public/music/`. |
 | `src/server/node.ts` | Node server: static files plus `ws`. |
 | `cloudflare/worker.ts` | Worker plus the `RoomObject` Durable Object. |
 | `src/client/view3d.ts` | The 3D renderer (Three.js): tilted camera, sky, cloud sea, floating plaza, firelight, bloom and the models. |

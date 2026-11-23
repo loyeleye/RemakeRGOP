@@ -6,6 +6,7 @@ import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
 import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg, type StoryLine } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { StoryRoom } from "../server/story.js";
+import * as sound from "./sound.js";
 import { Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -46,6 +47,7 @@ function onServer(m: ServerMsg) {
         snap = prevSnap = null;
       }
       if (room.phase === "countdown" && was !== "countdown") cam.follow = true;
+      if (room.story) storyPhaseSound(was);
       render();
       break;
     }
@@ -56,6 +58,7 @@ function onServer(m: ServerMsg) {
       snapAt = performance.now();
       tickMs = m.tickMs;
       for (const b of m.snap.banks) bankFlash(b.guild);
+      if (room?.story) storyTickSound(m.snap);
       renderHud();
       break;
     case "say":
@@ -169,6 +172,7 @@ function leave() {
   snap = prevSnap = null;
   clearCaptions();
   skyBase = null;
+  stopStorySound();
   try {
     history.replaceState(null, "", location.pathname);
   } catch {
@@ -310,6 +314,70 @@ function renderStoryEnd() {
       return li;
     }),
   );
+  // The eye: the last line is the narration, and it lands on one held low note.
+  clearTimeout(eyeTimer);
+  eyeTimer = setTimeout(() => room?.story && sound.eyeNote(), (0.6 + (end.lines.length - 1) * 1.8) * 1000);
+}
+
+// ------------------------------------------------------------------ story sound
+
+let eyeTimer: ReturnType<typeof setTimeout> | undefined;
+let musicFor = -1;
+let pullFrom = 0;
+
+/** Lumi's bell at each movement's countdown (three rings at the end), with the music fading under it. */
+function storyPhaseSound(was: string | undefined) {
+  const phase = room!.phase;
+  if (phase === "countdown" && was !== "countdown") {
+    sound.stopMusic();
+    musicFor = -1;
+    sound.handBell(1);
+  }
+  if (phase === "results" && was !== "results") {
+    sound.pullHum(null);
+    sound.stopMusic();
+    sound.handBell(3);
+  }
+}
+
+/** Per-tick story sounds: banks, Kes's island, and Rook's staff (catch, hum, slip). */
+function storyTickSound(s: GameSnapshot) {
+  const st = room!.story!;
+  if (room!.phase === "playing" && musicFor !== st.movement) {
+    musicFor = st.movement;
+    sound.playMusic(st.movement); // starts on a tick, so the beat lines up with the 600 ms steps
+  }
+  const prev = prevSnap;
+  const board = shrineFor(room!.shrine, room!.teams).board;
+  const half = board.width / 2;
+  for (const b of s.banks) {
+    if (b.guild !== 0) continue;
+    const holder = prev?.wisps.find((w) => w.id === b.wisp)?.holder ?? null;
+    const crew = holder !== null && holder !== me ? s.players.find((p) => p.id === holder) : undefined;
+    if (crew) sound.bankChime(s.tick, "crew", (crew.x - board.center.x) / half);
+    else sound.bankChime(s.tick, "rook");
+  }
+  if (prev && (s.scores[1] ?? 0) > (prev.scores[1] ?? 0)) sound.kesChime();
+  const mine = s.players.find((p) => p.id === me);
+  const was = prev?.players.find((p) => p.id === me);
+  if (!mine) return;
+  if (mine.slipped && !was?.slipped) sound.slipKnock();
+  const w = mine.beam !== null ? s.wisps.find((x) => x.id === mine.beam) : undefined;
+  const dist = (x: { x: number; y: number }) => Math.hypot(x.x - board.center.x, x.y - board.center.y);
+  if (w && room!.phase === "playing") {
+    if (was?.beam !== mine.beam) {
+      sound.catchClick();
+      pullFrom = Math.max(1, dist(w));
+    }
+    sound.pullHum(1 - dist(w) / pullFrom);
+  } else sound.pullHum(null);
+}
+
+function stopStorySound() {
+  clearTimeout(eyeTimer);
+  sound.pullHum(null);
+  sound.stopMusic(0.3);
+  musicFor = -1;
 }
 
 function renderHud() {
@@ -322,6 +390,7 @@ function renderHud() {
   }
   const story = room.story;
   $("score-1").classList.toggle("kes", !!story);
+  $("mute").hidden = !story;
   if (story) {
     $("score-1").textContent = `${cam.compact ? "Kes" : "Kes's island"} ${story.kes}`;
     if (room.phase === "countdown") {
@@ -705,6 +774,17 @@ $("join-form").onsubmit = (e) => {
 };
 $("practice").onclick = () => connectPractice(playerName());
 $("story").onclick = () => connectStory(playerName());
+sound.unlockOnFirstInput();
+const muteBtn = $("mute");
+const showMute = () => {
+  muteBtn.textContent = sound.isMuted() ? "🔇" : "🔊";
+  muteBtn.setAttribute("aria-label", sound.isMuted() ? "Sound on" : "Sound off");
+};
+showMute();
+muteBtn.onclick = () => {
+  sound.setMuted(!sound.isMuted());
+  showMute();
+};
 $("start").onclick = () => link?.send({ t: "start" });
 $<HTMLSelectElement>("teams").onchange = (e) => {
   const n = Number((e.target as HTMLSelectElement).value);

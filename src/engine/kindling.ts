@@ -35,6 +35,13 @@ export const KINDLING = {
     crewWalk: 14,
     /** A wisp this close to Rook is his to sort out: the crew leave it. */
     leaveNear: 3,
+    /**
+     * Coording: the second crew member holds a tile across the brazier from Rook and banks the
+     * wisps on Rook's side (which Rook can't bank without changing sides). If Rook changes sides
+     * more than `maxCrossings` times in `crossWindow` ticks, both go back to feeding him, until
+     * he has stayed on one side for `settle` ticks.
+     */
+    split: { crossWindow: 40, maxCrossings: 2, settle: 20 },
   },
   crescendo: {
     title: "The crescendo",
@@ -136,6 +143,8 @@ export interface CrewState {
   fed: number | null;
   /** Wisps it gave up on, and until which tick. */
   skip: Map<number, number>;
+  /** Set on the tick it lets go of a wisp near Rook: the story stops it where it is, so it can't drift onto the rim. */
+  drop?: number | null;
 }
 
 /**
@@ -143,19 +152,22 @@ export interface CrewState {
  * that soonest brings it where Rook (wherever he stands) can bank it in one pull, and lets go
  * as soon as the wisp will come to rest there. It steps off any wisp Rook touches.
  */
-export function crewCommand(game: Game, id: number, rookId: number, state: CrewState, others: CrewState[]): Command | null {
+export function crewCommand(game: Game, id: number, rookId: number, state: CrewState, others: CrewState[], scope: (w: Wisp) => boolean = () => true, finish?: Pt): Command | null {
   state.fed = null;
+  state.drop = null;
   const me = game.players.find((p) => p.id === id);
   const rook = game.players.find((p) => p.id === rookId);
   if (!me || !rook) return null;
   const board = game.board;
+  // Who finishes: Rook, or (for the partner feeding himself) a post across the brazier.
+  const fin = finish ?? rook.pos;
   const live = (w: Wisp) => w.guild === me.guild && !board.inBankZone(w.pos);
   const rookOn = rook.action.kind === "staff" ? rook.action.wisp : null;
   const memo = new Map<string, boolean>();
   const ready = (at: Pt) => {
     const k = `${at.x},${at.y}`;
     let v = memo.get(k);
-    if (v === undefined) memo.set(k, (v = banksFrom(board, rook.pos, at)));
+    if (v === undefined) memo.set(k, (v = banksFrom(board, fin, at)));
     return v;
   };
   // Where a wisp comes to rest if every staff lets go now.
@@ -167,12 +179,14 @@ export function crewCommand(game: Game, id: number, rookId: number, state: CrewS
       state.wisp = null;
       return { action: { kind: "idle" } };
     }
-    if (live(w) && ready(rest(w))) {
-      state.fed = w.id;
+    // Where it is now, or where it's heading: as soon as Rook can bank it, let go and leave it there.
+    if (live(w) && (ready(w.pos) || ready(rest(w)))) {
+      state.fed = state.drop = w.id;
       state.wisp = null;
       return { action: { kind: "idle" } };
     }
-    if (live(w) && cheb(rest(w), rook.pos) <= KINDLING.relay.leaveNear) {
+    if (live(w) && cheb(rest(w), fin) <= KINDLING.relay.leaveNear) {
+      state.drop = w.id;
       state.wisp = null;
       return { action: { kind: "idle" } };
     }
@@ -182,9 +196,9 @@ export function crewCommand(game: Game, id: number, rookId: number, state: CrewS
 
   const taken = new Set(others.map((o) => o.wisp).filter((v): v is number => v !== null));
   // Not one that's already at Rook's feet, or one this bot gave up on a moment ago.
-  const near = (w: Wisp) => cheb(rest(w), rook.pos) <= KINDLING.relay.leaveNear;
+  const near = (w: Wisp) => cheb(rest(w), fin) <= KINDLING.relay.leaveNear;
   const skipped = (w: Wisp) => (state.skip.get(w.id) ?? -1) > game.tick;
-  const targets = game.wisps.filter((w) => live(w) && w.id !== rookOn && !taken.has(w.id) && !ready(rest(w)) && !near(w) && !skipped(w));
+  const targets = game.wisps.filter((w) => live(w) && scope(w) && w.id !== rookOn && !taken.has(w.id) && !ready(rest(w)) && !near(w) && !skipped(w));
   let target = targets.find((w) => w.id === state.wisp);
   if (!target) {
     target = targets.sort((a, b) => cheb(a.pos, me.pos) - cheb(b.pos, me.pos))[0];
@@ -194,7 +208,7 @@ export function crewCommand(game: Game, id: number, rookId: number, state: CrewS
     // Nothing to fetch: stand clear of Rook.
     return me.action.kind === "idle" ? null : { action: { kind: "idle" } };
   }
-  const spot = feedSpot(game, me.pos, target.pos, ready, rook.pos);
+  const spot = feedSpot(game, me.pos, target.pos, ready, fin);
   if (!spot) {
     // No pull from anywhere helps: leave it a while and fetch another.
     state.skip.set(target.id, game.tick + 10);
@@ -232,14 +246,86 @@ function feedSpot(game: Game, me: Pt, wisp: Pt, ready: (p: Pt) => boolean, rook:
         }
       }
       if (cost === null) {
-        const cut = path.findIndex((p) => board.inBankZone(p));
-        const end = (cut < 0 ? path : path.slice(0, cut)).at(-1);
+        // A pull that would carry it onto the rim is the crew banking it: not theirs to do.
+        if (path.some((p) => board.inBankZone(p))) continue;
+        const end = path.at(-1);
         if (!end || cheb(end, rook) >= cheb(wisp, rook)) continue;
         cost = 100 + cheb(end, rook) * 3 + walk / 2;
       }
       if (!best || cost < best.cost) best = { s, cost };
     }
   return best?.s ?? null;
+}
+
+/** One half of the island: the side of a line through the brazier, across `axis`. */
+export interface Half {
+  axis: "x" | "y";
+  side: 1 | -1;
+}
+
+/** The half a tile is in: along whichever axis it is further from the brazier on. */
+export function halfOf(board: Board, p: Pt): Half {
+  const dx = p.x - board.center.x, dy = p.y - board.center.y;
+  return Math.abs(dx) >= Math.abs(dy) ? { axis: "x", side: dx < 0 ? -1 : 1 } : { axis: "y", side: dy < 0 ? -1 : 1 };
+}
+
+/** How far into the half a tile is (negative: across the line, on the far side). */
+export function depthIn(board: Board, h: Half, p: Pt): number {
+  return h.side * (h.axis === "x" ? p.x - board.center.x : p.y - board.center.y);
+}
+
+/** The free floor tile nearest the point across the brazier from `p`: where a partner stands to cover Rook's blind side. */
+export function acrossFrom(board: Board, p: Pt): Pt {
+  const c = board.center;
+  const m = pt(2 * c.x - p.x, 2 * c.y - p.y);
+  for (let r = 0; r <= 4; r++)
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const q = pt(m.x + dx, m.y + dy);
+        if (board.inside(q) && board.passable(q, Mover.Walker) && !board.inBankZone(q)) return q;
+      }
+  return m;
+}
+
+/**
+ * The partner who coords with Rook, the way two players work an altar: he holds a tile across
+ * the brazier from Rook and banks the wisps on Rook's side, the ones Rook can't bring home
+ * without changing sides. Wisps on his own side are Rook's. Undefined: nothing for him to bank
+ * from his post, so he can fetch for Rook instead.
+ */
+export function partnerCommand(game: Game, id: number, rookId: number, state: CrewState, post: Pt, mine: (w: Wisp) => boolean): Command | null | undefined {
+  state.fed = null;
+  state.drop = null;
+  const me = game.players.find((p) => p.id === id);
+  const rook = game.players.find((p) => p.id === rookId);
+  if (!me || !rook) return null;
+  const board = game.board;
+  const live = (w: Wisp) => w.guild === me.guild && !board.inBankZone(w.pos);
+  const rookOn = rook.action.kind === "staff" ? rook.action.wisp : null;
+  const rest = (w: Wisp) => w.target ?? w.pos;
+  if (me.action.kind === "staff") {
+    const w = game.wisps[me.action.wisp]!;
+    if (w.id === rookOn || w.pullers.includes(rookId)) {
+      state.wisp = null;
+      return { action: { kind: "idle" } };
+    }
+    const stuck = me.beam === w.id && samePt(w.prev, w.pos) && !w.target;
+    // Banking from the post: hold it until it's home.
+    if (live(w) && !stuck && state.wisp === w.id && samePt(me.pos, post)) return null;
+  }
+  const targets = game.wisps.filter((w) => live(w) && w.id !== rookOn && mine(w) && banksFrom(board, post, rest(w)));
+  if (!targets.length) {
+    state.wisp = null;
+    return undefined;
+  }
+  if (!samePt(me.pos, post)) {
+    if (me.action.kind === "walk" && samePt(me.action.to, post)) return null;
+    return { action: { kind: "walk", to: post } };
+  }
+  const w = targets.sort((a, b) => cheb(a.pos, post) - cheb(b.pos, post))[0]!;
+  state.wisp = w.id;
+  return { action: { kind: "staff", wisp: w.id } };
 }
 
 // ------------------------------------------------------------------ movement 3: Lumi's calls

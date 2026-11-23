@@ -11,8 +11,8 @@
 
 import { pt, samePt, type Pt } from "../engine/board.js";
 import { homeSquares } from "../engine/bot.js";
-import { Game, Grip, Rng, TICK_MS, type Action, type Guild } from "../engine/game.js";
-import { KINDLING, banksFrom, compass, crewCommand, neglected, numberWord, ringSpot, type CrewState } from "../engine/kindling.js";
+import { Game, Grip, Rng, TICK_MS, type Action, type Guild, type Wisp } from "../engine/game.js";
+import { KINDLING, banksFrom, compass, acrossFrom, crewCommand, depthIn, halfOf, neglected, numberWord, partnerCommand, ringSpot, type CrewState, type Half } from "../engine/kindling.js";
 import { shrineById, spawnField, type Shrine } from "../engine/maps.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
 import { realClock, type Clock } from "./room.js";
@@ -68,6 +68,11 @@ export class StoryRoom {
   private crew: { id: number; name: string; state: CrewState }[] = [];
   /** The wisp the crew last left for Rook, while it's still his to bank. */
   private fed: number | null = null;
+  /** Coording: Rook's side of the brazier, the partner's post across from him, whether they're coording, and when Rook changed sides. */
+  private half: Half | null = null;
+  private post: Pt | null = null;
+  private split = true;
+  private crossings: number[] = [];
   // Movement 3: Lumi's calls.
   private lastTouch = new Map<number, number>();
   private calls: Call[] = [];
@@ -166,6 +171,10 @@ export class StoryRoom {
     this.onRingFor = 0;
     this.strayFor = 0;
     this.fed = null;
+    this.half = null;
+    this.post = null;
+    this.split = true;
+    this.crossings = [];
     this.home = m === 1 ? (homeSquares(this.game, 1)[0] ?? null) : null;
     this.lastTouch = new Map(this.game.wisps.map((w) => [w.id, 0]));
     this.calls = [];
@@ -196,16 +205,29 @@ export class StoryRoom {
     }
     if (this.phase !== "playing") return;
     const g = this.game;
-    for (const c of this.crew) {
-      const cmd = crewCommand(g, c.id, ROOK, c.state, this.crew.filter((o) => o !== c).map((o) => o.state));
+    if (this.movement === 1) this.coord();
+    this.crew.forEach((c, i) => {
+      const others = this.crew.filter((o) => o !== c).map((o) => o.state);
+      const half = this.half, post = this.post;
+      // Coording: the second holds a post across the brazier and banks the wisps on Rook's
+      // side, fetching them into his own reach first when they're far out. The first fetches
+      // the rest for Rook. When they aren't coording, both fetch for Rook.
+      const rookSide = (w: Wisp) => !!half && depthIn(g.board, half, w.target ?? w.pos) >= 0;
+      let cmd: ReturnType<typeof crewCommand> | undefined;
+      if (this.split && post && i === 1) {
+        const his = (w: Wisp) => rookSide(w) && w.id !== this.fed;
+        cmd = partnerCommand(g, c.id, ROOK, c.state, post, his);
+        if (cmd === undefined) cmd = crewCommand(g, c.id, ROOK, c.state, others, his, post);
+      } else cmd = crewCommand(g, c.id, ROOK, c.state, others, this.split && post ? (w) => !rookSide(w) : undefined);
       if (cmd) g.command(c.id, cmd);
-      // A wisp the crew leave for Rook is his: a fresh touch takes it even while it's still drifting.
-      if (c.state.fed !== null) {
-        const w = g.wisps[c.state.fed]!;
+      // A wisp the crew leave for Rook stops where it is, and is his: a fresh touch takes it.
+      if (c.state.drop != null) {
+        const w = g.wisps[c.state.drop]!;
+        w.target = null;
         w.holder = null;
         w.grip = Grip.Free;
       }
-    }
+    });
     g.step();
     if (this.rng.next() < 1 / KINDLING.kesEvery[this.movement]!) this.kes++;
     if (this.movement === 0) this.firstLight();
@@ -226,7 +248,7 @@ export class StoryRoom {
   /** Lines as play begins in each movement. */
   private opening() {
     if (this.movement === 0) this.say(HESTA, "One at a time tonight, Rook. Stand in the ring and pull.");
-    if (this.movement === 1) this.say(HESTA, "Hold the ring. Let the crew bring them to you.");
+    if (this.movement === 1) this.say(HESTA, `Hold your side, Rook. ${KINDLING.relay.crew[0]} brings them in, and ${KINDLING.relay.crew[1]} has your back, across the fire.`);
     if (this.movement === 2) this.say(HESTA, "It's yours, Rook. I'll be quiet now.");
   }
 
@@ -271,6 +293,31 @@ export class StoryRoom {
 
   // ---------------------------------------------------------------- movement 2
 
+  /**
+   * Which side Rook is holding. The line through the brazier only turns when he clearly
+   * crosses it (2 tiles over), so standing near it doesn't flip it. Crossing too often stops
+   * the split; staying put brings it back.
+   */
+  private coord() {
+    const g = this.game, rook = this.rook(), S = KINDLING.relay.split;
+    const was = this.split;
+    if (!this.half) {
+      const at = this.home ?? rook.pos;
+      this.half = halfOf(g.board, at);
+      this.post = acrossFrom(g.board, at);
+    } else if (depthIn(g.board, this.half, rook.pos) <= -2) {
+      this.half = halfOf(g.board, rook.pos);
+      this.post = acrossFrom(g.board, rook.pos);
+      this.crossings.push(g.tick);
+    }
+    this.crossings = this.crossings.filter((t) => g.tick - t < S.crossWindow);
+    const last = this.crossings.at(-1) ?? -Infinity;
+    if (this.split && this.crossings.length > S.maxCrossings) this.split = false;
+    else if (!this.split && g.tick - last >= S.settle) this.split = true;
+    if (was && !this.split) this.say(HESTA, "Too much running, Rook. Hold still and they'll both bring them to you.");
+    if (!was && this.split) this.say(HESTA, `${KINDLING.relay.crew[1]} has your back again, across the fire.`);
+  }
+
   private relay() {
     const g = this.game, rook = this.rook();
     const home = this.home;
@@ -285,7 +332,8 @@ export class StoryRoom {
         }
       } else {
         this.strayFor = away > 3 ? this.strayFor + 1 : 0;
-        if (this.strayFor === 8 && g.tick - this.lastHesta > 25) {
+        // Moving about his own side is fine while the crew split the island.
+        if (this.strayFor === 8 && !this.split && g.tick - this.lastHesta > 25) {
           this.ring = home;
           this.say(HESTA, "Back to your square, Rook. Let them bring it.");
         }
@@ -298,7 +346,8 @@ export class StoryRoom {
       const his = rook.action.kind === "staff" && rook.action.wisp === w.id;
       if (banked || his || !banksFrom(g.board, rook.pos, w.target ?? w.pos)) this.fed = null;
     }
-    for (const c of this.crew) {
+    // While coording, the partner's feeds are for himself: only feeds for Rook get a line.
+    for (const c of this.split && this.post ? this.crew.slice(0, 1) : this.crew) {
       const fed = c.state.fed;
       if (fed !== null && this.fed === null) this.fed = fed;
       if (fed === null || g.tick - this.lastHesta < 8) continue;
