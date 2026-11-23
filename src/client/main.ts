@@ -1114,7 +1114,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)) };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board) };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.
@@ -1170,6 +1170,17 @@ function watchersFor(b: Board): DrawState["watchers"] {
     { cast: "hesta", ...edge(b.center.x + 2) },
   ];
 }
+/** Run 1 only: the steps Hesta leaves by, off the north rim by the bell's lamp post. For looks: not walkable. */
+function stepsFor(b: Board): DrawState["steps"] {
+  if (!(storyRoom instanceof StoryRoom) || !room?.story) return undefined;
+  const x = b.center.x;
+  let y = 0;
+  while (y < b.height && b.tile({ x, y }) !== Tile.Floor) y++;
+  return { x: x + 0.5, y: y - STEPS_EDGE };
+}
+/** How far past the plaza's edge (in tiles) the steps start. */
+const STEPS_EDGE = 2.3;
+
 /** How far past the plaza's edge (in tiles) Lumi and Hesta stand. */
 const WATCH_EDGE = 1.7;
 

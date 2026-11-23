@@ -36,6 +36,8 @@ export interface DrawState {
   now: number;
   /** Story figures who aren't playing, standing on the island (tile coords) and turning to watch you. */
   watchers?: { cast: string; x: number; y: number }[];
+  /** Story run 1 only: a flight of steps leaving the island at this spot (tile coords), heading north. For looks: nobody walks them. */
+  steps?: { x: number; y: number };
 }
 
 // ------------------------------------------------------------------ camera
@@ -693,6 +695,24 @@ interface WispRig {
   lastY: number;
 }
 
+/** Floating stone steps, climbing north (toward -z) from where they're placed. */
+function makeSteps(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: "#c9bda8", roughness: 0.85 });
+  const edge = new THREE.MeshStandardMaterial({ color: "#8a8178", roughness: 0.9 });
+  for (let i = 0; i < 9; i++) {
+    const step = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.16, 0.55), mat);
+    step.position.set(0, 0.08 + i * 0.32, -i * 0.62);
+    g.add(step);
+    // A short stone root under each step, so they read as floating slabs, not a ramp.
+    const root = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.5, 6), edge);
+    root.rotation.x = Math.PI;
+    root.position.set(0, step.position.y - 0.33, step.position.z);
+    g.add(root);
+  }
+  return g;
+}
+
 /** A story character's model, at their height, lit flat-ish: the model's own colours glow a little. */
 function castBody(cast: string): THREE.Object3D | null {
   const model = models[cast];
@@ -735,6 +755,8 @@ export class World {
   private mossBits: { obj: THREE.Mesh; v: THREE.Vector3; born: number }[] = [];
   private players = new Map<number, PlayerRig>();
   private watchers = new Map<string, THREE.Object3D>();
+  /** Story run 1's steps off the island (see DrawState.steps). */
+  private steps: THREE.Group | null = null;
   private wisps = new Map<number, WispRig>();
   private brazierLight = new THREE.PointLight("#ff9a4a", 60, 30, 1.6);
   private rim: THREE.LineSegments | null = null;
@@ -1639,6 +1661,16 @@ export class World {
       }
     }
     for (const [k, o] of this.watchers) if (!seenWt.has(k)) (this.scene.remove(o), this.watchers.delete(k));
+
+    // Story run 1: the steps Hesta leaves by, off the north rim and up into the sky. Decoration only.
+    if (st.steps && !this.steps) {
+      this.steps = makeSteps();
+      this.scene.add(this.steps);
+    }
+    if (this.steps) {
+      this.steps.visible = !!st.steps;
+      if (st.steps) this.steps.position.set(this.worldX(b, st.steps.x), 0, this.worldZ(b, st.steps.y));
+    }
 
     // Lamplighters.
     const seenP = new Set<number>();
