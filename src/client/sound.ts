@@ -271,7 +271,7 @@ export function pullHum(near: number | null) {
 export const VOICE: { who: string; match: RegExp; src: string }[] = [
   // Hesta's "Now." in place of her two-note cue ("Now.", "Now, Rook.", "...left you one. Now."), not "Now pull."
   { who: "Hesta", match: /(^|\. )Now[.,]/, src: "voice/hesta-now.mp3" },
-  // Rook's run 2 lines, whole, in the Umbriel voice (a trial: his voice isn't picked yet).
+  // Rook's run 2 lines, whole: Umbriel, lowered a semitone (Ladi's pick).
   { who: "Rook", match: /^Three wisps\. I won't point today\.$/, src: "voice/rook-three-wisps.mp3" },
   { who: "Rook", match: /^Where would I stand\?$/, src: "voice/rook-where-stand.mp3" },
   { who: "Rook", match: /^Remember, across the fire from\.\.\.$/, src: "voice/rook-remember.mp3" },
