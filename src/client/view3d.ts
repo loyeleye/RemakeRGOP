@@ -148,9 +148,9 @@ export class Camera {
 
 type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
-const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth"] as const;
+const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell"] as const;
 /** Each character's height against Rook's (models come in at one height). Lumi is nine. */
-export const CAST_SCALE: Record<string, number> = { lumi: 0.7, hesta: 0.95, wick: 1.05, moth: 0.95 };
+export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, hesta: 0.95, wick: 1.05, moth: 0.95 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};
@@ -704,7 +704,12 @@ interface WispRig {
   crust?: THREE.Group;
   /** When it was first seen held (seconds), for the crust closing over it. */
   rootedAt?: number;
+  /** The line of earth from the holder's lantern to it. */
+  earth?: THREE.Mesh;
 }
+
+/** Seconds the earth line takes to reach a wisp before the stone starts closing over it. */
+const EARTH_LINE = 0.35;
 
 /** Stone closing over a wisp: a rough shell, and bright cracks where the light gets out. */
 function makeCrust(col: string): THREE.Group {
@@ -1722,7 +1727,7 @@ export class World {
         this.scene.add(rig.stones);
       }
       if (rig.stones) {
-        rig.stones.visible = !!w.rooted;
+        rig.stones.visible = !!w.rooted && rig.rootedAt !== undefined && time - rig.rootedAt > EARTH_LINE;
         rig.stones.position.set(this.worldX(b, w.x), 0, this.worldZ(b, w.y));
       }
       // The wisp turns from a light into a stone: a crust closes over it in about a second,
@@ -1731,7 +1736,25 @@ export class World {
       let stone = 0;
       if (w.rooted) {
         rig.rootedAt ??= time;
-        stone = Math.min(1, (time - rig.rootedAt) / 1.1);
+        // A line of earth runs from her lantern to it first; the stone starts where it lands.
+        const since = time - rig.rootedAt;
+        const holder = this.players.get(w.rooted);
+        if (holder) {
+          if (!rig.earth) {
+            rig.earth = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: "#b07a3c", transparent: true }));
+            this.scene.add(rig.earth);
+          }
+          const from = holder.root.position.clone().add(holder.lantern.position);
+          const to = new THREE.Vector3(this.worldX(b, w.x), 0.5, this.worldZ(b, w.y));
+          const grow = Math.min(1, since / EARTH_LINE);
+          const end = from.clone().lerp(to, grow);
+          rig.earth.position.copy(from).lerp(end, 0.5);
+          rig.earth.scale.set(1, Math.max(0.001, from.distanceTo(end)), 1);
+          rig.earth.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), end.clone().sub(from).normalize());
+          (rig.earth.material as THREE.MeshBasicMaterial).opacity = since < 1.5 ? 0.95 : Math.max(0.3, 0.95 - (since - 1.5) * 0.65);
+          rig.earth.visible = true;
+        }
+        stone = Math.min(1, Math.max(0, since - EARTH_LINE) / 1.1);
         stone = stone * stone * (3 - 2 * stone);
         if (!rig.crust) {
           rig.crust = makeCrust(GUILD_COLORS[w.guild]!);
@@ -1742,7 +1765,10 @@ export class World {
         rig.crust.position.set((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
         rig.crust.scale.setScalar(0.4 + 0.6 * stone);
         rig.crust.rotation.y = w.id;
-      } else rig.rootedAt = undefined;
+      } else {
+        rig.rootedAt = undefined;
+        if (rig.earth) rig.earth.visible = false;
+      }
       if (rig.crust) rig.crust.visible = !!w.rooted;
       const bob = w.rooted ? -0.3 * stone + Math.sin(time * 2.2 + w.id * 1.7) * 0.12 * (1 - stone) : Math.sin(time * 2.2 + w.id * 1.7) * 0.12;
       const sink = w.rim > 0 ? Math.min(1, w.rim * 0.5 + st.t * 0.5) : 0;
@@ -1756,7 +1782,7 @@ export class World {
       if (w.rim > 0) rimPulse = Math.max(rimPulse, 1);
       wispPos.set(w.id, rig.root.position.clone());
     }
-    for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), rig.stones && this.scene.remove(rig.stones), this.wisps.delete(id));
+    for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), rig.stones && this.scene.remove(rig.stones), rig.earth && this.scene.remove(rig.earth), this.wisps.delete(id));
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
     // Watchers: story figures standing off the plaza, turning slowly to keep you in view.

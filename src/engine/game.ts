@@ -160,7 +160,7 @@ export interface GameSnapshot {
   moss?: number[];
   /** One score per team in the round. */
   scores: number[];
-  wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null; rooted?: boolean }[];
+  wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null; rooted?: number }[];
   players: {
     id: number;
     guild: Guild;
@@ -287,8 +287,8 @@ export class Game {
    * when two pull together (toward the point between them).
    */
   heavy = new Set<number>();
-  /** Story: wisps held fast in the ground (run 3's earth hold). Nothing moves them while they're here. */
-  rooted = new Set<number>();
+  /** Story: wisps held fast in the ground (run 3's earth hold), and by whom. Nothing moves them while they're here. */
+  rooted = new Map<number, number>();
   /** Story: wisps that sit on the rim without banking for now (Hesta waiting on her match point). */
   noBank = new Set<number>();
   /**
@@ -916,7 +916,7 @@ export class Game {
         py: w.prev.y,
         rim: w.rimTicks,
         holder: w.holder,
-        ...(this.rooted.has(w.id) ? { rooted: true } : {}),
+        ...(this.rooted.has(w.id) ? { rooted: this.rooted.get(w.id)! } : {}),
       })),
       players: this.players.map((p) => ({
         id: p.id,

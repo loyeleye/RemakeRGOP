@@ -22,6 +22,7 @@ const KID_IDS = [3, 4] as const;
 const HESTA_ID = 5;
 const ROOK = "Rook", LUMI = "Lumi", HESTA = "Hesta";
 const [NELL, SEFA] = GRANNY.children;
+const WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 
 export class GrannyRoom {
   private send: ((m: ServerMsg) => void) | null = null;
@@ -46,10 +47,16 @@ export class GrannyRoom {
   private pushTicks: number[] = [];
   private baits = 0;
   private callTurn = 0;
+  private scoreTurn = 0;
   private leader = 0;
   private sefaLetGo = -99;
   /** Who last held each wisp, so a bank can be put down to someone. */
   private lastHolder = new Map<number, number>();
+  /** Barks waiting their turn, when the next may play, and when the last story line played. */
+  private queue: { at: number; line: StoryLine }[] = [];
+  private nextBarkAt = 0;
+  private lastKey = -99;
+  private holdTick = 0;
   /** Lumi's tide pull, seen in front of Hesta (tick), or -1. */
   private tideSeen = -1;
 
@@ -115,13 +122,16 @@ export class GrannyRoom {
     this.player(HESTA_ID).run = false;
     this.dist = bankDistances(this.game.board);
     this.parked = this.holdWisp = null;
-    this.parkedAt = this.lastCall = this.pushes = this.baits = this.callTurn = this.leader = 0;
+    this.parkedAt = this.lastCall = this.pushes = this.baits = this.callTurn = this.leader = this.scoreTurn = 0;
     this.said = new Set();
     this.lastPushedBy = null;
     this.pushTicks = [];
     this.sefaLetGo = -99;
     this.lastHolder = new Map();
     this.tideSeen = -1;
+    this.queue = [];
+    this.nextBarkAt = 0;
+    this.lastKey = -99;
     this.phase = "countdown";
     this.countdown = GRANNY.bellTicks;
     this.say(LUMI, PLAYER_IS_ROOK ? "I'm captain. I picked Dad first." : "I'm captain.", { talk: true });
@@ -144,6 +154,7 @@ export class GrannyRoom {
     this.steerHesta();
     g.step();
     this.afterStep();
+    if (this.phase === "playing") this.due();
     this.flush();
     if (this.phase === "playing") this.broadcastTick();
   }
@@ -177,11 +188,11 @@ export class GrannyRoom {
     }
     // Lumi calls to Nell and Sefa now and then (never to the player): barks, no rule.
     const sefa = this.player(KID_IDS[1]);
-    if (g.tick - this.sefaLetGo === 1) this.say(LUMI, `It's fine. Again, ${SEFA}.`, { player: LUMI_ID });
+    if (g.tick - this.sefaLetGo === 1) this.say(LUMI, `It's fine. Again, ${SEFA}.`, { player: LUMI_ID }, true);
     else if (g.tick >= GRANNY.firstPushAfter && g.tick - this.lastCall >= GRANNY.callEvery) {
       this.lastCall = g.tick;
-      if (sefa.beam !== null && this.callTurn++ % 2 === 0) this.say(LUMI, `${SEFA}, hold it. Hold it. ...${SEFA}.`, { player: LUMI_ID });
-      else this.say(LUMI, `${NELL}, go left. Your other left.`, { player: LUMI_ID });
+      if (sefa.beam !== null && this.callTurn++ % 2 === 0) this.say(LUMI, `${SEFA}, hold it. Hold it. ...${SEFA}.`, { player: LUMI_ID }, true);
+      else this.say(LUMI, `${NELL}, go left. Your other left.`, { player: LUMI_ID }, true);
     }
     for (const p of g.players) if (p.beam !== null) this.lastHolder.set(p.beam, p.id);
     if (this.staging() && LUMI_ID !== YOU) this.stageTide();
@@ -263,7 +274,9 @@ export class GrannyRoom {
     g.noBank.clear();
     if (hers >= GRANNY.target - 1) {
       const mine = g.wisps.filter((w) => w.guild === 1).sort((a, b) => this.stepsOut(a) - this.stepsOut(b));
-      for (const w of this.holdWisp === null ? mine : mine.slice(1)) g.noBank.add(w.id);
+      // ...and not before the exchange at the hold has had its moment.
+      const talking = this.holdWisp !== null && g.tick < this.holdTick + GRANNY.holdTalk;
+      for (const w of this.holdWisp === null || talking ? mine : mine.slice(1)) g.noBank.add(w.id);
     }
     // Give and take: leading by enough, she brings hers close but not in, and lets them catch up.
     const holdBack = lead >= H.calmLead;
@@ -315,14 +328,21 @@ export class GrannyRoom {
   private afterStep() {
     const g = this.game;
     // Match point: their next wisp to reach the rim stops dead, held in the ground.
-    if (this.kidsScore() >= GRANNY.target - 1) {
-      for (const w of g.wisps) {
-        if (w.guild !== 0 || g.rooted.has(w.id) || this.stepsOut(w) > GRANNY.holdAt) continue;
-        g.rooted.add(w.id);
-        w.target = null;
-        w.rimTicks = 0;
-        if (this.holdWisp === null) {
-          this.holdWisp = w.id;
+    if (this.kidsScore() >= GRANNY.target - 1 && this.holdWisp === null) {
+      const near = g.wisps.find((w) => w.guild === 0 && this.stepsOut(w) <= GRANNY.holdAt);
+      if (near) {
+        // She stones every wisp they have in play, a line of earth from her lantern to each.
+        for (const w of g.wisps) {
+          if (w.guild !== 0) continue;
+          g.rooted.set(w.id, HESTA_ID);
+          w.target = null;
+          w.rimTicks = 0;
+        }
+        {
+          this.holdWisp = near.id;
+          this.holdTick = g.tick;
+          this.say(NELL, "No fair!", { player: KID_IDS[0] });
+          this.say(SEFA, "That's cheating!", { player: KID_IDS[1] });
           this.say(LUMI, "You can't do that!", { talk: true });
           this.say(HESTA, "You did it on the pond. Yours is water. Mine's rock.", { talk: true });
           this.say(LUMI, "Dad hasn't got one.", { talk: true });
@@ -357,6 +377,14 @@ export class GrannyRoom {
     ];
     for (const [t, who, text, id] of age) if (g.tick === t) this.say(who, text, { player: id });
     // Their banks: drawn pushes (bait), and her one line of real praise.
+    // Nell and Sefa call how many they still need.
+    if (g.banks.some((b) => b.guild === 0)) {
+      const left = GRANNY.target - this.kidsScore();
+      if (left > 0 && this.holdWisp === null) {
+        const kid = this.scoreTurn++ % 2;
+        this.say(kid ? SEFA : NELL, `${left === 1 ? "One more" : `${WORDS[left] ?? left} more`}!`, { player: KID_IDS[kid] });
+      }
+    }
     for (const b of g.banks) {
       if (b.guild !== 0) continue;
       if (this.pushTicks.some((t) => g.tick - t <= GRANNY.baitWindow)) {
@@ -392,6 +420,9 @@ export class GrannyRoom {
   }
 
   private finish() {
+    // Anything still waiting its turn plays now, before the end.
+    for (const q of this.queue) this.lines.push(q.line);
+    this.queue = [];
     this.phase = "results";
     const g = this.game;
     this.end = {
@@ -415,8 +446,35 @@ export class GrannyRoom {
 
   // ---------------------------------------------------------------- wire
 
-  private say(who: string, text: string, how: Omit<StoryLine, "who" | "text"> = {}) {
-    this.lines.push({ who, text, ...how });
+  /**
+   * A line. Dialog lines queue in the box; barks over a speaker are spaced out so none wipes the
+   * one before. Chatter (Lumi bossing the children) is dropped when it would crowd a story line.
+   */
+  private say(who: string, text: string, how: Omit<StoryLine, "who" | "text"> = {}, chatter = false) {
+    const line = { who, text, ...how };
+    const now = this.game?.tick ?? 0;
+    if (this.phase !== "playing") return void this.lines.push(line);
+    // Dialog waits for any barks queued before it, so the exchange plays in order.
+    if (how.talk) {
+      const at = Math.max(now, this.nextBarkAt);
+      if (at <= now) this.lines.push(line);
+      else this.queue.push({ at, line });
+      return;
+    }
+    const at = Math.max(now, this.nextBarkAt);
+    if (chatter && (at > now || now - this.lastKey < GRANNY.quietAround)) return;
+    this.nextBarkAt = at + GRANNY.barkGap;
+    if (!chatter) this.lastKey = at;
+    if (at <= now) this.lines.push(line);
+    else this.queue.push({ at, line });
+  }
+
+  /** Barks whose turn has come. */
+  private due() {
+    const now = this.game.tick;
+    const ready = this.queue.filter((q) => q.at <= now);
+    this.queue = this.queue.filter((q) => q.at > now);
+    for (const q of ready) this.lines.push(q.line);
   }
 
   private flush() {
