@@ -79,6 +79,7 @@ export function setMuted(m: boolean) {
   }
   if (master && ctx) master.gain.setTargetAtTime(m ? 0 : SOUND.volume, ctx.currentTime, 0.05);
   if (music) music.muted = m;
+  if (voicing) voicing.muted = m;
 }
 
 // ------------------------------------------------------------------ building blocks
@@ -286,8 +287,14 @@ export const VOICE: { who: string; match: RegExp; src: string }[] = [
   { who: "Rook", match: /^Let's call it for now\. We can try again tomorrow\.$/, src: "voice/rook-call-it.mp3" },
 ];
 
+/** The voice clip playing now. One voice at a time: a line that comes while it plays stays silent. */
+let voicing: HTMLAudioElement | null = null;
+const voiceBusy = () => voicing != null && !voicing.ended && !voicing.paused;
+
 /** A line appears: its clip if it has one, else Hesta's "Now" cue or the speaker's babble. */
 export function speak(who: string, text: string, now = false) {
+  // Someone is still talking: don't talk over them (the text still shows).
+  if (voiceBusy()) return;
   // An exact whole-line clip wins; then a pattern; else the babble.
   const src = VOICE_LINES[`${who}|${text}`] ?? VOICE.find((c) => c.who === who && c.match.test(text))?.src;
   if (src) {
@@ -295,7 +302,11 @@ export function speak(who: string, text: string, now = false) {
     const a = new Audio(src);
     a.volume = SOUND.volume;
     a.muted = muted;
-    void a.play().catch(() => {});
+    voicing = a;
+    const done = () => { if (voicing === a) voicing = null; };
+    a.addEventListener("ended", done);
+    a.addEventListener("error", done);
+    void a.play().catch(done);
     return;
   }
   if (now) nowCue();
