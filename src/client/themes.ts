@@ -124,7 +124,19 @@ export const THEMES: Record<string, Theme> = {
   },
   // The home island as a place to walk: the lagoon's sky and falls, on grass.
   get "home-island"() {
-    return { ...THEMES["tidepool-steps"]!, name: "Home island", floor: "home-island", grass: "#7fb352", place: true };
+    const base = THEMES["tidepool-steps"]!;
+    return {
+      ...base, name: "Home island", floor: "home-island", grass: "#7fb352", place: true,
+      // Palms stand just inside the rim (the cliff is tight to the edge here), and none in the falls' mouth.
+      decorate(d: DecorContext) {
+        for (let i = 0; i < 9; i++) {
+          if (i === 5) continue;
+          const a = Math.PI * (1.05 + (i / 8) * 0.9);
+          const p = d.ring(a, -1.2 - (i % 2) * 0.5);
+          add(d.group, makePalm(2.4 + (i % 3) * 0.6, i), p.x, 0, p.z);
+        }
+      },
+    };
   },
   "ember-quarry": {
     name: "Volcano",

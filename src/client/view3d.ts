@@ -15,7 +15,7 @@ import { PULL_REACH, PUSH_REACH, gateOpen, mistBanks, platesHeld, quarterOf, MOS
 import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js";
 import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
-import { makeCloud, makeIsland, makeWaterfall } from "./islands.js";
+import { makeCloud, makeCurtain, makeIsland, makeWaterfall } from "./islands.js";
 import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
 export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff", "#6fe07a"];
@@ -1455,8 +1455,12 @@ export class World {
         post.castShadow = true;
         g.add(post);
       }
-      // A wide falls (the horseshoe's whole north mouth) stays the drawn sheet: the model is one stream.
-      const drawn = kind === "falls" && w > 4 ? undefined : PLACE_OF[kind];
+      // A wide falls (the horseshoe's whole north mouth): the lake pours off the lip as one curtain.
+      if (kind === "falls" && w > 4) {
+        this.addCurtain(props.filter((q) => q.kind === "falls"), b, shrine.coast);
+        continue;
+      }
+      const drawn = PLACE_OF[kind];
       if (drawn) {
         this.placeSlot(drawn.model, obj, at[0] + (drawn.dx ?? 0), at[1], shrine.turns?.[kind] ?? drawn.rot ?? 0, drawn.y ?? 0);
         continue;
@@ -1475,6 +1479,51 @@ export class World {
       g.add(rope);
     }
     this.fillHouse();
+  }
+
+  /**
+   * The horseshoe's falls: the lake speeds up, tips over the north rim as white water, and
+   * mist boils up from beyond the brink. (The game looks north, so the drop itself is out of
+   * sight behind the island: what shows is the water going over.)
+   */
+  private addCurtain(tiles: { x: number; y: number }[], b: Board, coast: ((dx: number, dy: number) => number) | null) {
+    const g = this.shrineGroup;
+    const byX = new Map<number, number>();
+    for (const t of tiles) byX.set(t.x, Math.min(byX.get(t.x) ?? Infinity, t.y));
+    const xs = [...byX.keys()].sort((p, q) => p - q);
+    // The lip: just past the island's drawn edge, north of each column (and of both ends).
+    const rimZ = (wx: number, wz: number) => {
+      let z = wz;
+      if (coast) while (coast(wx, z) < 0.5 && wz - z < 4) z -= 0.1;
+      else z -= 1;
+      return z;
+    };
+    const from: { x: number; z: number }[] = [], lip: { x: number; z: number }[] = [];
+    const cols = [xs[0]! - 0.5, ...xs, xs[xs.length - 1]! + 0.5];
+    for (const cx of cols) {
+      const x = this.worldX(b, cx), z = this.worldZ(b, byX.get(Math.round(Math.min(Math.max(cx, xs[0]!), xs[xs.length - 1]!)))!);
+      from.push({ x, z: z + 1.2 });
+      lip.push({ x, z: rimZ(x, z) });
+    }
+    const fallU = { value: 0 };
+    this.timeUniforms.push(fallU);
+    const curtain = makeCurtain(from, lip, { x: 0, z: -1 }, fallU);
+    curtain.position.y = 0.045;
+    curtain.renderOrder = 2;
+    g.add(curtain);
+    const midX = (lip[0]!.x + lip[lip.length - 1]!.x) / 2;
+    const midZ = Math.min(...lip.map((p) => p.z));
+    const width = lip[lip.length - 1]!.x - lip[0]!.x;
+    // Mist boiling up from beyond the brink: thick low down, thinning as it rises.
+    const puffs = Math.max(3, Math.round(width / 3));
+    for (let k = 0; k < puffs; k++) {
+      const x = midX + ((k + 0.5) / puffs - 0.5) * width * 1.1;
+      const low = makeCloud(6.5, "#ffffff", 0.3);
+      low.position.set(x, -5.5, midZ - 9.5 - (k % 2) * 0.8);
+      const high = makeCloud(5, "#ffffff", 0.12);
+      high.position.set(x + 0.8, -1.5 + (k % 3) * 0.6, midZ - 11);
+      g.add(low, high);
+    }
   }
 
   private worldX(b: Board, x: number) {
@@ -1566,7 +1615,7 @@ export class World {
       rx: 1, rz: 1, depth: 24, squareness: 2, seed: W + H,
       // A place drawn from its own shape (the horseshoe) keeps its cliff tight to the edge, so the
       // falls pour off the rim rather than onto a verge.
-      radius: (a) => (coast(a) + (shrine.lobes ? 0.7 : 2.1)) / 0.95,
+      radius: (a) => (shrine.lobes ? coast(a) + 0.2 : (coast(a) + 2.1) / 0.95),
       ledge: shrine.lobes ? 0 : 2.4, spires: this.low ? 3 : 6, grass: th.grass, soil: th.soil, rock: th.rock,
       segments: this.low ? 128 : 220,
     });

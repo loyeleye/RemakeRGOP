@@ -349,6 +349,100 @@ void main() {
   gl_FragColor = vec4(col, (0.35 + streaks * 0.55) * edge * fade);
 }`;
 
+const CURTAIN_VS = /* glsl */ `
+attribute float aEdge;
+attribute float aPhase;
+varying vec2 vUv;
+varying float vEdge;
+varying float vPhase;
+void main() {
+  vUv = uv;
+  vEdge = aEdge;
+  vPhase = aPhase;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+const CURTAIN_FS = /* glsl */ `
+varying vec2 vUv;
+varying float vEdge;
+varying float vPhase;
+uniform float uTime;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+}
+void main() {
+  // vUv.x runs along the lip in tiles; vUv.y is how far the water has run. vPhase: 0 to 1 the
+  // run-up on the lake, 1 to 2 the slope over the brink, 2 to 3 the plunge.
+  float run = clamp(vPhase, 0.0, 1.0), slope = clamp(vPhase - 1.0, 0.0, 1.0), plunge = clamp(vPhase - 2.0, 0.0, 1.0);
+  float t = uTime * (1.3 + slope * 1.2);
+  // Long streaks drawn out the way it runs, quicker and whiter as it goes over.
+  float lines = noise(vec2(vUv.x * 2.6, vUv.y * 0.4 - t)) * 0.55 + noise(vec2(vUv.x * 6.5, vUv.y * 0.9 - t * 1.6)) * 0.45;
+  float foamy = smoothstep(0.6 - slope * 0.32, 0.82 - slope * 0.3, lines);
+  vec3 lake = vec3(0.13, 0.47, 0.72), glass = vec3(0.3, 0.68, 0.86), white = vec3(0.95, 0.98, 1.0);
+  vec3 col = mix(lake, glass, slope * 0.55);
+  col = mix(col, white, clamp(foamy * (0.45 + slope * 0.55) + plunge * 0.8, 0.0, 1.0));
+  // The brink: a bright boiling line where it tips over.
+  float brink = 1.0 - smoothstep(0.0, 0.22, abs(vPhase - 2.0));
+  col = mix(col, white, brink * (0.55 + lines * 0.45));
+  // It fades in out of the lake, and breaks into spray after the brink. Both ends of the lip thin out.
+  float a = smoothstep(0.0, 0.7, run) * (1.0 - smoothstep(0.25, 1.0, plunge + (lines - 0.5) * 0.4));
+  a *= smoothstep(0.0, 1.0, vEdge) * (0.94 + foamy * 0.06);
+  gl_FragColor = vec4(col, a);
+}`;
+
+/**
+ * The lake pouring off the island's rim, seen from behind the falls (the game looks north, the
+ * water falls north): a run-up on the lake from `from` to `lip`, then a slope over the brink
+ * that the camera can still see, then the plunge. `out` is the way it falls, a unit vector on the ground.
+ */
+export function makeCurtain(from: { x: number; z: number }[], lip: { x: number; z: number }[], out: { x: number; z: number }, time: { value: number }) {
+  const N = lip.length;
+  // Each row: how far past the lip (negative on the lake), how far it has dropped, and its phase.
+  const rows: { f: number; d: number; ph: number }[] = [];
+  for (let j = 0; j <= 6; j++) rows.push({ f: -(1 - j / 6), d: 0, ph: j / 6 });
+  for (let j = 1; j <= 16; j++) {
+    const f = (j / 16) * 8;
+    rows.push({ f, d: 0.085 * f * f, ph: 1 + j / 16 });
+  }
+  for (let j = 1; j <= 8; j++) rows.push({ f: 8 + (j / 8) * 2, d: 5.44 + (j / 8) * 2.8 + (j / 8) * (j / 8) * 10, ph: 2 + j / 8 });
+  const R = rows.length;
+  const pos: number[] = [], uv: number[] = [], edge: number[] = [], phase: number[] = [], idx: number[] = [];
+  const along: number[] = [0];
+  for (let i = 1; i < N; i++) along.push(along[i - 1]! + Math.hypot(lip[i]!.x - lip[i - 1]!.x, lip[i]!.z - lip[i - 1]!.z));
+  for (let i = 0; i < N; i++) {
+    let ran = 0, px = from[i]!.x, py = 0, pz = from[i]!.z;
+    rows.forEach((r, j) => {
+      // On the lake the row runs from `from` to the lip; past it, out and down.
+      const x = r.f <= 0 ? lip[i]!.x + (from[i]!.x - lip[i]!.x) * -r.f : lip[i]!.x + out.x * r.f;
+      const z = r.f <= 0 ? lip[i]!.z + (from[i]!.z - lip[i]!.z) * -r.f : lip[i]!.z + out.z * r.f;
+      const y = -r.d;
+      if (j) ran += Math.hypot(x - px, y - py, z - pz);
+      (px = x), (py = y), (pz = z);
+      pos.push(x, y, z);
+      uv.push(along[i]!, ran);
+      edge.push(Math.min(along[i]!, along[N - 1]! - along[i]!));
+      phase.push(r.ph);
+    });
+  }
+  for (let i = 0; i < N - 1; i++)
+    for (let j = 0; j < R - 1; j++) {
+      const a = i * R + j, b = a + 1, c = a + R, d = c + 1;
+      idx.push(a, c, b, b, c, d);
+    }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  geo.setAttribute("aEdge", new THREE.Float32BufferAttribute(edge, 1));
+  geo.setAttribute("aPhase", new THREE.Float32BufferAttribute(phase, 1));
+  geo.setIndex(idx);
+  return new THREE.Mesh(
+    geo,
+    new THREE.ShaderMaterial({ vertexShader: CURTAIN_VS, fragmentShader: CURTAIN_FS, uniforms: { uTime: time }, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+  );
+}
+
 /** A ribbon of falling water `length` long, dropping from y=0. Faces +z. */
 export function makeWaterfall(width: number, length: number, time: { value: number }) {
   const g = new THREE.Group();

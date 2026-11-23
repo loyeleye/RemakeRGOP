@@ -191,11 +191,12 @@ export function horseshoeRows(): { rows: string[]; turns: Record<string, number>
   set(7, -41, "N", ".,");
   set(8, -41, "N", ".,");
 
-  // The falls: the north mouth, where the channel runs off the rim.
+  // The falls: the north mouth, where the channel runs off the rim, the stone's column too.
   for (let x = -8; x <= 8; x++) {
     let y = -40;
     while (outer(x, y - 1)) y--;
-    if (lake(x, y) && !(x >= -1 && x <= 1)) set(x, y, "V", "~");
+    // Water still (so the lake runs right to the lip), marked as the falls.
+    if (lake(x, y)) set(x, y, "v", "~");
   }
   // The Offering stone in the falls' mouth, water on both sides. Nobody walks to it.
   block(-1, -49, 3, 3, "h", "~");

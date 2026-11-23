@@ -343,7 +343,7 @@ export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flo
 export const PROP_CHARS: Record<string, PropKind> = {
   F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling",
   // The horseshoe island's houses, the Offering stone, and the one boat at its mooring.
-  M: "maudie-house", D: "moth-house", g: "mabry-house", I: "orrin-house", e: "nell-house", f: "sefa-house", X: "wick-house", h: "offering", i: "mooring", j: "boat",
+  M: "maudie-house", D: "moth-house", g: "mabry-house", I: "orrin-house", e: "nell-house", f: "sefa-house", X: "wick-house", h: "offering", i: "mooring", j: "boat", v: "falls",
 };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
 export const GROUND_CHARS: Record<string, "path" | "planks" | "terrace"> = { ",": "path", ";": "planks", ":": "terrace" };
@@ -859,6 +859,8 @@ const TILE_OF: Record<string, Tile> = {
   i: Tile.Wall,
   /** The boat rides on the water: drawn, but the tile stays water. */
   j: Tile.Water,
+  /** The horseshoe's falls: the lake's last row at the lip, still water. */
+  v: Tile.Water,
   o: Tile.Rock,
   "~": Tile.Water,
   /** Deep water (the law of the water): a pool tile where a plain pull slips. */
