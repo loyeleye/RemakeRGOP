@@ -165,7 +165,7 @@ describe("Lumi's lesson", () => {
     expect(r.room.state.games).toBe(2);
   });
 
-  it("losing round 3 brings best of five, and winning ends the run", () => {
+  it("losing round 3 brings best of five, then seven, and winning ends the run", () => {
     const r = newRoom(5);
     const room = r.room as unknown as { startRound(n: number, again: boolean): void };
     room.startRound(2, false);
@@ -173,6 +173,10 @@ describe("Lumi's lesson", () => {
     for (let i = 0; i < LESSON.firstToThree.ticks + 5 && r.room.state.games === 1; i++) r.room.onTick();
     expect(r.room.state.games).toBe(2);
     expect(r.said().some((l) => l.text === "Best of five.")).toBe(true);
+    r.play();
+    // Losing again moves the goalposts.
+    for (let i = 0; i < LESSON.firstToThree.ticks + 5 && r.room.state.games === 2; i++) r.room.onTick();
+    expect(r.said().some((l) => l.text === "Best of seven.")).toBe(true);
     r.play();
     r.room.state.game.scores[0] = LESSON.firstToThree.target;
     r.room.onTick();

@@ -315,7 +315,9 @@ export class LessonRoom {
     // Rook to three first, or the clock runs out: she goes again.
     if (g.finished || g.scores[1]! >= T.target) {
       this.games++;
-      this.say(LUMI, "Best of five.", { talk: true });
+      // She won't take a loss: each one moves the goalposts. Best of five, of seven, ...of nine.
+      const n = ["three", "five", "seven", "nine", "eleven", "thirteen"][Math.min(5, this.games - 1)];
+      this.say(LUMI, `${this.games > 3 ? "..." : ""}Best of ${n}.`, { talk: true });
       this.startRound(2, true);
     }
   }
