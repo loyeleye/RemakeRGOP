@@ -455,7 +455,7 @@ export class StoryRoom {
     const lines: StoryLine[] = [
       { who: LUMI, text: "That's the last bell!" },
       { who: HESTA, text: "Look up, Rook." },
-      { who: LUMI, text: m === 0 ? "You didn't miss one. I counted anyway." : `You missed ${numberWord(m)}. I counted.` },
+      { who: LUMI, text: m === 0 ? "You didn't ignore me once. I counted." : `You ignored me ${m === 1 ? "once" : m === 2 ? "twice" : `${numberWord(m)} times`}. I counted.` },
     ];
     this.end = { banked, kes: this.kes, sky, lines };
     this.ring = null;
