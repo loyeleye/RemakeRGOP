@@ -305,6 +305,15 @@ export class Game {
    * Only a held wisp being pulled toward its target hurries.
    */
   pullBoost = new Map<number, number>();
+  /** Story (run 4's Steps): lamplighters whose pull can't take hold of a wisp out on the water (it
+   *  slips): Rook, so the pools are Lumi's work. */
+  dryHands = new Set<number>();
+  /** Where dry hands slip: these water tiles (board index), or every water tile if null. */
+  deepWater: Set<number> | null = null;
+  /** Whether this lamplighter's pull slips on a wisp at `at` (dry hands, deep water). */
+  slipsAt(id: number, at: Pt) {
+    return this.dryHands.has(id) && this.board.tile(at) === Tile.Water && (!this.deepWater || this.deepWater.has(at.y * this.board.width + at.x));
+  }
   /** Story (run 4): the tide moves loose wisps about a pool but never washes one out onto the ground. */
   tideStaysWet = false;
   /** Story: where a wisp comes back, if not the usual spawn (called after it's placed). */
@@ -961,6 +970,7 @@ export class Game {
       return;
     }
     if (!p.slipped && this.loses(p, w)) p.slipped = true;
+    if (p.mode === "pull" && this.slipsAt(p.id, w.pos)) p.slipped = true;
     p.beam = w.id;
     if (p.slipped) return;
     const off = flingOffset(p.pos, w.pos, p.mode);

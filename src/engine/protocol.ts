@@ -83,6 +83,8 @@ export interface StoryView {
   canCall?: boolean;
   /** Who a call goes to, when it's someone to send (run 4: "Lumi"); left out, it's run 2's call to Rook. */
   callWho?: string;
+  /** Run 4's Steps: the pool the next wave will come up on, shimmering until it does. */
+  shimmer?: { x: number; y: number }[];
   /** Where a wisp pulled by two heads: the point halfway between them. */
   halfway?: { x: number; y: number } | null;
   /** The tile the partner was last called to, while he's on his way or standing there. */

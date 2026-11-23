@@ -27,10 +27,19 @@ function play(seed: number, plan: (r: JobRoom, stop: number, tick: number) => vo
 
 const sendWell = (r: JobRoom, stop: number, t: number) => {
   const c = r.state.game.board.center;
-  if (t !== 1 || r.state.sends) return;
-  // Stop 1: to the thicket. Stop 2: the fire side of the west pool.
-  r.sendLumi(stop === 0 ? pt(c.x + 8, c.y) : pt(c.x - 8, c.y));
+  // Stop 1: once, to the thicket.
+  if (stop === 0) {
+    if (t === 1 && !r.state.sends) r.sendLumi(pt(c.x + 8, c.y));
+    return;
+  }
+  // Stop 2: to each wave's pool, on its fire side, as soon as it shimmers.
+  const to = r.state.nextPool ?? r.state.wavePool;
+  if (to && sentFor.get(r) !== to) {
+    sentFor.set(r, to);
+    r.sendLumi(to.fire);
+  }
 };
+const sentFor = new WeakMap<JobRoom, unknown>();
 
 describe("Run 4: A job", () => {
   it("sent to the thicket and the fire side, she and a Medium Rook finish both stops", () => {
@@ -62,6 +71,54 @@ describe("Run 4: A job", () => {
     expect(lumi.pos).toEqual(room.state.sentTo);
     expect(msgs.flatMap((m) => (m.t === "say" ? m.lines : [])).some((l) => l.who === "Lumi" && JOB.lines.sent.includes(l.text as never))).toBe(true);
     expect(room.storyView().called).toEqual(room.state.sentTo);
+  });
+});
+
+describe("Tidepool Steps' waves", () => {
+  it("come one pool at a time, never on the same side twice running, and one send isn't enough", () => {
+    let s = 21;
+    const r = new JobRoom(manualClock(), () => (s = (s * 48271) % 2147483647), true);
+    r.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const sides: number[] = [];
+    let sent = false;
+    for (let i = 0; i < 2500 && r.state.restarts === 0; i++) {
+      r.onTick();
+      const st = r.state, c = st.game.board.center;
+      if (st.phase !== "playing") continue;
+      if (st.stop === 0) {
+        if (st.game.tick === 1 && !st.sends) r.sendLumi(pt(c.x + 8, c.y));
+        continue;
+      }
+      if (st.wavePool && sides.at(-1) !== st.wavePool.side + 10 * st.wave) sides.push(st.wavePool.side + 10 * st.wave);
+      // Only the first wave's pool, once.
+      if (!sent && st.wavePool) (sent = true), r.sendLumi(st.wavePool.fire);
+      // The shimmer shows where the next comes up, before it does.
+      if (st.nextPool) expect(r.storyView().shimmer).toEqual(st.nextPool.tiles);
+    }
+    expect(r.state.restarts).toBe(1);
+    expect(r.state.stop).toBe(1);
+    const bySide = sides.map((v) => v % 10);
+    expect(bySide.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < bySide.length; i++) expect(bySide[i]).not.toBe(bySide[i - 1]);
+  });
+
+  it("Rook's pull slips on a wisp out on a big pool", () => {
+    let s = 5;
+    const r = new JobRoom(manualClock(), () => (s = (s * 48271) % 2147483647));
+    r.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    (r as unknown as { startStop(n: number, again: boolean): void }).startStop(1, false);
+    for (let i = 0; i < JOB.bellTicks + JOB.stops[1].waves.firstAt + 1; i++) r.onTick();
+    const g = r.state.game;
+    const w = g.wisps.find((q) => q.guild === 0 && !g.away.has(q.id))!;
+    const rook = g.players.find((p) => p.id === 1)!;
+    const bank = r.state.wavePool!.fire;
+    rook.pos = rook.prev = bank;
+    g.command(1, { action: { kind: "staff", wisp: w.id } });
+    const at = w.pos;
+    r.onTick();
+    r.onTick();
+    expect(rook.slipped).toBe(true);
+    expect(w.pos).toEqual(at);
   });
 });
 

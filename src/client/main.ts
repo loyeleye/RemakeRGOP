@@ -65,6 +65,8 @@ function onServer(m: ServerMsg) {
     }
     case "tick":
       prevSnap = snap && snap.tick === m.snap.tick - 1 ? snap : null;
+      // Banked wisps waiting to come back (Granny's rim, run 4's waves) aren't on the board.
+      if (m.snap.wisps.some((w) => w.away)) m.snap = { ...m.snap, wisps: m.snap.wisps.filter((w) => !w.away) };
       snap = m.snap;
       debugTick(m.snap, m.bots ?? []);
       snapAt = performance.now();
@@ -1445,6 +1447,23 @@ function drawTide(g: CanvasRenderingContext2D, shrine: ReturnType<typeof shrineF
       g.lineTo(r.x, r.y);
       g.stroke();
     }
+  // Run 4: the pool the next wave comes up on shimmers, a few ticks ahead.
+  const sh = room?.story?.shimmer;
+  if (sh) {
+    for (const p of sh) {
+      const k = 0.5 + 0.5 * Math.sin(now / 140 + p.x * 0.9 + p.y * 1.3);
+      const q = cam.toScreen(p.x + 0.5, p.y + 0.5, 0.05);
+      g.fillStyle = `rgba(235, 250, 255, ${0.15 + 0.4 * k})`;
+      g.beginPath();
+      g.arc(q.x, q.y, Math.max(3, cam.scale * (0.18 + 0.14 * k)), 0, Math.PI * 2);
+      g.fill();
+    }
+    // Off screen: an arrow at the edge points to it.
+    if (sh.length) {
+      const mx = sh.reduce((a, p) => a + p.x, 0) / sh.length + 0.5, my = sh.reduce((a, p) => a + p.y, 0) / sh.length + 0.5;
+      edgeArrow(g, cam.toScreen(mx, my, 0.05), "#e8f8ff");
+    }
+  }
   if (room?.story?.callWho) {
     g.fillStyle = "rgba(255, 170, 80, 0.4)";
     for (const p of fireSideOf(b)) {

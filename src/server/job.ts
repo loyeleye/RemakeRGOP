@@ -11,7 +11,7 @@
 import { Mover, Tile, cheb, pt, samePt, type Pt } from "../engine/board.js";
 import { BOT_MEDIUM, botCommand } from "../engine/bot.js";
 import { Game, Grip, Rng, TICK_MS, tideIn, type Action, type Guild, type Wisp } from "../engine/game.js";
-import { JOB } from "../engine/job.js";
+import { JOB, stepsPools, type StepsPool } from "../engine/job.js";
 import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
@@ -57,7 +57,15 @@ export class JobRoom {
   private outroTick = 0;
   /** Lumi re-taps a wisp the moss is holding (a fresh tap tears at it). */
   private lumiStuck = 0;
+  private lumiWet = 0;
   private lastSent = -1;
+  /** The Steps' waves: how many have come, the pool the current one is on, how many of it are
+   *  still out, and the next one's pool and tick (its pool shimmers until then). */
+  private waveN = 0;
+  private wavePool: StepsPool | null = null;
+  private waveLeft = 0;
+  private nextPool: StepsPool | null = null;
+  private nextAt = -1;
 
   constructor(
     private clock: Clock = realClock,
@@ -159,7 +167,21 @@ export class JobRoom {
       this.lumiHeld.delete(w.id);
       this.respawn(w);
     };
-    for (const w of g.wisps) if (w.guild === 0) this.respawn(w);
+    this.waveN = this.waveLeft = 0;
+    this.wavePool = this.nextPool = null;
+    this.nextAt = -1;
+    if (n === 1) {
+      // The Steps: all of them wait off the board, and come on in waves (see wave()).
+      g.respawnPause = 1e6;
+      // Rook's pull slips out on the big pools (not the little arcs close in, where he can reach).
+      if (JOB.stops[1].dryRook) {
+        g.dryHands.add(ROOK_ID);
+        g.deepWater = new Set(stepsPools(g.board).flatMap((p) => p.tiles.map((q) => q.y * g.board.width + q.x)));
+      }
+      for (const w of g.wisps) if (w.guild === 0) g.away.set(w.id, 1e9);
+      this.nextPool = this.pickPool();
+      this.nextAt = JOB.stops[1].waves.firstAt;
+    } else for (const w of g.wisps) if (w.guild === 0) this.respawn(w);
     this.phase = "countdown";
     this.countdown = again ? JOB.restartTicks : JOB.bellTicks;
     if (!again) this.opening();
@@ -174,27 +196,19 @@ export class JobRoom {
     for (const dx of S.wall) for (let dy = S.rows[0]; dy <= S.rows[1]; dy++) g.addMoss(pt(c.x + dx, c.y + dy));
   }
 
-  /** Where a wisp of theirs comes up: behind the thicket, or (at the Steps) mostly on a pool. */
+  /** Where a wisp of theirs comes up at Moss Hollow: behind the thicket. (At the Steps they come in waves.) */
   private respawn(w: Wisp) {
-    if (w.guild !== 0) return;
+    if (w.guild !== 0 || this.stopN !== 0) return;
     const g = this.game, b = g.board, c = b.center;
     const free = (p: Pt) => !g.wisps.some((o) => o !== w && samePt(o.pos, p)) && !g.players.some((q) => samePt(q.pos, p));
-    let spots: Pt[] = [];
-    if (this.stopN === 0) {
+    const spots: Pt[] = [];
+    {
       const S = JOB.stops[0];
       for (let dy = S.rows[0]; dy <= S.rows[1]; dy++)
         for (let dx = S.spawnX[0]; dx <= S.spawnX[1]; dx++) {
           const p = pt(c.x + dx, c.y + dy);
           if (b.tile(p) === Tile.Floor && free(p)) spots.push(p);
         }
-    } else {
-      const S = JOB.stops[1];
-      const pools = g.shrine.poolField.filter((p) => b.tile(p) === Tile.Water && free(p) && Math.abs(p.x - c.x) >= JOB.stops[1].poolDx);
-      if (this.banked() >= S.lateFrom && this.sentTo) {
-        // Near the end: the pool on the far side of the fire from where she was sent last.
-        const side = Math.sign(this.sentTo.x - c.x) || 1;
-        spots = pools.filter((p) => Math.sign(p.x - c.x) === -side);
-      } else if (this.rng.next() < S.poolShare) spots = pools;
     }
     if (!spots.length) return;
     const p = spots[Math.floor(this.rng.next() * spots.length)]!;
@@ -248,9 +262,14 @@ export class JobRoom {
     g.step();
     for (const b of g.banks) {
       if (b.guild !== 0) continue;
+      if (this.stopN === 1 && --this.waveLeft === 0 && this.waveN < JOB.stops[1].waves.sizes.length) {
+        this.nextPool = this.pickPool();
+        this.nextAt = g.tick + JOB.stops[1].waves.gap;
+      }
       if (this.wet.has(b.wisp)) this.fromWater++;
       if (this.lumiHeld.has(b.wisp)) this.bark(JOB.lines.mine, false);
     }
+    if (this.stopN === 1 && this.nextPool && g.tick >= this.nextAt) this.wave();
     this.notice();
     const S = this.S;
     if (this.banked() >= S.goal) {
@@ -282,16 +301,50 @@ export class JobRoom {
     const held = me.beam !== null ? g.wisps[me.beam] : undefined;
     const drawing = !!this.sentTo && !!held && g.drifting > 0;
     if (drawing) {
-      const late = this.banked() >= JOB.stops[1].lateFrom;
+      const late = this.waveN >= 2;
       if (late && held && Math.sign(held.pos.x - c.x) === Math.sign(me.pos.x - c.x) && cheb(me.pos, c) < cheb(held.pos, c)) this.bark(JOB.lines.thisSide);
       else this.bark(JOB.lines.coming);
     }
-    // Sent to a pool's far bank: they go the wrong way. One hint, never near the end.
-    const far = !!this.sentTo && Math.abs(this.sentTo.x - c.x) > JOB.stops[1].poolDx + 4;
+    // Sent past the wave's pool, to its far bank: they go the wrong way. One hint, not on the last wave.
+    const P = this.wavePool;
+    const far = !!this.sentTo && !!P && P.tiles.some((q) => cheb(q, this.sentTo!) <= 3) && cheb(this.sentTo, c) >= cheb(P.fire, c) + JOB.stops[1].farBy;
     this.farFor = far ? this.farFor + 1 : 0;
-    if (!this.hintSaid && this.farFor >= JOB.farBankFor && this.banked() < JOB.stops[1].lateFrom) {
+    if (!this.hintSaid && this.farFor >= JOB.farBankFor && this.waveN < JOB.stops[1].waves.sizes.length) {
       this.hintSaid = true;
       this.say(HESTA, L.fireSide);
+    }
+  }
+
+  /** A pool for the next wave: any of the Steps' big pools, on a different side from the last. */
+  private pickPool(): StepsPool {
+    const all = stepsPools(this.game.board);
+    const last = this.wavePool?.side;
+    const ok = all.filter((p) => p.side !== last);
+    return ok[Math.floor(this.rng.next() * ok.length)]!;
+  }
+
+  /** The next wave comes up: its wisps, all at once, loose on its pool. */
+  private wave() {
+    const g = this.game, pool = this.nextPool!;
+    const size = JOB.stops[1].waves.sizes[this.waveN] ?? 0;
+    this.waveN++;
+    this.wavePool = pool;
+    this.nextPool = null;
+    this.nextAt = -1;
+    this.waveLeft = 0;
+    const waiting = g.wisps.filter((w) => w.guild === 0 && g.away.has(w.id));
+    for (const w of waiting.slice(0, size)) {
+      const free = pool.tiles.filter((p) => !g.wisps.some((o) => o !== w && !g.away.has(o.id) && samePt(o.pos, p)));
+      if (!free.length) break;
+      g.away.delete(w.id);
+      w.pos = w.prev = free[Math.floor(this.rng.next() * free.length)]!;
+      w.target = null;
+      w.holder = null;
+      w.grip = Grip.Free;
+      w.rimTicks = 0;
+      this.wet.add(w.id);
+      this.lumiHeld.delete(w.id);
+      this.waveLeft++;
     }
   }
 
@@ -339,8 +392,8 @@ export class JobRoom {
   private steerLumi() {
     const g = this.game, me = this.player(LUMI_ID);
     const cmd = (action: Action) => g.command(LUMI_ID, { action, toggleMode: me.mode !== "pull" || undefined });
-    // Her tide pull is work: it's on where she's been sent, not while she plays about.
-    g.tidePuller = this.sentTo ? LUMI_ID : null;
+    // Her tide pull is always hers (left alone she ignores the pools, so it only works once sent).
+    g.tidePuller = LUMI_ID;
     if (!this.sentTo) return this.lumiFree();
     // On her way.
     if (!samePt(me.pos, this.sentTo)) {
@@ -357,17 +410,55 @@ export class JobRoom {
     }
     // Then their wisps: the nearest she can bring in toward her spot (wet ones first at the Steps).
     const w = this.lumiPick();
+    // At the Steps, one left on the water right at her feet won't come any closer: she steps back
+    // a tile, toward the fire, to draw it off the pool.
+    if (!w && this.stopN === 1 && this.stepBack()) return;
     if (!w) {
       if (me.action.kind !== "idle") cmd({ kind: "idle" });
       return;
     }
     const holding = me.action.kind === "staff" && me.action.wisp === w.id;
+    // Out on the water and not coming (a rock in the way): she moves along the bank to get a line on it.
+    const wetStuck = holding && g.board.tile(w.pos) === Tile.Water && samePt(w.pos, w.prev);
+    this.lumiWet = wetStuck ? this.lumiWet + 1 : 0;
+    if (this.lumiWet >= 3 && this.stopN === 1 && this.shuffle(w)) return void (this.lumiWet = 0);
     // Held back (moss, or nothing moving): a fresh tap.
     this.lumiStuck = holding && !w.target && samePt(w.pos, w.prev) && g.board.tile(w.pos) !== Tile.Water ? this.lumiStuck + 1 : 0;
     if (!holding || this.lumiStuck >= 2) {
       this.lumiStuck = 0;
       cmd({ kind: "staff", wisp: w.id });
     }
+  }
+
+  /** Lumi, beside a wisp still on the water: a step back from it, toward the fire. Her spot moves with her. */
+  private stepBack(): boolean {
+    const g = this.game, me = this.player(LUMI_ID), b = g.board, c = b.center;
+    const wet = g.wisps.find((w) => w.guild === 0 && !g.away.has(w.id) && b.tile(w.pos) === Tile.Water && cheb(w.pos, me.pos) <= 1);
+    if (!wet) return false;
+    const opts = [pt(me.pos.x + Math.sign(me.pos.x - wet.pos.x), me.pos.y + Math.sign(me.pos.y - wet.pos.y)), pt(me.pos.x + Math.sign(c.x - me.pos.x), me.pos.y + Math.sign(c.y - me.pos.y))];
+    const to = opts.find((q) => !samePt(q, me.pos) && b.passable(q, Mover.Walker) && !g.players.some((p) => samePt(p.pos, q)) && cheb(q, wet.pos) === 2);
+    if (!to) return false;
+    this.sentTo = to;
+    g.command(LUMI_ID, { action: { kind: "walk", to } });
+    return true;
+  }
+
+  /** Lumi, on a wisp out on the water that won't come: along the bank to another spot on its fire side. */
+  private shuffle(w: Wisp): boolean {
+    const g = this.game, me = this.player(LUMI_ID), b = g.board, c = b.center;
+    const spots: Pt[] = [];
+    for (let dy = -3; dy <= 3; dy++)
+      for (let dx = -3; dx <= 3; dx++) {
+        const q = pt(w.pos.x + dx, w.pos.y + dy), d = cheb(q, w.pos);
+        if (d < 2 || samePt(q, me.pos) || !b.inside(q) || !b.passable(q, Mover.Walker) || cheb(q, c) >= cheb(w.pos, c)) continue;
+        if (g.players.some((p) => samePt(p.pos, q)) || !b.canSee(q, w.pos)) continue;
+        spots.push(q);
+      }
+    const to = spots.sort((a, z) => cheb(a, me.pos) - cheb(z, me.pos))[0];
+    if (!to) return false;
+    this.sentTo = to;
+    g.command(LUMI_ID, { action: { kind: "walk", to } });
+    return true;
   }
 
   /** The wisp she works from where she stands, or null. */
@@ -497,6 +588,7 @@ export class JobRoom {
       note: this.note(),
       canCall: this.phase === "playing" && this.outroUntil < 0,
       callWho: LUMI,
+      ...(this.nextPool && this.phase === "playing" ? { shimmer: this.nextPool.tiles } : {}),
       called: this.sentTo,
       end: this.end,
     };
@@ -532,7 +624,7 @@ export class JobRoom {
 
   /** For tests. */
   get state() {
-    return { phase: this.phase, stop: this.stopN, game: this.game, sends: this.sends, allSends: this.allSends, restarts: this.restarts, fromWater: this.fromWater, sentTo: this.sentTo, end: this.end };
+    return { wave: this.waveN, wavePool: this.wavePool, nextPool: this.nextPool, phase: this.phase, stop: this.stopN, game: this.game, sends: this.sends, allSends: this.allSends, restarts: this.restarts, fromWater: this.fromWater, sentTo: this.sentTo, end: this.end };
   }
 }
 

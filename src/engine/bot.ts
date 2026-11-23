@@ -125,7 +125,8 @@ export function botCommand(game: Game, id: number, style: BotStyle, rand: () => 
     return botCommand(game, id, BOT_MEDIUM, rand);
   }
   const c = game.board.center;
-  const live = (w: Wisp) => !game.board.inBankZone(w.pos);
+  // Not one on the rim, waiting off the board, or (with dry hands, run 4) out on the water.
+  const live = (w: Wisp) => !game.board.inBankZone(w.pos) && !game.away.has(w.id) && !game.slipsAt(id, w.pos);
 
   // Shove a rival wisp that's about to be banked.
   if (style.pushy > 0) {

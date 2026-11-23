@@ -3,6 +3,8 @@
 // voice in his ear and plans the route. Two stops on other people's islands, one after the other.
 // Build brief: project files gameplay/run4-prototype-brief.md. Counts, clocks and lines are drafts.
 
+import { Tile, cheb, pt, type Board, type Pt } from "./board.js";
+
 export const JOB = {
   run: "A job",
   /** Ticks of the bell before each stop. A restart skips the bell and waits this long instead. */
@@ -43,20 +45,24 @@ export const JOB = {
       title: "Tidepool Steps",
       shrine: "tidepool-steps",
       keeper: "Marit",
-      /** Draft: bank this many in this many ticks, with at least `onWater` of them starting on a pool. */
-      goal: 8,
-      ticks: 220,
+      /** Draft (Ladi, 23 Nov: "add more pools"): bank this many in this many ticks, all off the pools. */
+      goal: 10,
+      ticks: 340,
       wisps: 3,
-      onWater: 5,
-      /** Share of wisps that come back on a pool (the rest on the ground). */
-      poolShare: 0.75,
-      /** Only the two big side pools, this far east or west of the fire: well off Rook's lines. */
-      poolDx: 13,
-      /** The last ones (from this many banked) come up on the pool across from where Lumi was sent. */
-      lateFrom: 6,
+      onWater: 8,
+      /**
+       * The wisps come in waves, `sizes` of them a wave, each on one pool and never on the same side
+       * of the fire twice running. The next wave comes `gap` ticks after the last one is banked, and
+       * its pool shimmers for those ticks first. Pools: the big ones on each side (see stepsPools).
+       */
+      waves: { sizes: [3, 3, 2, 2] as readonly number[], gap: 6, firstAt: 6 },
+      /** Rook's pull slips on a wisp out on the water: only Lumi's tide pull brings them off a pool. */
+      dryRook: true,
+      /** Hesta's far-bank hint: Lumi this much further out than the wave's pool's fire side. */
+      farBy: 4,
       rook: { x: 4, y: 3 },
       lumiStart: { x: 4, y: -3 },
-      keeperAt: { x: 0, y: 6 },
+      keeperAt: { x: -4, y: 3 },
       lines: {
         route: "Now the pools. Stand her on the fire side, and pull while the tide's coming in. It turns against you after.",
         greet: ["Rook. Good. Half of them are out on the water again.", "Granny said you'd bring someone for the water."],
@@ -87,3 +93,49 @@ export const JOB = {
     ],
   },
 } as const;
+
+export interface StepsPool {
+  /** Which side of the fire: 0 west, 1 east, 2 north, 3 south. Waves never repeat a side. */
+  side: number;
+  tiles: Pt[];
+  /** Where to stand her: the ground on the pool's fire side, nearest the brazier. */
+  fire: Pt;
+}
+
+const poolCache = new WeakMap<Board, StepsPool[]>();
+/**
+ * Tidepool Steps' wave pools: each connected pool of 8 tiles or more that lies square off the fire
+ * (west, east, north or south), not the small diagonal arcs close in.
+ */
+export function stepsPools(b: Board): StepsPool[] {
+  const hit = poolCache.get(b);
+  if (hit) return hit;
+  const c = b.center, seen = new Set<number>(), out: StepsPool[] = [];
+  for (let y = 0; y < b.height; y++)
+    for (let x = 0; x < b.width; x++) {
+      const k = y * b.width + x;
+      if (seen.has(k) || b.tile(pt(x, y)) !== Tile.Water) continue;
+      const tiles: Pt[] = [], todo = [pt(x, y)];
+      seen.add(k);
+      while (todo.length) {
+        const q = todo.pop()!;
+        tiles.push(q);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const n = pt(q.x + dx, q.y + dy), nk = n.y * b.width + n.x;
+          if (b.inside(n) && !seen.has(nk) && b.tile(n) === Tile.Water) (seen.add(nk), todo.push(n));
+        }
+      }
+      if (tiles.length < 8) continue;
+      const mx = tiles.reduce((a, q) => a + q.x, 0) / tiles.length - c.x, my = tiles.reduce((a, q) => a + q.y, 0) / tiles.length - c.y;
+      // Square off the fire: well out along one axis and close to the other.
+      const side = Math.abs(mx) >= 10 && Math.abs(my) <= 3 ? (mx < 0 ? 0 : 1) : Math.abs(my) >= 7 && Math.abs(mx) <= 3 ? (my < 0 ? 2 : 3) : -1;
+      if (side < 0) continue;
+      // The fire side: ground beside the pool's nearest tile, one step toward the brazier.
+      const near = tiles.reduce((a, q) => (cheb(q, c) < cheb(a, c) ? q : a));
+      const step = side < 2 ? pt(Math.sign(c.x - near.x), 0) : pt(0, Math.sign(c.y - near.y));
+      const fire = pt(near.x + step.x, near.y + step.y);
+      out.push({ side, tiles, fire });
+    }
+  poolCache.set(b, out);
+  return out;
+}
