@@ -16,8 +16,8 @@ The sky, cloud sea, fire, embers, light pillar, water and wisps are drawn in cod
 
 ## Music
 
-The Grand Kindling's music was generated with Mureka by Ladi and added on 2026-11-22. Each track was
-loudness-matched to -18 LUFS and encoded to 160 kbps MP3 with ffmpeg. Sources are in the project files:
+The Grand Kindling's music was generated with Mureka by Ladi and added on 2026-11-22. Each track had its
+leading silence trimmed (0.1 to 0.4 s, so the first beat lands on the first tick), was loudness-matched to -18 LUFS, and was encoded to 160 kbps MP3 with ffmpeg. Sources are in the project files:
 `kindling-run-1.wav`, `kindling-run-1 (1).wav`, `kindling-run-1 (2).wav` and an upload named
 `kindling-run-1 3.wav`.
 
