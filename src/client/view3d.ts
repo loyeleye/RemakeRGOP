@@ -1737,6 +1737,21 @@ export class World {
 export function drawOverlay(g: CanvasRenderingContext2D, cam: Camera, st: DrawState) {
   g.clearRect(0, 0, cam.w, cam.h);
   const lerp = (a: number, z: number) => a + (z - a) * Math.min(1, st.t);
+  // Watchers: a soft name tag over each one whose model is in, so they can be found on the rim.
+  for (const w of st.watchers ?? []) {
+    if (!models[w.cast]) continue;
+    const p = cam.toScreen(w.x, w.y, 1.75 * (CAST_SCALE[w.cast] ?? 1));
+    const fs = Math.max(10, Math.min(13, cam.scale * 0.36));
+    g.font = `600 ${fs}px system-ui, sans-serif`;
+    g.textAlign = "center";
+    const label = w.cast[0]!.toUpperCase() + w.cast.slice(1);
+    const tw = g.measureText(label).width + 10;
+    g.fillStyle = "rgba(10,6,18,0.45)";
+    roundRect(g, p.x - tw / 2, p.y - fs - 4, tw, fs + 8, 6);
+    g.fill();
+    g.fillStyle = w.cast === "lumi" ? "#ffd36a" : "#9fd8ff";
+    g.fillText(label, p.x, p.y);
+  }
   for (const pl of st.snap.players) {
     const x = lerp(pl.px, pl.x) + 0.5;
     const y = lerp(pl.py, pl.y) + 0.5;
