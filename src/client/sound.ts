@@ -271,6 +271,19 @@ export function pullHum(near: number | null) {
 export const VOICE: { who: string; match: RegExp; src: string }[] = [
   // Hesta's "Now." in place of her two-note cue ("Now.", "Now, Rook.", "...left you one. Now."), not "Now pull."
   { who: "Hesta", match: /(^|\. )Now[.,]/, src: "voice/hesta-now.mp3" },
+  // Rook's run 2 lines, whole, in the Umbriel voice (a trial: his voice isn't picked yet).
+  { who: "Rook", match: /^Three wisps\. I won't point today\.$/, src: "voice/rook-three-wisps.mp3" },
+  { who: "Rook", match: /^Where would I stand\?$/, src: "voice/rook-where-stand.mp3" },
+  { who: "Rook", match: /^Remember, across the fire from\.\.\.$/, src: "voice/rook-remember.mp3" },
+  { who: "Rook", match: /^That's it\.$/, src: "voice/rook-thats-it.mp3" },
+  { who: "Rook", match: /^Just like that\.$/, src: "voice/rook-just-like-that.mp3" },
+  { who: "Rook", match: /^This one's stuck\. Pull with me\.$/, src: "voice/rook-stuck.mp3" },
+  { who: "Rook", match: /^See\? It comes to the middle of us\.$/, src: "voice/rook-middle.mp3" },
+  { who: "Rook", match: /^Now you're the boss\. Tell me where to stand\.$/, src: "voice/rook-boss.mp3" },
+  { who: "Rook", match: /^Yes, ma'am\.$/, src: "voice/rook-yes-maam.mp3" },
+  { who: "Rook", match: /^First to three\. No help\.$/, src: "voice/rook-first-to-three.mp3" },
+  { who: "Rook", match: /^How did you do that\?$/, src: "voice/rook-how.mp3" },
+  { who: "Rook", match: /^Let's call it for now\. We can try again tomorrow\.$/, src: "voice/rook-call-it.mp3" },
 ];
 
 /** A line appears: its clip if it has one, else Hesta's "Now" cue or the speaker's babble. */

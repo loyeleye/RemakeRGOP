@@ -28,3 +28,16 @@ describe("Lumi's one open-mouth face in runs 1 and 2", () => {
     for (const t of ["Dad. North one.", "So I'm coming tomorrow.", "I pulled.", "Again."]) expect(moodOf("Lumi", t)).not.toBe("delight-flash");
   });
 });
+
+describe("voice clips", () => {
+  it("every clip file exists, and Rook's run 2 lines each have one", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("src/client/sound.ts", "utf8");
+    for (const m of src.matchAll(/^  \{ who: .*src: "(voice\/[^"]+)"/gm)) expect(existsSync(`public/${m[1]}`), m[1]).toBe(true);
+    const lesson = readFileSync("src/server/lesson.ts", "utf8");
+    const rook = [...lesson.matchAll(/say\(ROOK, "([^"]+)"/g)].map((m) => m[1]!);
+    expect(rook.length).toBeGreaterThan(8);
+    const clips = [...src.matchAll(/who: "Rook", match: \/(.+?)\/, src/g)].map((m) => new RegExp(m[1]!));
+    for (const t of rook) expect(clips.some((r) => r.test(t)), t).toBe(true);
+  });
+});

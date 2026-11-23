@@ -49,3 +49,4 @@ They are stand-ins until the game is distributed, and will be replaced or cleare
 | File | Voice | Line |
 |---|---|---|
 | voice/hesta-now.mp3 | Gacrux (Gemini TTS), from `gameplay/voice/run1/final/hesta-now.wav`, loudness-matched and encoded to MP3 | Hesta's "Now." |
+| voice/rook-*.mp3 (12 clips) | Sogni speech in a copy of the Umbriel voice, a trial while Rook's voice is picked; from `gameplay/voice/run2/rook-umbriel/` as delivered (trimmed and levelled by the design thread), 2026-11-23. Terms for a copied voice not yet checked: ❓ | Rook's run 2 lines, one clip per line |
