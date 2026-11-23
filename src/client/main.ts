@@ -378,6 +378,57 @@ function noteProgress() {
   renderProgress();
 }
 
+/**
+ * The look across the water, on the first walk (maps thread): the camera eases out and over to
+ * frame Rook, the statue and the falls, holds, then comes back to him. Any tap or key ends it.
+ */
+const LOOK = { wait: 900, out: 1800, hold: 3200, back: 1400, within: 40 };
+let lookBeat: { at: number; from: { cx: number; cy: number; scale: number } | null; to?: { cx: number; cy: number; scale: number } } | null = null;
+function endLook() {
+  if (!lookBeat) return;
+  if (lookBeat.from) {
+    cam.scale = Math.min(cam.w, cam.h) / 17;
+    cam.follow = true;
+  }
+  lookBeat = null;
+}
+function stepLook(now: number, props: { kind: string; x: number; y: number }[], me: { x: number; y: number } | undefined) {
+  const L = lookBeat;
+  if (!L || now < L.at || !me) return;
+  if (!L.from) {
+    // The statue, and the nearest of the falls and the Offering stone to it.
+    const near = (kind: string) => {
+      const all = props.filter((p) => p.kind === kind);
+      const st = props.find((p) => p.kind === "statue") ?? me;
+      return all.sort((a, b) => Math.hypot(a.x - st.x, a.y - st.y) - Math.hypot(b.x - st.x, b.y - st.y)).slice(0, 1);
+    };
+    const sights = [...near("statue"), ...near("falls"), ...near("offering")];
+    // Only where the statue is across the water from his door (the horseshoe island), not a walk away.
+    const statue = sights.find((p) => p.kind === "statue");
+    if (!statue || Math.hypot(statue.x - me.x, statue.y - me.y) > LOOK.within) return void (lookBeat = null);
+    const xs = [me.x, ...sights.map((p) => p.x)], ys = [me.y, ...sights.map((p) => p.y)];
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const home = Math.min(cam.w, cam.h) / 17;
+    // Room round the edges, and more height: the tilt squashes the ground and the top is far.
+    const scale = Math.min(home, cam.w / (x1 - x0 + 8), cam.h / ((y1 - y0 + 8) * 1.25));
+    L.from = { cx: cam.cx, cy: cam.cy, scale: cam.scale };
+    L.to = { cx: (x0 + x1) / 2 + 0.5, cy: (y0 + y1) / 2 + 0.5, scale };
+    cam.follow = false;
+  }
+  const t = now - L.at, ease = (k: number) => k * k * (3 - 2 * k);
+  const f = L.from!, to = L.to!;
+  const homeAt = { cx: me.x + 0.5, cy: me.y + 0.5, scale: Math.min(cam.w, cam.h) / 17 };
+  let a = f, b = to, k = 1;
+  if (t < LOOK.out) k = ease(t / LOOK.out);
+  else if (t < LOOK.out + LOOK.hold) k = 1;
+  else if (t < LOOK.out + LOOK.hold + LOOK.back) (a = to), (b = homeAt), (k = ease((t - LOOK.out - LOOK.hold) / LOOK.back));
+  else return endLook();
+  cam.cx = a.cx + (b.cx - a.cx) * k;
+  cam.cy = a.cy + (b.cy - a.cy) * k;
+  // Zoom in log space so the ease reads even.
+  cam.scale = Math.exp(Math.log(a.scale) + (Math.log(b.scale) - Math.log(a.scale)) * k);
+}
+
 /** The walking map: a closer camera that follows Rook, and a short fade out when Hesta's game starts. */
 let inPlace = false;
 let placeFade: HTMLElement | null = null;
@@ -385,6 +436,8 @@ function placeView(place: boolean, leaving: boolean) {
   if (place && !inPlace) {
     cam.scale = Math.min(cam.w, cam.h) / 17;
     cam.follow = true;
+    // The first walk: as Rook steps out, the camera eases out to show the statue across the water.
+    if (room?.story?.pond?.walk === 1) lookBeat = { at: performance.now() + LOOK.wait, from: null };
   }
   if (leaving && !placeFade) {
     placeFade = document.createElement("div");
@@ -394,6 +447,7 @@ function placeView(place: boolean, leaving: boolean) {
     requestAnimationFrame(() => requestAnimationFrame(() => f.classList.add("on")));
   }
   if (!place && inPlace) {
+    lookBeat = null;
     // Back to fitting the board for the game, and the fade lifts on it.
     cam.scale = 0;
     const f = placeFade;
@@ -872,6 +926,7 @@ canvas.addEventListener("pointermove", (e) => {
 });
 
 const endPointer = (e: PointerEvent) => {
+  endLook();
   const p = pointers.get(e.pointerId);
   pointers.delete(e.pointerId);
   if (pointers.size < 2) pinch = null;
@@ -917,6 +972,7 @@ canvas.addEventListener(
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 window.addEventListener("keydown", (e) => {
+  endLook();
   if (room?.phase !== "playing" || (e.target as HTMLElement).tagName === "INPUT") return;
   const k = e.key.toLowerCase();
   if (k === "`") return void (toggleDebug(), e.preventDefault());
@@ -1279,6 +1335,7 @@ function frame(now: number) {
   }
   const t = Math.min(1, (now - snapAt) / tickMs);
   const mine = snap.players.find((p) => p.id === me);
+  if (lookBeat) stepLook(now, shrine.props ?? [], mine);
   if (cam.follow && mine) {
     if (cam.compact || cam.zoomedIn) {
       const tx = mine.px + (mine.x - mine.px) * t + 0.5;
