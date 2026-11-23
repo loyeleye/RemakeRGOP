@@ -129,4 +129,10 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Lumi|Best of three. No rocks.": 1.9,
   "Lumi|That's my dad.": 0.74,
   "Lumi|She's distracting you. Eyes on the wisp.": 2.45,
+  "Hesta|Moss Hollow first. Send Sparkbug ahead to tear the moss, then pull behind her. It grows back.": 7.73,
+  "Hesta|Now the pools. Stand her on the fire side, and pull while the tide's coming in. It turns against you after.": 7.32,
+  "Hesta|Tide's turned. Wait for it.": 2.06,
+  "Hesta|She's pulling them away from you, Rook. Fire side.": 3.14,
+  "Lumi|She said my name.": 0.89,
+  "Rook|I heard.": 0.62,
 };

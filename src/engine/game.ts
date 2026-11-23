@@ -71,6 +71,11 @@ export const MIST_LAP = 150;
 export const MOSS_HP = 2;
 export const MOSS_GROW = 6;
 export const MOSS_MAX = 64;
+/**
+ * The tide puller against the clocked tide: drawn the way the tide runs, a wisp comes two tiles
+ * a tick; drawn against it, it only moves one tick in this many.
+ */
+export const TIDE_AGAINST = 3;
 /** Pushing reaches less far than pulling. */
 export const PUSH_REACH = 8;
 export const WISPS_PER_GUILD = 3;
@@ -300,6 +305,8 @@ export class Game {
    * Only a held wisp being pulled toward its target hurries.
    */
   pullBoost = new Map<number, number>();
+  /** Story (run 4): the tide moves loose wisps about a pool but never washes one out onto the ground. */
+  tideStaysWet = false;
   /** Story: where a wisp comes back, if not the usual spawn (called after it's placed). */
   onReturn: ((w: Wisp) => void) | null = null;
   /**
@@ -471,12 +478,55 @@ export class Game {
     for (const w of this.wisps) {
       if (w === held || w.touched || w.target || w.skate || this.board.inBankZone(w.pos)) continue;
       if (this.board.tile(w.pos) !== Tile.Water || this.poolOf(w.pos) !== pool) continue;
-      const mv = wispMove(this.board, w.pos, sign(p.pos.x - w.pos.x), sign(p.pos.y - w.pos.y), Math.abs(p.pos.x - w.pos.x), Math.abs(p.pos.y - w.pos.y));
-      if (!mv || mv.bounce) continue;
-      const to = pt(w.pos.x + mv.step[0], w.pos.y + mv.step[1]);
-      if (samePt(to, p.pos) || this.wisps.some((o) => o !== w && samePt(o.pos, to))) continue;
-      this.drift.set(w.id, to);
+      const to = this.tideStep(w.pos, p.pos);
+      if (!to) continue;
+      // On a shrine with a clocked tide the two drifts add up: with the tide (toward the brazier
+      // while it comes in, away while it goes out) she draws them two tiles a tick; against it,
+      // they barely move. Across the tide, she draws them as usual.
+      const tide = this.shrine.gimmicks.tide;
+      let at = to;
+      if (tide) {
+        const c = this.board.center, inward = cheb(to, c) - cheb(w.pos, c);
+        const run = tideIn(this.tick, tide) ? -1 : 1;
+        if (inward === run) {
+          const more = this.tideStep(to, p.pos, w);
+          if (more && this.board.tile(more) === Tile.Water) at = more;
+        } else if (inward === -run && this.tick % TIDE_AGAINST !== 0) continue;
+      }
+      this.drift.set(w.id, at);
     }
+  }
+
+  /** One tile from `from` toward the tide puller at `to`, over open water or ground, or null. */
+  private tideStep(from: Pt, to: Pt, self?: Wisp): Pt | null {
+    const mv = wispMove(this.board, from, sign(to.x - from.x), sign(to.y - from.y), Math.abs(to.x - from.x), Math.abs(to.y - from.y));
+    if (!mv || mv.bounce) return null;
+    const at = pt(from.x + mv.step[0], from.y + mv.step[1]);
+    if (samePt(at, to) || this.wisps.some((o) => o !== self && !samePt(o.pos, from) && samePt(o.pos, at))) return null;
+    return at;
+  }
+
+  /** Story: moss laid by the run (a thicket), as if it had grown there. */
+  addMoss(at: Pt) {
+    const i = at.y * this.board.width + at.x;
+    if (this.board.tile(at) !== Tile.Floor) return;
+    this.board.tiles[i] = Tile.Moss;
+    this.mossHp.set(i, MOSS_HP);
+    this.board.version++;
+  }
+
+  /** Story: one tear at the tuft on this tile (a partner clearing the way), as a tap would. */
+  tearMoss(at: Pt) {
+    const i = at.y * this.board.width + at.x;
+    const hp = this.mossHp.get(i);
+    if (hp === undefined) return false;
+    if (hp > 1) this.mossHp.set(i, hp - 1);
+    else {
+      this.mossHp.delete(i);
+      this.board.tiles[i] = Tile.Floor;
+      this.board.version++;
+    }
+    return true;
   }
 
   private poolOf(at: Pt) {
@@ -643,7 +693,8 @@ export class Game {
         const tx = tide ? dir * sign(c.x - w.pos.x) : northSouth ? -sign(oy) : 0;
         const ty = tide ? dir * sign(c.y - w.pos.y) : northSouth ? 0 : sign(ox);
         const mv = (tx || ty) && wispMove(this.board, w.pos, tx, ty, Math.abs(c.x - w.pos.x), Math.abs(c.y - w.pos.y));
-        if (mv && !mv.bounce) w.pos = pt(w.pos.x + mv.step[0], w.pos.y + mv.step[1]);
+        const to = mv && !mv.bounce ? pt(w.pos.x + mv.step[0], w.pos.y + mv.step[1]) : null;
+        if (to && !(this.tideStaysWet && this.board.tile(to) !== Tile.Water)) w.pos = to;
       }
       return;
     }

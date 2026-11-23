@@ -76,4 +76,15 @@ describe("The later walks", () => {
     expect(moved).toBe(true);
     expect(at("Hesta")).toEqual(hesta0);
   });
+  it("in walk 2, tapping the skiff goes on to the first job (run 4)", () => {
+    let s = 7;
+    const room = new PondRoom(manualClock(), () => (s = (s * 48271) % 2147483647), 2);
+    const conn = room.connect(() => {});
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const skiff = room.state.game.shrine.props!.find((p) => p.kind === "skiff")!;
+    conn.message(JSON.stringify({ t: "act", action: { kind: "walk", to: { x: skiff.x, y: skiff.y } } }));
+    for (let i = 0; i < 200 && !room.state.job; i++) room.onTick();
+    expect(room.state.job).toBeTruthy();
+    expect(room.state.job!.state.stop).toBe(0);
+  });
 });

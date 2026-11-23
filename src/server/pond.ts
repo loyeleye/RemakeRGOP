@@ -10,6 +10,7 @@ import { GRANNY } from "../engine/granny.js";
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
 import { GrannyRoom } from "./granny.js";
+import { JobRoom } from "./job.js";
 import { realClock, type Clock } from "./room.js";
 import { walkByN, type Anchor, type Walk } from "../engine/walks.js";
 
@@ -107,7 +108,13 @@ export class PondRoom {
   private gatheredAt = -1;
   private lastSefa = -99;
   /** Once Hesta is tapped: Granny's game, which this room hands everything to. */
-  private granny: { room: GrannyRoom; conn: ReturnType<GrannyRoom["connect"]> } | null = null;
+  /** The run the walk has gone on to (Granny's game from walks 1 and 2, the job from walk 2's skiff), played inside this room. */
+  private inner: { room: GrannyRoom | JobRoom; conn: ReturnType<GrannyRoom["connect"]> } | null = null;
+  private get granny() {
+    return this.inner;
+  }
+  /** Which run the fade leads to. */
+  private nextRun: 3 | 4 = 3;
   /** The tick Hesta was tapped: the screen fades, then the cut to her game. */
   private leavingAt = -1;
   /** Where everything is (see pondSpots). */
@@ -401,6 +408,14 @@ export class PondRoom {
   private answer(thing: Thing) {
     const W = this.walkDef;
     if (W.n === 1 && thing.name === "Hesta") return this.startGame();
+    // Walk 2's skiff: off to the first job (run 4), with Lumi's "I won. So I'm coming." behind it.
+    if (W.n === 2 && thing.name === W.go && W.next === 4) {
+      this.nextRun = 4;
+      this.going = null;
+      this.leavingAt = this.game.tick;
+      this.broadcast();
+      return;
+    }
     // Walk 2: Nell or Sefa, asked twice, starts the rematch (the optional run).
     if (W.n === 2 && (thing.name === NELL || thing.name === SEFA) && (this.taps.get(thing.name) ?? 0) >= 1) {
       this.say(thing.name, "Yes! Granny! Rematch!");
@@ -422,6 +437,7 @@ export class PondRoom {
 
   /** Hesta, tapped: her line, a short fade, then Granny's game. */
   private startGame(line = true) {
+    this.nextRun = 3;
     if (line) this.say("Hesta", LINES.Hesta![0]!);
     this.going = null;
     this.leavingAt = this.game.tick;
@@ -433,6 +449,14 @@ export class PondRoom {
    * brazier (Hesta on her own at the top, the four of them round the rest), then the bell.
    */
   private cut() {
+    if (this.nextRun === 4) {
+      const room = new JobRoom(this.clock, this.seed);
+      this.endClock();
+      const send = this.send;
+      this.inner = { room, conn: room.connect((m) => send?.(m)) };
+      this.inner.conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+      return;
+    }
     const shrine = shrineById(GRANNY.shrine);
     const board = shrine.board;
     const order = [HESTA_ID, NELL_ID, ROOK_ID, LUMI_ID, SEFA_ID];
@@ -447,7 +471,7 @@ export class PondRoom {
     this.endClock();
     const send = this.send;
     const conn = room.connect((m) => send?.(m));
-    this.granny = { room, conn };
+    this.inner = { room, conn };
     conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
   }
 
@@ -521,7 +545,7 @@ export class PondRoom {
 
   /** For tests. */
   get state() {
-    return { game: this.game, granny: this.granny?.room ?? null, going: this.going, leaving: this.leavingAt >= 0 };
+    return { game: this.game, granny: this.inner?.room instanceof GrannyRoom ? this.inner.room : null, job: this.inner?.room instanceof JobRoom ? this.inner.room : null, going: this.going, leaving: this.leavingAt >= 0 };
   }
 }
 

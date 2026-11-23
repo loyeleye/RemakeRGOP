@@ -9,6 +9,7 @@ import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
 import { GrannyRoom } from "../server/granny.js";
 import { PondRoom } from "../server/pond.js";
+import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
 import { loadProgress, reach, resetProgress } from "./progress.js";
 import { StoryRoom } from "../server/story.js";
@@ -118,14 +119,14 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | null = null;
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | "pond" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | "pond" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
@@ -367,6 +368,7 @@ function noteProgress() {
   if (room!.phase === "results" && st.end) {
     if (st.run === "The Grand Kindling") reach({ next: 2 });
     else if (st.end.lines[0]?.text === "So I'm coming tomorrow.") reach({ next: 3 });
+    else if (st.run === "A job") reach({ next: 5 });
     else if (storyRoom instanceof GrannyRoom || st.run === "Granny's game") reach({ next: 4 });
   }
   renderProgress();
@@ -1076,6 +1078,7 @@ $("practice").onclick = () => connectPractice(playerName());
 $("story").onclick = () => connectStory(playerName());
 $("story2").onclick = () => connectStory(playerName(), 2);
 $("story3").onclick = () => connectStory(playerName(), 3);
+$("story4").onclick = () => connectStory(playerName(), 4);
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Saved progress: continue from where this browser got to, jump to any walk, or start over.
 function renderProgress() {
@@ -1088,8 +1091,8 @@ $("story-continue").onclick = () => {
   const p = loadProgress();
   const nextWalk = WALKS.find((w) => w.after === p.next - 1 && w.n > p.walk);
   if (nextWalk) return connectStory(playerName(), "pond", nextWalk.n);
-  if (p.next === 1 || p.next === 2 || p.next === 3) return connectStory(playerName(), p.next as 1 | 2 | 3);
-  // Runs 4 on aren't built: the latest walk reached.
+  if (p.next >= 1 && p.next <= 4) return connectStory(playerName(), p.next as 1 | 2 | 3 | 4);
+  // Runs 5 on aren't built: the latest walk reached.
   connectStory(playerName(), "pond", Math.max(1, p.walk));
 };
 $<HTMLSelectElement>("walk-pick").replaceChildren(
@@ -1136,9 +1139,15 @@ function callHint() {
   }
   $("call").classList.toggle("nudge", fresh && !callMode);
   const touch = document.body.classList.contains("touch");
+  // Run 4 turns it round: Rook sends Lumi.
+  const who = st?.callWho;
+  const where = who ? `${who} should go` : "Rook should stand";
+  const btn = who ? `📣 Send ${who}` : "📣 Call";
+  $("call").textContent = btn;
+  $("call").setAttribute("aria-label", who ? `Send ${who} to a spot` : "Call Rook to a spot");
   el.textContent = callMode
-    ? `${touch ? "Tap" : "Click"} the ground where Rook should stand.`
-    : touch ? "Tap 📣 Call, then tap where Rook should stand." : "Press C or click 📣 Call, then click where Rook should stand.";
+    ? `${touch ? "Tap" : "Click"} the ground where ${where}.`
+    : touch ? `Tap ${btn}, then tap where ${where}.` : `Press C or click ${btn}, then click where ${where}.`;
 }
 sound.unlockOnFirstInput();
 const muteBtn = $("mute");
@@ -1281,6 +1290,7 @@ function frame(now: number) {
     g.restore();
   }
   if (bigTaps) drawBigTaps(g, mine?.mode === "push", mine?.guild, lit, t, now);
+  drawTide(g, shrine, now);
   if (room.story) drawStory(g, t, now);
   if (cam.compact && !ending) {
     const w = Math.min(120, cam.w * 0.3);
@@ -1351,6 +1361,73 @@ let lastMark: number | null = null;
 let skyBase: number | null = null;
 
 /** Story marks: Hesta's ring on the ground, the wisp Lumi is calling, and the sky lighting at the end. */
+/** Each pool's tile edges nearest the brazier: "the fire side" (run 4's route line), worked out once per board. */
+const fireSides = new WeakMap<object, { x: number; y: number }[]>();
+function fireSideOf(b: Board) {
+  let out = fireSides.get(b);
+  if (out) return out;
+  out = [];
+  const c = b.center;
+  for (let y = 0; y < b.height; y++)
+    for (let x = 0; x < b.width; x++) {
+      if (b.tile({ x, y }) !== Tile.Floor) continue;
+      // Ground next to a pool, on the pool's side facing the fire.
+      const sx = Math.sign(c.x - x), sy = Math.sign(c.y - y);
+      const back = { x: x - sx, y: y - (Math.abs(x - c.x) > Math.abs(y - c.y) ? 0 : sy) };
+      if (b.inside(back) && b.tile(back) === Tile.Water && Math.hypot(x - c.x, y - c.y) > 6) out.push({ x, y });
+    }
+  fireSides.set(b, out);
+  return out;
+}
+
+/**
+ * A clocked tide, read at a glance: chevrons on every pool tile that run in toward the brazier
+ * while the tide comes in and out while it goes out, brightest just after it turns. In run 4 the
+ * fire side of each pool glows faintly too, since Hesta's route sends Lumi there.
+ */
+function drawTide(g: CanvasRenderingContext2D, shrine: ReturnType<typeof shrineFor>, now: number) {
+  const tide = shrine.gimmicks.tide;
+  if (!tide || !snap || room?.phase === "lobby") return;
+  const b = shrine.board, c = b.center;
+  const tickNow = snap.tick + 1;
+  const comingIn = tideIn(tickNow, tide);
+  const since = tickNow % tide;
+  const fresh = Math.max(0, 1 - since / 6);
+  g.save();
+  const flow = ((now / 900) % 1) * 0.5;
+  g.lineWidth = 2;
+  g.strokeStyle = comingIn ? `rgba(150, 235, 255, ${0.45 + 0.4 * fresh})` : `rgba(170, 180, 205, ${0.3 + 0.3 * fresh})`;
+  for (let y = 0; y < b.height; y++)
+    for (let x = 0; x < b.width; x++) {
+      if (b.tile({ x, y }) !== Tile.Water || (x + y) % 2) continue;
+      let dx = Math.sign(c.x - x), dy = Math.sign(c.y - y);
+      if (Math.abs(x - c.x) > Math.abs(y - c.y) * 1.5) dy = 0;
+      else if (Math.abs(y - c.y) > Math.abs(x - c.x) * 1.5) dx = 0;
+      if (!comingIn) (dx = -dx), (dy = -dy);
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const o = flow - 0.25;
+      const tip = cam.toScreen(x + 0.5 + ux * (0.2 + o), y + 0.5 + uy * (0.2 + o), 0.04);
+      const l = cam.toScreen(x + 0.5 - ux * 0.1 + uy * 0.22 + ux * o, y + 0.5 - uy * 0.1 - ux * 0.22 + uy * o, 0.04);
+      const r = cam.toScreen(x + 0.5 - ux * 0.1 - uy * 0.22 + ux * o, y + 0.5 - uy * 0.1 + ux * 0.22 + uy * o, 0.04);
+      g.beginPath();
+      g.moveTo(l.x, l.y);
+      g.lineTo(tip.x, tip.y);
+      g.lineTo(r.x, r.y);
+      g.stroke();
+    }
+  if (room?.story?.callWho) {
+    g.fillStyle = "rgba(255, 170, 80, 0.4)";
+    for (const p of fireSideOf(b)) {
+      const q = cam.toScreen(p.x + 0.5, p.y + 0.5, 0.03);
+      g.beginPath();
+      g.arc(q.x, q.y, Math.max(3, cam.scale * 0.28), 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  g.restore();
+}
+
 function drawStory(g: CanvasRenderingContext2D, t: number, now: number) {
   placeBarks(performance.now());
   const st = room?.story;
@@ -1410,7 +1487,8 @@ function drawStory(g: CanvasRenderingContext2D, t: number, now: number) {
     g.stroke();
     g.restore();
   }
-  if (st.called && room!.phase === "playing") groundRing(st.called.x + 0.5, st.called.y + 0.5, 0.5, "rgba(255, 255, 255, 0.8)", [5, 5]);
+  // Where the partner was sent: white for Rook (run 2), Lumi's frost blue (run 4).
+  if (st.called && room!.phase === "playing") groundRing(st.called.x + 0.5, st.called.y + 0.5, 0.5 + (st.callWho ? 0.08 * pulse : 0), st.callWho ? "rgba(140, 220, 255, 0.95)" : "rgba(255, 255, 255, 0.8)", [5, 5]);
   const cw = st.mark ? snap.wisps.find((w) => w.id === st.mark!.wisp) : null;
   if (cw) {
     // The plain focus circle, at the size of its tap target.

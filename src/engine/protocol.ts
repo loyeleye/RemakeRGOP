@@ -79,8 +79,10 @@ export interface StoryView {
   rival?: { name: string; short: string; score: number } | null;
   /** Shown in place of the clock, e.g. "Pulls left: 4". */
   note?: string;
-  /** The player can call a partner to a tile (run 2). */
+  /** The player can call a partner to a tile (run 2), or send one (run 4). */
   canCall?: boolean;
+  /** Who a call goes to, when it's someone to send (run 4: "Lumi"); left out, it's run 2's call to Rook. */
+  callWho?: string;
   /** Where a wisp pulled by two heads: the point halfway between them. */
   halfway?: { x: number; y: number } | null;
   /** The tile the partner was last called to, while he's on his way or standing there. */

@@ -131,4 +131,11 @@ export const VOICE_LINES: Record<string, string> = {
   "Lumi|Best of three. No rocks.": "voice/lumi-best-of-three.mp3",
   "Lumi|That's my dad.": "voice/lumi-my-dad.mp3",
   "Lumi|She's distracting you. Eyes on the wisp.": "voice/lumi-eyes-on-wisp.mp3",
+  // Run 4, A job (gameplay/voice/final/run4).
+  "Hesta|Moss Hollow first. Send Sparkbug ahead to tear the moss, then pull behind her. It grows back.": "voice/hesta-route-moss.mp3",
+  "Hesta|Now the pools. Stand her on the fire side, and pull while the tide's coming in. It turns against you after.": "voice/hesta-route-pools.mp3",
+  "Hesta|Tide's turned. Wait for it.": "voice/hesta-tides-turned.mp3",
+  "Hesta|She's pulling them away from you, Rook. Fire side.": "voice/hesta-fire-side.mp3",
+  "Lumi|She said my name.": "voice/lumi-said-my-name.mp3",
+  "Rook|I heard.": "voice/rook-i-heard.mp3",
 };
