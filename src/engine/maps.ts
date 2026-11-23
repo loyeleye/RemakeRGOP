@@ -336,8 +336,8 @@ export function ringWalls(ring: Ring): Pt[] {
 }
 
 /** Story places: solid things drawn as themselves. Multi-tile ones are one block of their letter. */
-export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling";
-export const PROP_CHARS: Record<string, PropKind> = { F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling" };
+export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling";
+export const PROP_CHARS: Record<string, PropKind> = { F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling" };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
 export const GROUND_CHARS: Record<string, "path" | "planks" | "terrace"> = { ",": "path", ";": "planks", ":": "terrace" };
 
@@ -823,6 +823,10 @@ const TILE_OF: Record<string, Tile> = {
   U: Tile.Wall,
   P: Tile.Wall,
   L: Tile.Wall,
+  W: Tile.Wall,
+  T: Tile.Wall,
+  A: Tile.Wall,
+  Q: Tile.Wall,
   V: Tile.Wall,
   K: Tile.Wall,
   S: Tile.Wall,
@@ -1349,6 +1353,13 @@ function homeIslandRows(): string[] {
   // Orrin's stall by the path, and the shrine on it.
   block(R.stall.dx, R.stall.dy, 2, 1, "O");
   block(R.shrine.dx, R.shrine.dy, 4, 4, "S");
+  // Its yard, as in the glow test scene: a low wall behind it with a shade tree past each end, a
+  // stone lamp before its steps (which face west, to the path) and a spout basin south of the lamp.
+  for (let j = -1; j <= 4; j++) set(R.shrine.dx + 5, R.shrine.dy + j, "W");
+  set(R.shrine.dx + 5, R.shrine.dy - 3, "T");
+  set(R.shrine.dx + 5, R.shrine.dy + 6, "T");
+  set(R.shrine.dx - 2, R.shrine.dy + 1, "A");
+  set(R.shrine.dx - 2, R.shrine.dy + 3, "Q");
   // Hesta's house on the terrace, the chair before her door (south, facing the brazier), steps down.
   const hh = R.hestaHouse;
   for (let j = -1; j <= hh.h + 2; j++) for (let i = -2; i <= hh.w + 1; i++) set(hh.dx - Math.floor(hh.w / 2) + i, hh.dy + j, ":", ".,");

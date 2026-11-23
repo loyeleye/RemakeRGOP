@@ -175,7 +175,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "stall", "brazier", "falls"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "stall", "brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -835,7 +835,7 @@ const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number }> = {
 };
 
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
-const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed"]);
+const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin"]);
 
 function makePlace(kind: string, w: number, d: number): THREE.Group {
   const g = new THREE.Group();
@@ -1301,6 +1301,29 @@ export class World {
         this.placeSlot("barrel", m, wx, wz);
       } else if (p.kind === "woodpile") {
         this.placeSlot("woodpile", box(0.9, 0.9, 0.9, wood), wx, wz);
+      } else if (p.kind === "shrine-wall") {
+        // Two tiles a section, end to end along the run; a north-south run turns them.
+        const ns = has(p.x, p.y - 1, "shrine-wall") || has(p.x, p.y + 1, "shrine-wall");
+        const run = props.filter((q) => q.kind === "shrine-wall" && (ns ? q.x === p.x : q.y === p.y)).map((q) => (ns ? q.y : q.x));
+        const k = (ns ? p.y : p.x) - Math.min(...run);
+        if (k % 2) continue;
+        const two = has(p.x + (ns ? 0 : 1), p.y + (ns ? 1 : 0), "shrine-wall");
+        const stone = new THREE.MeshStandardMaterial({ color: "#c9a878", roughness: 1 });
+        this.placeSlot("shrine-wall", box(2, 1.3, 0.8, stone), wx + (!ns && two ? 0.5 : 0), wz + (ns && two ? 0.5 : 0), ns ? Math.PI / 2 : 0);
+      } else if (p.kind === "tree") {
+        const t = new THREE.Group();
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.22, 1.6, 8), wood);
+        trunk.position.y = 0.8;
+        const crown = new THREE.Mesh(new THREE.SphereGeometry(1.2, 12, 10), new THREE.MeshStandardMaterial({ color: "#5f8f45", roughness: 1 }));
+        crown.position.y = 2.3;
+        t.add(trunk, crown);
+        t.traverse((o) => ((o as THREE.Mesh).castShadow = true));
+        this.placeSlot("shade-tree", t, wx, wz);
+      } else if (p.kind === "lamp") {
+        this.placeSlot("lamp-pedestal", box(0.6, 1.3, 0.6, new THREE.MeshStandardMaterial({ color: "#b9b2a4", roughness: 1 })), wx, wz);
+      } else if (p.kind === "basin") {
+        // Turned so the spout pours toward the path, west.
+        this.placeSlot("spout-basin", box(1.1, 0.5, 1.1, new THREE.MeshStandardMaterial({ color: "#a9a296", roughness: 1 })), wx, wz, Math.PI);
       } else if (p.kind === "flowerbed") {
         const bed = new THREE.Group();
         bed.add(box(0.95, 0.35, 0.95, wood), box(0.85, 0.2, 0.85, new THREE.MeshStandardMaterial({ color: "#6f9fd8", roughness: 1 }), 0.45));
