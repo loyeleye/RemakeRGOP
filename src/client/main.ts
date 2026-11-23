@@ -3,6 +3,7 @@
 import type { Pt } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
+import { moodOf } from "../engine/moods.js";
 import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg, type StoryLine } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
@@ -129,8 +130,12 @@ function connectStory(name: string, run: 1 | 2 = 1) {
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => `&${({ "&": "amp", "<": "lt", ">": "gt", '"': "quot" } as Record<string, string>)[c]};`);
 /** Lines are plain text; *word* is said with weight. */
 const lineHtml = (t: string) => esc(t).replace(/\*([^*]+)\*/g, "<em>$1</em>");
-const FACES: Record<string, string> = { Hesta: "faces/hesta.webp", Lumi: "faces/lumi.webp" };
-const faceHtml = (who: string) => (FACES[who] ? `<img class="face" src="${FACES[who]}" alt="" />` : "");
+/** The portrait for a line, by speaker and mood, or "" for speakers without one. */
+const faceOf = (l: { who: string; text: string; mood?: string }) => {
+  const m = moodOf(l.who, l.text, l.mood);
+  return m ? `faces/${l.who.toLowerCase()}-${m}.webp` : "";
+};
+const faceHtml = (l: StoryLine) => (faceOf(l) ? `<img class="face" src="${faceOf(l)}" alt="" />` : "");
 
 const talkQueue: StoryLine[] = [];
 let talkTimer = 0;
@@ -154,9 +159,10 @@ function sayLine(l: StoryLine) {
   const el = $(anchored ? "bark" : "chip");
   el.className = `bark${anchored ? "" : " chip"} ${l.who.toLowerCase()}`;
   const img = el.querySelector("img")!;
-  img.src = FACES[l.who] ?? "";
-  img.hidden = !FACES[l.who];
-  el.querySelector("span")!.innerHTML = (FACES[l.who] ? "" : `<b>${esc(l.who)}</b> `) + lineHtml(l.text);
+  const face = faceOf(l);
+  if (face) img.src = face;
+  img.hidden = !face;
+  el.querySelector("span")!.innerHTML = (face ? "" : `<b>${esc(l.who)}</b> `) + lineHtml(l.text);
   el.hidden = false;
   // Restart the fade-in.
   el.style.animation = "none";
@@ -224,8 +230,9 @@ function nextTalk() {
   el.hidden = false;
   el.className = l.who ? "" : "tell";
   const face = $<HTMLImageElement>("dialog-face");
-  face.hidden = !FACES[l.who];
-  if (FACES[l.who]) face.src = FACES[l.who]!;
+  const src = faceOf(l);
+  face.hidden = !src;
+  if (src) face.src = src;
   const name = $("dialog-name");
   name.textContent = l.who;
   name.className = l.who.toLowerCase();
@@ -427,7 +434,7 @@ function renderStoryEnd() {
     ...end.lines.map((l, i) => {
       const li = document.createElement("li");
       if (!l.who) li.className = "tell";
-      li.innerHTML = (l.who ? `${faceHtml(l.who)}<b class="${l.who.toLowerCase()}">${esc(l.who)}</b>` : "") + lineHtml(l.text);
+      li.innerHTML = (l.who ? `${faceHtml(l)}<b class="${l.who.toLowerCase()}">${esc(l.who)}</b>` : "") + lineHtml(l.text);
       li.style.animationDelay = `${0.6 + i * 1.8}s`;
       return li;
     }),
@@ -1017,7 +1024,7 @@ function frame(now: number) {
     const reach = p?.mode === "push" ? PUSH_REACH : PULL_REACH;
     $("staff").classList.toggle("far", !p || !w || Math.max(Math.abs(w.x - p.x), Math.abs(w.y - p.y)) > reach);
   }
-  const st: DrawState = { shrine, prev: prevSnap, snap, t, me, flames, hoverWisp: lit, now };
+  const st: DrawState = { shrine, prev: prevSnap, snap, t, me, flames, cast: castOf(), hoverWisp: lit, now };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.
@@ -1045,6 +1052,19 @@ function frame(now: number) {
   }
 }
 requestAnimationFrame(frame);
+
+/** Story runs: who each player is, for their character model. In run 1 you are Rook. */
+function castOf(): Map<number, string> | undefined {
+  if (!room?.story) return undefined;
+  const m = new Map<number, string>();
+  for (const p of room.players) {
+    const name = p.name.toLowerCase();
+    const who = ["rook", "lumi", "wick", "moth", "kes", "hesta"].find((n) => name.startsWith(n));
+    if (who) m.set(p.id, who);
+  }
+  if (room.story.run === "The Grand Kindling") m.set(me, "rook");
+  return m;
+}
 
 /** The last story mark seen, so a new one takes the phone's focus once. */
 let lastMark: number | null = null;

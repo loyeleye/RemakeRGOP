@@ -59,6 +59,8 @@ export interface StoryLine {
   ring?: boolean;
   /** A bark over this player (the speaker herself, in run 2). */
   player?: number;
+  /** The portrait's mood, e.g. "smug"; left out, it's picked from the line (engine/moods.ts). */
+  mood?: string;
 }
 
 export interface StoryView {

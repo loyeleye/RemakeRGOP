@@ -30,6 +30,8 @@ export interface DrawState {
   t: number;
   me: number;
   flames: Map<number, Flame>;
+  /** Story runs: which character model each player wears (rook, lumi, wick, moth, kes). */
+  cast?: Map<number, string>;
   hoverWisp: number | null;
   now: number;
 }
@@ -138,7 +140,11 @@ export class Camera {
 // ------------------------------------------------------------------ assets
 
 type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
-const models: Partial<Record<ModelName, THREE.Object3D>> = {};
+/** Story characters with a model of their own so far. Others wear their guild's robe. */
+const CAST_MODELS = ["rook"] as const;
+/** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
+const CAST_FLAT = 0.25;
+const models: Partial<Record<string, THREE.Object3D>> = {};
 const modelWaiters: (() => void)[] = [];
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
@@ -154,7 +160,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 export function loadModels() {
-  for (const n of ["dawn", "dusk", "brazier", "monolith", "boulder"] as ModelName[]) {
+  for (const n of ["dawn", "dusk", "brazier", "monolith", "boulder", ...CAST_MODELS] as string[]) {
     loader.load(
       `models/${n}.glb`,
       (g: GLTF) => {
@@ -661,12 +667,14 @@ function glowSprite(color: string, size: number, opacity = 1) {
 interface PlayerRig {
   root: THREE.Group;
   body: THREE.Object3D | null;
-  bodyKind: ModelName | null;
+  bodyKind: string | null;
   ring: THREE.Mesh;
   lantern: THREE.Sprite;
   beam: THREE.Mesh;
   facing: number;
   guild: Guild;
+  /** The story character this player is, if they have a model of their own. */
+  cast: string | null;
 }
 
 interface WispRig {
@@ -1354,7 +1362,7 @@ export class World {
 
   // -------------------------------------------------------------- players and wisps
 
-  private makePlayer(guild: Guild, flame: string): PlayerRig {
+  private makePlayer(guild: Guild, flame: string, cast: string | null): PlayerRig {
     const root = new THREE.Group();
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.36, 0.46, 40),
@@ -1380,15 +1388,18 @@ export class World {
     beam.visible = false;
     this.scene.add(beam);
     this.scene.add(root);
-    const rig: PlayerRig = { root, body: null, bodyKind: null, ring, lantern, beam, facing: 0, guild };
+    const rig: PlayerRig = { root, body: null, bodyKind: null, ring, lantern, beam, facing: 0, guild, cast };
+    // Rook carries no lantern glow: it hides his face.
+    lantern.visible = cast !== "rook";
     this.dressPlayer(rig);
     return rig;
   }
 
   private dressPlayer(rig: PlayerRig) {
     // Tide wears Dusk's robe and Grove wears Dawn's, recoloured below.
-    const kind: ModelName = rig.guild === 0 || rig.guild === 3 ? "dawn" : "dusk";
-    if (rig.body && (rig.body.userData.real || !models[kind])) return;
+    const own = rig.cast && models[rig.cast] ? rig.cast : null;
+    const kind: string = own ?? (rig.guild === 0 || rig.guild === 3 ? "dawn" : "dusk");
+    if (rig.body && ((rig.body.userData.real && rig.body.userData.kind === kind) || !models[kind])) return;
     if (rig.body) rig.root.remove(rig.body);
     const model = models[kind];
     let body: THREE.Object3D;
@@ -1396,7 +1407,24 @@ export class World {
       body = model.clone();
       body.scale.multiplyScalar(1.8);
       body.userData.real = true;
-      if (rig.guild >= 2) {
+      body.userData.kind = kind;
+      if (own) {
+        // Flat-ish lighting: the model's own colours glow a little.
+        body.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          const mats = (Array.isArray(m.material) ? m.material : [m.material]).map((mt) => {
+            const c = mt.clone() as THREE.MeshStandardMaterial;
+            if (c.map) {
+              c.emissiveMap = c.map;
+              c.emissive = new THREE.Color("#ffffff");
+              c.emissiveIntensity = CAST_FLAT;
+            }
+            return c;
+          });
+          m.material = Array.isArray(m.material) ? mats : mats[0]!;
+        });
+      } else if (rig.guild >= 2) {
         // Re-dye the borrowed robe in this guild's colour.
         const dye = new THREE.Color(GUILD_COLORS[rig.guild]);
         body.traverse((o) => {
@@ -1580,9 +1608,10 @@ export class World {
       seenP.add(p.id);
       const flame = FLAME_COLORS[st.flames.get(p.id) ?? "amber"];
       let rig = this.players.get(p.id);
-      if (!rig || rig.guild !== p.guild) {
+      const cast = st.cast?.get(p.id) ?? null;
+      if (!rig || rig.guild !== p.guild || rig.cast !== cast) {
         if (rig) (this.scene.remove(rig.root), this.scene.remove(rig.beam));
-        rig = this.makePlayer(p.guild, flame);
+        rig = this.makePlayer(p.guild, flame, cast);
         this.players.set(p.id, rig);
       }
       (rig.ring.material as THREE.MeshBasicMaterial).color.set(flame).multiplyScalar(p.id === st.me ? 2.2 : 1.2);

@@ -11,7 +11,8 @@ subscription-only billing so no Spark was spent. Sources are in the project file
 | sprites/wall.png | krea2_turbo_fp8_scaled (seamless stone) |
 | ui/*.webp (phone stick and buttons) | z_image_turbo_bf16, cropped to a circle with an alpha mask |
 | sprites/brazier.png, sprites/wisp-dawn.png (logo and favicon) | z_image_turbo_bf16, background removed with birefnet_image_background_removal_fp16 |
-| faces/hesta.webp, faces/lumi.webp (story portraits) | Draft crops from the art thread's character sheets (project files `gameplay/faces/`), resized to 160 px WebP |
+| faces/&lt;who&gt;-&lt;mood&gt;.webp (story portraits: Hesta 3 moods, Lumi 6, Rook 4) | First-draft mood faces from the cast art thread (project files `sogni/lanternfall/production/<who>/face-*.png`, 2026-11-23), resized to 160 px WebP |
+| models/rook.glb (Rook's body in story runs) | The cast art thread's `production/rook/rook.glb` (image to 3D), 48.5 MB shrunk to 566 KB with `tools/models.sh` (512 px WebP, meshopt, simplified to 2%) |
 
 The sky, cloud sea, fire, embers, light pillar, water and wisps are drawn in code with shaders.
 
