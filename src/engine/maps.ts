@@ -336,8 +336,8 @@ export function ringWalls(ring: Ring): Pt[] {
 }
 
 /** Story places: solid things drawn as themselves. Multi-tile ones are one block of their letter. */
-export type PropKind = "fence" | "post" | "bench" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling";
-export const PROP_CHARS: Record<string, PropKind> = { F: "fence", Y: "post", N: "bench", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling" };
+export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling";
+export const PROP_CHARS: Record<string, PropKind> = { F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling" };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
 export const GROUND_CHARS: Record<string, "path" | "planks" | "terrace"> = { ",": "path", ";": "planks", ":": "terrace" };
 
@@ -820,6 +820,9 @@ const TILE_OF: Record<string, Tile> = {
   F: Tile.Wall,
   Y: Tile.Wall,
   N: Tile.Wall,
+  U: Tile.Wall,
+  P: Tile.Wall,
+  L: Tile.Wall,
   V: Tile.Wall,
   K: Tile.Wall,
   S: Tile.Wall,
@@ -1324,6 +1327,10 @@ function homeIslandRows(): string[] {
   // A wash line between two posts north of the house.
   set(-16, -13, "Y");
   set(-10, -13, "Y");
+  // By the door: a bed of Rosalind's blue flowers and the rain barrel. Behind the fence, the woodpile.
+  set(-8, -8, "L");
+  set(-8, -10, "U");
+  set(-15, -2, "P");
   // A bench by the water, south-west of the pool.
   set(8, 6, "N");
   set(9, 6, "N");

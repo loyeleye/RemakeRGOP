@@ -175,7 +175,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -819,6 +819,9 @@ function makeHouse(w: number, d: number, look: { wall?: string; roof?: string; w
 }
 
 /** Story places on the walking island, as block-outs: w by d tiles, centred. */
+/** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
+const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed"]);
+
 function makePlace(kind: string, w: number, d: number): THREE.Group {
   const g = new THREE.Group();
   const std = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, ...extra });
@@ -1198,52 +1201,72 @@ export class World {
   /** A story place's own things: worn paths on the grass, a fence, a wash line between posts, a bench. */
   private addPlace(shrine: Shrine, b: Board) {
     const g = this.shrineGroup;
-    const dirt = new THREE.MeshStandardMaterial({ color: "#b89a6a", roughness: 1, transparent: true, opacity: 0.85 });
-    const disc = new THREE.CircleGeometry(0.85, 14);
-    for (const [i, p] of (shrine.paths ?? []).entries()) {
-      const m = new THREE.Mesh(disc, dirt);
-      m.rotation.x = -Math.PI / 2;
-      m.position.set(this.worldX(b, p.x) + Math.sin(i * 1.7) * 0.15, 0.02 + (i % 3) * 0.001, this.worldZ(b, p.y) + Math.cos(i * 2.3) * 0.15);
-      m.receiveShadow = true;
-      g.add(m);
+    // The worn path: soft discs of packed earth, textured in world space so overlaps never show.
+    const pathTiles = shrine.paths ?? [];
+    if (pathTiles.length) {
+      const disc = new THREE.CircleGeometry(0.85, 14);
+      const pos = disc.getAttribute("position"), idx = disc.getIndex()!;
+      const verts: number[] = [], uvs: number[] = [], index: number[] = [];
+      for (const [i, p] of pathTiles.entries()) {
+        const cx = this.worldX(b, p.x) + Math.sin(i * 1.7) * 0.15, cz = this.worldZ(b, p.y) + Math.cos(i * 2.3) * 0.15;
+        const base = verts.length / 3;
+        for (let k = 0; k < pos.count; k++) {
+          // The disc lies in x/y; on the ground y becomes -z.
+          const x = cx + pos.getX(k), z = cz - pos.getY(k);
+          verts.push(x, 0.02, z);
+          uvs.push(x / 6, -z / 6);
+        }
+        for (let k = 0; k < idx.count; k += 3) index.push(base + idx.getX(k), base + idx.getX(k + 1), base + idx.getX(k + 2));
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+      geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      geo.setIndex(index);
+      geo.computeVertexNormals();
+      const map = tex(`textures/path-${shrine.id}.webp`, 1);
+      const path = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map, roughness: 1, color: "#ffffff", polygonOffset: true, polygonOffsetFactor: -1 }));
+      path.receiveShadow = true;
+      g.add(path);
     }
     const wood = new THREE.MeshStandardMaterial({ color: "#7a5434", roughness: 0.85 });
     const props = shrine.props ?? [];
     const has = (x: number, y: number, kind: string) => props.some((q) => q.kind === kind && q.x === x && q.y === y);
+    const box = (w: number, h: number, d: number, mat: THREE.Material, y = h / 2) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.y = y;
+      m.castShadow = true;
+      return m;
+    };
+    const LINE_H = 2.25;
     for (const p of props) {
       const wx = this.worldX(b, p.x), wz = this.worldZ(b, p.y);
       if (p.kind === "fence") {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.9, 0.14), wood);
-        post.position.set(wx, 0.45, wz);
-        g.add(post);
-        // Rails to the next fence tile east and south.
-        for (const [dx, dy] of [[1, 0], [0, 1]] as const) {
-          if (!has(p.x + dx, p.y + dy, "fence")) continue;
-          for (const h of [0.35, 0.7]) {
-            const rail = new THREE.Mesh(new THREE.BoxGeometry(dx ? 1 : 0.07, 0.08, dy ? 1 : 0.07), wood);
-            rail.position.set(wx + dx * 0.5, h, wz + dy * 0.5);
-            rail.castShadow = true;
-            g.add(rail);
-          }
+        // One section a tile, along X; a run north to south turns it. A corner gets both.
+        const ew = has(p.x - 1, p.y, "fence") || has(p.x + 1, p.y, "fence");
+        const ns = has(p.x, p.y - 1, "fence") || has(p.x, p.y + 1, "fence");
+        for (const rot of [...(ew || !ns ? [0] : []), ...(ns ? [Math.PI / 2] : [])]) {
+          const f = new THREE.Group();
+          f.add(box(0.12, 0.8, 0.12, wood), box(1, 0.08, 0.07, wood, 0.3), box(1, 0.08, 0.07, wood, 0.62));
+          this.placeSlot("fence", f, wx, wz, rot);
         }
-        post.castShadow = true;
       } else if (p.kind === "post") {
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 2, 8), wood);
-        post.position.set(wx, 1, wz);
-        post.castShadow = true;
-        g.add(post);
-        // The line runs east to the next post on this row, with a few things pegged out.
+        // A T-post, crossbar across the line; the lines run east to the next post on this row.
+        const t = new THREE.Group();
+        t.add(box(0.14, 2.4, 0.14, wood), box(0.1, 0.1, 1.5, wood, 2.3));
+        this.placeSlot("washpost", t, wx, wz, Math.PI / 2);
         const other = props.find((q) => q.kind === "post" && q.y === p.y && q.x > p.x);
-        if (other) {
-          const len = other.x - p.x;
-          const line = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, len, 4), new THREE.MeshStandardMaterial({ color: "#eee6d6" }));
+        if (!other) continue;
+        const len = other.x - p.x;
+        const cloths = ["#e8d7b0", "#9fc4e8", "#e8a0a0", "#f4f0e6"];
+        for (const side of [-1, 1]) {
+          const line = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, len, 4), new THREE.MeshStandardMaterial({ color: "#eee6d6" }));
           line.rotation.z = Math.PI / 2;
-          line.position.set(wx + len / 2, 1.85, wz);
+          line.position.set(wx + len / 2, LINE_H, wz + side * 0.66);
           g.add(line);
-          const cloths = ["#e8d7b0", "#9fc4e8", "#e8a0a0", "#f4f0e6"];
           for (let k = 1; k < len; k++) {
-            const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.7), new THREE.MeshStandardMaterial({ color: cloths[k % cloths.length], side: THREE.DoubleSide, roughness: 1 }));
-            cloth.position.set(wx + k, 1.5, wz);
+            if ((k + (side > 0 ? 1 : 0)) % 2) continue;
+            const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.7), new THREE.MeshStandardMaterial({ color: cloths[(k + side + 4) % cloths.length], side: THREE.DoubleSide, roughness: 1 }));
+            cloth.position.set(wx + k, LINE_H - 0.37, wz + side * 0.66);
             cloth.castShadow = true;
             g.add(cloth);
           }
@@ -1251,22 +1274,25 @@ export class World {
       } else if (p.kind === "bench") {
         if (has(p.x - 1, p.y, "bench")) continue;
         const long = has(p.x + 1, p.y, "bench") ? 2 : 1;
+        // The model's back is on -Z; turned round, it looks north over the water.
         const bench = new THREE.Group();
-        const seat = new THREE.Mesh(new THREE.BoxGeometry(long * 0.95, 0.08, 0.45), wood);
-        seat.position.y = 0.45;
-        const back = new THREE.Mesh(new THREE.BoxGeometry(long * 0.95, 0.4, 0.06), wood);
-        back.position.set(0, 0.7, 0.2);
-        bench.add(seat, back);
-        for (const sx of [-1, 1]) {
-          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.45, 0.4), wood);
-          leg.position.set((sx * long * 0.95) / 2 - sx * 0.08, 0.22, 0);
-          bench.add(leg);
-        }
-        bench.traverse((o) => ((o as THREE.Mesh).castShadow = true));
-        bench.position.set(wx + (long - 1) / 2, 0, wz);
-        g.add(bench);
+        bench.add(box(long * 0.95, 0.08, 0.45, wood, 0.45), box(long * 0.95, 0.4, 0.06, wood, 0.7));
+        bench.children[1]!.position.z = -0.2;
+        this.placeSlot("bench", bench, wx + (long - 1) / 2, wz, Math.PI);
+      } else if (p.kind === "barrel") {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.9, 12), wood);
+        m.position.y = 0.45;
+        m.castShadow = true;
+        this.placeSlot("barrel", m, wx, wz);
+      } else if (p.kind === "woodpile") {
+        this.placeSlot("woodpile", box(0.9, 0.9, 0.9, wood), wx, wz);
+      } else if (p.kind === "flowerbed") {
+        const bed = new THREE.Group();
+        bed.add(box(0.95, 0.35, 0.95, wood), box(0.85, 0.2, 0.85, new THREE.MeshStandardMaterial({ color: "#6f9fd8", roughness: 1 }), 0.45));
+        this.placeSlot("flowerbed", bed, wx, wz);
       }
     }
+    this.fillHouse();
     // Ground that isn't grass: the landing's planks, the terrace's flags.
     const planks = new THREE.MeshStandardMaterial({ color: "#8a6440", roughness: 0.9 });
     const flags = new THREE.MeshStandardMaterial({ color: "#b9b2a4", roughness: 0.95 });
@@ -1279,7 +1305,7 @@ export class World {
     // The bigger places, one block each (placeholders until the maps thread draws them).
     const boxes = new Map<string, { x0: number; y0: number; x1: number; y1: number }>();
     for (const p of props) {
-      if (p.kind === "fence" || p.kind === "post" || p.kind === "bench") continue;
+      if (YARD.has(p.kind)) continue;
       const bx = boxes.get(p.kind) ?? { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
       boxes.set(p.kind, { x0: Math.min(bx.x0, p.x), y0: Math.min(bx.y0, p.y), x1: Math.max(bx.x1, p.x), y1: Math.max(bx.y1, p.y) });
     }
@@ -1308,7 +1334,7 @@ export class World {
   private buildShrine(shrine: Shrine) {
     this.shrineId = shrine.id + "~" + shrine.teams;
     this.shrineGroup.clear();
-    this.houseSlot = null;
+    this.placeSlots = [];
     this.isPlace = !!themeFor(shrine.id).place;
     this.lightKey = "";
     this.propSlots = [];
@@ -1486,11 +1512,7 @@ export class World {
     // Rook's house (story islands): a placeholder block-out until the art thread designs it.
     if (shrine.house) {
       const hs = shrine.house;
-      const slot = new THREE.Group();
-      slot.add(makeHouse(hs.w, hs.h));
-      slot.position.set(this.worldX(b, hs.x + (hs.w - 1) / 2), 0, this.worldZ(b, hs.y + (hs.h - 1) / 2));
-      this.shrineGroup.add(slot);
-      this.houseSlot = { group: slot, model: hs.w >= 8 ? "rook-house-big" : "rook-house" };
+      this.placeSlot(hs.w >= 8 ? "rook-house-big" : "rook-house", makeHouse(hs.w, hs.h), this.worldX(b, hs.x + (hs.w - 1) / 2), this.worldZ(b, hs.y + (hs.h - 1) / 2));
       this.fillHouse();
     }
 
@@ -1804,14 +1826,26 @@ export class World {
   private lightKey = "";
   /** A place to walk (see Theme.place): no banking rim, no reach square. */
   private isPlace = false;
-  private houseSlot: { group: THREE.Group; model: string } | null = null;
+  /** Place models (the house, the yard props): a block-out in each slot until the model loads. */
+  private placeSlots: { group: THREE.Group; model: string }[] = [];
   private fillHouse() {
-    const s = this.houseSlot;
-    const m = s && models[s.model];
-    if (!s || !m || s.group.userData.filled) return;
-    s.group.clear();
-    s.group.add(m.clone());
-    s.group.userData.filled = true;
+    for (const s of this.placeSlots) {
+      const m = models[s.model];
+      if (!m || s.group.userData.filled) continue;
+      s.group.clear();
+      s.group.add(m.clone());
+      s.group.userData.filled = true;
+    }
+  }
+  /** A slot for a place model at (x, z), turned `rot`, showing `blockout` until the model is in. */
+  private placeSlot(model: string, blockout: THREE.Object3D, x: number, z: number, rot = 0) {
+    const slot = new THREE.Group();
+    slot.add(blockout);
+    slot.position.set(x, 0, z);
+    slot.rotation.y = rot;
+    this.shrineGroup.add(slot);
+    this.placeSlots.push({ group: slot, model });
+    return slot;
   }
 
   private refreshProps() {
