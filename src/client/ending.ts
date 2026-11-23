@@ -32,7 +32,9 @@ const ENDING_OLD = {
   title: 44,
   buttons: 46,
   /** Music: null keeps the old slow fade from the last bell (main.ts, SOUND.endMusicFade). */
-  music: null as null | { duck: number; duckTo: number; duckFor: number; cut: number; cutFor: number },
+  /** pieceAt: when music/kindling-ending's own 0 s plays, in seconds from the bell. Negative skips
+   *  into the file, positive waits; for lining its swell up with the sky without re-exporting. */
+  music: null as null | { duck: number; duckTo: number; duckFor: number; cut: number; cutFor: number; pieceAt: number },
   /** The new order only: the crew's faces, before the sky and with Lumi's count, and Fairy Ring
    *  pulling away after them (ring.to, scaling from ring.pull to 1). Null keeps the old order. */
   faces: null as null | { one: number; two: number },
@@ -55,7 +57,7 @@ const ENDING_TEST: typeof ENDING_OLD = {
   eye: 34.5,
   title: 47.5,
   buttons: 49.5,
-  music: { duck: 17.5, duckTo: 0.33, duckFor: 0.5, cut: 24, cutFor: 0.4 },
+  music: { duck: 17.5, duckTo: 0.33, duckFor: 0.5, cut: 24, cutFor: 0.4, pieceAt: 0 },
 };
 
 /** The emotion test, step 2: the new order, about 60 s. Last bell; "Look up, Rook." as the camera
@@ -77,7 +79,7 @@ const ENDING_ORDER: typeof ENDING_OLD = {
   eye: 45.5,
   title: 58.5,
   buttons: 60.5,
-  music: { duck: 24, duckTo: 0.33, duckFor: 0.5, cut: 35, cutFor: 0.4 },
+  music: { duck: 24, duckTo: 0.33, duckFor: 0.5, cut: 35, cutFor: 0.4, pieceAt: 0 },
 };
 
 /** The three cuts, for the testing menu on the home screen. */
@@ -330,11 +332,12 @@ export class KindlingEnding {
     });
     this.once("wind", t, E.descent.wind, () => sound.wind(E.music ? 1.5 : 4));
     // The emotion test's music: a third under Lumi's count, then cut dead at the rim. Ladi's ending
-    // piece (music/kindling-ending), once it exists, replaces both: it plays from the bell as made.
+    // piece (music/kindling-ending), once it exists, isn't ducked (it shapes itself) but is still cut.
     if (E.music) {
       const M = E.music;
       this.once("duck", t, M.duck, () => sound.duckMusic(M.duckTo, M.duckFor));
-      this.once("cut", t, M.cut, () => sound.endingPieceOn() || sound.stopMusic(M.cutFor));
+      // The cut at the rim always happens, piece or not: the eye's note needs the silence.
+      this.once("cut", t, M.cut, () => sound.stopMusic(M.cutFor));
     }
     op("black", ramp(t, E.descent.to - 1.5, E.dark));
     // The eye. It draws its own black before and after; the low note lands as it fixes on the islands.

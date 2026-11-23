@@ -422,10 +422,11 @@ export const endingPieceOn = () => endingPiece && music !== null;
 
 /**
  * The run 1 ending's own piece, music/kindling-ending (Ladi's, about 60 s: story/cutscene-emotion-brief.md,
- * section A), from the last bell, once and at full. If the file isn't there, the crescendo track
- * plays on and the ending ducks and cuts it instead.
+ * section A), from the last bell, once and at full; `at` is when its 0 s plays (negative skips in).
+ * If the file isn't there, the crescendo track plays on and the ending ducks it instead. Both are
+ * cut at the rim.
  */
-export function playEndingMusic() {
+export function playEndingMusic(at = 0) {
   const a = new Audio();
   a.loop = false;
   a.muted = muted;
@@ -443,8 +444,14 @@ export function playEndingMusic() {
     music = a;
     endingPiece = true;
     a.volume = SOUND.musicGain;
-    void a.play().catch(() => {});
+    // Line the file up with the bell: skip in, or wait, by how long it took to load too.
+    const late = (performance.now() - t0) / 1000 - at;
+    if (late >= 0) {
+      a.currentTime = late;
+      void a.play().catch(() => {});
+    } else setTimeout(() => music === a && void a.play().catch(() => {}), -late * 1000);
   };
+  const t0 = performance.now();
   next();
 }
 

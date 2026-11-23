@@ -629,7 +629,7 @@ function storyPhaseSound(was: string | undefined) {
     const run1 = room!.story?.end?.sky !== undefined;
     if (!run1) sound.stopMusic();
     else if (!ENDING.music) sound.stopMusic(sound.SOUND.endMusicFade);
-    else sound.playEndingMusic();
+    else sound.playEndingMusic(ENDING.music.pieceAt);
     sound.handBell(3);
   }
 }

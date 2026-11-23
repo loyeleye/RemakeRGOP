@@ -7,6 +7,9 @@ Record each track and its licence in CREDITS.md.
 
 The ending's own piece goes here as `kindling-ending` (same file types). When it's there, it starts
 at the last bell of run 1, once and at full, in place of the third track (which then fades out in
-0.3 s), and the ending stops ducking and cutting the music itself: the piece carries its own shape
-(about 60 s; plan in story/cutscene-emotion-brief.md, section A). Without it, the third track plays
-on and the ending ducks it under Lumi's count and cuts it at the rim.
+0.3 s). The ending doesn't duck it (the piece carries its own shape) but still cuts it dead at the
+rim, so the eye always lands in silence even if the file runs long. Plan in
+story/cutscene-emotion-brief.md, section A. To line it up without re-exporting, change `pieceAt` in
+the ENDING tables (client/ending.ts): when the file's 0 s plays, in seconds from the bell (negative
+skips into it). Without the file, the third track plays on, ducked under Lumi's count and cut at
+the rim.
