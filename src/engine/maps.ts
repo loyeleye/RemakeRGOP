@@ -1339,12 +1339,12 @@ function homeIslandRows(): string[] {
   // The falls: where a stream goes over the north rim (Lumi's spot), in sight of the door.
   let fy = -8;
   while (land(R.falls.dx, fy - 1) && land(R.falls.dx + R.falls.w - 1, fy - 1)) fy--;
-  block(R.falls.dx, fy, R.falls.w, 1, "V");
-  line(R.falls.dx, fy + 1, -7, -8);
+  block(R.falls.dx, fy, R.falls.w, 2, "V");
+  line(R.falls.dx, fy + 2, -7, -8);
   // The landing: planks out to the west rim of the neck, and the skiff tied up at the end.
   let lx = 0;
   while (land(lx - 1, R.landing.dy) && land(lx - 1, R.landing.dy + 1)) lx--;
-  for (let x = lx + 1; x <= lx + 3; x++) for (let y = R.landing.dy - 1; y <= R.landing.dy + 2; y++) set(x, y, ";", ".,");
+  for (let x = lx + 1; x <= lx + 3; x++) for (let y = R.landing.dy - 1; y <= R.landing.dy + 1; y++) set(x, y, ";", ".,");
   block(lx, R.landing.dy, 1, 2, "K");
   // Orrin's stall by the path, and the shrine on it.
   block(R.stall.dx, R.stall.dy, 2, 1, "O");

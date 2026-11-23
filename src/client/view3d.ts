@@ -175,7 +175,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "stall", "brazier", "falls"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -819,6 +819,21 @@ function makeHouse(w: number, d: number, look: { wall?: string; roof?: string; w
 }
 
 /** Story places on the walking island, as block-outs: w by d tiles, centred. */
+/**
+ * The bigger places the maps thread has drawn: the model for each, and how it sits on its plot.
+ * The shrine's steps face +X as built, turned to face the path to its west; the skiff is moored
+ * west of its post.
+ */
+const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number }> = {
+  "hesta-house": { model: "hesta-house" },
+  chair: { model: "hesta-chair" },
+  shrine: { model: "shrine", rot: Math.PI },
+  stall: { model: "stall" },
+  kindling: { model: "brazier" },
+  falls: { model: "falls" },
+  skiff: { model: "skiff", dx: -1.6 },
+};
+
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
 const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed"]);
 
@@ -1296,11 +1311,22 @@ export class World {
     // Ground that isn't grass: the landing's planks, the terrace's flags.
     const planks = new THREE.MeshStandardMaterial({ color: "#8a6440", roughness: 0.9 });
     const flags = new THREE.MeshStandardMaterial({ color: "#b9b2a4", roughness: 0.95 });
+    // The landing's planks are one place: the maps thread's landing, sunk so its deck is a low step.
+    const deck = new THREE.Group();
+    const decks = (shrine.ground ?? []).filter((q) => q.kind !== "terrace");
     for (const q of shrine.ground ?? []) {
       const tile = new THREE.Mesh(new THREE.BoxGeometry(0.98, q.kind === "terrace" ? 0.12 : 0.08, 0.98), q.kind === "terrace" ? flags : planks);
       tile.position.set(this.worldX(b, q.x), q.kind === "terrace" ? 0.06 : 0.04, this.worldZ(b, q.y));
       tile.receiveShadow = true;
-      g.add(tile);
+      (q.kind === "terrace" ? g : deck).add(tile);
+    }
+    if (decks.length) {
+      const xs = decks.map((q) => q.x), ys = decks.map((q) => q.y);
+      const cx = this.worldX(b, (Math.min(...xs) + Math.max(...xs)) / 2), cz = this.worldZ(b, (Math.min(...ys) + Math.max(...ys)) / 2);
+      deck.position.set(-cx, 0, -cz);
+      const holder = new THREE.Group();
+      holder.add(deck);
+      this.placeSlot("landing", holder, cx, cz, 0, -1);
     }
     // The bigger places, one block each (placeholders until the maps thread draws them).
     const boxes = new Map<string, { x0: number; y0: number; x1: number; y1: number }>();
@@ -1314,17 +1340,24 @@ export class World {
       const obj = makePlace(kind, w, d);
       const at = [this.worldX(b, bx.x0 + (w - 1) / 2), this.worldZ(b, bx.y0 + (d - 1) / 2)] as const;
       // Drawn ones: the maps thread's model in a slot, the block-out until it loads.
-      const model = { "hesta-house": "hesta-house", chair: "hesta-chair" }[kind];
-      if (model) {
-        this.placeSlot(model, obj, at[0], at[1]);
+      if (kind === "kindling") {
+        const light = new THREE.PointLight("#ff9a3a", 3, 14, 1.6);
+        light.position.set(at[0], 2.5, at[1]);
+        g.add(light);
+      }
+      if (kind === "skiff") {
+        // Its mooring post stays on the edge; the boat lies west of it.
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.1, 8), new THREE.MeshStandardMaterial({ color: "#6b4a2e", roughness: 0.9 }));
+        post.position.set(at[0] + 0.3, 0.55, at[1]);
+        post.castShadow = true;
+        g.add(post);
+      }
+      const drawn = PLACE_OF[kind];
+      if (drawn) {
+        this.placeSlot(drawn.model, obj, at[0] + (drawn.dx ?? 0), at[1], drawn.rot ?? 0);
         continue;
       }
       obj.position.set(at[0], 0, at[1]);
-      if (kind === "kindling") {
-        const light = new THREE.PointLight("#ff9a3a", 3, 14, 1.6);
-        light.position.y = 2.5;
-        obj.add(light);
-      }
       g.add(obj);
     }
     this.fillHouse();
@@ -1846,10 +1879,11 @@ export class World {
     }
   }
   /** A slot for a place model at (x, z), turned `rot`, showing `blockout` until the model is in. */
-  private placeSlot(model: string, blockout: THREE.Object3D, x: number, z: number, rot = 0) {
+  private placeSlot(model: string, blockout: THREE.Object3D, x: number, z: number, rot = 0, y = 0) {
     const slot = new THREE.Group();
     slot.add(blockout);
-    slot.position.set(x, 0, z);
+    blockout.position.y -= y;
+    slot.position.set(x, y, z);
     slot.rotation.y = rot;
     this.shrineGroup.add(slot);
     this.placeSlots.push({ group: slot, model });
