@@ -132,6 +132,10 @@ export class LessonRoom {
     this.game = new Game(shrine, roster, this.seed(), rival ? [T.wisps, T.rookWisps] : [1, 0], rival ? T.ticks : FOREVER);
     // The laws of water hold in every story run.
     this.game.waterLawHere = true;
+    // Moving water never puts a wisp ashore in a story run.
+    this.game.tideStaysWet = true;
+    // Lumi carries the water light: she holds on any water.
+    this.game.waterLight = LUMI_ID;
     const g = this.game;
     const rook = this.player(ROOK_ID);
     this.pulls = this.banked = this.quietFor = this.outFor = this.calls = 0;

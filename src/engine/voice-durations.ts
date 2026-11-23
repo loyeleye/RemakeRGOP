@@ -113,6 +113,8 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Hesta|Don't mind that one, Rook. It only goes in when you make me nervous.": 5.06,
   "Hesta|All the way over there, Rook? At my age?": 3.24,
   "Hesta|Did you now.": 0.84,
+  "Hesta|It takes water to hold water, Rook. Go round.": 3.31,
+  "Hesta|It takes water to hold water, Rook. Send her.": 3.98,
   "Hesta|You did it on the pond. Yours is water. Mine's rock.": 4.22,
   "Hesta|No. Your father does it the hard way.": 2.69,
   "Hesta|Winner's prize. I'm giving it to the losers.": 3.24,

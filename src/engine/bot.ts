@@ -259,7 +259,13 @@ export function bankDistances(board: Board): Int16Array {
 }
 
 /** Where the wisp ends up if pulled from `from` until it stops, and how many ticks it takes. */
-export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30, gimmicks: Gimmicks = {}): { end: Pt; ticks: number } {
+/** The shrine's gimmicks, plus the laws of water for this puller: where a pull of theirs stops at the bank. */
+export type PullRules = Gimmicks & { wet?: (p: Pt) => boolean };
+export function pullRules(game: Game, id: number): PullRules {
+  return { ...game.shrine.gimmicks, wet: (p) => game.slipsAt(id, p) };
+}
+
+export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30, gimmicks: PullRules = {}): { end: Pt; ticks: number } {
   let w = start;
   // Once it's turned by a crystal or out of a moon pond, the staff has let go: it just flies.
   let skate: Pt | null = null;
@@ -291,7 +297,10 @@ export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30, g
         target = null;
       }
       const prev = w;
-      w = pt(w.x + mv.step[0], w.y + mv.step[1]);
+      const next = pt(w.x + mv.step[0], w.y + mv.step[1]);
+      // The laws of water: without a water light the pull stops at the bank.
+      if (!skate && gimmicks.wet && gimmicks.wet(next) && !gimmicks.wet(prev)) return { end: w, ticks: t };
+      w = next;
       if (gimmicks.ponds && board.tile(w) === Tile.Water && board.tile(prev) !== Tile.Water) {
         const twin = pt(2 * c.x - w.x, 2 * c.y - w.y);
         if (board.tile(twin) === Tile.Water) {
@@ -347,6 +356,7 @@ export function planSpot(game: Game, id: number, me: Pt, wisp: Wisp, rank = 0, s
     }
   }
   const now = bank[at]!;
+  const rules = pullRules(game, id);
   const options: { s: Pt; cost: number; end: number }[] = [];
   const stuckOptions: { s: Pt; cost: number; end: number }[] = [];
   for (let dy = -PULL_REACH; dy <= PULL_REACH; dy++)
@@ -356,7 +366,7 @@ export function planSpot(game: Game, id: number, me: Pt, wisp: Wisp, rank = 0, s
       const wk = walk[s.y * W + s.x]!;
       // Nobody can stand still on ice to pull from it.
       if (wk === UNREACHABLE || board.tile(s) === Tile.Ice || !board.canSee(s, wisp.pos)) continue;
-      const { end, ticks } = simulatePull(board, s, wisp.pos, 30, game.shrine.gimmicks);
+      const { end, ticks } = simulatePull(board, s, wisp.pos, 30, rules);
       const left = bank[end.y * W + end.x]!;
       if (left >= now) {
         // No better: but a wisp wedged where nothing brings it closer has to be moved out first.
@@ -393,7 +403,7 @@ function pickTap(game: Game, me: Game["players"][number], rank = 0): number | nu
     if (w.guild !== me.guild || board.inBankZone(w.pos)) continue;
     if (!game.inReach({ ...me, mode: "pull" }, w)) continue;
     const now = bank[w.pos.y * W + w.pos.x]!;
-    const { end, ticks } = simulatePull(board, me.pos, w.pos, 30, game.shrine.gimmicks);
+    const { end, ticks } = simulatePull(board, me.pos, w.pos, 30, pullRules(game, me.id));
     const left = bank[end.y * W + end.x]!;
     if (left >= now) continue;
     const stalled = w.prev.x === w.pos.x && w.prev.y === w.pos.y;
@@ -539,7 +549,7 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
       let pick: { id: number; score: number } | null = null;
       for (const w of game.wisps) {
         if (!live(w) || !game.inReach({ ...me, mode: "pull" }, w)) continue;
-        const { end, ticks } = simulatePull(board, me.pos, w.pos, 30, game.shrine.gimmicks);
+        const { end, ticks } = simulatePull(board, me.pos, w.pos, 30, pullRules(game, me.id));
         const left = bank[end.y * W + end.x]!;
         if (left >= bank[w.pos.y * W + w.pos.x]!) continue;
         const score = left * 4 + ticks;

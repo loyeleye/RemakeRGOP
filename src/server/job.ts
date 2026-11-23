@@ -151,6 +151,10 @@ export class JobRoom {
     this.game = new Game(shrine, roster, this.seed(), [S.wisps, 0], S.ticks + 10);
     // The laws of water hold in every story run.
     this.game.waterLawHere = true;
+    // Moving water never puts a wisp ashore in a story run.
+    this.game.tideStaysWet = true;
+    // Lumi carries the water light: she holds on any water.
+    this.game.waterLight = LUMI_ID;
     const g = this.game;
     g.tideStaysWet = true;
     g.tidePuller = LUMI_ID;

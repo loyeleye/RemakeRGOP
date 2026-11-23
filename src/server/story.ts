@@ -172,6 +172,8 @@ export class StoryRoom {
     this.game = new Game(shrine, roster, this.seed(), [mv.wisps, 0], mv.ticks);
     // The laws of water hold in every story run.
     this.game.waterLawHere = true;
+    // Moving water never puts a wisp ashore in a story run.
+    this.game.tideStaysWet = true;
     // Rook stays where he was when the bell went.
     const rook = this.game.players.find((p) => p.id === ROOK)!;
     if (rookAt) rook.pos = rook.prev = rookAt;

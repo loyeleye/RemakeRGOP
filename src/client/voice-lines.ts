@@ -115,6 +115,8 @@ export const VOICE_LINES: Record<string, string> = {
   "Hesta|Don't mind that one, Rook. It only goes in when you make me nervous.": "voice/hesta-hint-parked.mp3",
   "Hesta|All the way over there, Rook? At my age?": "voice/hesta-hint-far.mp3",
   "Hesta|Did you now.": "voice/hesta-did-you-now.mp3",
+  "Hesta|It takes water to hold water, Rook. Go round.": "voice/hesta-water-go-round.mp3",
+  "Hesta|It takes water to hold water, Rook. Send her.": "voice/hesta-water-send-her.mp3",
   "Hesta|You did it on the pond. Yours is water. Mine's rock.": "voice/hesta-water-rock.mp3",
   "Hesta|No. Your father does it the hard way.": "voice/hesta-hard-way.mp3",
   "Hesta|Winner's prize. I'm giving it to the losers.": "voice/hesta-winners-prize.mp3",

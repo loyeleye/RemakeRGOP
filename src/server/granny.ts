@@ -5,7 +5,7 @@
 // and walks her last one in, so it always ends with her winning by one.
 // Numbers are in GRANNY (src/engine/granny.ts).
 
-import { Mover, Tile, pt, samePt, type Pt } from "../engine/board.js";
+import { Mover, Tile, cheb, pt, samePt, type Pt } from "../engine/board.js";
 import { bankDistances, botCommand, planSpot } from "../engine/bot.js";
 import { Game, Grip, Rng, TICK_MS, type Action, type Command, type Guild, type Wisp } from "../engine/game.js";
 import { GRANNY } from "../engine/granny.js";
@@ -129,6 +129,10 @@ export class GrannyRoom {
     this.game = new Game(shrine, roster, this.seed(), GRANNY.wisps, GRANNY.ticks);
     // The laws of water hold in every story run.
     this.game.waterLawHere = true;
+    // Moving water never puts a wisp ashore in a story run.
+    this.game.tideStaysWet = true;
+    // Lumi carries the water light: she holds on any water.
+    this.game.waterLight = LUMI_ID;
     this.game.tidePuller = LUMI_ID;
     // A banked wisp is gone a moment before it comes back, so every point takes a little longer.
     this.game.respawnPause = GRANNY.respawnPause;
@@ -281,7 +285,7 @@ export class GrannyRoom {
       for (let x = b.center.x - hi; x <= b.center.x + hi; x++) {
         const p = pt(x, y);
         const r = Math.max(Math.abs(x - b.center.x), Math.abs(y - b.center.y));
-        if (r < lo || r > hi || !b.passable(p, Mover.Wisp) || b.inBankZone(p)) continue;
+        if (r < lo || r > hi || !b.passable(p, Mover.Wisp) || b.inBankZone(p) || g.lawWater(p)) continue;
         if (g.wisps.some((o) => o !== w && samePt(o.pos, p)) || g.players.some((q) => samePt(q.pos, p))) continue;
         const d = Math.hypot(x - me.pos.x, y - me.pos.y) + this.rng.next() * 2;
         if (d < bestD) (bestD = d), (best = p);
@@ -293,7 +297,7 @@ export class GrannyRoom {
   private nearHesta(): Pt | null {
     const g = this.game, me = this.player(HESTA_ID);
     const spots = g.shrine.spawnField.filter(
-      (p) => Math.max(Math.abs(p.x - me.pos.x), Math.abs(p.y - me.pos.y)) <= GRANNY.hesta.near && !g.wisps.some((w) => samePt(w.pos, p)) && !g.players.some((q) => samePt(q.pos, p)),
+      (p) => Math.max(Math.abs(p.x - me.pos.x), Math.abs(p.y - me.pos.y)) <= GRANNY.hesta.near && !g.lawWater(p) && !g.wisps.some((w) => samePt(w.pos, p)) && !g.players.some((q) => samePt(q.pos, p)),
     );
     return spots.length ? spots[Math.floor(this.rng.next() * spots.length)]! : null;
   }
@@ -326,7 +330,7 @@ export class GrannyRoom {
     const quiet = !this.keyTalking();
     if (!matchPoint && lead < H.calmLead && g.tick >= GRANNY.firstPushAfter && (this.pushes > 0 || quiet)) {
       const threats = g.wisps
-        .filter((w) => w.guild === 0 && !g.rooted.has(w.id) && this.stepsOut(w) > 0 && this.stepsOut(w) <= H.latePushAt && g.inReach({ ...me, mode: "push" }, w))
+        .filter((w) => w.guild === 0 && !g.rooted.has(w.id) && this.stepsOut(w) > 0 && this.stepsOut(w) <= H.latePushAt && g.inReach({ ...me, mode: "push" }, w) && !g.slipsAt(HESTA_ID, w.pos))
         .sort((a, b) => this.stepsOut(a) - this.stepsOut(b));
       // Spread it about: not the same child twice in a row when she has a choice.
       const threat = threats.find((w) => w.holder === null || w.holder !== this.lastPushedBy) ?? threats[0];
@@ -355,7 +359,8 @@ export class GrannyRoom {
     }
 
     // 2. Her own wisps. One is parked near the rim until the children threaten, or a while passes.
-    const live = g.wisps.filter((w) => w.guild === 1 && this.stepsOut(w) > 0);
+    // She never reaches for one over water (the laws of water): she waits for it, or walks round.
+    const live = g.wisps.filter((w) => w.guild === 1 && this.stepsOut(w) > 0 && !g.slipsAt(HESTA_ID, w.pos));
     if (this.parked !== null && !live.some((w) => w.id === this.parked)) this.parked = null;
     const kidsClose = g.wisps.some((w) => w.guild === 0 && this.stepsOut(w) <= H.releaseWhen && !g.rooted.has(w.id));
     // On her own match point she waits for theirs, so the hold always comes and it ends ten to nine.
@@ -397,6 +402,18 @@ export class GrannyRoom {
       if (w && free.includes(w) && (w.target || me.beam !== w.id)) return;
     }
     const target = free.sort((a, b) => this.stepsOut(a) - this.stepsOut(b))[0];
+    // The pond between her and it (a pull stops at the bank): she walks round to a dry line on it.
+    if (target && g.board.lineTiles(me.pos, target.pos).some((q) => g.lawWater(q))) {
+      const round = this.dryLine(target);
+      if (round && !samePt(round, me.pos)) {
+        if (!this.said.has("round")) {
+          this.said.add("round");
+          this.say(LUMI, "Use the pond. She has to go round.", { player: LUMI_ID }, "key");
+        }
+        if (!(me.action.kind === "walk" && samePt(me.action.to, round))) cmd({ action: { kind: "walk", to: round }, toggleMode: fix("pull") });
+        return;
+      }
+    }
     if (!target) {
       if (me.action.kind !== "idle") cmd({ action: { kind: "idle" }, toggleMode: fix("pull") });
       return;
@@ -405,6 +422,22 @@ export class GrannyRoom {
     if (!spot || (spot.x === me.pos.x && spot.y === me.pos.y)) return cmd({ action: { kind: "staff", wisp: target.id }, toggleMode: fix("pull") });
     if (me.action.kind === "walk" && me.action.to.x === spot.x && me.action.to.y === spot.y) return;
     cmd({ action: { kind: "walk", to: spot }, toggleMode: fix("pull") });
+  }
+
+  /** A tile she can pull `w` from without the pond in the way: in reach, a dry straight line to it,
+   *  on the brazier's side of it if there's a choice, and as near her as can be. */
+  private dryLine(w: Wisp): Pt | null {
+    const g = this.game, b = g.board, me = this.player(HESTA_ID), c = b.center;
+    let best: Pt | null = null, bestD = Infinity;
+    for (let dy = -6; dy <= 6; dy++)
+      for (let dx = -6; dx <= 6; dx++) {
+        const q = pt(w.pos.x + dx, w.pos.y + dy);
+        if (cheb(q, w.pos) < 2 || !b.inside(q) || !b.passable(q, Mover.Walker) || g.players.some((p) => p !== me && samePt(p.pos, q))) continue;
+        if (!g.inReach({ ...me, pos: q, mode: "pull" }, w) || b.lineTiles(q, w.pos).some((t) => g.lawWater(t))) continue;
+        const d = Math.hypot(q.x - me.pos.x, q.y - me.pos.y) + (cheb(q, c) > cheb(w.pos, c) ? 6 : 0);
+        if (d < bestD) (bestD = d), (best = q);
+      }
+    return best;
   }
 
   /** Her three hints to the player: each once, the first time he sees the thing. */
@@ -432,8 +465,10 @@ export class GrannyRoom {
         {
           this.holdWisp = near.id;
           this.holdTick = g.tick;
-          // Everything still waiting goes, so the hold plays clean.
-          this.queue = [];
+          // Everything still waiting goes, so the hold plays clean: all but the tide exchange,
+          // which must land (Hesta has to have seen the tide pull before she answers it with rock).
+          const TIDE_LINES = ["How did you do that?", "I pulled.", "Did you now."];
+          this.queue = this.queue.filter((q) => TIDE_LINES.includes(q.line.text));
           this.busyUntil = Math.min(this.busyUntil, g.tick + 2);
           this.say(NELL, "No fair!", { player: KID_IDS[0] }, "key");
           this.say(SEFA, "That's cheating!", { player: KID_IDS[1] }, "key");
@@ -443,6 +478,11 @@ export class GrannyRoom {
           this.say(HESTA, "No. Your father does it the hard way.", { talk: true });
         }
       }
+    }
+    // The first time the player's pull stops at the pond's edge: Hesta states the law.
+    if (PLAYER_IS_ROOK && !this.said.has("bank") && g.bankStops.some((b) => b.player === YOU)) {
+      this.said.add("bank");
+      this.say(HESTA, "It takes water to hold water, Rook. Go round.", { player: HESTA_ID }, "key");
     }
     // Lumi's tide pull, in front of everyone: Hesta notices.
     if (this.tideSeen < 0 && g.drifting > 0) {

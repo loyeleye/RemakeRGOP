@@ -151,6 +151,8 @@ export interface Lamplighter {
   beam: number | null;
   /** Lost a tie for the current wisp: the staff does nothing until a fresh click. */
   slipped: boolean;
+  /** The slip is the water's (laws of water), checked again each tick. */
+  wetSlip?: boolean;
 }
 
 export interface BankEvent {
@@ -306,21 +308,35 @@ export class Game {
    */
   pullBoost = new Map<number, number>();
   /**
-   * The laws of water (gameplay thread's events doc; Ladi, 23 Nov: "Rook should not be able to pull
-   * over pools"): a plain pull slips on a wisp over water (the grey beam), for everyone without a
-   * water light; the water light (the tide puller, Lumi) holds on any water. Pushing works over any
-   * water. Switch: "all" water (Ladi's lean, waiting on the gameplay and story threads), "deep" only
-   * (the ≈ tiles: today only the Steps' big pools, so it plays as before), or "off".
+   * The laws of water (gameplay thread's events doc, agreed by Ladi 23 Nov), in the story runs:
+   * 1. Only a water light can pull or push a wisp that is over water; anyone else slips (the grey beam).
+   * 2. A pull without a water light can't carry a wisp onto water: it stops at the bank, on land.
+   * 3. While the water light holds a wisp over water, her partner can pull it too (a team pull).
+   * 4. Story runs only (waterLawHere); practice keeps the old behaviour.
+   * Switch: "all" water, "deep" only (the ≈ tiles), or "off".
    */
-  static waterLaw: "all" | "deep" | "off" = "deep";
-  /** Where the law holds: the story runs (they set waterLawHere), or every board (practice too). */
+  static waterLaw: "all" | "deep" | "off" = "all";
+  /** Extend the laws to every board, practice too. */
   static waterLawEverywhere = false;
   waterLawHere = false;
-  /** Whether this lamplighter's pull slips on a wisp at `at`. */
-  slipsAt(id: number, at: Pt) {
-    if (Game.waterLaw === "off" || !(this.waterLawHere || Game.waterLawEverywhere) || id === this.tidePuller || this.board.tile(at) !== Tile.Water) return false;
-    return Game.waterLaw === "all" || this.board.isDeep(at);
+  /** Who carries a water light (Lumi): she holds on any water. The tide puller always does too. */
+  waterLight: number | null = null;
+  private hasLight(id: number | null | undefined) {
+    return id != null && (id === this.waterLight || id === this.tidePuller);
   }
+  private lawOn() {
+    return Game.waterLaw !== "off" && (this.waterLawHere || Game.waterLawEverywhere);
+  }
+  /** Whether water at `at` is the kind the law covers. */
+  lawWater(at: Pt) {
+    return this.lawOn() && this.board.tile(at) === Tile.Water && (Game.waterLaw === "all" || this.board.isDeep(at));
+  }
+  /** Whether this lamplighter's staff slips on a wisp at `at` (no water light, over water). */
+  slipsAt(id: number, at: Pt) {
+    return !this.hasLight(id) && this.lawWater(at);
+  }
+  /** Ticks on which a pull without a light was stopped at the bank (for the story runs' lines). */
+  bankStops: { tick: number; player: number; wisp: number }[] = [];
   /** The laws of water, law 5: moving water (tide or current) carries a loose wisp about its pool but
    *  never puts it ashore; it stops at the water's edge. On in the story runs that set it (run 4);
    *  every board once the water laws are settled. */
@@ -451,6 +467,7 @@ export class Game {
     if (this.finished) return;
     this.tick++;
     this.banks = [];
+    this.bankStops = [];
     for (const w of this.wisps) w.pullers = [];
     const g = this.shrine.gimmicks;
     if ((g?.portcullis && this.tick % g.portcullis === 0) || g?.plates) this.setGates();
@@ -745,7 +762,14 @@ export class Game {
       return;
     }
     const [dx, dy] = mv.step;
-    w.pos = pt(w.pos.x + dx, w.pos.y + dy);
+    // Law 2: a pull or fling without a water light stops at the bank instead of going out on the water.
+    const next = pt(w.pos.x + dx, w.pos.y + dy);
+    if (this.lawWater(next) && !this.lawWater(w.pos) && !this.hasLight(w.holder) && !w.pullers.some((id) => this.hasLight(id))) {
+      w.target = null;
+      if (w.holder != null) this.bankStops.push({ tick: this.tick, player: w.holder, wisp: w.id });
+      return;
+    }
+    w.pos = next;
     if (samePt(w.pos, w.target)) w.target = null;
     // On ice it keeps its way: the moment nobody is pulling it, it skates on.
     if (isSlick(this.board.tile(w.pos)) && !this.board.inBankZone(w.pos)) w.skate = pt(dx, dy);
@@ -974,6 +998,14 @@ export class Game {
 
   private touch(p: Lamplighter, w: Wisp, fresh: boolean) {
     if (fresh) p.slipped = false;
+    // The laws of water: no light, no hold over water, pull or push; but a partner can join the
+    // light's own pull on a wisp she has hold of. Checked afresh each tick (not a sticky slip).
+    if (p.wetSlip) (p.slipped = false), (p.wetSlip = false);
+    if (this.slipsAt(p.id, w.pos) && !(p.mode === "pull" && this.hasLight(w.holder) && w.grip === Grip.Held)) {
+      p.slipped = p.wetSlip = true;
+      p.beam = w.id;
+      return;
+    }
     if (fresh && this.mossHp.size) this.chipMoss(p, w);
     // Pulling together: a teammate already pulled this wisp this tick, so it heads for the
     // point between all of them instead.
@@ -992,7 +1024,6 @@ export class Game {
       return;
     }
     if (!p.slipped && this.loses(p, w)) p.slipped = true;
-    if (p.mode === "pull" && this.slipsAt(p.id, w.pos)) p.slipped = true;
     p.beam = w.id;
     if (p.slipped) return;
     const off = flingOffset(p.pos, w.pos, p.mode);
