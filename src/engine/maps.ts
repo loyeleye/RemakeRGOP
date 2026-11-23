@@ -34,6 +34,8 @@ export interface ShrineDef {
   farSpawns?: { band: [number, number]; share: number };
   /** A share of wisps appear on pools in this band instead (of those not sent far out). */
   poolSpawns?: { band: [number, number]; share: number };
+  /** The rows are the whole island, not half of a point-symmetric one (story islands). */
+  full?: boolean;
 }
 
 export interface Gimmicks {
@@ -830,7 +832,7 @@ export function mirrorRows(half: string[]): string[] {
 }
 
 export function buildShrine(def: ShrineDef): Shrine {
-  let rows = scaleRows(mirrorRows(def.rows), def.scale ?? MAP_SCALE);
+  let rows = scaleRows(def.full ? def.rows : mirrorRows(def.rows), def.scale ?? MAP_SCALE);
   const isle = scaledIsle(def);
   if (isle) rows = carveIsle(rows, isle);
   rows = addRings(rows, ringsOf(def));
@@ -1190,8 +1192,43 @@ export const SHRINES: Shrine[] = SHRINE_DEFS.map((d) => {
 });
 const FOUR_WAY = new Map<string, Shrine>();
 
+/**
+ * Lumi's home pond, for story run 2: a small island, the brazier in the middle, one pool on the
+ * east side (far enough out that nobody can pull a wisp on it straight into the brazier from
+ * across the fire), and a few boulders round the jams. Not symmetric, and not in the lobby.
+ */
+function homePondRows(): string[] {
+  const N = 31, c = 15;
+  const g = Array.from({ length: N }, () => Array<string>(N).fill("."));
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      // The pool: an oval east of the brazier, 8 to 12 tiles out.
+      const px = (x - (c + 10)) / 2.6, py = (y - c) / 5.2;
+      if (px * px + py * py <= 1) g[y]![x] = "~";
+    }
+  // Boulders by the jams (north and west), and a couple out in the open.
+  for (const [x, y] of [[13, 6], [17, 6], [6, 12], [6, 18], [9, 24], [21, 24], [10, 9]] as const) g[y]![x] = "o";
+  g[22]![15] = "1";
+  g[22]![16] = "2";
+  return g.map((r) => r.join(""));
+}
+
+export const STORY_SHRINES: Shrine[] = [
+  buildShrine({
+    id: "home-pond",
+    name: "Home pond",
+    blurb: "Lumi's island: a small pond island, the brazier in the middle and a pool to the east.",
+    full: true,
+    scale: 1,
+    isle: { radius: 14.5, squareness: 2.1, coves: 0.06, heads: 0.05, seed: 5, stretch: [1.08, 0.95] },
+    rings: [],
+    spawnBand: [6, 9],
+    rows: homePondRows(),
+  }),
+];
+
 export function shrineById(id: string): Shrine {
-  return SHRINES.find((s) => s.id === id) ?? SHRINES[0]!;
+  return SHRINES.find((s) => s.id === id) ?? STORY_SHRINES.find((s) => s.id === id) ?? SHRINES[0]!;
 }
 
 /**

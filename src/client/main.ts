@@ -412,10 +412,12 @@ function renderStoryEnd() {
   shownEnd = end;
   clearCaptions();
   $("result-title").textContent = st.run;
-  $("result-score").innerHTML = `<b style="color:${GUILD_COLORS[0]}">${end.banked}</b> <span class="blurb">wisps banked · Kes's island ${end.kes}</span>`;
+  $("result-score").innerHTML = end.summary ? `<span class="blurb">${esc(end.summary)}</span>` : `<b style="color:${GUILD_COLORS[0]}">${end.banked}</b> <span class="blurb">wisps banked · Kes's island ${end.kes}</span>`;
   const fill = $("sky-fill");
   fill.style.width = "0";
-  requestAnimationFrame(() => requestAnimationFrame(() => (fill.style.width = `${Math.round(end.sky * 100)}%`)));
+  (fill.parentElement as HTMLElement).hidden = end.sky === undefined;
+  const sky = end.sky ?? 0;
+  requestAnimationFrame(() => requestAnimationFrame(() => (fill.style.width = `${Math.round(sky * 100)}%`)));
   $("end-lines").replaceChildren(
     ...end.lines.map((l, i) => {
       const li = document.createElement("li");
@@ -502,8 +504,11 @@ function renderHud() {
   const story = room.story;
   $("score-1").classList.toggle("kes", !!story);
   $("mute").hidden = !story;
+  $("call").hidden = !story?.canCall;
   if (story) {
-    $("score-1").textContent = `${cam.compact ? "Kes" : "Kes's island"} ${story.kes}`;
+    const rv = story.rival;
+    $("score-1").hidden = !rv;
+    if (rv) $("score-1").textContent = `${cam.compact ? rv.short : rv.name} ${rv.score}`;
     if (room.phase === "countdown") {
       $("ticks").textContent = `🔔 ${story.title}`;
       return renderPad(s);
@@ -513,7 +518,7 @@ function renderHud() {
   const left = s ? len - s.tick : len;
   const tide = shrineFor(room.shrine, room.teams).gimmicks.tide;
   const tideNote = tide && s && room.phase !== "countdown" ? ` · tide ${tideIn(s.tick + 1, tide) ? "in" : "out"} (${tide - ((s.tick + 1) % tide)})` : "";
-  $("ticks").textContent = (story ? `${story.title} · ` : "") + (room.phase === "countdown" ? `Starts in ${room.countdown}` : `${left} ticks · ${fmtTime((left * tickMs) / 1000)}${tideNote}`);
+  $("ticks").textContent = (story ? `${story.title} · ` : "") + (room.phase === "countdown" ? `Starts in ${room.countdown}` : story?.note ?? `${left} ticks · ${fmtTime((left * tickMs) / 1000)}${tideNote}`);
   renderPad(s);
 }
 
@@ -1074,7 +1079,7 @@ function drawStory(g: CanvasRenderingContext2D, t: number, now: number) {
   const r = world.renderer;
   if (st.end && room!.phase === "results") {
     if (skyBase === null) skyBase = r.toneMappingExposure;
-    const goal = skyBase * (1 + 0.9 * st.end.sky);
+    const goal = skyBase * (1 + 0.9 * (st.end.sky ?? 0.3));
     r.toneMappingExposure += (goal - r.toneMappingExposure) * 0.02;
     cam.follow = false;
     cam.scale *= 0.997;

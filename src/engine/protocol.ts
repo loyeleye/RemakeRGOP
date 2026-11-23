@@ -57,6 +57,8 @@ export interface StoryLine {
   talk?: boolean;
   wisp?: number;
   ring?: boolean;
+  /** A bark over this player (the speaker herself, in run 2). */
+  player?: number;
 }
 
 export interface StoryView {
@@ -71,8 +73,18 @@ export interface StoryView {
   mark: { wisp: number; who: string } | null;
   /** Kes's island's score (scripted). */
   kes: number;
-  /** At the end: how bright the sky got (0 to 1), and the closing lines. */
-  end?: { banked: number; kes: number; sky: number; lines: StoryLine[] };
+  /** The other score in the HUD, if any: Kes's island in run 1, Rook in run 2's last round. */
+  rival?: { name: string; short: string; score: number } | null;
+  /** Shown in place of the clock, e.g. "Pulls left: 4". */
+  note?: string;
+  /** The player can call a partner to a tile (run 2). */
+  canCall?: boolean;
+  /** Where a wisp pulled by two heads: the point halfway between them. */
+  halfway?: { x: number; y: number } | null;
+  /** The tile the partner was last called to, while he's on his way or standing there. */
+  called?: { x: number; y: number } | null;
+  /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
+  end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[] };
 }
 
 export type ClientMsg =
@@ -86,6 +98,8 @@ export type ClientMsg =
   | { t: "start" }
   | { t: "act"; action?: Action; toggleRun?: boolean; toggleMode?: boolean }
   | { t: "lobby" }
+  /** Story run 2: call the partner to a tile. */
+  | { t: "call"; x: number; y: number }
   | { t: "ping"; at: number };
 
 export type ServerMsg =

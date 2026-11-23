@@ -338,8 +338,8 @@ export class StoryRoom {
     const last = this.crossings.at(-1) ?? -Infinity;
     if (this.split && this.crossings.length > S.maxCrossings) this.split = false;
     else if (!this.split && g.tick - last >= S.settle) this.split = true;
-    if (was && !this.split) this.say(HESTA, "Too much running, Rook. Hold still and they'll both bring them to you.");
-    if (!was && this.split) this.say(HESTA, `${KINDLING.relay.crew[1]} has your back again, across the fire.`);
+    if (was && !this.split) this.say(HESTA, "Hold still, Rook. They'll bring them.");
+    if (!was && this.split) this.say(HESTA, `${KINDLING.relay.crew[1]} has your back again.`);
   }
 
   private relay() {
@@ -359,7 +359,7 @@ export class StoryRoom {
         // Moving about his own side is fine while the crew split the island.
         if (this.strayFor === 8 && !this.split && g.tick - this.lastHesta > 25) {
           this.ring = home;
-          this.say(HESTA, "Back to your square, Rook. Let them bring it.", { ring: true });
+          this.say(HESTA, "Back to your square, Rook.", { ring: true });
         }
         if (away === 0) this.ring = null;
       }
@@ -502,6 +502,7 @@ export class StoryRoom {
       ring: this.ring && pt(this.ring.x, this.ring.y),
       mark: this.mark(),
       kes: this.kes,
+      rival: { name: "Kes's island", short: "Kes", score: this.kes },
       end: this.end,
     };
   }

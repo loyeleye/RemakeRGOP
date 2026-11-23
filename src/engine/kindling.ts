@@ -6,7 +6,7 @@
 // Every number that sets the feel lives in KINDLING at the top, so it is easy to change.
 
 import { Mover, cheb, pt, samePt, type Board, type Pt } from "./board.js";
-import { PULL_REACH, flingOffset, wispMove, type Command, type Game, type Wisp } from "./game.js";
+import { Grip, PULL_REACH, flingOffset, wispMove, type Command, type Game, type Wisp } from "./game.js";
 import { bankDistances, simulatePull } from "./bot.js";
 
 export const KINDLING = {
@@ -326,10 +326,12 @@ export function partnerCommand(game: Game, id: number, rookId: number, state: Cr
       return { action: { kind: "idle" } };
     }
     const stuck = me.beam === w.id && samePt(w.prev, w.pos) && !w.target;
-    // Banking from the post: hold it until it's home.
-    if (live(w) && !stuck && state.wisp === w.id && samePt(me.pos, post)) return null;
+    // Banking from the post: hold it until it's home (unless his staff slipped off it).
+    if (live(w) && !stuck && !me.slipped && state.wisp === w.id && samePt(me.pos, post)) return null;
   }
-  const targets = game.wisps.filter((w) => live(w) && w.id !== rookOn && mine(w) && banksFrom(board, post, rest(w)));
+  // Not one a crewmate is carrying (taking it in flight just slips the staff).
+  const free = (w: Wisp) => w.holder === null || w.holder === id || w.grip === Grip.Free;
+  const targets = game.wisps.filter((w) => live(w) && w.id !== rookOn && free(w) && mine(w) && banksFrom(board, post, rest(w)));
   if (!targets.length) {
     state.wisp = null;
     return undefined;

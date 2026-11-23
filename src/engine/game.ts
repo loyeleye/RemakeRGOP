@@ -282,6 +282,20 @@ export class Game {
   banks: BankEvent[] = [];
   private rng: Rng;
   private queued = new Map<number, Command>();
+  /**
+   * Story runs: jammed wisps. One staff holds a jammed wisp but can't move it; it only moves
+   * when two pull together (toward the point between them).
+   */
+  heavy = new Set<number>();
+  /**
+   * Story runs: the player whose pull is a tide pull (Lumi). While she holds a wisp that's on
+   * water, every loose wisp on that pool drifts a tile a tick toward her.
+   */
+  tidePuller: number | null = null;
+  /** Each water tile's pool (its connected stretch of water), worked out when first needed. */
+  private pools: Int32Array | null = null;
+  /** This tick's tide-pull steps, by wisp. */
+  private drift = new Map<number, Pt>();
 
   constructor(
     readonly shrine: Shrine,
@@ -408,6 +422,8 @@ export class Game {
         this.letGo(w);
       }
     }
+    this.drift.clear();
+    if (this.tidePuller !== null) this.tidePull();
     for (const w of this.wisps) this.stepWisp(w);
     for (const p of this.players) this.stepPlayer(p);
     for (const w of this.wisps) {
@@ -416,6 +432,51 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- wisps
+
+  /** The tide puller is holding a wisp on water: the loose wisps on that pool drift to her. */
+  private tidePull() {
+    const p = this.players.find((q) => q.id === this.tidePuller);
+    const held = p?.beam != null ? this.wisps[p.beam] : undefined;
+    if (!p || !held || !held.touched || this.board.tile(held.pos) !== Tile.Water) return;
+    const pool = this.poolOf(held.pos);
+    for (const w of this.wisps) {
+      if (w === held || w.touched || w.target || w.skate || this.board.inBankZone(w.pos)) continue;
+      if (this.board.tile(w.pos) !== Tile.Water || this.poolOf(w.pos) !== pool) continue;
+      const mv = wispMove(this.board, w.pos, sign(p.pos.x - w.pos.x), sign(p.pos.y - w.pos.y), Math.abs(p.pos.x - w.pos.x), Math.abs(p.pos.y - w.pos.y));
+      if (!mv || mv.bounce) continue;
+      const to = pt(w.pos.x + mv.step[0], w.pos.y + mv.step[1]);
+      if (samePt(to, p.pos) || this.wisps.some((o) => o !== w && samePt(o.pos, to))) continue;
+      this.drift.set(w.id, to);
+    }
+  }
+
+  private poolOf(at: Pt) {
+    if (!this.pools) {
+      const W = this.board.width, H = this.board.height;
+      const pools = new Int32Array(W * H).fill(-1);
+      let n = 0;
+      for (let i = 0; i < W * H; i++) {
+        if (pools[i] !== -1 || this.board.tiles[i] !== Tile.Water) continue;
+        const q = [i];
+        pools[i] = n;
+        for (let k = 0; k < q.length; k++) {
+          const x = q[k]! % W, y = Math.floor(q[k]! / W);
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+            const j = ny * W + nx;
+            if (pools[j] === -1 && this.board.tiles[j] === Tile.Water) {
+              pools[j] = n;
+              q.push(j);
+            }
+          }
+        }
+        n++;
+      }
+      this.pools = pools;
+    }
+    return this.pools[at.y * this.board.width + at.x]!;
+  }
 
   private stepWisp(w: Wisp) {
     // Touched last tick: a staff is still on it, and a pull beats the ice.
@@ -438,6 +499,11 @@ export class Game {
     if (held) {
       w.glide = 0;
       w.relay = 0;
+    }
+    const tide = this.drift.get(w.id);
+    if (tide) {
+      w.pos = tide;
+      return;
     }
     // Left resting on a sun glyph: it's relayed in, two tiles a tick, the short way round.
     if (this.flow && !held && !w.relay && !w.target && !w.skate && this.board.tile(w.pos) === Tile.Glyph) w.relay = this.shrine.gimmicks.glyphs! - 2;
@@ -789,8 +855,9 @@ export class Game {
     p.beam = w.id;
     if (p.slipped) return;
     const off = flingOffset(p.pos, w.pos, p.mode);
-    // Already right in front of the puller: the touch holds it but it doesn't move.
-    w.target = off.x === 0 && off.y === 0 ? null : pt(w.pos.x + off.x, w.pos.y + off.y);
+    // Already right in front of the puller: the touch holds it but it doesn't move. A jammed
+    // wisp doesn't move for one staff either; a second puller joining moves it (above).
+    w.target = (off.x === 0 && off.y === 0) || (this.heavy.has(w.id) && p.mode === "pull") ? null : pt(w.pos.x + off.x, w.pos.y + off.y);
     w.holder = p.id;
     w.grip = Grip.Held;
     w.touched = true;

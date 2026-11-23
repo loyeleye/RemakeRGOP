@@ -134,4 +134,23 @@ describe("Grand Kindling", () => {
       }
     }
   });
+
+  it("never leaves Moth stuck on a wisp Wick is carrying while Rook stands still", () => {
+    for (const seed of [11, 12, 13, 14, 15, 16]) {
+      let s = seed;
+      const room = new StoryRoom(manualClock(), () => (s = (s * 48271) % 2147483647));
+      room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+      (room as unknown as { startMovement(m: number, at: null): void }).startMovement(1, null);
+      let stuck = 0, worst = 0;
+      for (let i = 0; i < 120; i++) {
+        room.onTick();
+        const g = room.state.game;
+        const moth = g.players.find((p) => p.id === 3)!;
+        const w = moth.action.kind === "staff" ? g.wisps[moth.action.wisp]! : null;
+        stuck = w && samePt(w.pos, w.prev) ? stuck + 1 : 0;
+        worst = Math.max(worst, stuck);
+      }
+      expect(worst).toBeLessThan(15);
+    }
+  });
 });
