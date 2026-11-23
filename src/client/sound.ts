@@ -12,14 +12,9 @@ export const SOUND = {
   /** Crewmates' banks, and Kes's island far away. */
   crewGain: 0.45,
   kesGain: 0.12,
-  /**
-   * The pull: a faint, airy shimmer (a high D and A that slowly breathe, over a whisper of
-   * wind), with a soft echo. It brightens a little as the wisp nears the brazier.
-   */
-  humGain: 0.035,
-  /** The wind's pitch far out, and at the brazier. */
-  airFrom: 900,
-  airTo: 1800,
+  /** The pull cue: how loud, and how many seconds it takes to fade. */
+  humGain: 0.05,
+  pullCue: 1.1,
   /** Music volume, and how long it fades under Lumi's bell. */
   musicGain: 0.5,
   musicFade: 1.5,
@@ -188,9 +183,9 @@ export function kesChime() {
   strike(note(Math.floor(Math.random() * 5) + 5), SOUND.kesGain, 0.6, GLASS, f);
 }
 
-/** The staff takes hold: a soft pluck. */
+/** The staff takes hold: a soft, low pluck under the pull cue. */
 export function catchClick() {
-  strike(1174.66, 0.12, 0, [
+  strike(587.33, 0.06, 0, [
     [1, 1, 0.06],
     [2, 0.4, 0.04],
   ]);
@@ -209,94 +204,59 @@ export function handBell(rings = 1) {
   for (let i = 0; i < rings; i++) strike(880, 0.25, -0.3, HANDBELL, undefined, s.c.currentTime + i * 0.5);
 }
 
-// The pull: a quiet, mystical shimmer while Rook holds a pull.
-let hum: { stop: (at: number) => void; g: GainNode; air: BiquadFilterNode; shine: GainNode } | null = null;
+// The pull: one soft cue as the pull starts, which fades within about a second. Nothing
+// keeps playing while he holds it.
+let pulling = false;
 
-/** Shimmer while pulling; `near` is 0 far out to 1 at the brazier. Null stops it. */
+/** Call every tick of a pull (`near` is unused now); null when it ends. The cue plays once per pull. */
 export function pullHum(near: number | null) {
+  if (near === null) {
+    pulling = false;
+    return;
+  }
+  if (pulling) return;
+  pulling = true;
   const s = out();
   if (!s) return;
   const { c, o } = s;
-  if (near === null) {
-    if (hum) {
-      const h = hum;
-      hum = null;
-      h.g.gain.setTargetAtTime(0.0001, c.currentTime, 0.12);
-      h.stop(c.currentTime + 1.2);
-    }
-    return;
+  const t = c.currentTime;
+  // A low, warm swell (D4 and A4, sine), with a breath of soft, dark wind under it.
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(SOUND.humGain, t + 0.12);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + SOUND.pullCue);
+  const soft = c.createBiquadFilter();
+  soft.type = "lowpass";
+  soft.frequency.value = 1200;
+  g.connect(soft).connect(o);
+  for (const [f, amp] of [
+    [293.66, 0.6],
+    [440.0, 0.3],
+  ] as const) {
+    const x = c.createOscillator();
+    x.type = "sine";
+    x.frequency.setValueAtTime(f, t);
+    x.frequency.exponentialRampToValueAtTime(f * 1.012, t + SOUND.pullCue);
+    const a = c.createGain();
+    a.gain.value = amp;
+    x.connect(a).connect(g);
+    x.start(t);
+    x.stop(t + SOUND.pullCue + 0.1);
   }
-  if (!hum) {
-    const t = c.currentTime;
-    const g = c.createGain();
-    g.gain.value = 0.0001;
-    g.gain.setTargetAtTime(SOUND.humGain, t, 0.25);
-    // A soft echo, darkened, so it hangs in the air.
-    const dly = c.createDelay(1);
-    dly.delayTime.value = 0.27;
-    const fb = c.createGain();
-    fb.gain.value = 0.38;
-    const dark = c.createBiquadFilter();
-    dark.type = "lowpass";
-    dark.frequency.value = 2400;
-    g.connect(o);
-    g.connect(dly).connect(dark).connect(fb).connect(dly);
-    dark.connect(o);
-    const nodes: AudioScheduledSourceNode[] = [];
-    // The shimmer: D5 and A5, each breathing slowly at its own rate, with a slight waver.
-    const shine = c.createGain();
-    shine.gain.value = 0.55;
-    shine.connect(g);
-    for (const [f, rate, pan] of [
-      [587.33, 0.23, -0.25],
-      [880.0, 0.31, 0.25],
-      [1174.66, 0.17, 0],
-    ] as const) {
-      const x = c.createOscillator();
-      x.type = "sine";
-      x.frequency.value = f;
-      const vib = c.createOscillator();
-      vib.frequency.value = 4.5;
-      const vibAmt = c.createGain();
-      vibAmt.gain.value = f * 0.002;
-      vib.connect(vibAmt).connect(x.frequency);
-      const amp = c.createGain();
-      amp.gain.value = f > 1000 ? 0.12 : 0.3;
-      const lfo = c.createOscillator();
-      lfo.frequency.value = rate;
-      const lfoAmt = c.createGain();
-      lfoAmt.gain.value = amp.gain.value * 0.8;
-      lfo.connect(lfoAmt).connect(amp.gain);
-      const p = c.createStereoPanner();
-      p.pan.value = pan;
-      x.connect(amp).connect(p).connect(shine);
-      for (const n of [x, vib, lfo]) {
-        n.start(t);
-        nodes.push(n);
-      }
-    }
-    // The wind: looped noise through a narrow band that rises as the wisp comes home.
-    const len = c.sampleRate * 2;
-    const buf = c.createBuffer(1, len, c.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    const src = c.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-    const air = c.createBiquadFilter();
-    air.type = "bandpass";
-    air.Q.value = 9;
-    air.frequency.value = SOUND.airFrom;
-    const airG = c.createGain();
-    airG.gain.value = 0.5;
-    src.connect(air).connect(airG).connect(g);
-    src.start(t);
-    nodes.push(src);
-    hum = { g, air, shine, stop: (at) => nodes.forEach((n) => n.stop(at)) };
-  }
-  const k = Math.max(0, Math.min(1, near));
-  hum.air.frequency.setTargetAtTime(SOUND.airFrom + (SOUND.airTo - SOUND.airFrom) * k, c.currentTime, 0.3);
-  hum.shine.gain.setTargetAtTime(0.45 + 0.35 * k, c.currentTime, 0.3);
+  const len = Math.ceil(c.sampleRate * (SOUND.pullCue + 0.1));
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const air = c.createBiquadFilter();
+  air.type = "bandpass";
+  air.frequency.value = 500;
+  air.Q.value = 2;
+  const ag = c.createGain();
+  ag.gain.value = 0.25;
+  src.connect(air).connect(ag).connect(g);
+  src.start(t);
 }
 
 /** The eye opens: everything else cuts out, and one low note is held. */
