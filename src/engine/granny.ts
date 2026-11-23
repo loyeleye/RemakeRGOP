@@ -13,6 +13,8 @@ export const GRANNY = {
   target: 10,
   /** Long enough never to run out in practice. */
   ticks: 900,
+  /** After the hold, one of her wisps is pulled in every this many ticks until she has ten. */
+  rushEvery: 1,
   /** Ticks a banked wisp is gone before it comes back (0: straight back). */
   respawnPause: 8,
   /** Wisps in play: the children's team, and Hesta's. Each comes back when banked. */

@@ -245,6 +245,42 @@ export class GrannyRoom {
     if (spot) g.command(LUMI_ID, { action: { kind: "walk", to: spot }, toggleMode: fix });
   }
 
+  /**
+   * The finish, once theirs are stoned: every `rushEvery` ticks one of her wisps is pulled in
+   * from wherever it is straight onto the rim on her side (a fast slide, not a walk), until she
+   * has ten. Nothing waits on a respawn pause meanwhile.
+   */
+  private rush() {
+    const g = this.game, me = this.player(HESTA_ID);
+    g.respawnPause = 0;
+    g.noBank.clear();
+    for (const [id] of g.away) if (g.wisps[id]!.guild === 1) g.away.set(id, g.tick);
+    const mine = g.wisps.filter((w) => w.guild === 1);
+    // Ten and done: nothing more of hers goes in while the last lines play.
+    if (this.hestaScore() >= GRANNY.target) {
+      for (const w of mine) g.noBank.add(w.id);
+      return;
+    }
+    if ((g.tick - this.holdTick) % GRANNY.rushEvery !== 0) return;
+    const w = mine.filter((q) => !g.board.inBankZone(q.pos) && !g.away.has(q.id)).sort((a, b) => this.stepsOut(a) - this.stepsOut(b))[0];
+    if (!w) return;
+    const b = g.board;
+    let rim: Pt | null = null, best = Infinity;
+    for (let y = b.center.y - 4; y <= b.center.y + 4; y++)
+      for (let x = b.center.x - 4; x <= b.center.x + 4; x++) {
+        const p = pt(x, y);
+        if (!b.inBankZone(p) || b.tile(p) === Tile.Brazier || !b.passable(p, Mover.Wisp)) continue;
+        if (g.wisps.some((o) => samePt(o.pos, p)) || g.players.some((q) => samePt(q.pos, p))) continue;
+        const d = Math.hypot(p.x - me.pos.x, p.y - me.pos.y);
+        if (d < best) (best = d), (rim = p);
+      }
+    if (!rim) return;
+    const from = w.pos;
+    moveWisp(w, rim);
+    w.prev = from;
+    g.command(HESTA_ID, { action: { kind: "idle" }, toggleMode: me.mode !== "pull" || undefined });
+  }
+
   /** A free spawn tile within `hestaNear` of Hesta, for one of her wisps coming back. */
   private nearHesta(): Pt | null {
     const g = this.game, me = this.player(HESTA_ID);
@@ -303,6 +339,9 @@ export class GrannyRoom {
         return cmd({ action: { kind: "staff", wisp: threat.id }, toggleMode: fix("push") });
       }
     }
+
+    // After the hold she finishes it fast (Ladi: within about ten seconds): her wisps fly to the rim.
+    if (this.holdWisp !== null) return this.rush();
 
     // 2. Her own wisps. One is parked near the rim until the children threaten, or a while passes.
     const live = g.wisps.filter((w) => w.guild === 1 && this.stepsOut(w) > 0);
@@ -456,7 +495,8 @@ export class GrannyRoom {
       }
       this.leader = lead;
     }
-    if (this.hestaScore() >= GRANNY.target) return this.finish();
+    // Her tenth ends it, once the exchange at the hold has finished.
+    if (this.hestaScore() >= GRANNY.target && !(this.holdWisp !== null && this.talking())) return this.finish();
     if (g.finished) return this.finish();
   }
 

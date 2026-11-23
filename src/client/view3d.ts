@@ -712,6 +712,8 @@ interface WispRig {
 
 /** Seconds the earth line takes to reach a wisp before the stone starts closing over it. */
 const EARTH_LINE = 0.35;
+/** Seconds after the hold by which the earth line has faded out. */
+const EARTH_FADE = 4.5;
 
 /** Stone closing over a wisp: a rough shell, and bright cracks where the light gets out. */
 function makeCrust(col: string): THREE.Group {
@@ -1819,8 +1821,9 @@ export class World {
           rig.earth.position.copy(from).lerp(end, 0.5);
           rig.earth.scale.set(1, Math.max(0.001, from.distanceTo(end)), 1);
           rig.earth.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), end.clone().sub(from).normalize());
-          (rig.earth.material as THREE.MeshBasicMaterial).opacity = since < 1.5 ? 0.95 : Math.max(0.3, 0.95 - (since - 1.5) * 0.65);
-          rig.earth.visible = true;
+          // Strong while the stone closes, then gone by EARTH_FADE seconds (Ladi: five at most).
+          (rig.earth.material as THREE.MeshBasicMaterial).opacity = since < 1.5 ? 0.95 : Math.max(0, 0.95 * (1 - (since - 1.5) / (EARTH_FADE - 1.5)));
+          rig.earth.visible = since < EARTH_FADE;
         }
         stone = Math.min(1, Math.max(0, since - EARTH_LINE) / 1.1);
         stone = stone * stone * (3 - 2 * stone);
