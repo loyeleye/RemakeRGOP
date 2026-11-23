@@ -8,8 +8,8 @@ import { EYE_CUT, EYE_FIX, loadEye, type Eye } from "./eye-rig.js";
 import * as sound from "./sound.js";
 
 /** The ending as first built: the music fades slowly from the last bell, the sky holds about 6 s,
- *  and the wind comes in before the rim. Kept so the emotion test is one switch away: set
- *  `ENDING_TEST` to false, or open the page with ?ending=old. */
+ *  and the wind comes in before the rim. Kept so it is one switch away: ?ending=old, or the
+ *  testing menu on the home screen (ENDING_CUTS). */
 const ENDING_OLD = {
   /** Lines: Lumi's bell, Hesta's "Look up, Rook.", and Lumi's count over the sky. */
   lineAt: [0.2, 3.4, 15.5],
@@ -18,7 +18,7 @@ const ENDING_OLD = {
   stream: { from: 0.6, each: 0.25, fly: 1.6 },
   /** The game camera lifts off the board and tilts up. */
   lift: { from: 4, to: 9 },
-  ring: { in: 8, inFor: 1.5 },
+  ring: { in: 8, inFor: 1.5, pull: 1 },
   sky: { in: 13, inFor: 1.5, panTo: 21.5 },
   /** Over Fairy Ring's rim and down its underside, the veins leading to its heart. */
   underside: { in: 20.5, inFor: 1.2, to: 26 },
@@ -33,6 +33,9 @@ const ENDING_OLD = {
   buttons: 46,
   /** Music: null keeps the old slow fade from the last bell (main.ts, SOUND.endMusicFade). */
   music: null as null | { duck: number; duckTo: number; duckFor: number; cut: number; cutFor: number },
+  /** The new order only: the crew's faces, before the sky and with Lumi's count, and Fairy Ring
+   *  pulling away after them (ring.to, scaling from ring.pull to 1). Null keeps the old order. */
+  faces: null as null | { one: number; two: number },
   /** Lumi's lantern before run 2: how long it holds before play, and its fade. */
   lantern: { hold: 4, fade: 1.2, matchScale: 2.7, beat: 0.5, ease: 2.5 },
 };
@@ -55,17 +58,60 @@ const ENDING_TEST: typeof ENDING_OLD = {
   music: { duck: 17.5, duckTo: 0.33, duckFor: 0.5, cut: 24, cutFor: 0.4 },
 };
 
-/** Which ending plays. true: the emotion test. false (or ?ending=old): the ending as first built. */
-const USE_TEST = (() => {
+/** The emotion test, step 2: the new order, about 60 s. Last bell; "Look up, Rook." as the camera
+ *  lifts; a hard cut to the crew's faces (kindling-faces-1, 4 s); the sky cross-fades in and holds
+ *  9 s with no words; the music drops and it cuts to kindling-faces-2 for Lumi's count; then Fairy
+ *  Ring, pulling away; over the rim the music stops, and the rest runs as before. Cuts on picture
+ *  changes, cross-fades into the sky and the dark. */
+const ENDING_ORDER: typeof ENDING_OLD = {
+  ...ENDING_OLD,
+  lineAt: [0.2, 3.4, 26],
+  lift: { from: 4, to: 9 },
+  faces: { one: 9.5, two: 24.5 },
+  sky: { in: 13.5, inFor: 1.5, panTo: 24.5 },
+  ring: { in: 30.5, inFor: 0, pull: 1.3 },
+  underside: { in: 35, inFor: 0.05, to: 40.5 },
+  hearts: { in: 40, inFor: 1, to: 45.5 },
+  descent: { from: 41, to: 45.5, wind: 35 },
+  dark: 45.5,
+  eye: 45.5,
+  title: 58.5,
+  buttons: 60.5,
+  music: { duck: 24, duckTo: 0.33, duckFor: 0.5, cut: 35, cutFor: 0.4 },
+};
+
+/** The three cuts, for the testing menu on the home screen. */
+export const ENDING_CUTS = [
+  { id: "order", name: "New order (faces, sky, count, ring)", cut: ENDING_ORDER },
+  { id: "test", name: "Music test (old order, music held)", cut: ENDING_TEST },
+  { id: "old", name: "As first built", cut: ENDING_OLD },
+] as const;
+const CUT_KEY = "lanternfall.endingCut";
+
+/** Which ending plays: ?ending=old|test|order, else the one picked on the home screen, else the new order. */
+export function endingCut(): (typeof ENDING_CUTS)[number]["id"] {
+  let id: string | null = null;
   try {
-    return new URLSearchParams(location.search).get("ending") !== "old";
+    id = new URLSearchParams(location.search).get("ending") ?? localStorage.getItem(CUT_KEY);
   } catch {
-    return true;
+    /* private window */
   }
-})();
+  return ENDING_CUTS.find((c) => c.id === id)?.id ?? "order";
+}
 
 /** Seconds from the last bell. Change the timing here. */
-export const ENDING = USE_TEST ? ENDING_TEST : ENDING_OLD;
+export let ENDING = ENDING_CUTS.find((c) => c.id === endingCut())!.cut;
+
+export function setEndingCut(id: string) {
+  const c = ENDING_CUTS.find((x) => x.id === id);
+  if (!c) return;
+  ENDING = c.cut;
+  try {
+    localStorage.setItem(CUT_KEY, id);
+  } catch {
+    /* private window */
+  }
+}
 
 const SEEN = "lanternfall.kindlingEnd";
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
@@ -124,6 +170,8 @@ export class KindlingEnding {
     const add = (k: string, el: HTMLElement) => r.appendChild((this.els[k] = el));
     add("ring", card("kindling-ring", "ring", `<div class="lamp"></div>`));
     add("sky", card("kindling-sky", "sky"));
+    add("faces1", card("kindling-faces-1", "faces"));
+    add("faces2", card("kindling-faces-2", "faces"));
     add("underside", card("kindling-underside", "underside", `<div class="tip"></div>`));
     add("heart", card("kindling-heart", "heart", `<div class="spark"></div>`));
     add("back", Object.assign(document.createElement("div"), { className: "black" }));
@@ -236,8 +284,23 @@ export class KindlingEnding {
     const lastLine = Math.max(...E.lineAt.filter((a) => t >= a), -99);
     this.caption.classList.toggle("fade", t > lastLine + E.lineFor);
     // Fairy Ring, then the sky crossfading over it with a slow pan.
-    op("ring", ramp(t, E.ring.in, E.ring.in + E.ring.inFor) * (1 - ramp(t, E.sky.in + E.sky.inFor, E.sky.in + E.sky.inFor + 0.1)));
-    op("sky", ramp(t, E.sky.in, E.sky.in + E.sky.inFor) * (1 - ramp(t, E.underside.in + E.underside.inFor, E.underside.in + E.underside.inFor + 0.1)));
+    const F = E.faces;
+    const overRim = E.underside.in + E.underside.inFor;
+    if (!F) {
+      op("ring", ramp(t, E.ring.in, E.ring.in + E.ring.inFor) * (1 - ramp(t, E.sky.in + E.sky.inFor, E.sky.in + E.sky.inFor + 0.1)));
+      op("sky", ramp(t, E.sky.in, E.sky.in + E.sky.inFor) * (1 - ramp(t, overRim, overRim + 0.1)));
+      op("faces1", 0);
+      op("faces2", 0);
+    } else {
+      // The new order: hard cuts between pictures, except the sky, which cross-fades in.
+      const skyFull = E.sky.in + E.sky.inFor;
+      op("faces1", t >= F.one && t < skyFull ? 1 : 0);
+      op("sky", t < F.two ? ramp(t, E.sky.in, skyFull) : 0);
+      op("faces2", t >= F.two && t < E.ring.in ? 1 : 0);
+      op("ring", t >= E.ring.in && t < overRim + 0.1 ? 1 : 0);
+      // Fairy Ring pulls away: it starts close and eases back to the whole ring.
+      e.ring!.style.transform = `scale(${E.ring.pull - (E.ring.pull - 1) * ease(ramp(t, E.ring.in, E.underside.in))})`;
+    }
     const pan = ease(ramp(t, E.sky.in, E.sky.panTo));
     const down = ease(ramp(t, E.descent.from, E.descent.to));
     e.sky!.style.transform = `translate(${(0.5 - pan) * 12}%, 0)`;

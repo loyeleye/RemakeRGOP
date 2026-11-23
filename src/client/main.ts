@@ -13,7 +13,7 @@ import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
 import { loadProgress, reach, resetProgress } from "./progress.js";
 import { StoryRoom } from "../server/story.js";
-import { ENDING, KindlingEnding, lanternCard } from "./ending.js";
+import { ENDING, ENDING_CUTS, endingCut, KindlingEnding, lanternCard, setEndingCut } from "./ending.js";
 import * as sound from "./sound.js";
 import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
@@ -1111,6 +1111,14 @@ $("walk-go").onclick = () => {
   // A jump to test a walk doesn't move saved progress on.
   jumped = true;
 };
+{
+  const pick = $<HTMLSelectElement>("ending-pick");
+  pick.replaceChildren(
+    ...ENDING_CUTS.map((c) => Object.assign(document.createElement("option"), { value: c.id, textContent: c.name })),
+  );
+  pick.value = endingCut();
+  pick.onchange = () => setEndingCut(pick.value);
+}
 $("progress-reset").onclick = () => {
   resetProgress();
   renderProgress();

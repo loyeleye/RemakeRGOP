@@ -170,6 +170,7 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #ending .c2 { background-image: radial-gradient(ellipse 70% 25% at 60% 55%, #8f88b8cc, transparent 70%), radial-gradient(ellipse 40% 15% at 10% 30%, #a29ccaaa, transparent 70%); }
 #ending .c3 { background-image: radial-gradient(ellipse 80% 30% at 45% 50%, #4a4570dd, transparent 72%); }
 #ending .black { background: #000; }
+#ending .faces { background-color: #1a1430; background-image: radial-gradient(ellipse 30% 40% at 25% 62%, #ffb24a55, transparent 70%), radial-gradient(ellipse 30% 40% at 52% 58%, #7fd3ff44, transparent 70%), radial-gradient(ellipse 30% 40% at 78% 64%, #9cf29a44, transparent 70%), linear-gradient(#0d0b22, #2a1d40); }
 /* The eye: shut, a slit, open. One eye, nothing else. */
 #ending .eye { background-color: #000; }
 #ending .eye .lid { position: absolute; left: 50%; top: 50%; width: 64vmin; height: 30vmin; transform: translate(-50%, -50%) scaleY(var(--open)); border-radius: 50%; background: radial-gradient(circle, #050308 0 18%, #6b3a10 19%, #c98a2a 30%, #3a1d08 44%, #0a0604 50%); box-shadow: 0 0 6vmin #c98a2a22; }
