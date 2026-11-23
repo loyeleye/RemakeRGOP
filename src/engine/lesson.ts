@@ -35,7 +35,7 @@ export const LESSON = {
   firstToThree: {
     title: "First to three",
     target: 3,
-    /** Rook plays a real game (medium bot) up to this score, then an easy one; first to three wins. */
+    /** Rook plays a real game (medium bot) up to this score, then dawdles more (never stands frozen); first to three wins. */
     rookStops: 2,
     ticks: 150,
     /** Games she gets: each loss moves her goalposts (best of five ... best of fifteen); losing the last ends the run. */

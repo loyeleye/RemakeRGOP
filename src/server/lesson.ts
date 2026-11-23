@@ -9,7 +9,7 @@
 // Numbers are in LESSON (src/engine/lesson.ts).
 
 import { Mover, Tile, pt, samePt, type Pt } from "../engine/board.js";
-import { BOT_EASY, BOT_MEDIUM, botCommand } from "../engine/bot.js";
+import { BOT_MEDIUM, botCommand, type BotStyle } from "../engine/bot.js";
 import { Game, Grip, Rng, TICK_MS, type Action, type Guild, type Wisp } from "../engine/game.js";
 import { LESSON } from "../engine/lesson.js";
 import { shrineById } from "../engine/maps.js";
@@ -22,6 +22,9 @@ const LUMI = "Lumi";
 const ROOK = "Rook";
 const ROUNDS = [LESSON.yourTurn, LESSON.together, LESSON.firstToThree] as const;
 const FOREVER = 1_000_000;
+
+/** Rook at two in first to three: Medium's moves, dawdling a little more, never frozen. */
+const ROOK_EASED: BotStyle = { ...BOT_MEDIUM, sloppiness: 0.45 };
 
 export class LessonRoom {
   private send: ((m: ServerMsg) => void) | null = null;
@@ -208,9 +211,9 @@ export class LessonRoom {
       else action = hers !== null ? { kind: "staff", wisp: hers } : { kind: "idle" };
     }
     if (this.round === 2) {
-      // He plays for real up to two, then eases off: still moving and pulling, but slowly, so
-      // she has time to find the tide pull and a slow player can still lose.
-      const style = g.scores[1]! < LESSON.firstToThree.rookStops ? BOT_MEDIUM : BOT_EASY;
+      // He plays for real up to two, then eases off: he keeps moving and pulling (no standing
+      // still to think, which looked like a stuck bot), just dawdling more often.
+      const style = g.scores[1]! < LESSON.firstToThree.rookStops ? BOT_MEDIUM : ROOK_EASED;
       const cmd = botCommand(g, ROOK_ID, style, () => this.rng.next());
       if (cmd) g.command(ROOK_ID, cmd);
       return;
