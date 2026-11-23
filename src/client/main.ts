@@ -1,6 +1,6 @@
 // Lanternfall client: home screen, lobby, and the round itself.
 
-import type { Pt } from "../engine/board.js";
+import { Tile, type Board, type Pt } from "../engine/board.js";
 import { PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
 import { faceOf as faceFile } from "../engine/moods.js";
@@ -1108,7 +1108,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: watchersFor(shrine.board) };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.
@@ -1136,6 +1136,23 @@ function frame(now: number) {
   }
 }
 requestAnimationFrame(frame);
+
+/** Run 1: Lumi and Hesta stand at the island's north edge, facing the camera, watching Rook's kindling. */
+function watchersFor(b: Board): DrawState["watchers"] {
+  if (!(storyRoom instanceof StoryRoom) || !room?.story) return undefined;
+  // Just past the northernmost floor tile in their column, on the island's rim.
+  const edge = (x: number) => {
+    let y = 0;
+    while (y < b.height && b.tile({ x, y }) !== Tile.Floor) y++;
+    return { x: x + 0.5, y: y - WATCH_EDGE };
+  };
+  return [
+    { cast: "lumi", ...edge(b.center.x - 2) },
+    { cast: "hesta", ...edge(b.center.x + 2) },
+  ];
+}
+/** How far past the plaza's edge (in tiles) Lumi and Hesta stand. */
+const WATCH_EDGE = 1.7;
 
 /** Story runs: who each player is, for their character model. In run 1 you are Rook. */
 function castOf(): Map<number, string> | undefined {

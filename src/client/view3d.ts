@@ -34,6 +34,8 @@ export interface DrawState {
   cast?: Map<number, string>;
   hoverWisp: number | null;
   now: number;
+  /** Story figures who aren't playing, standing on the island (tile coords) and turning to watch you. */
+  watchers?: { cast: string; x: number; y: number }[];
 }
 
 // ------------------------------------------------------------------ camera
@@ -143,7 +145,7 @@ export class Camera {
 
 type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
-const CAST_MODELS = ["rook", "lumi"] as const;
+const CAST_MODELS = ["rook", "lumi", "hesta"] as const;
 /** Each character's height against Rook's (models come in at one height). Lumi is nine. */
 const CAST_SCALE: Record<string, number> = { lumi: 0.7 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
@@ -691,6 +693,29 @@ interface WispRig {
   lastY: number;
 }
 
+/** A story character's model, at their height, lit flat-ish: the model's own colours glow a little. */
+function castBody(cast: string): THREE.Object3D | null {
+  const model = models[cast];
+  if (!model) return null;
+  const body = model.clone();
+  body.scale.multiplyScalar(1.8 * (CAST_SCALE[cast] ?? 1));
+  body.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const mats = (Array.isArray(m.material) ? m.material : [m.material]).map((mt) => {
+      const c = mt.clone() as THREE.MeshStandardMaterial;
+      if (c.map) {
+        c.emissiveMap = c.map;
+        c.emissive = new THREE.Color("#ffffff");
+        c.emissiveIntensity = CAST_FLAT;
+      }
+      return c;
+    });
+    m.material = Array.isArray(m.material) ? mats : mats[0]!;
+  });
+  return body;
+}
+
 export class World {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -709,6 +734,7 @@ export class World {
   private mossHp = new Map<number, { hp: number; hit: number }>();
   private mossBits: { obj: THREE.Mesh; v: THREE.Vector3; born: number }[] = [];
   private players = new Map<number, PlayerRig>();
+  private watchers = new Map<string, THREE.Object3D>();
   private wisps = new Map<number, WispRig>();
   private brazierLight = new THREE.PointLight("#ff9a4a", 60, 30, 1.6);
   private rim: THREE.LineSegments | null = null;
@@ -1408,26 +1434,12 @@ export class World {
     const model = models[kind];
     let body: THREE.Object3D;
     if (model) {
-      body = model.clone();
-      body.scale.multiplyScalar(1.8 * (own ? (CAST_SCALE[own] ?? 1) : 1));
+      body = own ? castBody(own)! : model.clone();
+      if (!own) body.scale.multiplyScalar(1.8);
       body.userData.real = true;
       body.userData.kind = kind;
       if (own) {
-        // Flat-ish lighting: the model's own colours glow a little.
-        body.traverse((o) => {
-          const m = o as THREE.Mesh;
-          if (!m.isMesh) return;
-          const mats = (Array.isArray(m.material) ? m.material : [m.material]).map((mt) => {
-            const c = mt.clone() as THREE.MeshStandardMaterial;
-            if (c.map) {
-              c.emissiveMap = c.map;
-              c.emissive = new THREE.Color("#ffffff");
-              c.emissiveIntensity = CAST_FLAT;
-            }
-            return c;
-          });
-          m.material = Array.isArray(m.material) ? mats : mats[0]!;
-        });
+        /* lit flat in castBody */
       } else if (rig.guild >= 2) {
         // Re-dye the borrowed robe in this guild's colour.
         const dye = new THREE.Color(GUILD_COLORS[rig.guild]);
@@ -1605,6 +1617,28 @@ export class World {
     }
     for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), this.wisps.delete(id));
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
+
+    // Watchers: story figures standing off the plaza, turning slowly to keep you in view.
+    const meNow = st.snap.players.find((p) => p.id === st.me);
+    const seenWt = new Set<string>();
+    for (const w of st.watchers ?? []) {
+      let o = this.watchers.get(w.cast);
+      if (!o) {
+        const body = castBody(w.cast);
+        if (!body) continue;
+        o = body;
+        this.scene.add(o);
+        this.watchers.set(w.cast, o);
+      }
+      seenWt.add(w.cast);
+      const wx = this.worldX(b, w.x), wz = this.worldZ(b, w.y);
+      o.position.set(wx, 0, wz);
+      if (meNow) {
+        const yaw = Math.atan2(this.worldX(b, lerp(meNow.px, meNow.x)) - wx, this.worldZ(b, lerp(meNow.py, meNow.y)) - wz);
+        o.rotation.y = lerpAngle(o.rotation.y, yaw, 0.04);
+      }
+    }
+    for (const [k, o] of this.watchers) if (!seenWt.has(k)) (this.scene.remove(o), this.watchers.delete(k));
 
     // Lamplighters.
     const seenP = new Set<number>();
