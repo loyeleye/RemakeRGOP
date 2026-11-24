@@ -111,6 +111,9 @@ const LINES: Record<string, string[]> = {
   kindling: ["The Kindling brazier. Burning steady."],
 };
 
+/** Whether a place of this kind says anything when tapped (the page gives only these a tap target). */
+export const answersTap = (kind: string) => !!LINES[kind];
+
 type Thing = { name: string; at: () => Pt };
 
 export class PondRoom {

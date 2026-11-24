@@ -15,7 +15,7 @@ import { RaceRoom } from "../server/race.js";
 import { DyingRoom } from "../server/dying.js";
 import { SieveRoom } from "../server/sieve.js";
 import { DYING } from "../engine/dying.js";
-import { PondRoom } from "../server/pond.js";
+import { PondRoom, answersTap } from "../server/pond.js";
 import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
 import { loadProgress, reach, resetProgress } from "./progress.js";
@@ -1171,7 +1171,14 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
   const pond = room.story?.pond;
   if (pond) {
     let hit: { at: Pt; d: number } | null = null;
-    const places = (shrineFor(room.shrine, room.teams).props ?? []).filter((q) => !["fence", "post", "bench"].includes(q.kind));
+    // Small things that answer (the statue, the skiff, her chair) get a finger-sized target. A house,
+    // or any place more than a tile wide and deep, counts only where it is drawn: a tap on the path
+    // beside it is a tap on the path (Ladi). Lamps, barrels and trees say nothing and take no taps.
+    const home = shrineFor(room.shrine, room.teams), props = home.props ?? [];
+    const kindAt = new Map(props.map((q) => [`${q.x},${q.y}`, q.kind]));
+    const same = (q: { x: number; y: number; kind: string }, dx: number, dy: number) => kindAt.get(`${q.x + dx},${q.y + dy}`) === q.kind;
+    const big = (q: { x: number; y: number; kind: string }) => (same(q, 1, 0) || same(q, -1, 0)) && (same(q, 0, 1) || same(q, 0, -1));
+    const places = props.filter((q) => answersTap(q.kind) && !big(q));
     const things = [...snap.players.filter((q) => q.id !== me).map((q) => ({ at: { x: q.x, y: q.y }, h: 0.9 })), { at: pond.lantern, h: 0.3 }, ...places.map((q) => ({ at: { x: q.x, y: q.y }, h: 0.6 }))];
     for (const th of things) {
       const c = cam.toScreen(th.at.x + 0.5, th.at.y + 0.5, th.h);
@@ -1179,6 +1186,10 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
       if (d <= Math.max(bigTapRadius(), cam.scale * 0.9) && (!hit || d < hit.d)) hit = { at: th.at, d };
     }
     if (hit) return { action: { kind: "walk", to: hit.at }, wisp: null };
+    // A house or other big place, tapped on the model itself: one of its tiles, and the walk tells him which side to go to.
+    const place = world?.placeAt(sx, sy);
+    const on = place === "house" ? home.house && { x: home.house.x + Math.floor(home.house.w / 2), y: home.house.y + Math.floor(home.house.h / 2) } : place ? props.find((q) => q.kind === place) : null;
+    if (on) return { action: { kind: "walk", to: { x: on.x, y: on.y } }, wisp: null };
   }
   const tile: Pt = { x: Math.floor(t.x), y: Math.floor(t.y) };
   const board = shrineFor(room.shrine, room.teams).board;

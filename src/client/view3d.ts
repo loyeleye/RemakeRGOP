@@ -1730,6 +1730,7 @@ export class World {
       const drawn = PLACE_OF[kind];
       if (drawn) {
         const slot = this.placeSlot(drawn.model, obj, at[0] + (drawn.dx ?? 0), at[1], shrine.turns?.[kind] ?? drawn.rot ?? 0, drawn.y ?? 0);
+        slot.userData.place = kind;
         if (kind === "skiff") this.moor(slot, this.landingPost ?? new THREE.Vector3(at[0] + 0.3, 0.9, at[1]));
         continue;
       }
@@ -2112,7 +2113,7 @@ export class World {
     // Rook's house (story islands): a placeholder block-out until the art thread designs it.
     if (shrine.house) {
       const hs = shrine.house;
-      this.placeSlot(hs.w >= 8 ? "rook-house-big" : "rook-house", makeHouse(hs.w, hs.h), this.worldX(b, hs.x + (hs.w - 1) / 2), this.worldZ(b, hs.y + (hs.h - 1) / 2));
+      this.placeSlot(hs.w >= 8 ? "rook-house-big" : "rook-house", makeHouse(hs.w, hs.h), this.worldX(b, hs.x + (hs.w - 1) / 2), this.worldZ(b, hs.y + (hs.h - 1) / 2)).userData.place = "house";
       this.fillHouse();
     }
 
@@ -3509,6 +3510,31 @@ export class World {
     const top = rest.find((o) => o.isMesh && o.geometry.type === "ShapeGeometry");
     // Rough chalk rock, not cut slabs, so it reads as ground nobody walks on.
     if (top) top.material = new THREE.MeshStandardMaterial({ map: tex("textures/rock-sieve-cliff.webp", 1 / 6), color: "#c9c0aa", roughness: 1 });
+  }
+
+  private tapRay = new THREE.Raycaster();
+  /**
+   * The drawn place under this point of the screen (a house, the shrine, the Kindling brazier...),
+   * by its kind on the map ("house" for Rook's), or null. Only the model as drawn counts: the
+   * ground and the path beside a house are not the house (Ladi).
+   */
+  placeAt(sx: number, sy: number): string | null {
+    this.tapRay.setFromCamera(new THREE.Vector2((sx / this.cam.w) * 2 - 1, -(sy / this.cam.h) * 2 + 1), this.cam.three);
+    // No farther than the ground: a model's footing below the grass is not a place to tap.
+    const ray = this.tapRay.ray;
+    this.tapRay.far = ray.direction.y < -1e-6 ? -ray.origin.y / ray.direction.y : Infinity;
+    const shown = (o: THREE.Object3D | null) => {
+      for (; o; o = o.parent) if (!o.visible) return false;
+      return true;
+    };
+    let best: { d: number; place: string } | null = null;
+    for (const s of this.placeSlots) {
+      const place = s.group.userData.place as string | undefined;
+      if (!place) continue;
+      const hit = this.tapRay.intersectObject(s.group, true).find((h) => (h.object as THREE.Mesh).isMesh && shown(h.object));
+      if (hit && (!best || hit.distance < best.d)) best = { d: hit.distance, place };
+    }
+    return best?.place ?? null;
   }
 
   private placeSlot(model: string, blockout: THREE.Object3D, x: number, z: number, rot = 0, y = 0) {
