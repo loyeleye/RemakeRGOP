@@ -50,10 +50,11 @@ export const DYING = {
   cloud: { start: 10.5, stepIn: 1.5, stepsAt: [46, 37, 28, 19] as const, push: 1, pushMax: 4, pushHold: 12 },
   /**
    * The bottom, scripted, however he did: the last lurch, the flame falling to `level` over `fall`
-   * ticks, the cloud closing to `radius` and (the switch below) over Rook from `blindAt`; the fire's
-   * sound stops at `fireOff`, the bell at `bellOff`, and from `orange` everything is lit from above.
+   * ticks, the cloud closing to `radius` and (the switch below) over Rook from `blindAt`. The sounds
+   * stop one at a time: the fire at `fireOff`, the crowd at `crowdOff`, the shrine's great bell at
+   * `greatOff`, and Lumi's hand bell, the last, at `bellOff`, when she looks up; from `orange` everything is lit from above.
    */
-  bottom: { ticks: 17, fall: 3, level: 2, radius: 3, blindAt: 3, fireOff: 7, crowdOff: 10, bellOff: 14, orange: 15 },
+  bottom: { ticks: 17, fall: 3, level: 2, radius: 3, blindAt: 3, fireOff: 6, crowdOff: 8, greatOff: 10, bellOff: 14, orange: 15 },
   /** Three held pictures, the cutscene thread's, for this many ticks in all; plain cards with these names until they exist. */
   stills: { ticks: 10, names: ["Faces, lit from above", "The comet over the horseshoe", "Hesta on one knee in the glass"] as const },
   /** The picture at the end of run 7, and how long it is held. */

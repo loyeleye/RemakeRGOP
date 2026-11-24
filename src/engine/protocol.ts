@@ -96,7 +96,7 @@ export interface StoryView {
    * stills, run 7, the hold after the last bank, the picture of the island clear of the cloud, and
    * the village gathering after. `cloud`: where the cloud's edge is in run 6, tiles from the
    * brazier. `lurch`: how many times the ground has lurched (down in run 6, up in run 7).
-   * `fire`, `bell`: which sounds are still going. `blind`: the cloud is over Rook and he sees no
+   * `fire`, `great` (the shrine's alarm bell), `bell` (Lumi's hand bell): which sounds are still going. `blind`: the cloud is over Rook and he sees no
    * wisp. `orange`: lit from above. `still`: which picture is held. `lift`: banks in run 7, each
    * lifting the island, of `lifts` to fill the fire; `cloudGone`: the lifts that clear the wall.
    */
@@ -107,6 +107,7 @@ export interface StoryView {
     lurch?: number;
     fire?: boolean;
     bell?: boolean;
+    great?: boolean;
     blind?: boolean;
     orange?: boolean;
     still?: number;
@@ -116,7 +117,7 @@ export interface StoryView {
     hesta?: number;
   };
   /** Run 8, the Sieve: who the keeper is (a player who stands and watches), and which wells are about to have a wisp over them. Nothing is counted on screen. */
-  sieve?: { keeper: number; /** How much of the supply has come (0 to 1): the morning's colour drains with it. */ drain?: number; /** The first fall: the tile to look down at, while nothing moves. */ look?: { x: number; y: number }; /** Wells (by their place in the shrine's list) where a wisp is about to appear: the air over them shimmers. */ warn?: number[] };
+  sieve?: { keeper: number; /** How much of the supply has come (0 to 1): the morning's colour drains with it. */ drain?: number; /** The first fall: the tile to look down at, while nothing moves. */ look?: { x: number; y: number }; /** Wells (by their place in the shrine's list) where a wisp is about to appear: the air over them shimmers. */ warn?: number[]; /** The first pull: the rings closing in (`wind`), then everything holding (`hold`), with ticks left and the wisps that jumped. */ pull?: { phase: "wind" | "hold"; left: number; moved: number[] } };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */
   /** kitchen: how many times Rook has gone in his door this walk (from walk 2); a rise opens the kitchen still. */
   pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "night" | "dusk"; kitchen?: number };

@@ -604,12 +604,66 @@ export function fireBed(flame: number | null) {
   }
 }
 
-/** The alarm: Lumi's bell, struck hard, once. She rings it steadily through run 6, and it is the last sound left. */
-export function alarmBell(gain = 0.34) {
+/** Everything drops out for `sec` seconds, at once, then comes back. (Run 8's pull.) */
+export function hush(sec: number) {
+  if (!ctx || !master || muted) return;
+  const t = ctx.currentTime;
+  master.gain.cancelScheduledValues(t);
+  master.gain.setValueAtTime(0.0001, t);
+  master.gain.setValueAtTime(0.0001, t + sec);
+  master.gain.linearRampToValueAtTime(SOUND.volume, t + sec + 0.4);
+}
+
+/** Run 8's pull, placeholder: a low suck of air as the rings close, rising to the snap. */
+export function pullWind(sec: number) {
   const s = out();
   if (!s) return;
-  strike(784, gain, -0.25, HANDBELL);
-  strike(1175, gain * 0.35, -0.25, HANDBELL);
+  const { c, o } = s;
+  const len = Math.ceil(c.sampleRate * sec);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const f = c.createBiquadFilter();
+  f.type = "bandpass";
+  f.Q.value = 3;
+  f.frequency.setValueAtTime(900, c.currentTime);
+  f.frequency.exponentialRampToValueAtTime(120, c.currentTime + sec);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.35, c.currentTime + sec);
+  src.connect(f).connect(g).connect(o);
+  src.start();
+}
+
+/** The snap: one dull knock. */
+export function pullSnap() {
+  if (!out()) return;
+  thump(0.6);
+  noise(0.25, "lowpass", 200, 0.18);
+}
+
+/**
+ * The shrine's great bell, rung for an alarm: a heavy bronze strike with a long hum and a beat in
+ * it, as loud as anything in the game. Through the whole of run 6.
+ */
+const GREAT: [number, number, number][] = [
+  [0.5, 0.9, 5.5],
+  [1, 1, 4.2],
+  [1.19, 0.55, 3.2],
+  [1.5, 0.45, 2.4],
+  [2, 0.4, 1.8],
+  [2.52, 0.25, 1.2],
+  [3.01, 0.18, 0.9],
+];
+export function greatBell() {
+  const s = out();
+  if (!s) return;
+  strike(196, 0.42, 0.15, GREAT);
+  strike(197.6, 0.2, -0.15, GREAT.slice(0, 3));
+  thump(0.35);
+  noise(0.12, "bandpass", 2600, 0.06, 0.1);
 }
 
 /** The ground lurches: the island's timbers and rock groan, and something heavy shifts. Up (run 7) it is shorter and rises. */

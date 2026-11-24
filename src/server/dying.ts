@@ -539,6 +539,7 @@ export class DyingRoom {
         ...(after ? { lift: g.scores[0]!, lifts: Math.ceil((100 - DYING.seven.flame) / DYING.seven.feed) } : { cloud: low || this.part === "stills" ? B.radius : this.cloud() }),
         fire: this.part === "six" || (low && n < B.fireOff) || after,
         bell: this.part === "six" || (low && n < B.bellOff),
+        great: this.part === "six" || (low && n < B.greatOff),
         ...(this.blind() || this.part === "stills" ? { blind: true } : {}),
         ...((low && n >= B.orange) || this.part === "stills" ? { orange: true } : {}),
         ...(this.part === "stills" ? { still: Math.min(2, Math.floor((this.stillTick * 3) / DYING.stills.ticks)) } : {}),

@@ -103,10 +103,11 @@ describe("the falling law", () => {
   });
 });
 
-function play(stand: Stand, seed: number, max = 1500) {
+function play(stand: Stand, seed: number, max = 1500, pull = true) {
   let s = seed;
   const msgs: ServerMsg[] = [];
   const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), stand);
+  room.pullOn = pull;
   room.connect((m) => msgs.push(m)).message(JSON.stringify({ t: "hello", name: "Rook" }));
   let n = 0;
   while (room.state.phase !== "results" && n < max) room.onTick(), n++;
@@ -202,5 +203,82 @@ describe("Run 8: a harder job, on the Sieve", () => {
     expect(room.restarts).toBeGreaterThanOrEqual(2);
     expect(said).toContain("Again, Rook.");
     expect(room.state.game.scores[0]).toBe(0);
+  });
+
+  it("the first pull: after she says they don't wander, the rings close in, loose wisps jump a tile toward their nearest well, and everything holds while she says they never did", () => {
+    let s = 21;
+    const msgs: ServerMsg[] = [];
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "hold");
+    room.connect((m) => msgs.push(m)).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const said = () => msgs.flatMap((m) => (m.t === "say" ? m.lines.map((l) => l.text) : []));
+    while (room.state.pull.phase !== "wind" && room.state.phase === "playing" || room.state.phase === "countdown") room.onTick();
+    expect(room.state.pull.phase).toBe("wind");
+    expect(said()).toContain("They don't wander. Mind the wells and you'll be fine.");
+    expect(said()).toContain("A tired one drops. Straight down, right where it hangs. Knock it and it's right again.");
+    expect(said()).not.toContain("If I leave one, it goes down. If I knock it, it comes up. For a while.");
+    const g = room.state.game, c = g.board.center;
+    let winds = 0;
+    const view = () => (msgs.filter((m) => m.t === "room").pop() as Extract<ServerMsg, { t: "room" }>).room.story!.sieve!;
+    while (room.state.pull.phase === "wind") (winds++, expect(view().pull?.phase).toBe("wind"), room.onTick());
+    expect(winds).toBe(SIEVE.pull.windTicks);
+    expect(room.state.pull.phase).toBe("hold");
+    // Each one that moved went one tile, toward its nearest well.
+    const moved = view().pull!.moved;
+    expect(moved.length).toBeGreaterThan(0);
+    for (const id of moved) {
+      const w = g.wisps[id]!;
+      expect(Math.max(Math.abs(w.pos.x - w.prev.x), Math.abs(w.pos.y - w.prev.y))).toBe(1);
+      const near = [...SV_WELLS].sort((a, b) => Math.hypot(c.x + a.x - w.prev.x, c.y + a.y - w.prev.y) - Math.hypot(c.x + b.x - w.prev.x, c.y + b.y - w.prev.y))[0]!;
+      expect(Math.hypot(c.x + near.x - w.pos.x, c.y + near.y - w.pos.y)).toBeLessThan(Math.hypot(c.x + near.x - w.prev.x, c.y + near.y - w.prev.y));
+    }
+    // Everything holds: nothing moves, nothing falls, the clock stands.
+    const at = g.wisps.map((w) => ({ ...w.pos, h: g.height.get(w.id) })), tick = g.tick;
+    for (let i = 0; i < SIEVE.pull.holdTicks - 1; i++) room.onTick();
+    expect(g.tick).toBe(tick);
+    expect(g.wisps.map((w) => ({ ...w.pos, h: g.height.get(w.id) }))).toEqual(at);
+    expect(said()).toContain("They don't do that. They've never done that.");
+    // Then play goes on, and there is no second pull.
+    room.onTick();
+    expect(room.state.pull.phase).toBe("done");
+    while (room.state.phase === "playing" && g.tick < tick + 200) {
+      room.onTick();
+      expect(room.state.pull.phase).toBe("done");
+    }
+  });
+
+  it("the pull spares a wisp under his staff in the wind-up", () => {
+    let s = 21;
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "hold");
+    const conn = room.connect(() => {});
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    while (room.state.pull.phase !== "wind" && room.state.phase === "playing" || room.state.phase === "countdown") room.onTick();
+    const g = room.state.game;
+    const loose = g.wisps.filter((w) => !g.away.has(w.id) && !g.board.inBankZone(w.pos) && w.holder === null);
+    const pos = new Map(loose.map((w) => [w.id, { ...w.pos }]));
+    // Every loose one touched: none should move.
+    for (const w of loose) room.state.pull.spared.add(w.id);
+    while (room.state.pull.phase === "wind") room.onTick();
+    for (const w of loose) if (room.state.pull.spared.has(w.id)) expect(room.state.pull.moved).not.toContain(w.id);
+    expect(pos.size).toBeGreaterThan(0);
+  });
+
+  it("with the pull switched off it plays as before: her old line, no pull", () => {
+    const { room, said } = play("hold", 21, 1500, false);
+    expect(room.pulledAt).toBe(-1);
+    expect(said).not.toContain("They don't do that. They've never done that.");
+    expect(said).toContain("If I leave one, it goes down. If I knock it, it comes up. For a while.");
+  });
+
+  it("the pull leaves ten within reach: a juggler and most holders still pass", () => {
+    let pass = 0;
+    for (const seed of [3, 44, 501, 77, 12]) {
+      const { room } = play("hold", seed);
+      expect(room.pulledAt).toBeGreaterThanOrEqual(0);
+      if (room.state.phase === "results") pass++;
+    }
+    expect(pass).toBeGreaterThanOrEqual(4);
+    const j = play("juggle", 8);
+    expect(j.room.state.phase).toBe("results");
+    expect(j.room.restarts).toBe(0);
   });
 });

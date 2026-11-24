@@ -134,7 +134,7 @@ function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | "pond" = 1,
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 8 ? new SieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
@@ -775,6 +775,40 @@ let dyingPart = "";
 let dyingLurch = 0;
 let dyingStill = -1;
 
+/** Run 8 with the first pull (a test); ?nopull=1 in the address plays it as v108 had it. */
+function sieveRoom() {
+  const r = new SieveRoom();
+  if (new URLSearchParams(location.search).has("nopull")) r.pullOn = false;
+  return r;
+}
+
+/** Run 8's pull: the sound of the wind-up, the snap and the silence; the eye opens out to the whole island while it holds, and comes back. */
+let pullSeen = "";
+let pullView: { scale: number; follow: boolean; k: number } | null = null;
+function stepPull(pull: NonNullable<StoryView["sieve"]>["pull"], board: Board) {
+  const ph = pull?.phase ?? "";
+  if (ph !== pullSeen) {
+    if (ph === "wind") sound.pullWind((pull!.left * tickMs) / 1000);
+    if (ph === "hold") {
+      sound.pullSnap();
+      setTimeout(() => sound.hush((pull!.left * tickMs) / 1000 - 0.15), 150);
+      sound.windOff(0.1);
+    }
+    if (pullSeen === "hold" && room?.story?.sieve) sound.wind(1.5);
+    pullSeen = ph;
+  }
+  const open = ph === "hold";
+  if (!pullView && !open) return;
+  if (!pullView) (pullView = { scale: cam.scale, follow: cam.follow, k: 0 }), (cam.follow = false);
+  const V = pullView;
+  V.k += ((open ? 1 : 0) - V.k) * 0.12;
+  const whole = cam.fitScale(board) * 0.92;
+  cam.scale = V.scale + (whole - V.scale) * V.k;
+  cam.cx += (board.width / 2 - cam.cx) * 0.12 * V.k;
+  cam.cy += (board.height / 2 + 0.5 - cam.cy) * 0.12 * V.k;
+  if (!open && V.k < 0.02) (cam.scale = V.scale), (cam.follow = V.follow), (pullView = null);
+}
+
 /** Runs 6 and 7 with Ladi's switches: add ?calls=1 (Lumi calls), ?noback=1 (her line gives nothing back) or ?nocloud=1 (the cloud never reaches Rook) to the address to try the other way. */
 function dyingRoom() {
   const r = new DyingRoom();
@@ -801,12 +835,18 @@ function dyingSound(d: NonNullable<StoryView["dying"]>, s: GameSnapshot) {
     dyingLurch = d.lurch ?? 0;
     sound.lurchGroan(after);
   }
-  if (d.bell && s.tick % 2 === 0) sound.alarmBell();
+  // The shrine's great bell, every four ticks; Lumi's hand bell at her post inside it, between its strokes.
+  if (d.great && s.tick % 4 === 0) sound.greatBell();
+  if (d.bell && s.tick % 2 === 1) sound.handBell(1);
+  // Run 7 ends on her ordinary three rings, once the island is clear.
+  if (d.part === "after" && dyingRung !== d.part) sound.handBell(3);
+  dyingRung = d.part;
   if (d.orange && d.part === "bottom" && !dyingOrange) sound.cometFall((DYING.bottom.ticks - DYING.bottom.orange + 3) * (tickMs / 1000));
   dyingOrange = !!d.orange;
   sound.fireBed(d.fire ? flame : null);
 }
 let dyingOrange = false;
+let dyingRung = "";
 
 /** Run 6: the eye comes in with the cloud, so that by the bottom the fire and the people round it fill the picture; after the stills it goes back out to the whole ground. */
 let dyingZoomed = false;
@@ -1469,6 +1509,7 @@ function frame(now: number) {
   if (lookBeat) stepLook(now, shrine.props ?? [], mine);
   stepWellLook(room?.story?.sieve?.look);
   dyingCard(room?.story?.dying);
+  if (room?.story?.sieve || pullView) stepPull(room?.story?.sieve?.pull, shrine.board);
   dyingZoom(room?.story?.dying, shrine.board);
   if (cam.follow && mine) {
     if (cam.compact || cam.zoomedIn) {

@@ -43,6 +43,15 @@ export const SIEVE = {
   /** The first wisp, which cannot be saved: its height as the run opens, over the well furthest from Rook. */
   firstHeight: 9,
   /** Where Rook starts, and where the keeper stands and watches. */
+/**
+   * The first pull (gameplay/run8-rework-brief.md, update of 24 Nov, a test on a switch): the rings
+   * on every well close in for `windTicks`; then every loose wisp jumps one tile toward its nearest
+   * well, and play holds for `holdTicks` with the whole island in view and no sound. It is staged
+   * for when one of his wisps is within `nearBank` tiles of the bank and loose (touched within
+   * `hisWithin` ticks, not under his staff); by the time half the supply has come, it fires anyway.
+   * Once a game. `on` false plays the run as it was (v108).
+   */
+  pull: { on: true as boolean, windTicks: 3, holdTicks: 3, nearBank: 2, hisWithin: 12 },
   rook: [0, 4] as const,
   keeper: [5, 12] as const,
 } as const;

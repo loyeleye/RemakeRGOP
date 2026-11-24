@@ -46,6 +46,15 @@ export class SieveRoom {
   private lookLeft = 0;
   private look: Pt | null = null;
   private warned = new Map<number, { at: Pt; well: number; height: number }>();
+  /** The first pull: waiting, winding up (ticks left), holding (ticks left), or done. Wisps touched in the wind-up are spared. Once a game, restarts included. */
+  private pull: { phase: "wait" | "wind" | "hold" | "done"; left: number; spared: Set<number>; moved: number[] } = { phase: "wait", left: 0, spared: new Set(), moved: [] };
+  /** The first pull, on its switch (SIEVE.pull.on; the page turns it off with ?nopull=1). */
+  pullOn: boolean = SIEVE.pull.on;
+  /** For the measurements: the tick the pull fired, whether it was staged on a near bank, and how many wisps it moved and sent over a well. */
+  pulledAt = -1;
+  pullStaged = false;
+  pullMoved = 0;
+  pullOnWell = 0;
   /** For the measurements: wisps lost (the first not counted), how many of those over a well, restarts, and the ticks the last try took. */
   lost = 0;
   lostWell = 0;
@@ -91,7 +100,7 @@ export class SieveRoom {
         if (this.phase === "results") this.begin();
         return;
       case "act": {
-        if (this.phase !== "playing" || this.lookLeft > 0) return;
+        if (this.phase !== "playing" || this.lookLeft > 0 || this.pull.phase === "hold") return;
         this.game.command(YOU, { action: cleanAction(msg.action, this.game), toggleRun: !!msg.toggleRun, toggleMode: !!msg.toggleMode });
         return;
       }
@@ -104,6 +113,10 @@ export class SieveRoom {
     this.said = new Set();
     this.lines = [];
     this.restarts = 0;
+    this.pull = { phase: this.pullOn ? "wait" : "done", left: 0, spared: new Set(), moved: [] };
+    this.pulledAt = -1;
+    this.pullStaged = false;
+    this.pullMoved = this.pullOnWell = 0;
     this.endClock();
     this.start(true);
     this.stop = this.clock.every(TICK_MS, () => this.onTick());
@@ -225,13 +238,29 @@ export class SieveRoom {
     if (this.lookLeft > 0) {
       if (--this.lookLeft === 0) {
         this.look = null;
-        if (!this.said.has("there")) (this.said.add("there"), this.say(KEEPER, "There. That's what I sent for you about.", { player: KEEPER_ID }, "key"));
+        if (!this.said.has("there")) {
+          this.said.add("there");
+          this.say(KEEPER, "There. That's what I sent for you about.", { player: KEEPER_ID }, "key");
+          if (this.pullOn) {
+            // Calm, so the pull can answer her. These take the place of her old line about knocking them up.
+            this.said.add("knock");
+            this.said.add("calm");
+            this.say(KEEPER, "A tired one drops. Straight down, right where it hangs. Knock it and it's right again.", { player: KEEPER_ID }, "key");
+            this.say(KEEPER, "They don't wander. Mind the wells and you'll be fine.", { player: KEEPER_ID }, "key");
+          }
+        }
       }
+      return;
+    }
+    // The pull has happened: everything holds, in silence, while she says it.
+    if (this.pull.phase === "hold") {
+      if (--this.pull.left <= 0) (this.pull.phase = "done"), (this.pull.moved = []);
       return;
     }
     if (this.stand && this.stand !== "idle") this.steer();
     g.step();
     this.ticks = g.tick;
+    this.stepPull();
     for (const f of g.falls) {
       if (f.wisp === this.doomed) {
         this.doomed = g.pastSaving = null;
@@ -273,6 +302,74 @@ export class SieveRoom {
       this.lines.push({ who: HESTA, text: "Again, Rook." });
       this.start(false);
     }
+  }
+
+  /** The first pull: staged on his near bank (or half way through the supply), wound up, then the snap. */
+  private stepPull() {
+    const g = this.game, P = SIEVE.pull, p = this.pull;
+    if (p.phase === "wait") {
+      // Not before she has told him they don't wander, and he has had time to read it.
+      if (!this.said.has("calm") || this.talking() || this.doomed !== null) return;
+      const near = this.nearBank();
+      if (near === null && this.arrived < Math.ceil(SIEVE.supply / 2)) return;
+      this.pullStaged = near !== null;
+      p.phase = "wind";
+      p.left = P.windTicks;
+      p.spared = new Set();
+      return;
+    }
+    if (p.phase !== "wind") return;
+    // Whatever his staff is on in the wind-up stays where it is.
+    for (const w of g.wisps) if (w.touched || g.players.some((q) => q.id === YOU && q.beam === w.id)) p.spared.add(w.id);
+    if (--p.left > 0) return;
+    this.snap();
+    p.phase = "hold";
+    p.left = P.holdTicks;
+    this.pulledAt = g.tick;
+    this.player(YOU).action = { kind: "idle" };
+    this.queue = [];
+    this.busyUntil = 0;
+    this.say(KEEPER, "They don't do that. They've never done that.", { player: KEEPER_ID }, "key");
+  }
+
+  /** One of his wisps, loose, a move from the bank: its id, or null. */
+  private nearBank(): number | null {
+    const g = this.game, P = SIEVE.pull, b = g.board;
+    const rook = this.player(YOU);
+    for (const w of g.wisps) {
+      if (g.away.has(w.id) || w.id === this.doomed || b.inBankZone(w.pos) || w.touched || rook.beam === w.id) continue;
+      if (g.tick - (this.touchedAt.get(w.id) ?? -99) > P.hisWithin) continue;
+      for (let dy = -P.nearBank; dy <= P.nearBank; dy++)
+        for (let dx = -P.nearBank; dx <= P.nearBank; dx++) if (b.inBankZone(pt(w.pos.x + dx, w.pos.y + dy))) return w.id;
+    }
+    return null;
+  }
+
+  /** Every loose wisp jumps one tile toward its nearest well. One that lands over a well is over a well, as any other. */
+  private snap() {
+    const g = this.game, b = g.board, c = b.center, p = this.pull;
+    const taken = new Set(g.wisps.filter((w) => !g.away.has(w.id)).map((w) => `${w.pos.x},${w.pos.y}`));
+    p.moved = [];
+    for (const w of g.wisps) {
+      if (g.away.has(w.id) || p.spared.has(w.id) || w.holder !== null) continue;
+      const k = [...SV_WELLS].sort((a, z) => Math.hypot(c.x + a.x - w.pos.x, c.y + a.y - w.pos.y) - Math.hypot(c.x + z.x - w.pos.x, c.y + z.y - w.pos.y))[0]!;
+      const to = pt(w.pos.x + Math.sign(Math.round(c.x + k.x) - w.pos.x), w.pos.y + Math.sign(Math.round(c.y + k.y) - w.pos.y));
+      if ((to.x === w.pos.x && to.y === w.pos.y) || !b.inside(to) || !b.passable(to, Mover.Wisp) || taken.has(`${to.x},${to.y}`)) continue;
+      taken.delete(`${w.pos.x},${w.pos.y}`);
+      taken.add(`${to.x},${to.y}`);
+      w.prev = w.pos;
+      w.pos = to;
+      w.target = null;
+      w.skate = null;
+      w.rimTicks = 0;
+      p.moved.push(w.id);
+      if (b.tile(to) === Tile.Well) this.pullOnWell++;
+    }
+    this.pullMoved = p.moved.length;
+  }
+
+  private talking() {
+    return this.queue.length > 0 || this.game.tick < this.busyUntil;
   }
 
   private steer() {
@@ -353,7 +450,7 @@ export class SieveRoom {
   }
 
   storyView(): StoryView {
-    return { run: SIEVE.run, movement: 0, title: "", ring: null, mark: null, kes: 0, rival: null, note: "", end: this.end, sieve: { keeper: KEEPER_ID, drain: Math.max(0, Math.min(1, (this.arrived - SIEVE.onBoard) / (SIEVE.supply - SIEVE.onBoard))), ...(this.look ? { look: { x: this.look.x, y: this.look.y } } : {}), ...(this.warned.size ? { warn: [...new Set([...this.warned.values()].map((q) => q.well))] } : {}) } };
+    return { run: SIEVE.run, movement: 0, title: "", ring: null, mark: null, kes: 0, rival: null, note: "", end: this.end, sieve: { keeper: KEEPER_ID, drain: Math.max(0, Math.min(1, (this.arrived - SIEVE.onBoard) / (SIEVE.supply - SIEVE.onBoard))), ...(this.look ? { look: { x: this.look.x, y: this.look.y } } : {}), ...(this.warned.size ? { warn: [...new Set([...this.warned.values()].map((q) => q.well))] } : {}), ...(this.pull.phase === "wind" || this.pull.phase === "hold" ? { pull: { phase: this.pull.phase, left: this.pull.left, moved: this.pull.moved } } : {}) } };
   }
 
   view(): RoomView {
@@ -385,7 +482,7 @@ export class SieveRoom {
 
   /** For tests. */
   get state() {
-    return { phase: this.phase, game: this.game, end: this.end, said: this.said, doomed: this.doomed, arrived: this.arrived, warned: this.warned };
+    return { phase: this.phase, game: this.game, end: this.end, said: this.said, doomed: this.doomed, arrived: this.arrived, warned: this.warned, pull: this.pull };
   }
 }
 

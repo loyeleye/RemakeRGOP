@@ -48,7 +48,7 @@ export interface DrawState {
   light?: string;
   /** Runs 6 and 7, the dying brazier (see StoryView.dying). */
   /** Run 8, the Sieve (see StoryView.sieve). */
-  sieve?: { warn?: number[]; drain?: number; look?: { x: number; y: number } };
+  sieve?: { warn?: number[]; drain?: number; look?: { x: number; y: number }; pull?: { phase: "wind" | "hold"; left: number; moved: number[] } };
   dying?: NonNullable<import("../engine/protocol.js").StoryView["dying"]>;
   /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
   walk?: number;
@@ -2650,6 +2650,21 @@ export class World {
       return;
     }
     this.sieveOn = true;
+    // The pull's wind-up: every well's ring closes inward, all at once, and holds small and bright.
+    const pull = sv.pull;
+    if (pull && !this.pullFx) this.pullFx = { at: time, phase: pull.phase };
+    if (pull && this.pullFx && this.pullFx.phase !== pull.phase) this.pullFx = { at: time, phase: pull.phase };
+    if (!pull) this.pullFx = null;
+    if (this.pullFx) {
+      const wind = this.pullFx.phase === "wind", k = Math.min(1, (time - this.pullFx.at) / 1.8);
+      this.wellRings.forEach((r) => {
+        const m = r.material as THREE.MeshBasicMaterial;
+        r.visible = true;
+        m.opacity = wind ? 0.35 + 0.5 * k : 0.9 * (1 - Math.min(1, (time - this.pullFx!.at) / 1.6));
+        r.scale.setScalar(wind ? 1.9 - 1.3 * k * k : 0.6);
+      });
+      return this.lightSieve(sv);
+    }
     this.wellRings.forEach((r, i) => {
       const on = !!sv.warn?.includes(i);
       const m = r.material as THREE.MeshBasicMaterial;
@@ -2657,6 +2672,10 @@ export class World {
       r.visible = m.opacity > 0.01;
       r.scale.setScalar(0.9 + 0.1 * Math.sin(time * 5 + i * 2));
     });
+    this.lightSieve(sv);
+  }
+  private pullFx: { at: number; phase: string } | null = null;
+  private lightSieve(sv: NonNullable<DrawState["sieve"]>) {
     // Warm morning to a flat grey-white: the sun cools and weakens, the sky's own light makes up the brightness.
     const k = sv.drain ?? 0;
     this.sun.color.set(SIEVE_LIGHT.sun[0]).lerp(SIEVE_COLD.sun, k);

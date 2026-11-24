@@ -282,9 +282,13 @@ describe("runs 6 and 7, the dying brazier", () => {
       expect(low.length).toBe(B.ticks);
       expect(low.every((v) => v!.cloud === B.radius)).toBe(true);
       const first = (k: "blind" | "orange") => low.findIndex((v) => v![k]);
-      const lastOn = (k: "fire" | "bell") => low.map((v) => !!v![k]).lastIndexOf(true);
+      const lastOn = (k: "fire" | "bell" | "great") => low.map((v) => !!v![k]).lastIndexOf(true);
       expect(first("blind")).toBe(B.blindAt);
       expect(lastOn("fire")).toBe(B.fireOff - 1);
+      expect(lastOn("great")).toBe(B.greatOff - 1);
+      expect(B.fireOff).toBeLessThan(B.crowdOff);
+      expect(B.crowdOff).toBeLessThan(B.greatOff);
+      expect(B.greatOff).toBeLessThan(B.bellOff);
       // The bell is the last sound, alone, and stops before the light.
       expect(lastOn("bell")).toBe(B.bellOff - 1);
       expect(first("orange")).toBe(B.orange);
