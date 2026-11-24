@@ -786,6 +786,12 @@ export function alarmRumble(sec: number) {
   rush(sec, "lowpass", 95, 0.6, 0.5, 0.9);
 }
 
+/** Rock breaking off the island's underside: a dry crack and the weight of it, from `pan` (-1 left to 1 right). */
+export function rockCrack(pan = 0) {
+  noise(0.09, "bandpass", 1400 + Math.random() * 900, 0.07, pan);
+  noise(0.1, "lowpass", 260, 0.22, pan);
+}
+
 /** A cup knocking on its hook. */
 export function cupClink() {
   strike(1750 + Math.random() * 500, 0.035, Math.random() * 0.6 - 0.3, [[1, 1, 0.11], [2.32, 0.4, 0.06], [3.9, 0.15, 0.04]]);

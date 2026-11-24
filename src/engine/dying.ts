@@ -77,20 +77,45 @@ export const DYING = {
     shots: [
       { id: "kitchen", name: "The kitchen, dark", ms: 3000, push: 0.03 },
       { id: "falls", name: "From Rook's door: the falls", ms: 3000, push: 0.08 },
-      { id: "lake", name: "Down the lake", ms: 4000, push: 0.04 },
-      { id: "side", name: "The island from the side", ms: 4500, push: 0 },
+      { id: "brazier", name: "The Kindling ground, close", ms: 5000, push: 0.05, at: [512, 300] },
+      { id: "descent", name: "The island going down", ms: 6000, push: 0 },
       { id: "lumi", name: "Lumi at the door", ms: 3000, push: 0.03 },
-    ] as readonly { id: "kitchen" | "falls" | "lake" | "side" | "lumi"; name: string; ms: number; push: number }[],
+    ] as readonly { id: "kitchen" | "falls" | "brazier" | "descent" | "lumi"; name: string; ms: number; push: number; at?: readonly [number, number] }[],
     fadeMs: 500, bellFromMs: 300, bellEveryMs: 2400, bellFar: 0.6, bellNear: 1, lineAfterMs: 300,
     /** The board is asked for this long before the end, under the last shot, so building it holds nothing up. */
     readyMs: 2200,
     line: { who: "Lumi", text: "Dad. The falls." },
     /** The lamp and the three cups (where each hangs on the 1024 by 768 picture): they start still and build over `build` seconds to `swing` degrees either way, each at its own rate (swings a second). Cups knock at `clinks` (ms). */
     kitchen: { lamp: [403, 40] as const, cups: [[338, 245], [405, 245], [463, 245]] as const, build: 0.6, swing: 9, rates: [1.7, 2.05, 1.85] as const, lampSwing: 5, lampRate: 1.1, clinks: [700, 1150, 1900, 2450] as const },
-    /** The brazier's fire, by seconds into the shot: it flickers tall and middling for a second, then is low with a brief catch now and then, and ends low. */
-    lake: { fire: [[0, "tall"], [0.16, "mid"], [0.34, "tall"], [0.48, "mid"], [0.66, "tall"], [0.8, "mid"], [1, "low"], [1.55, "mid"], [1.68, "low"], [2.4, "mid"], [2.5, "low"], [3.2, "mid"], [3.27, "low"]] as readonly (readonly [number, "tall" | "mid" | "low"])[] },
-    /** The heart flickers for `flickerMs` (how dim, 0 bright to 1 dim, along the way) and ends dim; then the cloud in front slides up from `from` to `to` (pixels down the picture) over `riseMs`. */
-    side: { flickerMs: 2000, riseMs: 2500, from: 60, to: -120, flicker: [[0, 0], [0.1, 0.9], [0.18, 0.15], [0.32, 1], [0.4, 0.1], [0.52, 0.8], [0.6, 0.3], [0.74, 1], [0.82, 0.45], [0.92, 1], [1, 1]] as readonly (readonly [number, number])[] },
+    /**
+     * The brazier, close: how high its fire is by seconds into the shot (3 strong, 2 low, 1 embers, 0 out;
+     * the four pictures cross-fade between marks). `sparks`: `count` of them rise `rise` pixels from
+     * `at` (the bowl's mouth, give or take `spread`), fewer and duller until none is born after `until` seconds.
+     */
+    brazier: {
+      fire: [[0, 3], [0.9, 3], [1.1, 2], [1.35, 3], [1.6, 2], [1.8, 3], [2.1, 2], [2.6, 2], [2.9, 1], [3.1, 2], [3.5, 1], [4.2, 0], [5, 0]] as readonly (readonly [number, number])[],
+      sparks: { at: [512, 262] as const, spread: 42, rise: 150, until: 3.5, count: 46 },
+    },
+    /**
+     * The island going down. Its heart flickers for `heartMs` (how dim along the way) and is dead. From
+     * `dropAt` seconds it drops `drop` pixels by the shot's end, shaking by `shake`, and lets go of
+     * `rocks` rocks from its underside (a point `tip` pixels below its top in the middle, rising by
+     * `slope` to either side, `half` wide) until `rocksUntil`. The clouds, back to front (the island
+     * and its rocks are behind all but the first): each at `scale`, its top at `y`, starting at `x`
+     * and drifting `speed` pixels a second.
+     */
+    descent: {
+      heartMs: 1800, dropAt: 1.6, drop: 300, shake: 4, rocks: 16, rocksUntil: 5.2, gravity: 620,
+      heart: [[0, 0], [0.1, 0.9], [0.18, 0.15], [0.32, 1], [0.4, 0.1], [0.52, 0.8], [0.6, 0.3], [0.74, 1], [0.82, 0.45], [0.92, 1], [1, 1]] as readonly (readonly [number, number])[],
+      island: { size: [934, 632] as const, scale: 0.8, top: 18 },
+      under: { tip: 470, slope: 0.75, half: 190 },
+      cloudSize: [1536, 640] as const,
+      clouds: [
+        { file: "cloud-back", scale: 1.2, y: 250, x: -340, speed: -10 },
+        { file: "cloud-mid", scale: 1.2, y: 330, x: -620, speed: 22 },
+        { file: "cloud-front", scale: 1.4, y: 470, x: -420, speed: -45 },
+      ] as const,
+    },
   },
   /** What Ladi ruled on 24 Nov, each on a switch so the other way can be tried. */
   switches: {

@@ -1,8 +1,8 @@
 // The alarm before run 6 (story/runs6-7-reimagined.md, section 1): five short shots, full screen,
 // about seventeen seconds in all, and none of them still (Ladi, 24 Nov). The kitchen's cups and lamp
-// swing; the falls drop into the cloud; down the lake the brazier's fire fails while the village
-// run; from the side the island's heart flickers and the cloud comes up over it; Lumi is at the
-// door. The shrine's great bell tolls through all five. The layers are the gameplay thread's drafts
+// swing; the falls drop into the cloud; close on the Kindling ground the brazier's fire fails and
+// its sparks dim; the island's heart dies and it goes down through the cloud, shedding rock; Lumi
+// is at the door. The shrine's great bell tolls through all five. The layers are the gameplay thread's drafts
 // (project files gameplay/stills/run6/alarm-layers/), picked up by name from public/stills/alarm/,
 // on a 1024 by 768 stage. The order, the lengths and every other number are in DYING.alarm.
 
@@ -83,35 +83,92 @@ export function alarmCards(ready: () => void, then: () => void) {
       cam.append(layer("alarm/alarm2-falls"));
       return { start: (at, sec) => at(0, () => sound.alarmFalls(sec)) };
     },
-    // Three frames in which only the brazier differs: it gutters, and ends low. The village are heard.
-    lake(cam) {
-      const frames = { low: layer("alarm/alarm3-fire-low"), mid: layer("alarm/alarm3-fire-mid"), tall: layer("alarm/alarm3-fire-tall") };
-      cam.append(frames.low, frames.mid, frames.tall);
+    // Close on the Kindling ground: four frames of the one fire, strong, low, embers and out, cross-faded
+    // down a list of marks, with sparks over the bowl that thin and go dull. The village are heard.
+    brazier(cam) {
+      const B = A.brazier;
+      const frames = ["out", "embers", "low", "strong"].map((f) => layer(`alarm/alarm3-close-${f}`));
+      const cv = document.createElement("canvas");
+      cv.width = W;
+      cv.height = H;
+      const g = cv.getContext("2d");
+      cam.append(...frames, cv);
+      // The same sparks every time: each has its moment, its place over the bowl and how long it lives.
+      let seed = 7;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+      const K = B.sparks;
+      const sparks = Array.from({ length: K.count }, () => ({ born: K.until * (1 - Math.sqrt(1 - rnd())), x: K.at[0] + (rnd() * 2 - 1) * K.spread, life: 0.8 + rnd() * 0.7, sway: rnd() * 6.3, size: 1.6 + rnd() * 2.2 }));
       return {
         start: (at, sec) => at(0, () => sound.alarmChatter(sec)),
         step(t) {
-          let now: keyof typeof frames = "tall";
-          for (const [s, f] of A.lake.fire) if (t >= s) now = f;
-          frames.mid.style.opacity = now === "low" ? "0" : "1";
-          frames.tall.style.opacity = now === "tall" ? "1" : "0";
+          const level = along(B.fire, t);
+          frames.forEach((f, i) => i && (f.style.opacity = Math.max(0, Math.min(1, level - (i - 1))).toFixed(2)));
+          if (!g) return;
+          g.clearRect(0, 0, W, H);
+          for (const p of sparks) {
+            const a = (t - p.born) / p.life;
+            if (a < 0 || a > 1) continue;
+            // Bright and yellow while the fire is up; fewer, redder and dimmer as it goes.
+            const dull = Math.min(1, p.born / K.until);
+            g.globalAlpha = (1 - a) * (1 - 0.55 * dull);
+            g.fillStyle = `rgb(${Math.round(255 - 95 * dull)}, ${Math.round(205 - 160 * dull)}, ${Math.round(110 - 85 * dull)})`;
+            g.beginPath();
+            g.arc(p.x + Math.sin(p.sway + a * 5) * 9, K.at[1] - K.rise * (1 - (1 - a) * (1 - a)), p.size * (1 - 0.4 * a), 0, 6.3);
+            g.fill();
+          }
         },
       };
     },
-    // The heart under the rock flickers and goes dim; then the cloud comes up over the island.
-    side(cam) {
-      const S = A.side;
-      const dim = layer("alarm/alarm4-heart-dim"), cloud = layer("alarm/alarm4-cloud-front", 0, 0);
-      cam.append(layer("alarm/alarm4-heart-bright"), dim, cloud);
+    // The island going down: its heart flickers and dies, then it drops, shaking, shedding rock,
+    // through three layers of cloud that drift at their own speeds.
+    descent(cam) {
+      const D = A.descent;
+      const isle = document.createElement("div");
+      isle.className = "isle";
+      const w = D.island.size[0] * D.island.scale, h = D.island.size[1] * D.island.scale, left = (W - w) / 2;
+      const bright = layer("alarm/shot4/island-bright");
+      for (const img of [layer("alarm/shot4/island-dim"), bright]) (img.style.width = `${w}px`), (img.style.height = `${h}px`), isle.append(img);
+      isle.style.left = `${left}px`;
+      isle.style.top = `${D.island.top}px`;
+      const clouds = D.clouds.map((c) => {
+        const img = layer(`alarm/shot4/${c.file}`, 0, c.y);
+        img.style.width = `${D.cloudSize[0] * c.scale}px`;
+        img.style.height = `${D.cloudSize[1] * c.scale}px`;
+        return img;
+      });
+      let seed = 11;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+      const span = D.rocksUntil - D.dropAt;
+      const drop = (t: number) => {
+        const r = Math.max(0, Math.min(1, (t - D.dropAt) / (A.shots.find((x) => x.id === "descent")!.ms / 1000 - D.dropAt)));
+        return D.drop * r * r * (3 - 2 * r);
+      };
+      // Each rock: when it lets go, where on the underside (which narrows to a point in the middle), and how it turns.
+      const rocks = Array.from({ length: D.rocks }, (_, i) => {
+        const dx = (rnd() * 2 - 1) * D.under.half;
+        const el = layer(`alarm/shot4/debris-${(i % 4) + 1}`);
+        el.style.opacity = "0";
+        return { el, at: D.dropAt + (span * (i + rnd() * 0.8)) / D.rocks, x: W / 2 + dx, dy: D.under.tip - Math.abs(dx) * D.under.slope, vx: dx * 0.25 + (rnd() * 2 - 1) * 20, spin: (rnd() * 2 - 1) * 540, size: 0.8 + rnd() * 0.9 };
+      });
+      cam.append(layer("alarm/shot4/sky"), clouds[0]!, isle, ...rocks.map((r) => r.el), ...clouds.slice(1));
       return {
         start(at) {
-          at(S.flickerMs, () => (sound.lurchGroan(), sound.alarmRumble(S.riseMs / 1000)));
+          at(D.dropAt * 1000, () => (sound.lurchGroan(), sound.alarmRumble(A.shots.find((x) => x.id === "descent")!.ms / 1000 - D.dropAt)));
+          for (const r of rocks) at(r.at * 1000, () => sound.rockCrack((r.x - W / 2) / (W / 2)));
         },
         step(t) {
-          const f = (t * 1000) / S.flickerMs;
-          dim.style.opacity = along(S.flicker, f).toFixed(2);
-          const r = Math.max(0, Math.min(1, (t * 1000 - S.flickerMs) / S.riseMs));
-          const e = r * r * (3 - 2 * r);
-          cloud.style.transform = `translateY(${(S.from + (S.to - S.from) * e).toFixed(1)}px)`;
+          bright.style.opacity = t * 1000 >= D.heartMs ? "0" : (1 - along(D.heart, (t * 1000) / D.heartMs)).toFixed(2);
+          const y = drop(t), going = t > D.dropAt ? 1 : 0;
+          isle.style.transform = `translate(${(going * D.shake * Math.sin(t * 53) * Math.sin(t * 7.1)).toFixed(1)}px, ${(y + going * D.shake * 0.7 * Math.sin(t * 61 + 1)).toFixed(1)}px)`;
+          D.clouds.forEach((c, i) => (clouds[i]!.style.transform = `translateX(${(c.x + c.speed * t).toFixed(1)}px)`));
+          for (const r of rocks) {
+            const f = t - r.at;
+            if (f < 0) continue;
+            r.el.style.opacity = "1";
+            // It leaves with the island's own fall, then gravity has it.
+            const y0 = D.island.top + drop(r.at) + r.dy;
+            r.el.style.transform = `translate(${(r.x + r.vx * f).toFixed(1)}px, ${(y0 + 40 * f + 0.5 * D.gravity * f * f).toFixed(1)}px) rotate(${(r.spin * f).toFixed(0)}deg) scale(${r.size.toFixed(2)})`;
+          }
         },
       };
     },
@@ -130,6 +187,7 @@ export function alarmCards(ready: () => void, then: () => void) {
     pic.innerHTML = `<div class="ph"><small>picture to come</small><b>${esc(s.name)}</b></div>`;
     const cam = document.createElement("div");
     cam.className = "cam";
+    if (s.at) cam.style.transformOrigin = `${s.at[0]}px ${s.at[1]}px`;
     pic.append(cam);
     stage.append(pic);
     return { el: pic, cam, ...build[s.id]!(cam) };

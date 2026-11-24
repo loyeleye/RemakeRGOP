@@ -271,7 +271,9 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #alarm .pic small { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.45; }
 #alarm .pic b { font: 600 34px/1.25 Georgia, serif; }
 #alarm .cam { position: absolute; inset: 0; transform-origin: 50% 50%; will-change: transform; }
-#alarm .cam img { position: absolute; left: 0; top: 0; max-width: none; }
+#alarm .cam img, #alarm .cam canvas, #alarm .cam .isle { position: absolute; left: 0; top: 0; max-width: none; }
+#alarm .cam .isle img { position: relative; display: block; }
+#alarm .cam .isle img + img { position: absolute; }
 #alarm .say { position: absolute; left: 50%; bottom: max(9vh, 54px); transform: translate(-50%, 8px); margin: 0; padding: 10px 16px 11px; max-width: min(86vw, 520px); border-radius: 12px; border: 1px solid #ffd36a88; background: rgba(18, 14, 26, 0.88); color: #f6ecd6; font: 17px/1.3 system-ui, sans-serif; opacity: 0; transition: opacity 0.4s ease-out, transform 0.4s ease-out; }
 #alarm .say.on { opacity: 1; transform: translate(-50%, 0); }
 #alarm .say b { margin-right: 6px; }
