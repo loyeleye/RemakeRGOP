@@ -130,6 +130,16 @@ export const THEMES: Record<string, Theme> = {
     const base = THEMES["tidepool-steps"]!;
     return { ...base, name: "Kite Fell", floor: "kite-fell", grass: "#7fa850", dressed: true, decorate() {} };
   },
+  // The Sieve (run 8): the palest, quietest place. Bleached chalk under a low, washed-out morning; nothing growing, no colour.
+  get sieve() {
+    const base = THEMES["tidepool-steps"]!;
+    return {
+      ...base, name: "The Sieve", floor: "sieve", grass: "#d9d6c6", soil: "#e4dfd0", rock: "#cfc9b8",
+      sky: { ...base.sky, zenith: "#9fb4c4", sky: "#c9d6dc", haze: "#e6e8e2", below: "#dfe4e4" },
+      fog: "#d8dedc", clouds: "#f4f4ee", hemi: ["#eef2f4", "#b8b4a4", 1.0] as [string, string, number], sun: ["#fff2dc", 2.2] as [string, number], exposure: 0.95,
+      particles: null, dressed: true, decorate() {},
+    };
+  },
   // The fairy ring after Hesta's landing (run 7): the same look, with the crater's glass drawn by the board.
   get "kindling-crater"() {
     return THEMES["fairy-ring"]!;

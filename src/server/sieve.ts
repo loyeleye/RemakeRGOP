@@ -134,6 +134,11 @@ export class SieveRoom {
     moveWisp(first1, pt(c.x + far.x, c.y + far.y));
     g.height.set(first1.id, S.firstHeight);
     this.doomed = g.pastSaving = first1.id;
+    // Tilda stands off to the south and watches. She does not move.
+    const tilda = this.player(KEEPER_ID);
+    tilda.pos = tilda.prev = g.nearestFree(pt(c.x + S.keeper[0], c.y + S.keeper[1]), 0);
+    const rook = this.player(YOU);
+    rook.pos = rook.prev = g.nearestFree(pt(c.x + S.rook[0], c.y + S.rook[1]), 0);
     this.arrived--;
     this.phase = first ? "countdown" : "playing";
     if (first) {

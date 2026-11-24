@@ -368,6 +368,38 @@ varying vec2 vUv;
 void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 
 /** Night on the game board: dark everywhere the brazier's light doesn't reach, soft at the edge. */
+/** The Sieve's wells: pale cloud drifting far below, and the shaft's far wall in shade. */
+const WELL_FS = /* glsl */ `
+varying vec2 vUv;
+uniform float uTime;
+float whash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float wnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(whash(i), whash(i + vec2(1, 0)), u.x), mix(whash(i + vec2(0, 1)), whash(i + vec2(1, 1)), u.x), u.y);
+}
+void main() {
+  vec2 p = (vUv - 0.5) * 2.0;
+  float r = length(p);
+  if (r > 1.0) discard;
+  // The far wall shows as a crescent on the side away from the eye; the mouth below it is cloud.
+  float inner = length(p - vec2(0.0, -0.3));
+  float wall = smoothstep(0.78, 0.84, inner);
+  float n = wnoise(p * 2.2 + vec2(uTime * 0.03, uTime * 0.012)) * 0.6 + wnoise(p * 5.0 - vec2(uTime * 0.02, 0.0)) * 0.4;
+  vec3 cloud = mix(vec3(0.60, 0.68, 0.78), vec3(0.84, 0.88, 0.92), n);
+  // Deeper toward the near side, where the eye looks straight down.
+  cloud *= 0.86 + 0.14 * smoothstep(-0.9, 0.6, p.y);
+  float depth = clamp((p.y + 1.0) * 0.5, 0.0, 1.0);
+  vec3 chalk = mix(vec3(0.30, 0.32, 0.40), vec3(0.62, 0.61, 0.60), depth);
+  vec3 col = mix(cloud, chalk, wall);
+  // A thin dark lip where the ground stops.
+  col *= 1.0 - 0.35 * smoothstep(0.93, 1.0, r);
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+/** The falling law's look (run 8): how high a wisp at full height floats, where the low sun throws its shadow, and how long a fall takes to watch. */
+const FALL = { low: 0.32, high: 1.95, sun: [1.15, 0.55] as const, groundSec: 0.9, wellSec: 1.9, wellDrop: 9 };
+
 /** How big the village's glows at the rim are drawn, against their sizes in DYING.rim. */
 const RIM_GLOW = 2.4;
 
@@ -733,6 +765,9 @@ function poolMask(b: Board, kind: Tile): THREE.Texture | null {
   return t;
 }
 
+const SHADE_GEO = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+const SHADE_HARD_GEO = new THREE.CircleGeometry(0.5, 24).rotateX(-Math.PI / 2);
+
 function glowSprite(color: string, size: number, opacity = 1) {
   const s = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(color).multiplyScalar(2), transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }),
@@ -778,6 +813,8 @@ interface WispRig {
   earth?: THREE.Mesh;
   /** Run 7: when her helping line was last on it. */
   heldLit?: number;
+  /** Run 8: its shadow on the chalk, soft and hard. */
+  shade?: [THREE.Mesh, THREE.Mesh];
 }
 
 /** Seconds the earth line takes to reach a wisp before the stone starts closing over it. */
@@ -1890,6 +1927,26 @@ export class World {
     const amb = ambientParticles(th.particles, Math.max(W, H) * 0.65, this.low, (u) => this.timeUniforms.push(u));
     if (amb) g.add(amb);
 
+    // The Sieve's wells: old chalk pits gone through, each with a kerb of whitewashed stones.
+    for (const w of shrine.wells ?? []) {
+      const u = { uTime: { value: 0 } };
+      this.timeUniforms.push(u.uTime);
+      const R = w.r + 0.55;
+      const disc = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, R * 2).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: WELL_FS, uniforms: u, transparent: true, polygonOffset: true, polygonOffsetFactor: -1 }));
+      disc.position.set(w.x, 0.03, w.y);
+      g.add(disc);
+      const kerbMat = new THREE.MeshStandardMaterial({ color: "#f6f3ea", roughness: 0.95 });
+      const n = Math.max(10, Math.round(R * 7));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + w.x;
+        const st = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.2 + 0.06 * ((i * 7) % 3), 0.34), kerbMat);
+        st.position.set(w.x + Math.cos(a) * (R + 0.12), 0.1, w.y + Math.sin(a) * (R + 0.12));
+        st.rotation.y = -a + Math.PI / 2 + (((i * 13) % 5) - 2) * 0.04;
+        st.castShadow = st.receiveShadow = true;
+        g.add(st);
+      }
+    }
+
     // A place to walk has no parapet and no monoliths: its paths, fence, wash line and bench instead.
     if (th.place || th.dressed) this.addPlace(shrine, b);
     else {
@@ -2539,6 +2596,39 @@ export class World {
    * step back as the light shrinks, and the comet: a streak, a flash that lights everything, dust.
    */
   private dyingFx: { all: THREE.Object3D[]; dark: THREE.Mesh; u: { uLit: { value: number }; uDark: { value: number } }; glows: THREE.Sprite[]; head: THREE.Sprite; trail: THREE.Sprite[]; dust: THREE.Sprite[]; burst: THREE.PointLight; ember: THREE.Sprite; part: string; partAt: number; struckAt: number; lit: number; flame: number } | null = null;
+  /** Run 8: wisps that have just fallen away, watched going: down into the chalk, or down a well getting smaller. */
+  private fallFx: { key: string; s: THREE.Sprite; x: number; z: number; well: boolean; at: number }[] = [];
+  private stepFalls(st: DrawState, time: number) {
+    const b = st.shrine.board;
+    for (const f of st.snap.falls ?? []) {
+      const key = `${f.tick}:${f.wisp}`;
+      if (this.fallFx.some((q) => q.key === key)) continue;
+      const s = glowSprite("#ffb53a", 1.2, 0.5);
+      s.material.blending = THREE.NormalBlending;
+      s.material.color.set("#f29a1c");
+      // Seen through the ground as it goes: there is nothing to hide it down a well.
+      s.material.depthTest = !f.well;
+      s.renderOrder = 2;
+      this.scene.add(s);
+      this.fallFx.push({ key, s, x: this.worldX(b, f.x), z: this.worldZ(b, f.y), well: f.well, at: time });
+    }
+    this.fallFx = this.fallFx.filter((q) => {
+      const k = (time - q.at) / (q.well ? FALL.wellSec : FALL.groundSec);
+      if (k >= 1 || k < 0) return this.scene.remove(q.s), false;
+      // No flare either way: it only dims.
+      if (q.well) {
+        q.s.position.set(q.x, FALL.low - FALL.wellDrop * k * k, q.z + 0.6 * k);
+        q.s.scale.setScalar(1.2 * (1 - 0.8 * k));
+        q.s.material.opacity = 0.9 * (1 - k * k);
+      } else {
+        q.s.position.set(q.x, FALL.low - 0.5 * k, q.z);
+        q.s.scale.setScalar(1.2 * (1 - 0.5 * k));
+        q.s.material.opacity = 0.8 * (1 - k);
+      }
+      return true;
+    });
+  }
+
   /** The theme's own light levels, which the dying brazier turns down and gives back. */
   private dayLight = { hemi: 1, sun: 1, exposure: 1 };
   /** The island's own glowing things (lanterns, blossom) and how bright each is by rights, so the dark can turn them down. */
@@ -3053,7 +3143,34 @@ export class World {
       if (rig.crust) rig.crust.visible = !!stoned;
       const bob = stoned ? -0.3 * stone + Math.sin(time * 2.2 + w.id * 1.7) * 0.12 * (1 - stone) : Math.sin(time * 2.2 + w.id * 1.7) * 0.12;
       const sink = w.rim > 0 ? Math.min(1, w.rim * 0.5 + st.t * 0.5) : 0;
-      rig.root.position.set(this.worldX(b, x), 0.75 + bob + sink * 1.4, this.worldZ(b, y));
+      const h = w.h;
+      rig.root.position.set(this.worldX(b, x), (h === undefined ? 0.75 : FALL.low + (FALL.high - FALL.low) * h) + bob * (h === undefined ? 1 : 0.5) + sink * 1.4, this.worldZ(b, y));
+      if (h !== undefined) {
+        if (!rig.shade) {
+          const soft = new THREE.Mesh(SHADE_GEO, new THREE.MeshBasicMaterial({ map: GLOW, color: "#1c1a22", transparent: true, depthWrite: false }));
+          const hard = new THREE.Mesh(SHADE_HARD_GEO, new THREE.MeshBasicMaterial({ color: "#2a2730", transparent: true, depthWrite: false }));
+          soft.renderOrder = hard.renderOrder = 1;
+          this.scene.add(soft, hard);
+          rig.shade = [soft, hard];
+          // On pale chalk a white glow is lost: a deeper amber heart, and a halo that sits on the ground's colour and doesn't add to it.
+          (rig.core.material as THREE.MeshBasicMaterial).color.set("#f08a10");
+          rig.halo.material.blending = THREE.NormalBlending;
+          rig.halo.material.color.set("#ffb53a");
+          rig.halo.scale.setScalar(1.15);
+        }
+        // High: small, faint, thrown well away by the low sun. Low: dark, sharp, right under it. Over a well: none.
+        const sx = rig.root.position.x + FALL.sun[0] * h * 1.5, sz = rig.root.position.z + FALL.sun[1] * h * 1.5;
+        const over = b.tile({ x: Math.floor(sx - this.worldX(b, 0) + 0.5), y: Math.floor(sz - this.worldZ(b, 0) + 0.5) }) !== Tile.Floor;
+        const show = !w.away && !over && sink === 0;
+        const [soft, hard] = rig.shade;
+        soft.visible = hard.visible = show;
+        soft.position.set(sx, 0.045, sz);
+        hard.position.set(sx, 0.05, sz);
+        soft.scale.setScalar(2.3 - 0.9 * h);
+        (soft.material as THREE.MeshBasicMaterial).opacity = 0.85 - 0.5 * h;
+        hard.scale.setScalar(0.95 - 0.4 * h);
+        (hard.material as THREE.MeshBasicMaterial).opacity = 0.14 + 0.5 * Math.pow(1 - h, 1.4);
+      } else if (rig.shade) rig.shade[0].visible = rig.shade[1].visible = false;
       // Stopped at the bank: it lurches at the water and bumps back onto land.
       const fx = this.stopFx.get(w.id);
       if (fx) {
@@ -3090,9 +3207,11 @@ export class World {
       // Outside the light it dims like an ember away from the fire, with a gutter near the end.
       const gone = w.dim ?? 0;
       const dim = (1 - stone * (2 / 3)) * (1 - 0.82 * gone) * (gone > 0.7 ? 0.85 + 0.15 * Math.sin(time * 23 + w.id) : 1);
-      rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1));
-      rig.halo.material.opacity = 0.85 * s * dim * dim;
-      rig.light.intensity = 6 * s * dim;
+      // Lower is a little smaller and dimmer; and on the chalk its own light is kept down so its shadow shows.
+      const low = h === undefined ? 1 : 0.5 + 0.5 * h;
+      rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1) * (h === undefined ? 1 : 0.95 + 0.35 * h));
+      rig.halo.material.opacity = 0.85 * s * dim * dim * low;
+      rig.light.intensity = (h === undefined ? 6 : 1.2) * s * dim * low;
       rig.trail.visible = stone < 0.5;
       if (w.rim > 0) rimPulse = Math.max(rimPulse, 1);
       wispPos.set(w.id, rig.root.position.clone());
@@ -3100,8 +3219,9 @@ export class World {
     // Her lantern, where the sparks start: about hand height by her side.
     const stormRig = st.snap.stormLight != null ? this.players.get(st.snap.stormLight) : undefined;
     this.stepStormString(st.snap.string ?? [], !!st.snap.stringLive, wispPos, time, stormRig ? stormRig.root.position.clone().add(new THREE.Vector3(0.35, 1.15, 0)) : null);
-    for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), rig.stones && this.scene.remove(rig.stones), rig.earth && this.scene.remove(rig.earth), this.wisps.delete(id));
+    for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), rig.stones && this.scene.remove(rig.stones), rig.earth && this.scene.remove(rig.earth), rig.shade && this.scene.remove(...rig.shade), this.wisps.delete(id));
     this.stepDying(st, time);
+    this.stepFalls(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
     // Watchers: story figures standing off the plaza, turning slowly to keep you in view.
@@ -3326,7 +3446,7 @@ export function drawMinimap(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     for (let x = 0; x < b.width; x++) {
       const t = b.tiles[y * b.width + x];
       if (t === Tile.Edge) continue;
-      g.fillStyle = t === Tile.Wall ? "#4a4a55" : t === Tile.Water ? "#3f9fa8" : t === Tile.Rock ? "#888" : t === Tile.CrystalA || t === Tile.CrystalB ? "#e6c8ff" : t === Tile.Rime ? "#cfe8f4" : t === Tile.Moss ? "#4f8a3a" : t === Tile.Glyph ? "#c9a24a" : t === Tile.Brazier ? "#ff9a3a" : "#3b3346";
+      g.fillStyle = t === Tile.Wall ? "#4a4a55" : t === Tile.Water ? "#3f9fa8" : t === Tile.Well ? "#c9d4dc" : t === Tile.Rock ? "#888" : t === Tile.CrystalA || t === Tile.CrystalB ? "#e6c8ff" : t === Tile.Rime ? "#cfe8f4" : t === Tile.Moss ? "#4f8a3a" : t === Tile.Glyph ? "#c9a24a" : t === Tile.Brazier ? "#ff9a3a" : "#3b3346";
       g.fillRect(rect.x + x * k, rect.y + y * k, Math.ceil(k), Math.ceil(k));
     }
   for (const w of st.snap.wisps) {

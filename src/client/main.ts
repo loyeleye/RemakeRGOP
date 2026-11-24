@@ -10,6 +10,7 @@ import { LessonRoom } from "../server/lesson.js";
 import { GrannyRoom } from "../server/granny.js";
 import { RaceRoom } from "../server/race.js";
 import { DyingRoom } from "../server/dying.js";
+import { SieveRoom } from "../server/sieve.js";
 import { DYING } from "../engine/dying.js";
 import { PondRoom } from "../server/pond.js";
 import { JobRoom } from "../server/job.js";
@@ -126,14 +127,14 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | null = null;
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | "pond" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | "pond" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 6 ? new DyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 8 ? new SieveRoom() : run === 6 ? new DyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
@@ -379,6 +380,7 @@ function noteProgress() {
     else if (st.run === "The race") reach({ next: 6 });
     // Runs 6 and 7 are one piece: both are done when it ends.
     else if (st.run === "The dying brazier") reach({ next: 8 });
+    else if (st.run === "A harder job") reach({ next: 9 });
     else if (storyRoom instanceof GrannyRoom || st.run === "Granny's game") reach({ next: 4 });
   }
   renderProgress();
@@ -680,8 +682,13 @@ let pullFrom = 0;
 /** Lumi's bell at each movement's countdown (three rings at the end), with the music fading under it. */
 function storyPhaseSound(was: string | undefined) {
   const phase = room!.phase;
-  // The dying brazier has no bell and no music: only the fire.
+  // The dying brazier has no bell and no music: only the fire. The Sieve has only the wind.
   if (room!.story?.dying) return;
+  if (room!.story?.sieve) {
+    if (phase === "countdown" && was !== "countdown") sound.wind(3);
+    if (phase === "results" && was !== "results") sound.pullHum(null);
+    return;
+  }
   if (phase === "countdown" && was !== "countdown") {
     sound.stopMusic();
     musicFor = -1;
@@ -703,6 +710,7 @@ function storyPhaseSound(was: string | undefined) {
 function storyTickSound(s: GameSnapshot) {
   const st = room!.story!;
   if (st.dying) dyingSound(st.dying.part, s);
+  else if (st.sieve) void 0;
   else if (room!.phase === "playing" && musicFor !== st.movement) {
     musicFor = st.movement;
     sound.playMusic(st.movement); // starts on a tick, so the beat lines up with the 600 ms steps
@@ -760,6 +768,7 @@ function dyingSound(part: string, s: GameSnapshot) {
 function stopStorySound() {
   sound.pullHum(null);
   sound.fireBed(null);
+  sound.windOff(0.5);
   dyingPart = "";
   sound.stopMusic(0.3);
   musicFor = -1;
@@ -788,7 +797,7 @@ function renderHud() {
       return renderPad(s);
     }
     // The dying brazier: nothing to count and no clock.
-    if (story.dying) {
+    if (story.dying || story.sieve) {
       $("score-0").hidden = true;
       $("ticks").textContent = "";
       return renderPad(s);
@@ -1202,6 +1211,7 @@ $("story3").onclick = () => connectStory(playerName(), 3);
 $("story4").onclick = () => connectStory(playerName(), 4);
 $("story5").onclick = () => connectStory(playerName(), 5);
 $("story6").onclick = () => connectStory(playerName(), 6);
+$("story8").onclick = () => connectStory(playerName(), 8);
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Saved progress: continue from where this browser got to, jump to any walk, or start over.
 function renderProgress() {
@@ -1214,8 +1224,8 @@ $("story-continue").onclick = () => {
   const p = loadProgress();
   const nextWalk = WALKS.find((w) => w.after === p.next - 1 && w.n > p.walk);
   if (nextWalk) return connectStory(playerName(), "pond", nextWalk.n);
-  if (p.next >= 1 && p.next <= 7) return connectStory(playerName(), Math.min(6, p.next) as 1 | 2 | 3 | 4 | 5 | 6);
-  // Runs 8 on aren't built: the latest walk reached.
+  if (p.next >= 1 && p.next <= 8) return connectStory(playerName(), (p.next === 7 ? 6 : p.next) as 1 | 2 | 3 | 4 | 5 | 6 | 8);
+  // Runs 9 on aren't built: the latest walk reached.
   connectStory(playerName(), "pond", Math.max(1, p.walk));
 };
 $<HTMLSelectElement>("walk-pick").replaceChildren(
