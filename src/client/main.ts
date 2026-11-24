@@ -897,11 +897,13 @@ function rescueRoom() {
   return r;
 }
 
-/** Run 10, the ship home: ?wind=1, 2 or 3 sets how many ticks the wind takes to move a loose wisp a tile; ?nostills leaves the three views over the bow out. */
+/** Run 10, the ship home: ?reach=8, 10 or 12 sets how far his pull reaches (8 is the run's own); ?wind=0.75 or 1.25 (anything from 0.5 to 1.5) makes the wind that much of what it is; ?nostills leaves the three views over the bow out. */
 function shipRoom() {
   const r = new ShipRoom();
   const q = new URLSearchParams(location.search), wind = Number(q.get("wind"));
-  if ([1, 2, 3].includes(wind)) r.windEvery = wind;
+  if (wind >= 0.5 && wind <= 1.5) r.windScale = wind;
+  const reach = Number(q.get("reach"));
+  if ([8, 10, 12].includes(reach)) r.reach = reach;
   if (q.has("nostills")) r.stillsOn = false;
   else stills.preload("r10-");
   shipCut(false);
@@ -910,7 +912,7 @@ function shipRoom() {
 
 /** Run 10's sounds: the wind and the lamp, and from half way one slow stroke of the bell from home, a little nearer each time. */
 function shipSound(r: NonNullable<StoryView["ship"]>) {
-  if (r.bell && r.over === undefined && (r.tick - Math.ceil(r.ticks * SHIP.bell.from)) % SHIP.bell.every === 0) sound.greatBell(0.22 + 0.2 * r.home);
+  if (r.bell) sound.greatBell(0.22 + 0.2 * r.home);
   // He goes over the rail: the picture cuts before he lands.
   if (r.over !== undefined) shipCut(true);
 }
@@ -1834,7 +1836,7 @@ function frame(now: number) {
   if (document.body.classList.contains("touch")) {
     const p = snap.players.find((q) => q.id === me);
     const w = snap.wisps.find((q) => q.id === lit);
-    const reach = p?.mode === "push" ? PUSH_REACH : PULL_REACH;
+    const reach = p?.mode === "push" ? PUSH_REACH : (room?.story?.ship?.reach ?? PULL_REACH);
     $("staff").classList.toggle("far", !p || !w || Math.max(Math.abs(w.x - p.x), Math.abs(w.y - p.y)) > reach);
   }
   // The ending: leftover wisps lift off and stream into the brazier, and the camera looks up.

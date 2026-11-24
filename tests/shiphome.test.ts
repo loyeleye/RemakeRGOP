@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { Tile, pt } from "../src/engine/board.js";
+import { Mover, Tile, pt } from "../src/engine/board.js";
 import { TICK_MS, type Game, type Wisp } from "../src/engine/game.js";
 import { shrineById } from "../src/engine/maps.js";
 import type { ServerMsg } from "../src/engine/protocol.js";
-import { SHIP, SHIP_DECK, shipLight } from "../src/engine/shiphome.js";
+import { SHIP, SHIP_DECK, SHIP_LANES, SHIP_SEA, inSea, onDeck, shipLight } from "../src/engine/shiphome.js";
 import { STILLS } from "../src/engine/stills.js";
 import { ShipRoom, type Stand } from "../src/server/shiphome.js";
 
@@ -33,19 +33,63 @@ function stage(g: Game, w: Wisp, x: number, y: number) {
 }
 
 describe("Run 10: the ship home", () => {
-  it("the board is a deck with the lamp amidships, sky all round it, and the hooded figure at the stern", () => {
+  it("the board is a deck with the lamp amidships, the cloud sea round it where only wisps go, and the hooded figure at the stern", () => {
     const sh = shrineById(SHIP.shrine), b = sh.board, c = b.center;
     expect(sh.deck).toBe(true);
     expect(b.tile(c)).toBe(Tile.Brazier);
-    for (let y = -SHIP_DECK.hl - 3; y <= SHIP_DECK.hl + 3; y++)
-      for (let x = -SHIP_DECK.hw - 3; x <= SHIP_DECK.hw + 3; x++) {
-        const on = Math.abs(x) <= SHIP_DECK.hw && Math.abs(y) <= SHIP_DECK.hl;
-        if (!on) expect(b.tile(pt(c.x + x, c.y + y))).toBe(Tile.Edge);
-        else expect(b.tile(pt(c.x + x, c.y + y))).not.toBe(Tile.Edge);
+    for (let y = SHIP_SEA.y0 - 2; y <= SHIP_SEA.y1 + 2; y++)
+      for (let x = -SHIP_SEA.hw - 1; x <= SHIP_SEA.hw + 1; x++) {
+        const t = b.tile(pt(c.x + x, c.y + y));
+        if (onDeck(x, y)) expect(t === Tile.Edge || t === Tile.Well).toBe(false);
+        else expect(t).toBe(inSea(x, y) ? Tile.Well : Tile.Edge);
       }
     expect((sh.props ?? []).some((p) => p.kind === "ship-figure" && p.x === c.x + SHIP.figure[0] && p.y === c.y + SHIP.figure[1])).toBe(true);
-    // The wisps' lanes are clear of the lamp, so none goes in by itself.
-    for (const x of SHIP.lanes) expect(Math.abs(x)).toBeGreaterThan(2);
+    // The wisps' lanes are out in the cloud on both sides, from `off[0]` to `off[1]` tiles past the rail.
+    expect(SHIP_LANES).toHaveLength(2 * (SHIP.off[1] - SHIP.off[0] + 1));
+    for (const x of SHIP_LANES) {
+      expect(Math.abs(x) - SHIP_DECK.hw).toBeGreaterThanOrEqual(SHIP.off[0]);
+      expect(Math.abs(x) - SHIP_DECK.hw).toBeLessThanOrEqual(SHIP.off[1]);
+    }
+  });
+
+  it("the wisps show in the cloud ahead and slide back past the ship: left alone, none is ever on the deck", () => {
+    const { room, toPlay } = open(13, "idle");
+    toPlay();
+    const g = room.state.game, c = g.board.center;
+    let seen = 0;
+    for (let n = 0; n < 60; n++) {
+      room.onTick();
+      for (const w of onBoard(g)) {
+        seen++;
+        expect(onDeck(w.pos.x - c.x, w.pos.y - c.y)).toBe(false);
+        expect(SHIP_LANES).toContain(w.pos.x - c.x);
+      }
+    }
+    expect(seen).toBeGreaterThan(20);
+    expect(g.pullReach).toBe(SHIP.reach);
+    // The leeway: from the rail's own tile and up to `railLeeway` tiles in from it, the farthest lane on that side is in reach; one tile farther in it is not, nor from the middle.
+    const far = SHIP_DECK.hw + SHIP.off[1];
+    expect(far - (SHIP_DECK.hw - SHIP.railLeeway)).toBeLessThanOrEqual(SHIP.reach);
+    expect(far - (SHIP_DECK.hw - SHIP.railLeeway - 1)).toBeGreaterThan(SHIP.reach);
+    expect(far).toBeGreaterThan(SHIP.reach);
+    expect(far + SHIP_DECK.hw - SHIP.railLeeway).toBeGreaterThan(SHIP.reach);
+  });
+
+  it("he pulls one out of the cloud and over the rail, at the run's own haul", () => {
+    const { room, conn, toPlay } = open(17, null);
+    toPlay();
+    const g = room.state.game, c = g.board.center, rook = g.players[0]!;
+    const w = g.wisps[0]!;
+    // Level with him, in the nearest lane on the east side.
+    const x0 = SHIP_DECK.hw + SHIP.off[0];
+    stage(g, w, x0, rook.pos.y - c.y);
+    expect(g.board.passable(w.pos, Mover.Walker)).toBe(false);
+    conn.message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: w.id } }));
+    for (let i = 0; i < 3; i++) room.onTick();
+    // Two ticks of pulling (the first takes hold): `haul` tiles a tick, straight at him, whatever the wind is doing.
+    expect(w.pos.y).toBe(rook.pos.y);
+    expect(x0 - (w.pos.x - c.x)).toBeGreaterThanOrEqual(2 * SHIP.haul - 1);
+    expect(onDeck(w.pos.x - c.x, w.pos.y - c.y)).toBe(true);
   });
 
   it("lasts its fixed length whatever is banked, has no result, and says only Rook's two lines over three views", () => {
@@ -61,9 +105,11 @@ describe("Run 10: the ship home", () => {
       const said = lines().filter((l) => l.text);
       expect(said.map((l) => l.text)).toEqual(["Faster.", "That's her lantern. Why is it on the water?"]);
       expect(said.every((l) => l.who === "Rook")).toBe(true);
-      // A careful hand closes on the patch and is never nearer than it can be.
-      expect(room.nearest).toBeGreaterThanOrEqual(SHIP.patch.nearest);
+      // A careful hand closes on the patch, is never nearer than it can be, and never has it for good.
+      expect(room.nearest).toBeGreaterThan(SHIP.patch.nearest);
       expect(room.state.lead).toBeLessThan(SHIP.patch.start);
+      // Wisps are lost astern however well he plays.
+      expect(room.lost).toBeGreaterThan(10);
     }
   });
 
@@ -85,23 +131,26 @@ describe("Run 10: the ship home", () => {
     expect(at["r10-2"]).toBeGreaterThanOrEqual(SHIP.ticks - Math.ceil(15000 / TICK_MS));
   });
 
-  it("the wind takes a loose wisp one tile toward the stern every `wind` ticks, and off it", () => {
+  it("the wind carries a loose wisp toward the stern, and past it", () => {
     const { room, toPlay } = open(5, "idle");
     toPlay();
     const g = room.state.game, c = g.board.center;
     const w = g.wisps[0]!;
-    stage(g, w, 4, 0);
+    stage(g, w, 9, 0);
     const y0 = w.pos.y;
-    for (let i = 0; i < SHIP.wind * 4; i++) room.onTick();
-    expect(w.pos.x).toBe(c.x + 4);
-    expect(w.pos.y).toBe(y0 + 4);
-    // Off the stern: gone, and the patch draws away by `lose` (and its own drift).
-    stage(g, w, 4, SHIP_DECK.hl);
+    // At the start it is `wind[0]` tiles a tick, in whole steps as they come due.
+    for (let i = 0; i < 8; i++) room.onTick();
+    expect(w.pos.x).toBe(c.x + 9);
+    expect(w.pos.y).toBe(y0 + Math.floor(8 * SHIP.wind[0]));
+    // Past the stern: gone, the page is told where it went, and the patch draws away by `lose` (and its own drift).
+    stage(g, w, 9, SHIP_DECK.hl + SHIP.astern);
     const lost = room.lost, lead = room.state.lead;
-    for (let i = 0; i < SHIP.wind; i++) room.onTick();
+    for (let i = 0; i < 3 && room.lost === lost; i++) room.onTick();
     expect(g.away.has(w.id)).toBe(true);
     expect(room.lost).toBe(lost + 1);
-    expect(room.state.lead).toBeCloseTo(lead + SHIP.patch.lose + SHIP.patch.drift * SHIP.wind, 5);
+    expect(room.storyView().ship!.lost).toEqual([{ x: 9, tick: g.tick }]);
+    expect(room.state.lead - lead).toBeGreaterThan(SHIP.patch.lose);
+    expect(room.state.lead - lead).toBeLessThan(SHIP.patch.lose + 3 * SHIP.patch.drift[1] * SHIP.patch.pull[1]);
   });
 
   it("a wisp he holds is not the wind's, and one he has let go of is again", () => {
@@ -115,10 +164,10 @@ describe("Run 10: the ship home", () => {
     const act = (action: object) => conn.message(JSON.stringify({ t: "act", action }));
     act({ kind: "staff", wisp: w.id });
     const y0 = w.pos.y;
-    for (let i = 0; i < SHIP.wind * 3; i++) room.onTick();
+    for (let i = 0; i < 6; i++) room.onTick();
     expect(w.pos.y).toBe(y0);
     act({ kind: "idle" });
-    for (let i = 0; i < SHIP.wind * 3 + 1; i++) room.onTick();
+    for (let i = 0; i < 7; i++) room.onTick();
     expect(w.pos.y).toBeGreaterThanOrEqual(y0 + 2);
   });
 
@@ -132,7 +181,9 @@ describe("Run 10: the ship home", () => {
     const lead = room.state.lead, t0 = g.tick;
     for (let i = 0; i < 6 && room.banked === 0; i++) room.onTick();
     expect(room.banked).toBe(1);
-    expect(room.state.lead).toBeCloseTo(lead + SHIP.patch.drift * (g.tick - t0) - SHIP.patch.gain, 5);
+    // Its own drift over those ticks is small beside it.
+    expect(lead - room.state.lead).toBeLessThanOrEqual(SHIP.patch.gain);
+    expect(lead - room.state.lead).toBeGreaterThan(SHIP.patch.gain - (g.tick - t0) * SHIP.patch.drift[1] * SHIP.patch.pull[1]);
   });
 
   it("nobody playing: the patch goes out of sight, the lamp gutters, and it is the bow again with nothing said", () => {

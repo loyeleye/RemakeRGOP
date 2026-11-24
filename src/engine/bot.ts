@@ -9,6 +9,9 @@ import { Board, DIRS, Mover, Tile, cheb, isSlick, pt, samePt, type Pt } from "./
 import type { Gimmicks } from "./maps.js";
 import { CRYSTAL_FLIGHT, PONDS_FLIGHT, PULL_REACH, flingOffset, wispMove, type Command, type Game, type Wisp } from "./game.js";
 
+/** The pull's reach the bot is planning with: the game's own, set each time it is asked for a command (run 10 sets its own). */
+let REACH = PULL_REACH;
+
 export interface BotStyle {
   /** Push rival wisps within this many tiles of the brazier rim (0 = never). */
   pushy: number;
@@ -106,6 +109,7 @@ function off(game: Game, p: Pt): string {
 }
 
 export function botCommand(game: Game, id: number, style: BotStyle, rand: () => number = Math.random): Command | null {
+  REACH = game.pullReach;
   const me = game.players.find((p) => p.id === id);
   if (!me) return null;
   // Slow bots think first, then decide (as a team player or not) when the wait is up.
@@ -275,7 +279,7 @@ export function simulatePull(board: Board, from: Pt, start: Pt, maxTicks = 30, g
     if (board.inBankZone(w)) return { end: w, ticks: t };
     let target: Pt | null = null;
     if (!skate) {
-      if (cheb(from, w) > PULL_REACH || !board.canSee(from, w)) return { end: w, ticks: t };
+      if (cheb(from, w) > REACH || !board.canSee(from, w)) return { end: w, ticks: t };
       const off = flingOffset(from, w, "pull");
       if (!off.x && !off.y) return { end: w, ticks: t };
       target = pt(w.x + off.x, w.y + off.y);
@@ -332,6 +336,7 @@ const plans = new WeakMap<Game, Map<number, Plan>>();
  * the walk there. Kept until the wisp moves.
  */
 export function planSpot(game: Game, id: number, me: Pt, wisp: Wisp, rank = 0, straightOnly = false): Pt | null {
+  REACH = game.pullReach;
   const board = game.board;
   const W = board.width;
   let mine = plans.get(game);
@@ -359,8 +364,8 @@ export function planSpot(game: Game, id: number, me: Pt, wisp: Wisp, rank = 0, s
   const rules = pullRules(game, id);
   const options: { s: Pt; cost: number; end: number }[] = [];
   const stuckOptions: { s: Pt; cost: number; end: number }[] = [];
-  for (let dy = -PULL_REACH; dy <= PULL_REACH; dy++)
-    for (let dx = -PULL_REACH; dx <= PULL_REACH; dx++) {
+  for (let dy = -REACH; dy <= REACH; dy++)
+    for (let dx = -REACH; dx <= REACH; dx++) {
       const s = pt(wisp.pos.x + dx, wisp.pos.y + dy);
       if (!board.inside(s) || (dx === 0 && dy === 0)) continue;
       const wk = walk[s.y * W + s.x]!;
@@ -488,7 +493,7 @@ export function homeSquares(game: Game, n: number): Pt[] {
       if (d < 2 || !board.inside(s) || board.tile(s) !== Tile.Floor || board.inBankZone(s)) continue;
       let score = 0;
       for (const f of field) {
-        if (cheb(f, s) > PULL_REACH || !board.canSee(s, f)) continue;
+        if (cheb(f, s) > REACH || !board.canSee(s, f)) continue;
         if (board.inBankZone(simulatePull(board, s, f, 30, game.shrine.gimmicks).end)) score++;
       }
       if (score > 0) scored.push({ s, score });
@@ -569,7 +574,7 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
     // Off the square: finish the wisp I went for, then head back when there's work there.
     if (me.action.kind === "staff" && live(game.wisps[me.action.wisp]!)) return undefined;
     if (me.action.kind === "walk" && samePt(me.action.to, home)) return null;
-    if (game.wisps.some((w) => live(w) && cheb(w.pos, home) <= PULL_REACH && !claimed.has(w.id))) {
+    if (game.wisps.some((w) => live(w) && cheb(w.pos, home) <= REACH && !claimed.has(w.id))) {
       note(game, me.id, { intent: "back to home square: a wisp is in reach there" });
       return { action: { kind: "walk", to: home }, toggleMode: fixMode || undefined };
     }
@@ -586,10 +591,10 @@ function coopCommand(game: Game, me: Game["players"][number], team: Team, style:
   // A wisp an anchor can already bank from its square is theirs.
   const homes = [...team.homes.filter((h) => team.bots.some((id, i) => i < team.homes.length && samePt(game.players.find((p) => p.id === id)?.pos ?? pt(-1, -1), h))), ...team.partners];
   const anchorHas = (w: Wisp) =>
-    homes.some((h) => cheb(h, w.pos) <= PULL_REACH && board.canSee(h, w.pos) && board.inBankZone(simulatePull(board, h, w.pos, 30, game.shrine.gimmicks).end)) ||
+    homes.some((h) => cheb(h, w.pos) <= REACH && board.canSee(h, w.pos) && board.inBankZone(simulatePull(board, h, w.pos, 30, game.shrine.gimmicks).end)) ||
     // A person holding a square gets anything in their reach that they're working: one left
     // sitting there for a few ticks is fair game.
-    (restingFor(game, w) < 6 && team.partners.some((h) => cheb(h, w.pos) <= PULL_REACH && board.canSee(h, w.pos)));
+    (restingFor(game, w) < 6 && team.partners.some((h) => cheb(h, w.pos) <= REACH && board.canSee(h, w.pos)));
   const targets = game.wisps.filter((w) => live(w) && !claimed.has(w.id) && !anchorHas(w));
   let mine = fetching.get(game);
   if (!mine) fetching.set(game, (mine = new Map()));
@@ -652,8 +657,8 @@ function findFeed(game: Game, me: Pt, wisp: Wisp, homes: Pt[], partners: Pt[]): 
   const board = game.board;
   const g = game.shrine.gimmicks;
   let best: { s: Pt; cost: number } | null = null;
-  for (let dy = -PULL_REACH; dy <= PULL_REACH; dy++)
-    for (let dx = -PULL_REACH; dx <= PULL_REACH; dx++) {
+  for (let dy = -REACH; dy <= REACH; dy++)
+    for (let dx = -REACH; dx <= REACH; dx++) {
       const s = pt(wisp.pos.x + dx, wisp.pos.y + dy);
       if (!board.inside(s) || (dx === 0 && dy === 0) || !board.passable(s, Mover.Walker) || board.tile(s) === Tile.Ice) continue;
       // Keep off a person's square: that's their spot.
@@ -670,7 +675,7 @@ function findFeed(game: Game, me: Pt, wisp: Wisp, homes: Pt[], partners: Pt[]): 
         continue;
       }
       for (const h of homes) {
-        if (cheb(h, end) > PULL_REACH || !board.canSee(h, end)) continue;
+        if (cheb(h, end) > REACH || !board.canSee(h, end)) continue;
         const fin = simulatePull(board, h, end, 30, g);
         if (!board.inBankZone(fin.end)) continue;
         const cost = walk + ticks + fin.ticks;
@@ -753,7 +758,7 @@ export function halfCommand(game: Game, me: Game["players"][number], mate: Game[
       }
     if (court.length >= 6) break;
   }
-  const mateReach = (p: Pt) => cheb(mate.pos, p) <= PULL_REACH && board.canSee(mate.pos, p);
+  const mateReach = (p: Pt) => cheb(mate.pos, p) <= REACH && board.canSee(mate.pos, p);
   // Each of us stands just off the brazier on our own side, level with its middle (the
   // classic east-west coord; north-south is the same turned a quarter). From there the
   // shrine splits by who can bank a wisp without moving, not by a straight line.
@@ -773,7 +778,7 @@ export function halfCommand(game: Game, me: Game["players"][number], mate: Game[
   };
   const home = spotFor(half.side), mateHome = spotFor(-half.side);
   const bankable = (from: Pt, p: Pt) =>
-    cheb(from, p) <= PULL_REACH && !samePt(from, p) && board.canSee(from, p) && board.inBankZone(simulatePull(board, from, p, 30, g).end);
+    cheb(from, p) <= REACH && !samePt(from, p) && board.canSee(from, p) && board.inBankZone(simulatePull(board, from, p, 30, g).end);
   /** "me" if it's mine to bank from my spot, "mate" if theirs, "fetch" if neither spot can bank it. */
   const owner = (w: Wisp): "me" | "mate" | "fetch" => {
     const a = bankable(home, w.pos), b = bankable(mateHome, w.pos);
@@ -806,7 +811,7 @@ export function halfCommand(game: Game, me: Game["players"][number], mate: Game[
     const own = owner(w);
     if (own === "fetch" && !(mine(w.pos) || (along(w.pos) === 0 && me.id < mate.id))) continue;
     for (const s of court) {
-      if (cheb(s, w.pos) > PULL_REACH || samePt(s, w.pos) || !board.canSee(s, w.pos)) continue;
+      if (cheb(s, w.pos) > REACH || samePt(s, w.pos) || !board.canSee(s, w.pos)) continue;
       const { end, ticks } = simulatePull(board, s, w.pos, 30, g);
       if (!board.inBankZone(end)) continue;
       const cost = cheb(me.pos, s) + ticks + cheb(s, home) * 0.5 + (own === "mate" ? (mateReach(w.pos) ? 30 : 8) : 0);
@@ -825,8 +830,8 @@ export function halfCommand(game: Game, me: Game["players"][number], mate: Game[
     if (!live(w) || w.id === busy || owner(w) !== "fetch") continue;
     // On the middle line, the lower id goes for it.
     if (!(mine(w.pos) || (along(w.pos) === 0 && me.id < mate.id))) continue;
-    for (let dy = -PULL_REACH; dy <= PULL_REACH; dy++)
-      for (let dx = -PULL_REACH; dx <= PULL_REACH; dx++) {
+    for (let dy = -REACH; dy <= REACH; dy++)
+      for (let dx = -REACH; dx <= REACH; dx++) {
         const s = pt(w.pos.x + dx, w.pos.y + dy);
         if ((!dx && !dy) || !board.inside(s) || !board.passable(s, Mover.Walker) || board.tile(s) === Tile.Ice || !board.canSee(s, w.pos)) continue;
         const { end, ticks } = simulatePull(board, s, w.pos, 30, g);

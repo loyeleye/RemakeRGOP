@@ -392,6 +392,8 @@ export class Game {
   private lifted = new Set<number>();
   /** Story: nobody can push another side's wisps (run 5: no shoving). */
   noShove = false;
+  /** How far a pull reaches in this game (tiles), where a run sets its own (run 10). The stand-in bot still plans with the usual reach. */
+  pullReach = PULL_REACH;
   /** Ticks a banked wisp stays gone before it comes back (0: straight back, as in a match). */
   respawnPause = 0;
   /** Banked wisps that are gone for now, and the tick each comes back. They wait, unseen, on the rim. */
@@ -1260,7 +1262,7 @@ export class Game {
     for (let d = 0; ring.length && d < bestCost; d++) {
       const next: Pt[] = [];
       for (const q of ring) {
-        if (cheb(q, w.pos) <= PULL_REACH && !samePt(q, w.pos) && b.canSee(q, w.pos) && !wet(q)) {
+        if (cheb(q, w.pos) <= this.pullReach && !samePt(q, w.pos) && b.canSee(q, w.pos) && !wet(q)) {
           const cost = d + (cheb(q, c) > cheb(w.pos, c) ? 6 : 0);
           if (cost < bestCost) (bestCost = cost), (best = q);
         }
@@ -1286,7 +1288,7 @@ export class Game {
 
   inReach(p: Lamplighter, w: Wisp) {
     if (samePt(p.pos, w.pos)) return false;
-    const reach = p.mode === "pull" ? PULL_REACH : PUSH_REACH;
+    const reach = p.mode === "pull" ? this.pullReach : PUSH_REACH;
     return cheb(p.pos, w.pos) <= reach && this.board.canSee(p.pos, w.pos);
   }
 

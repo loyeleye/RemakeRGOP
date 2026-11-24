@@ -108,7 +108,7 @@ export interface RescueFrame {
 }
 
 /** A soft grey blob, for smoke (the glow sprites add light, and smoke must not). */
-function smokeTexture() {
+export function smokeTexture() {
   const c = document.createElement("canvas");
   c.width = c.height = 64;
   const g = c.getContext("2d")!;

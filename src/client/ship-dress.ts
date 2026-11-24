@@ -6,8 +6,8 @@
 
 import * as THREE from "three";
 import type { StoryView } from "../engine/protocol.js";
-import { SHIP, SHIP_DECK, onDeck } from "../engine/shiphome.js";
-import { figure } from "./rescue-dress.js";
+import { SHIP, SHIP_DECK, SHIP_SEA, onDeck } from "../engine/shiphome.js";
+import { figure, smokeTexture } from "./rescue-dress.js";
 
 type Ship = NonNullable<StoryView["ship"]>;
 type Glow = (color: string, size: number, opacity?: number) => THREE.Sprite;
@@ -28,10 +28,20 @@ export const SHIP_LOOK = {
   hemi: [["#4a62a8", 0.42], ["#b9c0d0", 0.95]] as const,
   sun: [["#8ea6e8", 0.5], ["#d6dbe8", 0.9]] as const,
   exposure: [1.25, 0.98] as const,
-  /** The ship's lamp: its colour, its glow's size, and how much it swells at a bank. */
+  /** The ship's lamp: its colour, its glow's size, how much it swells at a bank, and how low it burns when the patch is as far as it can be and still in sight (1 is no dimming). */
   lamp: "#ffb24a",
   lampSize: 7,
   lampPulse: 2.2,
+  lampFar: 0.3,
+  /** A wisp out in the cloud: how far under its usual height it rides, how much of its light shows, and how thick the cloud lying over its lower half is. Pulled, it lifts clear and is itself again. */
+  sunk: 0.75,
+  sunkLight: 0.5,
+  puff: 0.9,
+  /** The band along each rail where the far ones can be had: how strongly the planks are tinted there (0 is not at all). */
+  leeway: 0.07,
+  /** Seconds a wisp takes to lift out of the cloud when his staff takes it, and one the wind has taken astern to be gone from sight. */
+  liftSec: 0.35,
+  goneSec: 1.6,
   /** Wind streaks over the deck: how many, and how fast (tiles a second). */
   streaks: 26,
   streakSpeed: 9,
@@ -98,6 +108,9 @@ export interface ShipFrame {
   t: number;
   time: number;
   players: Map<number, { root: THREE.Object3D; beam: THREE.Object3D }>;
+  /** Each wisp's drawing, and where each is (tiles from the lamp) and whether his staff is on it. */
+  wisps: Map<number, { root: THREE.Object3D; halo: THREE.Sprite; light: THREE.PointLight }>;
+  at: Map<number, { x: number; y: number; held: boolean }>;
 }
 
 export class ShipFx {
@@ -123,6 +136,14 @@ export class ShipFx {
   private veilK = 0;
   private home = new THREE.Group();
   private last = 0;
+  /** How far each wisp is sunk in the cloud (0 clear of it, 1 riding in it). */
+  private sunk = new Map<number, number>();
+  /** Wisps the wind has taken, going astern. */
+  private goners: { s: THREE.Sprite; x: number; at: number }[] = [];
+  private goneSeen = new Set<string>();
+  /** The cloud lying over each wisp that is out in it. */
+  private puffs = new Map<number, THREE.Sprite>();
+  private puffMap = smokeTexture();
 
   constructor(private glow: Glow) {
     const std: Std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, ...extra });
@@ -169,6 +190,15 @@ export class ShipFx {
     noseMesh.position.set(0, 0.08, -hl);
     noseMesh.receiveShadow = true;
     this.all.add(noseMesh);
+
+    // The leeway: the planks within reach of the far lanes, a little paler along each rail.
+    const band = SHIP.railLeeway + 1;
+    for (const sx of [-1, 1]) {
+      const strip = new THREE.Mesh(new THREE.PlaneGeometry(band, hl * 2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffe2b0", transparent: true, opacity: K.leeway, depthWrite: false }));
+      strip.position.set(sx * (hw - band / 2), 0.1, 0);
+      strip.renderOrder = 2;
+      this.all.add(strip);
+    }
 
     // The rails: a low bulwark and a rail on posts, down both sides, across the stern, and along the prow.
     const rail = (x0: number, z0: number, x1: number, z1: number) => {
@@ -253,7 +283,7 @@ export class ShipFx {
     for (let i = 0; i < K.streaks; i++) {
       const len = 1.2 + ((i * 37) % 10) * 0.16;
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.05, len).rotateX(-Math.PI / 2), streakMat);
-      mesh.position.set(-8 + ((i * 53) % 160) / 10, 0.9 + ((i * 17) % 10) * 0.12, -18 + ((i * 29) % 34));
+      mesh.position.set(-SHIP_SEA.hw + ((i * 53) % (SHIP_SEA.hw * 20)) / 10, 0.9 + ((i * 17) % 10) * 0.12, -18 + ((i * 29) % 34));
       mesh.renderOrder = 4;
       this.streaks.push({ m: mesh, v: 0.75 + ((i * 13) % 10) * 0.05 });
       this.all.add(mesh);
@@ -391,7 +421,9 @@ export class ShipFx {
     this.lit += (want - this.lit) * (want < this.lit ? 0.25 : 0.06);
     const flick = gut === undefined ? 0.96 + 0.04 * Math.sin(time * 2.3) : 0.55 + 0.45 * Math.sin(time * 31) * Math.sin(time * 17);
     const pulse = Math.max(0, 1 - (time - this.pulse) / 0.6);
-    const lit = Math.max(0, this.lit * flick);
+    // It burns lower the farther the patch draws away.
+    const far = Math.max(0, Math.min(1, (this.lead - P.nearest) / (P.gone - P.nearest)));
+    const lit = Math.max(0, this.lit * flick) * (1 - (1 - K.lampFar) * far * far);
     this.lampGlow.scale.setScalar(K.lampSize * (0.5 + 0.5 * lit) + pulse * K.lampPulse);
     this.lampGlow.material.opacity = 0.6 * lit;
     this.lampCore.material.opacity = 0.95 * lit;
@@ -405,6 +437,51 @@ export class ShipFx {
     this.veil.visible = this.veilK > 0.004;
     (this.veil.material as THREE.MeshBasicMaterial).color.copy(this.sea).lerp(WHITE, 0.1).multiplyScalar(0.4);
     (this.veil.material as THREE.MeshBasicMaterial).opacity = this.veilK * 0.97;
+
+    // Wisps out in the cloud ride half sunk in it and dim; one his staff has, or one over the deck, is clear of it and bright.
+    for (const [id, rig] of f.wisps) {
+      const w = f.at.get(id);
+      if (!w) continue;
+      const want = !w.held && !onDeck(w.x, w.y) ? 1 : 0;
+      let k = this.sunk.get(id) ?? want;
+      k += Math.sign(want - k) * Math.min(Math.abs(want - k), dt / K.liftSec);
+      this.sunk.set(id, k);
+      rig.root.position.y -= K.sunk * k;
+      rig.halo.material.opacity *= 1 - (1 - K.sunkLight) * k;
+      rig.light.intensity *= 1 - k;
+      let puff = this.puffs.get(id);
+      if (!puff) {
+        puff = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.puffMap, transparent: true, opacity: 0, depthWrite: false }));
+        puff.renderOrder = 7;
+        this.puffs.set(id, puff);
+        this.all.add(puff);
+      }
+      puff.visible = k > 0.02 && rig.root.visible;
+      puff.position.set(rig.root.position.x + Math.sin(time * 0.9 + id) * 0.08, rig.root.position.y - 0.42, rig.root.position.z + 0.3);
+      puff.scale.set(1.9, 0.95, 1);
+      puff.material.color.copy(this.sea).lerp(WHITE, 0.3);
+      puff.material.opacity = K.puff * k;
+    }
+    for (const [id, puff] of this.puffs) if (!f.wisps.has(id)) (puff.removeFromParent(), puff.material.dispose(), this.puffs.delete(id));
+    // One the wind has taken: a dim light going away astern in the cloud, quickly, and out.
+    for (const o of r.lost ?? []) {
+      const key = `${o.tick}:${o.x}`;
+      if (this.goneSeen.has(key)) continue;
+      this.goneSeen.add(key);
+      const s = this.glow("#ffd9a0", 1.5, 0.5);
+      s.renderOrder = 5;
+      this.all.add(s);
+      this.goners.push({ s, x: o.x, at: time });
+    }
+    if (!r.lost?.length && this.goneSeen.size > 64) this.goneSeen.clear();
+    this.goners = this.goners.filter((o) => {
+      const k = (time - o.at) / K.goneSec;
+      if (k >= 1) return o.s.removeFromParent(), o.s.material.dispose(), false;
+      o.s.position.set(o.x, K.seaY + 0.35 - k * 0.5, SHIP_DECK.hl + SHIP.astern + 1 + k * (6 + K.stream * K.goneSec));
+      o.s.scale.setScalar(1.5 * (1 - 0.6 * k));
+      o.s.material.opacity = 0.5 * (1 - k) ** 1.5;
+      return true;
+    });
 
     // The wind.
     for (const s of this.streaks) {
@@ -437,6 +514,7 @@ export class ShipFx {
 
   dispose() {
     this.all.removeFromParent();
+    this.puffMap.dispose();
     this.all.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.geometry) mesh.geometry.dispose();

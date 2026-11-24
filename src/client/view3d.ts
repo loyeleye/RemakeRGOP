@@ -2993,7 +2993,9 @@ export class World {
       this.distant.visible = false;
     }
     this.brazierLight.intensity = 0;
-    this.shipFx.step({ r, t: st.t, time, players: this.players });
+    const c = st.shrine.board.center, mine = st.snap.players.find((p) => p.id === st.me);
+    const at = new Map(st.snap.wisps.map((w) => [w.id, { x: w.x - c.x, y: w.y - c.y, held: mine?.beam === w.id }]));
+    this.shipFx.step({ r, t: st.t, time, players: this.players, wisps: this.wisps, at });
     // The second clock, which nobody has to read: night to first light.
     const L = SHIP_LOOK, k = r.light, mix = (a: number, b: number) => a + (b - a) * k;
     this.hemi.color.set(L.hemi[0][0]).lerp(TMP_COLOR.set(L.hemi[1][0]), k);
@@ -4188,7 +4190,7 @@ export class World {
     // My reach square and walk marker.
     const me = st.snap.players.find((p) => p.id === st.me);
     if (me) {
-      const r = me.mode === "pull" ? PULL_REACH : PUSH_REACH;
+      const r = me.mode === "pull" ? (st.ship?.reach ?? PULL_REACH) : PUSH_REACH;
       const mx = lerp(me.px, me.x);
       const my = lerp(me.py, me.y);
       const x0 = Math.max(1, mx - r);
@@ -4269,7 +4271,7 @@ export function drawMinimap(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     for (let x = 0; x < b.width; x++) {
       const t = b.tiles[y * b.width + x];
       if (t === Tile.Edge) continue;
-      g.fillStyle = t === Tile.Wall ? "#4a4a55" : t === Tile.Water ? "#3f9fa8" : t === Tile.Well ? "#c9d4dc" : t === Tile.Rock ? "#888" : t === Tile.CrystalA || t === Tile.CrystalB ? "#e6c8ff" : t === Tile.Rime ? "#cfe8f4" : t === Tile.Moss ? "#4f8a3a" : t === Tile.Glyph ? "#c9a24a" : t === Tile.Brazier ? "#ff9a3a" : "#3b3346";
+      g.fillStyle = t === Tile.Wall ? "#4a4a55" : t === Tile.Water ? "#3f9fa8" : t === Tile.Well ? (st.ship ? "#262d42" : "#c9d4dc") : t === Tile.Rock ? "#888" : t === Tile.CrystalA || t === Tile.CrystalB ? "#e6c8ff" : t === Tile.Rime ? "#cfe8f4" : t === Tile.Moss ? "#4f8a3a" : t === Tile.Glyph ? "#c9a24a" : t === Tile.Brazier ? "#ff9a3a" : "#3b3346";
       g.fillRect(rect.x + x * k, rect.y + y * k, Math.ceil(k), Math.ceil(k));
     }
   for (const w of st.snap.wisps) {

@@ -12,7 +12,7 @@ import { botCommand } from "../engine/bot.js";
 import { Game, Grip, Rng, TICK_MS, type Action, type Guild, type Wisp } from "../engine/game.js";
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
-import { SHIP, SHIP_DECK, shipLight } from "../engine/shiphome.js";
+import { SHIP, SHIP_DECK, SHIP_LANES, shipLight, shipRise, onDeck } from "../engine/shiphome.js";
 import { STILL, stillMs, type StillCue } from "../engine/stills.js";
 import { lineTicks } from "./granny.js";
 import { realClock, type Clock } from "./room.js";
@@ -21,7 +21,7 @@ const YOU = 1;
 const ROOK = "Rook";
 
 /** How a stand-in for the player plays, in tests and measurements. */
-export type Stand = "hold" | "idle";
+export type Stand = "hold" | "rails" | "idle";
 
 export class ShipRoom {
   private send: ((m: ServerMsg) => void) | null = null;
@@ -47,8 +47,18 @@ export class ShipRoom {
   private stillEnd = -1e9;
   /** All the stills off (?nostills in the page). */
   stillsOn = true;
-  /** The wind, to try by playing (?wind=1, 2 or 3 in the page): a loose wisp goes a tile astern every this many ticks. */
-  windEvery = SHIP.wind as number;
+  /** His reach in this run, to try by playing (?reach=8, 10 or 12 in the page). */
+  reach = SHIP.reach as number;
+  /** The wind, to try by playing (?wind=0.75 or 1.25 in the page): SHIP.wind times this. */
+  windScale = 1;
+  /** The bell from home: the tick of its next stroke, how many it has rung, and whether it rings on this tick. */
+  private bellAt = 0;
+  private bells = 0;
+  private stroke = false;
+  /** Tiles of wind owed to the loose wisps (it blows by parts of a tile a tick). */
+  private windOwed = 0;
+  /** Wisps the wind has just taken off the stern: the column each left by (tiles from the lamp) and the tick, for the page to show going. */
+  private gone: { x: number; tick: number }[] = [];
   /** For tests and measurements. */
   stillsShown: string[] = [];
   restarts = 0;
@@ -123,18 +133,25 @@ export class ShipRoom {
     const S = SHIP;
     const g = (this.game = new Game(shrineById(S.shrine), [{ id: YOU, guild: 0 as Guild, name: ROOK }], this.seed(), [S.wisps, 0], 100000));
     g.noShove = true;
+    g.pullReach = this.reach;
+    g.pullBoost.set(YOU, SHIP.haul);
     g.respawnPause = g.outPause = S.pause;
     this.queue = [];
     this.busyUntil = 0;
     this.lead = S.patch.start;
     this.nextAt = 0;
     this.gutterAt = -1;
+    this.windOwed = 0;
+    this.gone = [];
+    this.bellAt = Math.ceil(S.ticks * S.bell.from);
+    this.bells = 0;
+    this.stroke = false;
     this.banked = this.lost = this.ticks = 0;
     this.nearest = 99;
     this.farthest = 0;
     this.said.delete("half");
     this.said.delete("last");
-    // Every wisp waits beyond the bow; the room brings them over one at a time.
+    // Every wisp waits out of sight ahead; the room brings them into the cloud beside the ship one at a time.
     this.free = new Map();
     for (const w of g.wisps) this.away(w, -1e9);
     // One that went in comes back to the bow's queue, not to the deck.
@@ -166,32 +183,44 @@ export class ShipRoom {
     this.free.set(w.id, since + SHIP.pause);
   }
 
-  /** One comes over the bow, in a lane with room in it. */
+  /** One shows in the cloud ahead of the bow, in a lane with room in it. */
   private arrive() {
     const g = this.game, c = g.board.center;
-    if (g.tick < this.nextAt) return;
+    // None once home is coming in over where they would show: the deck empties toward the end.
+    if (g.tick < this.nextAt || g.tick >= SHIP.ticks - this.homeTicks()) return;
     const w = g.wisps.find((o) => g.away.has(o.id) && (this.free.get(o.id) ?? 0) <= g.tick);
     if (!w) return;
-    const open = SHIP.lanes.filter((x) => !g.wisps.some((o) => !g.away.has(o.id) && o.pos.x === c.x + x && o.pos.y <= c.y - SHIP_DECK.hl + 2));
+    const top = c.y - SHIP_DECK.hl - SHIP.ahead;
+    const open = SHIP_LANES.filter((x) => !g.wisps.some((o) => !g.away.has(o.id) && o.pos.x === c.x + x && o.pos.y <= top + 2));
     if (!open.length) return;
-    const at = pt(c.x + open[this.rng.int(open.length)]!, c.y - SHIP_DECK.hl);
+    const at = pt(c.x + open[this.rng.int(open.length)]!, top);
     g.away.delete(w.id);
     this.free.delete(w.id);
     w.pos = w.prev = at;
     w.rimTicks = 0;
-    this.nextAt = g.tick + SHIP.every;
+    this.nextAt = g.tick + Math.ceil(shipRise(SHIP.every[0], SHIP.every[1], this.share(), SHIP.rise.by) - 1e-9);
   }
 
-  /** The wind: every loose wisp a tile toward the stern, and off it. One on his staff is not loose. */
+  /** How much of the run is done (0 to 1). */
+  private share() {
+    return this.game.tick / SHIP.ticks;
+  }
+
+  /** The wind: every loose wisp a tile toward the stern, in the cloud or on the deck, and gone once it is past it. One on his staff is not loose. */
   private wind() {
     const g = this.game, b = g.board, c = b.center, rook = this.player();
-    if (g.tick % this.windEvery !== 0) return;
+    this.gone = this.gone.filter((o) => g.tick - o.tick < 4);
+    // It rises over the run, and blows by parts of a tile: a whole tile owed is a step astern for every loose wisp.
+    this.windOwed += shipRise(SHIP.wind[0], SHIP.wind[1], this.share(), SHIP.rise.by) * this.windScale;
+    if (this.windOwed < 1) return;
+    this.windOwed -= 1;
     // Sternmost first, so that one moving on leaves room for the one behind it.
     // Loose is "no staff on it this tick, and not in flight": the engine's `holder` stays set after a touch, so it cannot be the test.
     const loose = g.wisps.filter((w) => !g.away.has(w.id) && !w.touched && rook.beam !== w.id && !w.target && !w.skate && !b.inBankZone(w.pos)).sort((a, z) => z.pos.y - a.pos.y);
     for (const w of loose) {
-      if (w.pos.y + 1 > c.y + SHIP_DECK.hl) {
-        // Gone off the stern: the patch draws away.
+      if (w.pos.y + 1 > c.y + SHIP_DECK.hl + SHIP.astern) {
+        // Gone astern: the patch draws away.
+        this.gone.push({ x: w.pos.x - c.x, tick: g.tick });
         this.away(w, g.tick);
         this.lost++;
         this.lead += SHIP.patch.lose;
@@ -234,6 +263,7 @@ export class ShipRoom {
 
   private step() {
     const g = this.game, S = SHIP, P = S.patch;
+    this.stroke = false;
     // Out of sight: the lamp gutters, and it is the bow again. Nobody says anything.
     if (this.gutterAt >= 0) {
       g.tick++;
@@ -254,7 +284,8 @@ export class ShipRoom {
       if (g.tick >= S.ticks) this.finish();
       return;
     }
-    if (this.stand && this.stand !== "idle") {
+    if (this.stand === "rails") this.keen();
+    else if (this.stand && this.stand !== "idle") {
       const cmd = botCommand(g, YOU, S.stand, () => this.rng.next());
       if (cmd) g.command(YOU, cmd);
     }
@@ -264,7 +295,8 @@ export class ShipRoom {
     this.wind();
     // The one meter. Each bank gains on it; it draws away by itself, and with every wisp the wind takes.
     this.banked += g.banks.length;
-    this.lead += P.drift - P.gain * g.banks.length;
+    const nearness = Math.max(0, Math.min(1, (P.gone - this.lead) / (P.gone - P.nearest)));
+    this.lead += shipRise(P.drift[0], P.drift[1], this.share()) * (P.pull[0] + (P.pull[1] - P.pull[0]) * nearness) - P.gain * g.banks.length;
     const last = g.tick >= S.ticks - this.homeTicks();
     this.lead = Math.max(P.nearest, last ? Math.min(this.lead, P.gone - 1) : this.lead);
     this.nearest = Math.min(this.nearest, this.lead);
@@ -274,6 +306,11 @@ export class ShipRoom {
       for (const w of g.wisps) if (!g.away.has(w.id)) this.away(w, g.tick);
       this.player().action = { kind: "idle" };
       return;
+    }
+    // The bell from home, from half way: one stroke, and the next after a gap that is never the last one.
+    if (g.tick >= this.bellAt) {
+      this.stroke = true;
+      this.bellAt = g.tick + S.bell.gaps[this.bells++ % S.bell.gaps.length]!;
     }
     // The views over the bow: half way (the picture alone), and near the end, with the question the Offering answers.
     if (!this.said.has("half") && g.tick >= S.ticks * S.stills.half) {
@@ -288,6 +325,41 @@ export class ShipRoom {
 
   private player() {
     return this.game.players.find((p) => p.id === YOU)!;
+  }
+
+  /**
+   * Measurements only: a keen stand-in. A pull brings a wisp to Rook, so one from a far lane takes
+   * two: one from the rail to get it aboard, one from across the lamp to bank it. The other
+   * stand-in mostly stays amidships and takes the near lanes. This one does the same while there is
+   * a near one to take or one lying on the deck, and otherwise runs to the rail for whichever far
+   * one is nearest to going off the stern and can still be got to.
+   */
+  private keen() {
+    const g = this.game!, c = g.board.center, rook = g.players[0]!, S = SHIP;
+    const near = SHIP_DECK.hw + S.off[0] + 1;
+    const live = g.wisps.filter((w) => !g.away.has(w.id) && !w.target && !w.skate && !g.board.inBankZone(w.pos));
+    const a = rook.action, mine = a.kind === "staff" ? live.find((w) => w.id === a.wisp) : undefined;
+    const fetching = !!mine && !onDeck(mine.pos.x - c.x, mine.pos.y - c.y) && Math.abs(mine.pos.x - c.x) > near;
+    if (fetching) return;
+    const easy = live.some((w) => {
+      const x = w.pos.x - c.x, y = w.pos.y - c.y;
+      return onDeck(x, y) || (Math.abs(x) <= near && y > -SHIP_DECK.hl - 2 && y < SHIP_DECK.hl - 2);
+    });
+    if (easy || g.wisps.some((w) => w.touched)) {
+      const cmd = botCommand(g, YOU, S.stand, () => this.rng.next());
+      if (cmd) g.command(YOU, cmd);
+      return;
+    }
+    const wind = shipRise(S.wind[0], S.wind[1], g.tick / S.ticks, S.rise.by) * this.windScale;
+    let best: number | null = null, bestY = -Infinity;
+    for (const w of live) {
+      const x = w.pos.x - c.x, y = w.pos.y - c.y;
+      if (y < -SHIP_DECK.hl - 2 || Math.abs(x) <= near) continue;
+      const stand = Math.sign(x) * Math.min(SHIP_DECK.hw, Math.max(0, Math.abs(x) - this.reach));
+      const walk = Math.ceil(Math.abs(stand - (rook.pos.x - c.x)) / 2) + Math.ceil(Math.max(0, Math.abs(y - (rook.pos.y - c.y)) - this.reach) / 2) + 2;
+      if (walk < (SHIP_DECK.hl + S.astern - y) / wind && y > bestY) (best = w.id), (bestY = y);
+    }
+    if (best !== null) g.command(YOU, { action: { kind: "staff", wisp: best }, toggleRun: !rook.run });
   }
 
   private finish() {
@@ -365,7 +437,9 @@ export class ShipRoom {
         lead: this.lead,
         light: shipLight(t / S.ticks),
         home: Math.max(0, Math.min(1, (t - (S.ticks - home)) / home)),
-        bell: t >= S.ticks * S.bell.from && this.gutterAt < 0,
+        bell: this.stroke,
+        reach: this.reach,
+        ...(this.gone.length ? { lost: this.gone } : {}),
         ...(this.gutterAt >= 0 ? { gutter: t - this.gutterAt } : {}),
         ...(this.over() ? { over: t - (S.ticks - S.railTicks) } : {}),
       },
