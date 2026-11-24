@@ -709,6 +709,8 @@ function storyTickSound(s: GameSnapshot) {
     else sound.bankChime(s.tick, "rook");
   }
   if (prev && (s.scores[1] ?? 0) > (prev.scores[1] ?? 0)) sound.kesChime();
+  // Hesta stones the wisps: the boulder sound, once for all of them.
+  if (prev && s.wisps.some((w) => w.rooted) && !prev.wisps.some((w) => w.rooted)) sound.stoneCast();
   const mine = s.players.find((p) => p.id === me);
   const was = prev?.players.find((p) => p.id === me);
   if (!mine) return;

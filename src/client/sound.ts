@@ -220,6 +220,28 @@ export function bankPlop() {
   noise(0.06, "lowpass", 700, 0.12);
 }
 
+/**
+ * Hesta's stone cast: a boulder settling. A low thud as her fist shuts (0.3 s into the move), a
+ * short grind of rock, and two small stones knocking after it. Plain and brief, not a quake.
+ */
+let lastStone = 0;
+export function stoneCast() {
+  const s = out();
+  if (!s || s.c.currentTime - lastStone < 3) return;
+  lastStone = s.c.currentTime;
+  setTimeout(() => {
+    thump(0.34);
+    strike(62, 0.2, 0, [
+      [1, 1, 0.5],
+      [1.48, 0.35, 0.22],
+    ]);
+    noise(0.16, "lowpass", 320, 0.45);
+    noise(0.05, "bandpass", 900, 0.12);
+  }, 300);
+  setTimeout(() => noise(0.07, "bandpass", 620, 0.07, -0.2), 520);
+  setTimeout(() => noise(0.05, "bandpass", 480, 0.09, 0.25), 660);
+}
+
 /** Lumi's hand bell; `rings` times, half a second apart. */
 export function handBell(rings = 1) {
   const s = out();
