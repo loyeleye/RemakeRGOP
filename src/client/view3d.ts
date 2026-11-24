@@ -19,6 +19,7 @@ import { makeCloud, makeCurtain, makeIsland, makeWaterfall } from "./islands.js"
 import { DYING, crowdSpot, terraceHeight } from "../engine/dying.js";
 import { DRESS, dressVerge, quarryPit, sieveGrain, sieveMask, sievePaths, wellLoop } from "./sieve-dress.js";
 import { SIEVE } from "../engine/sieve.js";
+import { RescueFx } from "./rescue-dress.js";
 import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
 export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff", "#6fe07a"];
@@ -52,6 +53,8 @@ export interface DrawState {
   /** Run 8, the Sieve (see StoryView.sieve). */
   sieve?: { warn?: number[]; drain?: number; look?: { x: number; y: number }; pull?: NonNullable<NonNullable<import("../engine/protocol.js").StoryView["sieve"]>["pull"]> };
   dying?: NonNullable<import("../engine/protocol.js").StoryView["dying"]>;
+  /** Run 9, the rescue (see StoryView.rescue). */
+  rescue?: NonNullable<import("../engine/protocol.js").StoryView["rescue"]>;
   /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
   walk?: number;
 }
@@ -96,7 +99,8 @@ export class Camera {
   }
 
   fitScale(board: Board) {
-    return Math.min(this.w / (board.width + 6), this.h / ((board.height + 4) * 0.95));
+    const f = board.frame;
+    return Math.min(this.w / ((f?.w ?? board.width) + 6), this.h / (((f?.h ?? board.height) + 4) * 0.95));
   }
 
   /** Zoomed out past the plaza, the camera tips down toward the horizon to show the island. */
@@ -111,7 +115,8 @@ export class Camera {
   }
 
   private minScale(board: Board) {
-    return Math.min(this.w / (board.width + 44), this.h / (board.height + 44));
+    const f = board.frame;
+    return Math.min(this.w / ((f?.w ?? board.width) + 44), this.h / ((f?.h ?? board.height) + 44));
   }
 
   phoneZoom() {
@@ -1047,7 +1052,7 @@ function setWindows(on: boolean) {
 }
 
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
-const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "streamer", "streamer-blue", "wind-vane", "bent-tree", "referee-stand"]);
+const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "streamer", "streamer-blue", "wind-vane", "bent-tree", "referee-stand", "cold-brazier", "low-lamp"]);
 /** Yard things drawn from their own model: tiles wide and deep, and the block-out's height. */
 const YARD_THINGS: Record<string, [number, number, number]> = {
   beehive: [1, 1, 1], "garden-plot": [3, 2, 0.3], "mat-rack": [2, 1, 1.9], baskets: [1, 1, 0.4], wheelbarrow: [1, 1, 0.7], "pane-crate": [1, 1, 0.7], "cargo-crates": [1, 1, 1.3],
@@ -2135,6 +2140,7 @@ export class World {
         if (hs && x >= hs.x && x < hs.x + hs.w && y >= hs.y && y < hs.y + hs.h) continue;
         if (t === Tile.Wall && propAt.has(`${x},${y}`)) continue;
         if (t === Tile.Wall) this.addProp(th.wall, wx, wz, 2.8, 2.2, seed);
+        else if (t === Tile.Rock && propAt.has(`${x},${y}`)) continue;
         else if (t === Tile.Rock) {
           // Deflector stones inside the archways can have their own look.
           const court = Math.max(Math.abs(x - b.center.x), Math.abs(y - b.center.y)) <= 4;
@@ -2183,11 +2189,14 @@ export class World {
     const cx = this.worldX(b, c.x);
     const cz = this.worldZ(b, c.y);
     const daisMat = new THREE.MeshStandardMaterial({ map: floorTex, color: "#9a8f9c", roughness: 0.85 });
+    // A landing's slip (run 9) has no brazier: none of this is seen there.
+    const hearth: THREE.Object3D[] = [];
     for (const [r, h] of [[2.4, 0.18], [1.9, 0.36]] as const) {
       const d = new THREE.Mesh(new THREE.CylinderGeometry(r, r + 0.1, h, 72), daisMat);
       d.position.set(cx, h / 2, cz);
       d.receiveShadow = d.castShadow = true;
       g.add(d);
+      hearth.push(d);
     }
     this.brazierSlot = new THREE.Group();
     this.brazierSlot.position.set(cx, 0.36, cz);
@@ -2226,6 +2235,7 @@ export class World {
     g.add(pillar);
     this.fireParts = { fire, embers, glow: fireGlow, pillar };
     this.brazierLight.position.set(cx, 4.2, cz);
+    if (shrine.landing) for (const o of [...hearth, this.brazierSlot, fire, embers, fireGlow, pillar]) o.visible = false;
 
     // The banking rim: a glowing square of runes 5x5 around the centre.
     const s = 2.5;
@@ -2929,6 +2939,29 @@ export class World {
     const dim = 1 - 0.55 * Math.sin(Math.min(1, dip * 3) * Math.PI * 0.5) * dip;
     this.sun.intensity = (SIEVE_LIGHT.sun[1] + (SIEVE_LIGHT.sun[2] - SIEVE_LIGHT.sun[1]) * k) * dim;
     this.hemi.intensity = (SIEVE_LIGHT.sky[1] + (SIEVE_LIGHT.sky[2] - SIEVE_LIGHT.sky[1]) * k) * dim;
+  }
+
+  /** Run 9, the rescue: the cloud sea and its wall, the patch, the landing, the boats and the lamps (rescue-dress.ts). */
+  private rescueFx: RescueFx | null = null;
+  private stepRescue(st: DrawState, time: number) {
+    const r = st.rescue;
+    if (!r || !st.shrine.landing) {
+      if (this.rescueFx) {
+        this.rescueFx.dispose();
+        this.rescueFx = null;
+        for (const rig of this.wisps.values()) rig.root.visible = true;
+        for (const rig of this.players.values()) rig.root.visible = rig.lantern.visible = true;
+      }
+      return;
+    }
+    if (!this.rescueFx) {
+      this.rescueFx = new RescueFx(glowSprite);
+      this.scene.add(this.rescueFx.all);
+    }
+    // No fire burns at the slip.
+    this.brazierLight.intensity = 0;
+    const b = st.shrine.board;
+    this.rescueFx.step({ r, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, wisps: this.wisps.values(), players: this.players });
   }
 
   /** Run 8: wisps that have just fallen away, watched going: down into the chalk, or down a well getting smaller. */
@@ -3957,6 +3990,7 @@ export class World {
     this.stepDying(st, time);
     this.stepFalls(st, time);
     this.stepSieve(st, time);
+    this.stepRescue(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
     // Watchers: story figures standing off the plaza, turning slowly to keep you in view.

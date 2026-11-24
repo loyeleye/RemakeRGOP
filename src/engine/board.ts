@@ -88,6 +88,9 @@ export class Board {
     return !!this.deep && this.tile(p) === Tile.Water && this.deep.has(p.y * this.width + p.x);
   }
 
+  /** Story boards whose centre is not their middle (the low one): the part worth looking at, in tiles. The camera fits and centres on it. */
+  frame: { x: number; y: number; w: number; h: number } | null = null;
+
   /** Bumped whenever the tiles change during a round (portcullises), so caches know. */
   version = 0;
 

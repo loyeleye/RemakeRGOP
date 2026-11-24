@@ -127,6 +127,14 @@ export interface StoryView {
   };
   /** Run 8, the Sieve: who the keeper is (a player who stands and watches), and which wells are about to have a wisp over them. Nothing is counted on screen. */
   sieve?: { keeper: number; /** How much of the supply has come (0 to 1): the morning's colour drains with it. */ drain?: number; /** The first fall: the tile to look down at, while nothing moves. */ look?: { x: number; y: number }; /** Wells (by their place in the shrine's list) where a wisp is about to appear: the air over them shimmers. */ warn?: number[]; /** The first pull: the rings closing in (`wind`), then everything holding (`hold`), with ticks left; the wisps that jumped, from where and toward which well; the wisp torn off his staff; the staged wisp to look at first; and which take it is. */ pull?: { phase: "wind" | "hold" | "tug" | "after"; left: number; /** The tug: the wisp it drags off his staff, and whether he is still holding it. */ tugged?: number; held?: boolean; moved: { id: number; x: number; y: number; well: number }[]; torn?: number; focus?: { x: number; y: number }; loud?: boolean } };
+  /**
+   * Run 9, the rescue: who Kes is; each boat's lamp (banks in it, of `perBoat`) and how many boats
+   * have lifted; how far the cloud's edge is from the slip; the dark patch while it is about (its
+   * middle in tiles, its step a tick, its half-width, ticks of warning left, which crossing, and
+   * whether it drags); players whose glow is dark under it; and, once the last lamp is full, the
+   * ticks since the boat lifted (-1 before it has) and who went aboard.
+   */
+  rescue?: { kes: number; boats: number[]; perBoat: number; lifted: number; cloud: number; patch?: { x: number; y: number; dx: number; dy: number; r: number; warn: number; n: number; drag?: boolean }; dark?: number[]; ending?: number; aboard?: number[] };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */
   /** kitchen: how many times Rook has gone in his door this walk (from walk 2); a rise opens the kitchen still. */
   pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "night" | "dusk"; kitchen?: number };

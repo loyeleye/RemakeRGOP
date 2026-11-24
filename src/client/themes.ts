@@ -140,6 +140,16 @@ export const THEMES: Record<string, Theme> = {
       particles: null, dressed: true, decorate() {},
     };
   },
+  // The low one (run 9): a plain green island at the end of the day, pale cloud already over its ground. Not dressed yet.
+  get "low-one"() {
+    const base = THEMES["tidepool-steps"]!;
+    return {
+      ...base, name: "The low one", floor: "kite-fell", grass: "#6f8f5a",
+      sky: { ...base.sky, zenith: "#3a4a6e", sky: "#7f8fb0", haze: "#c9c4c8", below: "#b9c0d0" },
+      fog: "#aab4c8", clouds: "#dfe4ee", hemi: ["#b8c4e0", "#6a6a70", 0.95] as [string, string, number], sun: ["#ffd9b0", 1.5] as [string, number], exposure: 0.92,
+      particles: null, dressed: true, decorate() {},
+    };
+  },
   // The fairy ring after Hesta's landing (run 7): the same look, with the crater's glass drawn by the board.
   get "kindling-crater"() {
     return THEMES["fairy-ring"]!;

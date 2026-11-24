@@ -58,6 +58,11 @@ export const STILLS: Record<string, StillCard> = {
   "r8-10": { who: "Her hands on the book, the page of sixteens, the pen stopping", faces: "No face." },
   "r8-11a": { who: "Tilda, straight at us", faces: "Asking: eyes on us, wet but no tears; brows up in the middle; mouth open." },
   "r8-11b": { who: "Rook, half turned to the skiff", faces: "No answer: eyes sliding away, brows down, mouth open with nothing coming." },
+  // Run 9, the rescue (story/runs9-10-story-check.md). None is drawn yet: plain cards.
+  "r9-0": { who: "Sefa's grandmother at the landing, her husband's shoulder behind her, boats and lamps beyond", faces: "Her eyes steady on Rook, brows level, mouth set, a small nod." },
+  "r9-1": { who: "Kes looking straight up, a dark band of cloud round her boots", faces: "Eyes wide, brows pulled together, mouth a little open." },
+  "r9-2": { who: "Kes and Rook side by side. Her glow is gone and she is looking at her empty hands", faces: "Kes: eyes wide, brows up in the middle, mouth open. Rook: brows down, eyes on her, mouth shut." },
+  "r9-3": { who: "The grandmother at the rail, one hand on her husband's arm, looking past us at Rook", faces: "Her eyes soft, brows a little up, mouth closed, chin lifted toward home." },
 };
 
 /** How long a still is up, fade to fade (ms), given how long its line takes to say (0 for none). */
