@@ -7,12 +7,12 @@
 // (src/engine/shiphome.ts), the brief project files gameplay/runs9-10-prototype-brief.md, the lines
 // and stills story/runs9-10-story-check.md (drafts for Ladi).
 
-import { Mover, pt, samePt } from "../engine/board.js";
+import { Mover, pt, samePt, type Pt } from "../engine/board.js";
 import { botCommand } from "../engine/bot.js";
-import { Game, Grip, Rng, TICK_MS, type Action, type Guild, type Wisp } from "../engine/game.js";
+import { Game, Grip, Rng, TICK_MS, flingOffset, type Action, type Guild, type Wisp } from "../engine/game.js";
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
-import { SHIP, SHIP_DECK, SHIP_LANES, shipLight, shipRise, onDeck } from "../engine/shiphome.js";
+import { SHIP, SHIP_DECK, inDraw, shipLanes, shipLight, shipReach, shipRise } from "../engine/shiphome.js";
 import { STILL, stillMs, type StillCue } from "../engine/stills.js";
 import { lineTicks } from "./granny.js";
 import { realClock, type Clock } from "./room.js";
@@ -59,6 +59,14 @@ export class ShipRoom {
   private windOwed = 0;
   /** Wisps the wind has just taken off the stern: the column each left by (tiles from the lamp) and the tick, for the page to show going. */
   private gone: { x: number; tick: number }[] = [];
+  /** Wisps the lamp has: over the rail, on their way to it. */
+  private drawn = new Set<number>();
+  /** The tiles round the lamp where one is banked. */
+  private rim: Pt[] = [];
+  /** How far off the rail the farthest lane is (tiles): the whole width on a wide screen, less on one held upright. */
+  far: number = SHIP.off[1];
+  /** Whether the lamp takes a wisp that is over the rail (see SHIP.draw). */
+  draws: boolean = SHIP.draw.on;
   /** For tests and measurements. */
   stillsShown: string[] = [];
   restarts = 0;
@@ -134,7 +142,13 @@ export class ShipRoom {
     const g = (this.game = new Game(shrineById(S.shrine), [{ id: YOU, guild: 0 as Guild, name: ROOK }], this.seed(), [S.wisps, 0], 100000));
     g.noShove = true;
     g.pullReach = this.reach;
-    g.pullBoost.set(YOU, SHIP.haul);
+    // From the band along a rail, everything out over it.
+    const c0 = g.board.center;
+    g.reachRule = (p, w) => shipReach(p.pos.x - c0.x, p.pos.y - c0.y, w.pos.x - c0.x, w.pos.y - c0.y, this.reach);
+    g.pullBoost.set(YOU, 2);
+    this.drawn = new Set();
+    this.rim = [];
+    for (let y = -4; y <= 4; y++) for (let x = -4; x <= 4; x++) if (g.board.inBankZone(pt(c0.x + x, c0.y + y))) this.rim.push(pt(c0.x + x, c0.y + y));
     g.respawnPause = g.outPause = S.pause;
     this.queue = [];
     this.busyUntil = 0;
@@ -181,24 +195,75 @@ export class ShipRoom {
     w.grip = Grip.Free;
     g.away.set(w.id, 1e9);
     this.free.set(w.id, since + SHIP.pause);
+    this.drawn.delete(w.id);
   }
 
-  /** One shows in the cloud ahead of the bow, in a lane with room in it. */
+  /** Where the lull is now: 0 before it and after the rich stretch, 1 in the lull, 2 in the rich stretch that follows. */
+  private lull() {
+    const L = SHIP.lull, t = this.game.tick - Math.round(SHIP.ticks * L.at);
+    return t < 0 ? 0 : t < L.ticks ? 1 : t < L.ticks + L.rich ? 2 : 0;
+  }
+
+  /** One shows in the cloud ahead of the bow: anywhere across the width of it, most of them far out, never two in a row. */
   private arrive() {
-    const g = this.game, c = g.board.center;
-    // None once home is coming in over where they would show: the deck empties toward the end.
-    if (g.tick < this.nextAt || g.tick >= SHIP.ticks - this.homeTicks()) return;
+    const g = this.game, c = g.board.center, S = SHIP;
+    // None once home is coming in over where they would show: the sea empties toward the end.
+    if (g.tick < this.nextAt || g.tick >= S.ticks - this.homeTicks()) return;
     const w = g.wisps.find((o) => g.away.has(o.id) && (this.free.get(o.id) ?? 0) <= g.tick);
     if (!w) return;
-    const top = c.y - SHIP_DECK.hl - SHIP.ahead;
-    const open = SHIP_LANES.filter((x) => !g.wisps.some((o) => !g.away.has(o.id) && o.pos.x === c.x + x && o.pos.y <= top + 2));
-    if (!open.length) return;
-    const at = pt(c.x + open[this.rng.int(open.length)]!, top);
+    const top = c.y - SHIP_DECK.hl - S.ahead;
+    const clear = (x: number) => !g.wisps.some((o) => !g.away.has(o.id) && Math.abs(o.pos.x - (c.x + x)) <= 1 && o.pos.y <= top + 3);
+    const lanes = shipLanes(this.far), nearEdge = SHIP_DECK.hw + S.off[0] + 1;
+    const near = lanes.filter((x) => Math.abs(x) <= nearEdge && clear(x)), wide = lanes.filter((x) => Math.abs(x) > nearEdge && clear(x));
+    const lull = this.lull();
+    const from = (near.length && this.rng.next() < (lull === 2 ? S.lull.richNear : S.nearShare)) || !wide.length ? near : wide;
+    if (!from.length) return;
+    const at = pt(c.x + from[this.rng.int(from.length)]!, top - this.rng.int(S.scatter + 1));
     g.away.delete(w.id);
     this.free.delete(w.id);
     w.pos = w.prev = at;
     w.rimTicks = 0;
-    this.nextAt = g.tick + Math.ceil(shipRise(SHIP.every[0], SHIP.every[1], this.share(), SHIP.rise.by) - 1e-9);
+    const every = shipRise(S.every[0], S.every[1], this.share(), S.rise.by);
+    this.nextAt = g.tick + Math.ceil((lull === 1 ? every * S.lull.thin : lull === 2 ? S.lull.richEvery : every) - 1e-9);
+  }
+
+  /**
+   * His haul, and the lamp's draw. A wisp his staff is on comes `haul` tiles a tick in all (the
+   * engine brings it two of them). One that is over the rail is the lamp's: his staff comes off it
+   * and it goes to the lamp by itself.
+   */
+  private haul() {
+    const g = this.game, b = g.board, c = b.center, rook = this.player(), S = SHIP;
+    const step = (w: Wisp, to: Pt, n: number, stopBy = 0) => {
+      for (let i = 0; i < n; i++) {
+        if (Math.max(Math.abs(to.x - w.pos.x), Math.abs(to.y - w.pos.y)) <= stopBy || b.inBankZone(w.pos)) return;
+        const q = pt(w.pos.x + Math.sign(to.x - w.pos.x), w.pos.y + Math.sign(to.y - w.pos.y));
+        if (!b.passable(q, Mover.Wisp) || samePt(q, rook.pos) || g.wisps.some((o) => o !== w && !g.away.has(o.id) && samePt(o.pos, q))) return;
+        w.pos = q;
+      }
+    };
+    for (const w of g.wisps) {
+      if (g.away.has(w.id) || b.inBankZone(w.pos)) continue;
+      if (!this.drawn.has(w.id) && w.touched && w.holder === YOU && rook.mode === "pull" && rook.beam === w.id) {
+        step(w, rook.pos, S.haul - 2, 1);
+        // The engine aimed it from where it was; it is nearer now, so aim it again from here.
+        const off = flingOffset(rook.pos, w.pos, "pull");
+        w.target = off.x || off.y ? pt(w.pos.x + off.x, w.pos.y + off.y) : null;
+      }
+      // Over the rail, or hauled right to his hand wherever he stands.
+      const atHand = w.touched && rook.beam === w.id && Math.max(Math.abs(w.pos.x - rook.pos.x), Math.abs(w.pos.y - rook.pos.y)) <= 1;
+      if (!this.draws || !(inDraw(w.pos.x - c.x, w.pos.y - c.y) || atHand || this.drawn.has(w.id))) continue;
+      // The lamp has it. Its nearest side of the rim, and his staff off it.
+      const fresh = !this.drawn.has(w.id);
+      this.drawn.add(w.id);
+      if (rook.action.kind === "staff" && rook.action.wisp === w.id) rook.action = { kind: "idle" };
+      if (rook.beam === w.id) rook.beam = null;
+      const to = this.rim.reduce((a, q) => (Math.hypot(q.x - w.pos.x, q.y - w.pos.y) < Math.hypot(a.x - w.pos.x, a.y - w.pos.y) ? q : a));
+      w.skate = null;
+      w.target = to;
+      if (!fresh) step(w, to, S.draw.speed - 1);
+    }
+    for (const id of this.drawn) if (g.away.has(id)) this.drawn.delete(id);
   }
 
   /** How much of the run is done (0 to 1). */
@@ -206,7 +271,7 @@ export class ShipRoom {
     return this.game.tick / SHIP.ticks;
   }
 
-  /** The wind: every loose wisp a tile toward the stern, in the cloud or on the deck, and gone once it is past it. One on his staff is not loose. */
+  /** The wind: every loose wisp out in the cloud a tile toward the stern, and gone once it is past it. One on his staff is not loose, and one over the rail is out of the wind. */
   private wind() {
     const g = this.game, b = g.board, c = b.center, rook = this.player();
     this.gone = this.gone.filter((o) => g.tick - o.tick < 4);
@@ -216,7 +281,7 @@ export class ShipRoom {
     this.windOwed -= 1;
     // Sternmost first, so that one moving on leaves room for the one behind it.
     // Loose is "no staff on it this tick, and not in flight": the engine's `holder` stays set after a touch, so it cannot be the test.
-    const loose = g.wisps.filter((w) => !g.away.has(w.id) && !w.touched && rook.beam !== w.id && !w.target && !w.skate && !b.inBankZone(w.pos)).sort((a, z) => z.pos.y - a.pos.y);
+    const loose = g.wisps.filter((w) => !g.away.has(w.id) && !w.touched && rook.beam !== w.id && !w.target && !w.skate && !b.inBankZone(w.pos) && !this.drawn.has(w.id) && !inDraw(w.pos.x - c.x, w.pos.y - c.y)).sort((a, z) => z.pos.y - a.pos.y);
     for (const w of loose) {
       if (w.pos.y + 1 > c.y + SHIP_DECK.hl + SHIP.astern) {
         // Gone astern: the patch draws away.
@@ -292,12 +357,15 @@ export class ShipRoom {
     this.arrive();
     g.step();
     this.ticks = g.tick;
+    this.haul();
     this.wind();
     // The one meter. Each bank gains on it; it draws away by itself, and with every wisp the wind takes.
     this.banked += g.banks.length;
     const nearness = Math.max(0, Math.min(1, (P.gone - this.lead) / (P.gone - P.nearest)));
-    this.lead += shipRise(P.drift[0], P.drift[1], this.share()) * (P.pull[0] + (P.pull[1] - P.pull[0]) * nearness) - P.gain * g.banks.length;
+    // In the last stretch, with home in sight, it draws away no more.
     const last = g.tick >= S.ticks - this.homeTicks();
+    const drift = last ? 0 : shipRise(P.drift[0], P.drift[1], this.share()) * (P.pull[0] + (P.pull[1] - P.pull[0]) * nearness) * [1, S.lull.drift, S.lull.richDrift][this.lull()]!;
+    this.lead += drift - P.gain * g.banks.length;
     this.lead = Math.max(P.nearest, last ? Math.min(this.lead, P.gone - 1) : this.lead);
     this.nearest = Math.min(this.nearest, this.lead);
     this.farthest = Math.max(this.farthest, this.lead);
@@ -328,36 +396,30 @@ export class ShipRoom {
   }
 
   /**
-   * Measurements only: a keen stand-in. A pull brings a wisp to Rook, so one from a far lane takes
-   * two: one from the rail to get it aboard, one from across the lamp to bank it. The other
-   * stand-in mostly stays amidships and takes the near lanes. This one does the same while there is
-   * a near one to take or one lying on the deck, and otherwise runs to the rail for whichever far
-   * one is nearest to going off the stern and can still be got to.
+   * Measurements only: a keen stand-in, who runs to whichever rail has the wisp that costs him
+   * least to get and hauls it over, where the other stand-in stays amidships and takes what is
+   * within the square. `stand.sloppiness` is how often he dithers for a tick before choosing.
    */
   private keen() {
-    const g = this.game!, c = g.board.center, rook = g.players[0]!, S = SHIP;
-    const near = SHIP_DECK.hw + S.off[0] + 1;
-    const live = g.wisps.filter((w) => !g.away.has(w.id) && !w.target && !w.skate && !g.board.inBankZone(w.pos));
-    const a = rook.action, mine = a.kind === "staff" ? live.find((w) => w.id === a.wisp) : undefined;
-    const fetching = !!mine && !onDeck(mine.pos.x - c.x, mine.pos.y - c.y) && Math.abs(mine.pos.x - c.x) > near;
-    if (fetching) return;
-    const easy = live.some((w) => {
-      const x = w.pos.x - c.x, y = w.pos.y - c.y;
-      return onDeck(x, y) || (Math.abs(x) <= near && y > -SHIP_DECK.hl - 2 && y < SHIP_DECK.hl - 2);
-    });
-    if (easy || g.wisps.some((w) => w.touched)) {
-      const cmd = botCommand(g, YOU, S.stand, () => this.rng.next());
-      if (cmd) g.command(YOU, cmd);
-      return;
-    }
+    const g = this.game, c = g.board.center, rook = this.player(), S = SHIP;
+    const px = rook.pos.x - c.x, py = rook.pos.y - c.y;
+    const live = (w: Wisp) => !g.away.has(w.id) && !this.drawn.has(w.id) && !g.board.inBankZone(w.pos);
+    const a = rook.action;
+    if (a.kind === "staff" && g.wisps[a.wisp] && live(g.wisps[a.wisp]!)) return;
+    if (this.rng.next() < S.stand.sloppiness) return;
     const wind = shipRise(S.wind[0], S.wind[1], g.tick / S.ticks, S.rise.by) * this.windScale;
-    let best: number | null = null, bestY = -Infinity;
-    for (const w of live) {
+    const band = SHIP_DECK.hw - S.railLeeway;
+    let best: number | null = null, cost = Infinity;
+    for (const w of g.wisps) {
+      if (!live(w)) continue;
       const x = w.pos.x - c.x, y = w.pos.y - c.y;
-      if (y < -SHIP_DECK.hl - 2 || Math.abs(x) <= near) continue;
-      const stand = Math.sign(x) * Math.min(SHIP_DECK.hw, Math.max(0, Math.abs(x) - this.reach));
-      const walk = Math.ceil(Math.abs(stand - (rook.pos.x - c.x)) / 2) + Math.ceil(Math.max(0, Math.abs(y - (rook.pos.y - c.y)) - this.reach) / 2) + 2;
-      if (walk < (SHIP_DECK.hl + S.astern - y) / wind && y > bestY) (best = w.id), (bestY = y);
+      if (y < -SHIP_DECK.hl - 3) continue;
+      const side = Math.sign(x);
+      // Ticks to be where he can take it (he runs two tiles a tick, and steadies for one), then to haul it to the rail.
+      const walk = shipReach(px, py, x, y, this.reach) ? 0 : Math.ceil(Math.max(Math.max(0, band - side * px), Math.max(0, Math.abs(y - py) - this.reach + 2)) / 2) + 1;
+      const hauls = Math.ceil(Math.max(0, Math.abs(x) - SHIP_DECK.hw - 1) / S.haul);
+      if (walk + 1 >= (SHIP_DECK.hl + S.astern - y) / wind) continue;
+      if (walk + hauls < cost) (best = w.id), (cost = walk + hauls);
     }
     if (best !== null) g.command(YOU, { action: { kind: "staff", wisp: best }, toggleRun: !rook.run });
   }
@@ -439,6 +501,7 @@ export class ShipRoom {
         home: Math.max(0, Math.min(1, (t - (S.ticks - home)) / home)),
         bell: this.stroke,
         reach: this.reach,
+        far: SHIP_DECK.hw + this.far,
         ...(this.gone.length ? { lost: this.gone } : {}),
         ...(this.gutterAt >= 0 ? { gutter: t - this.gutterAt } : {}),
         ...(this.over() ? { over: t - (S.ticks - S.railTicks) } : {}),

@@ -1,4 +1,5 @@
 // Run 10: one line a stand-in, for a set of feel numbers. npx tsx tools/ship-sweep.ts [seeds] [key=value ...]
+// Env: STAND=hold|rails|idle (hold stays amidships, rails runs to the rails), SLOPPY=0.08,0.5 (one line each), FAR=7 (the farthest lane, as on a phone held upright), NODRAW=1.
 import { SHIP } from "../src/engine/shiphome.js";
 import { ShipRoom, type Stand } from "../src/server/shiphome.js";
 
@@ -13,14 +14,16 @@ for (const kv of process.argv.slice(3)) {
 for (const sloppy of (process.env.SLOPPY ?? "0.08,0.3,0.5,0.7").split(",").map(Number)) {
   (SHIP.stand as { sloppiness: number }).sloppiness = sloppy;
   let restarts = 0, clean = 0, end = 0, near = 0, far = 0, banked = 0, lost = 0;
-  const at: number[] = [0, 0, 0, 0];
+  const at: number[] = [0, 0, 0, 0, 0, 0];
   for (let k = 1; k <= seeds; k++) {
     let s = k * 7919;
     const room = new ShipRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), (process.env.STAND ?? "hold") as Stand);
+    if (process.env.FAR) room.far = Number(process.env.FAR);
+    if (process.env.NODRAW) room.draws = false;
     room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
     for (let n = 0; n < 6000 && room.state.phase !== "results"; n++) {
       room.onTick();
-      if (room.restarts === 0 && room.state.phase === "playing") [50, 100, 150, 183].forEach((t, i) => room.state.game.tick === t && (at[i]! += room.state.lead / seeds));
+      if (room.restarts === 0 && room.state.phase === "playing") [50, 100, 120, 134, 154, 183].forEach((t, i) => room.state.game.tick === t && (at[i]! += room.state.lead / seeds));
     }
     restarts += room.restarts;
     if (!room.restarts) clean++;
@@ -30,5 +33,5 @@ for (const sloppy of (process.env.SLOPPY ?? "0.08,0.3,0.5,0.7").split(",").map(N
     banked += room.banked / seeds;
     lost += room.lost / seeds;
   }
-  console.log(`sloppy ${sloppy}: first try ${clean}/${seeds}, restarts ${restarts}, banked ${banked.toFixed(0)} lost ${lost.toFixed(0)}, lead at 50/100/150/183 ${at.map((x) => x.toFixed(1)).join(" ")}, end ${end.toFixed(1)}, nearest ${near.toFixed(1)}, farthest ${far.toFixed(1)}`);
+  console.log(`sloppy ${sloppy}: first try ${clean}/${seeds}, restarts ${restarts}, banked ${banked.toFixed(0)} lost ${lost.toFixed(0)}, lead at 50/100/120/134/154/183 ${at.map((x) => x.toFixed(1)).join(" ")}, end ${end.toFixed(1)}, nearest ${near.toFixed(1)}, farthest ${far.toFixed(1)}`);
 }

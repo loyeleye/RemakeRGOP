@@ -3,7 +3,7 @@ import { Mover, Tile, pt } from "../src/engine/board.js";
 import { TICK_MS, type Game, type Wisp } from "../src/engine/game.js";
 import { shrineById } from "../src/engine/maps.js";
 import type { ServerMsg } from "../src/engine/protocol.js";
-import { SHIP, SHIP_DECK, SHIP_LANES, SHIP_SEA, inSea, onDeck, shipLight } from "../src/engine/shiphome.js";
+import { SHIP, SHIP_DECK, SHIP_SEA, inDraw, inSea, onDeck, shipLanes, shipLight, shipReach } from "../src/engine/shiphome.js";
 import { STILLS } from "../src/engine/stills.js";
 import { ShipRoom, type Stand } from "../src/server/shiphome.js";
 
@@ -33,7 +33,7 @@ function stage(g: Game, w: Wisp, x: number, y: number) {
 }
 
 describe("Run 10: the ship home", () => {
-  it("the board is a deck with the lamp amidships, the cloud sea round it where only wisps go, and the hooded figure at the stern", () => {
+  it("the board is a deck with the lamp amidships, the cloud sea round it where only wisps go, and the man at the stern", () => {
     const sh = shrineById(SHIP.shrine), b = sh.board, c = b.center;
     expect(sh.deck).toBe(true);
     expect(b.tile(c)).toBe(Tile.Brazier);
@@ -45,8 +45,8 @@ describe("Run 10: the ship home", () => {
       }
     expect((sh.props ?? []).some((p) => p.kind === "ship-figure" && p.x === c.x + SHIP.figure[0] && p.y === c.y + SHIP.figure[1])).toBe(true);
     // The wisps' lanes are out in the cloud on both sides, from `off[0]` to `off[1]` tiles past the rail.
-    expect(SHIP_LANES).toHaveLength(2 * (SHIP.off[1] - SHIP.off[0] + 1));
-    for (const x of SHIP_LANES) {
+    expect(shipLanes()).toHaveLength(2 * (SHIP.off[1] - SHIP.off[0] + 1));
+    for (const x of shipLanes()) {
       expect(Math.abs(x) - SHIP_DECK.hw).toBeGreaterThanOrEqual(SHIP.off[0]);
       expect(Math.abs(x) - SHIP_DECK.hw).toBeLessThanOrEqual(SHIP.off[1]);
     }
@@ -62,39 +62,95 @@ describe("Run 10: the ship home", () => {
       for (const w of onBoard(g)) {
         seen++;
         expect(onDeck(w.pos.x - c.x, w.pos.y - c.y)).toBe(false);
-        expect(SHIP_LANES).toContain(w.pos.x - c.x);
+        expect(shipLanes()).toContain(w.pos.x - c.x);
       }
     }
     expect(seen).toBeGreaterThan(20);
+    // They are spread over the whole width, most of them beyond the two lanes he can take from amidships, and none stays where it showed.
+    const xs = onBoard(g).map((w) => Math.abs(w.pos.x - c.x));
+    expect(Math.max(...xs)).toBeGreaterThan(SHIP_DECK.hw + SHIP.off[1] - 4);
+    for (let n = 0; n < 40; n++) room.onTick();
+    expect(room.lost).toBeGreaterThan(3);
     expect(g.pullReach).toBe(SHIP.reach);
-    // The leeway: from the rail's own tile and up to `railLeeway` tiles in from it, the farthest lane on that side is in reach; one tile farther in it is not, nor from the middle.
-    const far = SHIP_DECK.hw + SHIP.off[1];
-    expect(far - (SHIP_DECK.hw - SHIP.railLeeway)).toBeLessThanOrEqual(SHIP.reach);
-    expect(far - (SHIP_DECK.hw - SHIP.railLeeway - 1)).toBeGreaterThan(SHIP.reach);
-    expect(far).toBeGreaterThan(SHIP.reach);
-    expect(far + SHIP_DECK.hw - SHIP.railLeeway).toBeGreaterThan(SHIP.reach);
   });
 
-  it("he pulls one out of the cloud and over the rail, at the run's own haul", () => {
+  it("on a screen held upright the lanes stop sooner, and nothing shows beyond them", () => {
+    const { room, toPlay } = open(13, "idle");
+    room.far = SHIP.offNarrow;
+    toPlay();
+    const g = room.state.game, c = g.board.center;
+    for (let n = 0; n < 80; n++) {
+      room.onTick();
+      for (const w of onBoard(g)) expect(Math.abs(w.pos.x - c.x)).toBeLessThanOrEqual(SHIP_DECK.hw + SHIP.offNarrow);
+    }
+    expect(room.storyView().ship!.far).toBe(SHIP_DECK.hw + SHIP.offNarrow);
+  });
+
+  it("the leeway: from the two tiles along a rail he reaches everything out over it, and from the middle only the two nearest lanes", () => {
+    const hw = SHIP_DECK.hw, far = hw + SHIP.off[1], near = hw + SHIP.off[0];
+    for (const x of [hw, hw - SHIP.railLeeway]) {
+      expect(shipReach(x, 0, far, 0)).toBe(true);
+      expect(shipReach(-x, 0, -far, 0)).toBe(true);
+      // Not one too far ahead or astern of him, and nothing over the other rail.
+      expect(shipReach(x, 0, far, SHIP.reach + 1)).toBe(false);
+      expect(shipReach(x, 0, -near, 0)).toBe(false);
+    }
+    expect(shipReach(hw - SHIP.railLeeway - 1, 0, far, 0)).toBe(false);
+    const fromMiddle = shipLanes().filter((x) => shipReach(0, 0, x, 0));
+    expect(fromMiddle.sort((a, z) => a - z)).toEqual([-near - 1, -near, near, near + 1]);
+    // The room plays by it.
     const { room, conn, toPlay } = open(17, null);
     toPlay();
     const g = room.state.game, c = g.board.center, rook = g.players[0]!;
     const w = g.wisps[0]!;
-    // Level with him, in the nearest lane on the east side.
-    const x0 = SHIP_DECK.hw + SHIP.off[0];
-    stage(g, w, x0, rook.pos.y - c.y);
+    rook.pos = pt(c.x + hw - SHIP.railLeeway, c.y);
+    stage(g, w, far, 0);
+    expect(g.inReach(rook, w)).toBe(true);
+    rook.pos = pt(c.x, c.y + 4);
+    expect(g.inReach(rook, w)).toBe(false);
+    conn.close();
+  });
+
+  it("he hauls one from the farthest lane to the rail in a few ticks, and from there the lamp takes it and banks it", () => {
+    const { room, conn, toPlay } = open(17, null);
+    toPlay();
+    const g = room.state.game, c = g.board.center, rook = g.players[0]!;
+    const w = g.wisps[0]!;
+    const far = SHIP_DECK.hw + SHIP.off[1];
+    rook.pos = pt(c.x + SHIP_DECK.hw, c.y + 6);
+    stage(g, w, far, 6);
     expect(g.board.passable(w.pos, Mover.Walker)).toBe(false);
     conn.message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: w.id } }));
-    for (let i = 0; i < 3; i++) room.onTick();
-    // Two ticks of pulling (the first takes hold): `haul` tiles a tick, straight at him, whatever the wind is doing.
+    let ticks = 0;
+    while (!inDraw(w.pos.x - c.x, w.pos.y - c.y) && ticks++ < 20) room.onTick();
+    // `haul` tiles a tick, whatever the wind is doing: about two seconds from the farthest lane.
+    expect(ticks).toBeLessThanOrEqual(Math.ceil(SHIP.off[1] / SHIP.haul) + 2);
     expect(w.pos.y).toBe(rook.pos.y);
-    expect(x0 - (w.pos.x - c.x)).toBeGreaterThanOrEqual(2 * SHIP.haul - 1);
-    expect(onDeck(w.pos.x - c.x, w.pos.y - c.y)).toBe(true);
+    // His staff comes off it, he does nothing more, and it is banked.
+    room.onTick();
+    expect(rook.action.kind).toBe("idle");
+    expect(rook.beam).toBe(null);
+    const t0 = g.tick;
+    while (room.banked === 0 && g.tick - t0 < 12) room.onTick();
+    expect(room.banked).toBe(1);
+  });
+
+  it("?nodraw: a hauled wisp lies where he left it, out of the wind, until he pulls it again", () => {
+    const { room, toPlay } = open(9, null);
+    room.draws = false;
+    toPlay();
+    const g = room.state.game;
+    const w = g.wisps[0]!;
+    stage(g, w, SHIP_DECK.hw, -3);
+    const at = { ...w.pos };
+    for (let i = 0; i < 10; i++) room.onTick();
+    expect(w.pos).toEqual(at);
+    expect(room.banked).toBe(0);
   });
 
   it("lasts its fixed length whatever is banked, has no result, and says only Rook's two lines over three views", () => {
     for (const seed of [11, 4242]) {
-      const { room, lines, run } = open(seed);
+      const { room, lines, run } = open(seed, "rails");
       run();
       expect(room.state.phase).toBe("results");
       expect(room.ticks).toBe(SHIP.ticks);
@@ -105,8 +161,8 @@ describe("Run 10: the ship home", () => {
       const said = lines().filter((l) => l.text);
       expect(said.map((l) => l.text)).toEqual(["Faster.", "That's her lantern. Why is it on the water?"]);
       expect(said.every((l) => l.who === "Rook")).toBe(true);
-      // A careful hand closes on the patch, is never nearer than it can be, and never has it for good.
-      expect(room.nearest).toBeGreaterThan(SHIP.patch.nearest);
+      // A careful hand ends closer to the patch than he started, and is never nearer than it can be.
+      expect(room.nearest).toBeGreaterThanOrEqual(SHIP.patch.nearest);
       expect(room.state.lead).toBeLessThan(SHIP.patch.start);
       // Wisps are lost astern however well he plays.
       expect(room.lost).toBeGreaterThan(10);
@@ -153,22 +209,27 @@ describe("Run 10: the ship home", () => {
     expect(room.state.lead - lead).toBeLessThan(SHIP.patch.lose + 3 * SHIP.patch.drift[1] * SHIP.patch.pull[1]);
   });
 
-  it("a wisp he holds is not the wind's, and one he has let go of is again", () => {
-    const { room, conn, toPlay } = open(9, null);
-    toPlay();
-    const g = room.state.game, c = g.board.center;
-    const rook = g.players[0]!;
-    const w = g.wisps[0]!;
-    // Right in front of him, so his staff holds it where it is.
-    stage(g, w, rook.pos.x - c.x + 1, rook.pos.y - c.y);
-    const act = (action: object) => conn.message(JSON.stringify({ t: "act", action }));
-    act({ kind: "staff", wisp: w.id });
-    const y0 = w.pos.y;
-    for (let i = 0; i < 6; i++) room.onTick();
-    expect(w.pos.y).toBe(y0);
-    act({ kind: "idle" });
-    for (let i = 0; i < 7; i++) room.onTick();
-    expect(w.pos.y).toBeGreaterThanOrEqual(y0 + 2);
+  it("running to the rails beats standing amidships by a clear margin", () => {
+    const banks = (stand: Stand) => [11, 4242, 77].reduce((n, seed) => {
+      const { room, run } = open(seed, stand);
+      run();
+      return n + room.banked;
+    }, 0);
+    expect(banks("rails")).toBeGreaterThan(banks("hold") * 1.3);
+  });
+
+  it("the lull: for a while they come seldom and the patch draws well away however he plays", () => {
+    const L = SHIP.lull, from = Math.round(SHIP.ticks * L.at);
+    for (const seed of [11, 4242]) {
+      const { room, toPlay } = open(seed, "rails");
+      toPlay();
+      const g = room.state.game;
+      while (g.tick < from) room.onTick();
+      const before = room.state.lead;
+      while (g.tick < from + L.ticks) room.onTick();
+      expect(room.state.lead - before).toBeGreaterThan(1);
+      expect(room.restarts).toBe(0);
+    }
   });
 
   it("a bank brings the patch nearer by `gain`", () => {

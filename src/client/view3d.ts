@@ -3005,7 +3005,8 @@ export class World {
     this.renderer.toneMappingExposure = mix(L.exposure[0], L.exposure[1]);
     (this.scene.background as THREE.Color).copy(this.shipFx.sea);
     (this.scene.fog as THREE.FogExp2).color.copy(this.shipFx.sea);
-    this.skyU.uStars.value = 1 - k;
+    // The eye looks down at the cloud: no stars, and no moon.
+    this.skyU.uStars.value = 0;
   }
 
   /** Run 8: wisps that have just fallen away, watched going: down into the chalk, or down a well getting smaller. */
@@ -4193,10 +4194,15 @@ export class World {
       const r = me.mode === "pull" ? (st.ship?.reach ?? PULL_REACH) : PUSH_REACH;
       const mx = lerp(me.px, me.x);
       const my = lerp(me.py, me.y);
-      const x0 = Math.max(1, mx - r);
+      let x0 = Math.max(1, mx - r);
       const y0 = Math.max(1, my - r);
-      const x1 = Math.min(b.width - 1, mx + r + 1);
+      let x1 = Math.min(b.width - 1, mx + r + 1);
       const y1 = Math.min(b.height - 1, my + r + 1);
+      if (st.ship && me.mode === "pull") {
+        // Run 10: from the band along a rail he reaches everything out over it, so the shape runs out to the farthest lane on that side.
+        const cx = b.center.x, rel = me.x - cx;
+        if (Math.abs(rel) >= SHIP_DECK.hw - SHIP.railLeeway && Math.abs(rel) <= SHIP_DECK.hw) rel > 0 ? (x1 = cx + st.ship.far + 1) : (x0 = cx - st.ship.far);
+      }
       const ox = b.width / 2;
       const oy = b.height / 2;
       const pos = this.reach.geometry.getAttribute("position") as THREE.BufferAttribute;

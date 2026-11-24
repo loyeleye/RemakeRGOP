@@ -394,6 +394,8 @@ export class Game {
   noShove = false;
   /** How far a pull reaches in this game (tiles), where a run sets its own (run 10). The stand-in bot still plans with the usual reach. */
   pullReach = PULL_REACH;
+  /** A story run's own rule for what a pull reaches, in place of the square (run 10: from the rail, everything out over it). */
+  reachRule: ((p: Lamplighter, w: Wisp) => boolean) | null = null;
   /** Ticks a banked wisp stays gone before it comes back (0: straight back, as in a match). */
   respawnPause = 0;
   /** Banked wisps that are gone for now, and the tick each comes back. They wait, unseen, on the rim. */
@@ -1288,6 +1290,7 @@ export class Game {
 
   inReach(p: Lamplighter, w: Wisp) {
     if (samePt(p.pos, w.pos)) return false;
+    if (p.mode === "pull" && this.reachRule) return this.reachRule(p, w) && this.board.canSee(p.pos, w.pos);
     const reach = p.mode === "pull" ? this.pullReach : PUSH_REACH;
     return cheb(p.pos, w.pos) <= reach && this.board.canSee(p.pos, w.pos);
   }

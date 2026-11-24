@@ -17,7 +17,7 @@ import { SieveRoom } from "../server/sieve.js";
 import { RescueRoom } from "../server/rescue.js";
 import { RESCUE } from "../engine/rescue.js";
 import { ShipRoom } from "../server/shiphome.js";
-import { SHIP, SHIP_DECK } from "../engine/shiphome.js";
+import { SHIP, SHIP_DECK, shipReach } from "../engine/shiphome.js";
 import { DYING } from "../engine/dying.js";
 import { PondRoom, answersTap } from "../server/pond.js";
 import { JobRoom } from "../server/job.js";
@@ -897,13 +897,23 @@ function rescueRoom() {
   return r;
 }
 
-/** Run 10, the ship home: ?reach=8, 10 or 12 sets how far his pull reaches (8 is the run's own); ?wind=0.75 or 1.25 (anything from 0.5 to 1.5) makes the wind that much of what it is; ?nostills leaves the three views over the bow out. */
+/**
+ * Run 10, the ship home. The wisps are spread over the whole width of the cloud in view, so on a
+ * screen held upright, which shows less to the sides, the lanes stop sooner (SHIP.offNarrow).
+ * Switches: ?far=10 sets the farthest lane (tiles off the rail, 4 to 14); ?reach=10 or 12 sets how
+ * far his pull reaches from the middle of the deck (8 is the run's own); ?nodraw leaves a hauled
+ * wisp lying at the rail for him to pull again; ?wind=0.75 or 1.25 (anything from 0.5 to 1.5)
+ * makes the wind that much of what it is; ?nostills leaves the three views over the bow out.
+ */
 function shipRoom() {
   const r = new ShipRoom();
   const q = new URLSearchParams(location.search), wind = Number(q.get("wind"));
   if (wind >= 0.5 && wind <= 1.5) r.windScale = wind;
   const reach = Number(q.get("reach"));
   if ([8, 10, 12].includes(reach)) r.reach = reach;
+  const far = Number(q.get("far"));
+  r.far = far >= 4 && far <= SHIP.off[1] ? Math.round(far) : innerHeight > innerWidth ? SHIP.offNarrow : SHIP.off[1];
+  if (q.has("nodraw")) r.draws = false;
   if (q.has("nostills")) r.stillsOn = false;
   else stills.preload("r10-");
   shipCut(false);
@@ -1836,8 +1846,10 @@ function frame(now: number) {
   if (document.body.classList.contains("touch")) {
     const p = snap.players.find((q) => q.id === me);
     const w = snap.wisps.find((q) => q.id === lit);
-    const reach = p?.mode === "push" ? PUSH_REACH : (room?.story?.ship?.reach ?? PULL_REACH);
-    $("staff").classList.toggle("far", !p || !w || Math.max(Math.abs(w.x - p.x), Math.abs(w.y - p.y)) > reach);
+    const ship = room?.story?.ship, c = shrine.board.center;
+    const reach = p?.mode === "push" || !ship ? (p?.mode === "push" ? PUSH_REACH : PULL_REACH) : ship.reach;
+    const near = !!p && !!w && (ship && p.mode !== "push" ? shipReach(p.x - c.x, p.y - c.y, w.x - c.x, w.y - c.y, reach) : Math.max(Math.abs(w.x - p.x), Math.abs(w.y - p.y)) <= reach);
+    $("staff").classList.toggle("far", !near);
   }
   // The ending: leftover wisps lift off and stream into the brazier, and the camera looks up.
   let drawSnap = snap, drawPrev = prevSnap;
