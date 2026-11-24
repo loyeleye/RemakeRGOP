@@ -1393,7 +1393,11 @@ export class World {
         const glow = glowSprite("#ffb65a", 1.5, 0);
         glow.position.set(wx + Math.cos(turn) * 0.42, 2.05, wz - Math.sin(turn) * 0.42);
         g.add(glow);
-        this.pathLamps.push({ slot, glow, mats: [], state: "off", seed: p.x * 7.3 + p.y * 3.1 });
+        // And a small bright flame just over the lantern's cap, so it reads from above (the glass is upright).
+        const core = glowSprite("#ffe2a0", 0.55, 0);
+        core.position.set(glow.position.x, 2.7, glow.position.z);
+        g.add(core);
+        this.pathLamps.push({ slot, glow, core, mats: [], state: "off", seed: p.x * 7.3 + p.y * 3.1 });
       } else if (p.kind === "ladder") {
         // Leaning on the lamp post beside it (toward the model's +X).
         const turn = shrine.turns?.[`${p.x},${p.y}`] ?? 0;
@@ -2123,7 +2127,7 @@ export class World {
   /** Lit windows for this walk's light (dusk and night). */
   private windowsOn = false;
   /** The lake path's lamps: each its own lantern, so one can gutter or go dark while the rest burn. */
-  private pathLamps: { slot: THREE.Group; glow: THREE.Sprite; mats: THREE.MeshStandardMaterial[]; state: "off" | "lit" | "gutter" | "dead"; seed: number }[] = [];
+  private pathLamps: { slot: THREE.Group; glow: THREE.Sprite; core: THREE.Sprite; mats: THREE.MeshStandardMaterial[]; state: "off" | "lit" | "gutter" | "dead"; seed: number }[] = [];
   private lampWalk = 1;
   /** Sets each lamp for this walk and light: off by day, lit at dusk and night, bar the walk's guttering and dead ones. */
   private dressLamps() {
@@ -2149,6 +2153,7 @@ export class World {
         mat.needsUpdate = true;
       }
       l.glow.material.opacity = on ? 0.55 : 0;
+      l.core.material.opacity = on ? 0.95 : 0;
     });
   }
   /** A guttering lamp flickers: mostly low, with fits of brightness. */
@@ -2158,6 +2163,7 @@ export class World {
       const k = 0.25 + 0.75 * Math.max(0, Math.sin(time * 9 + l.seed) * Math.sin(time * 2.3 + l.seed * 2)) ** 0.6;
       for (const mat of l.mats) mat.emissiveIntensity = k;
       l.glow.material.opacity = 0.55 * k;
+      l.core.material.opacity = 0.95 * k;
     }
   }
   private fillHouse() {
