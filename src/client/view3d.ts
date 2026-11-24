@@ -1499,6 +1499,14 @@ export class World {
       holder.add(deck);
       // The maps thread's 5x3 landing, long axis east to west, turned so its lamp stands at the water end.
       this.placeSlot("landing", holder, cx, cz, Math.PI, -1);
+      // Its lantern, on the post at the water end, burns with the path lamps (the last of them, for a walk's guttering or dead list).
+      const glow = glowSprite("#ffb65a", 1.5, 0), core = glowSprite("#ffe2a0", 0.55, 0);
+      glow.position.set(cx - 2.2, 1.95, cz - 1.25);
+      core.position.set(cx - 2.2, 2.25, cz - 1.25);
+      g.add(glow, core);
+      const lit = new THREE.Group();
+      lit.userData.filled = true;
+      this.pathLamps.push({ slot: lit, glow, core, mats: [], state: "off", seed: 5.5 });
     }
     // The bigger places, one block each (placeholders until the maps thread draws them).
     const boxes = new Map<string, { x0: number; y0: number; x1: number; y1: number }>();
