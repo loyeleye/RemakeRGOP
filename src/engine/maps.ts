@@ -8,6 +8,7 @@
 //   B  brazier      a  Dawn wisp spawn b  Dusk wisp spawn
 //   1  Dawn start   2  Dusk start
 
+import { KF_FAR, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
 import { HS_CENTRE, HS_FAR, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
 import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
 
@@ -340,7 +341,7 @@ export function ringWalls(ring: Ring): Pt[] {
 /** Story places: solid things drawn as themselves. Multi-tile ones are one block of their letter. */
 export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling"
   | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat" | "path-lamp" | "ladder"
-  | "beehive" | "garden-plot" | "mat-rack" | "baskets" | "wheelbarrow" | "pane-crate" | "cargo-crates";
+  | "beehive" | "garden-plot" | "mat-rack" | "baskets" | "wheelbarrow" | "pane-crate" | "cargo-crates" | "streamer" | "streamer-blue";
 export const PROP_CHARS: Record<string, PropKind> = {
   F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling",
   // The horseshoe island's houses, the Offering stone, and the one boat at its mooring.
@@ -348,6 +349,8 @@ export const PROP_CHARS: Record<string, PropKind> = {
   // The lake path's lamp posts, and the lamp trimmer's ladder against one.
   l: "path-lamp", k: "ladder",
   // The yards: hives, garden plots (3x2, walkable), a mat rack (2x1), baskets, a barrow, crates.
+  // Kite Fell's streamers: storm violet, and one in Rosalind's blue.
+  u: "streamer", y: "streamer-blue",
   q: "beehive", p: "garden-plot", m: "mat-rack", s: "baskets", w: "wheelbarrow", n: "pane-crate", r: "cargo-crates",
 };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
@@ -842,6 +845,8 @@ const TILE_OF: Record<string, Tile> = {
   k: Tile.Wall,
   // Yard things are solid; a garden plot ("p") stays open ground.
   q: Tile.Wall,
+  u: Tile.Wall,
+  y: Tile.Wall,
   m: Tile.Wall,
   s: Tile.Wall,
   w: Tile.Wall,
@@ -1317,14 +1322,6 @@ function homePondRows(k = 1): string[] {
 }
 
 /** Run 5's race ground: open dry ground, Rook starting south-west of the fire and Kes south-east. */
-function raceRows(): string[] {
-  const N = 47, c = (N - 1) / 2;
-  const g = Array.from({ length: N }, () => Array<string>(N).fill("."));
-  g[c + 6]![c - 4] = "1";
-  g[c + 6]![c + 4] = "2";
-  return g.map((r) => r.join(""));
-}
-
 export const STORY_SHRINES: Shrine[] = [
   buildShrine({
     id: "home-pond",
@@ -1349,22 +1346,21 @@ export const STORY_SHRINES: Shrine[] = [
     spawnBand: [15, 21],
     rows: homePondRows(1.5),
   }),
-  // Run 5, the race with Kes: a plain dry oval, one brazier in the middle. A neutral board of its
-  // own, so the place can be dressed either way once Ladi has chosen it.
-  buildShrine({
-    id: "kite-fell",
-    name: "Kite Fell",
-    blurb: "A plain dry oval with the brazier in the middle: room to race.",
-    full: true,
-    scale: 1,
-    isle: { radius: 21.5, squareness: 2.1, coves: 0.03, heads: 0.03, seed: 11, stretch: [1.08, 0.95] },
-    rings: [],
-    spawnBand: [14, 17],
-    rows: raceRows(),
-  }),
+  // Run 5, the race with Kes, on her island (see kitefell.ts).
+  kiteFell(),
   // The free walk between runs: the home island as a horseshoe round its lake (see horseshoe.ts).
   homeIsland(),
 ];
+
+/** Kite Fell: drawn from the maps thread's shapes, like the home island. */
+function kiteFell(): Shrine {
+  const { rows, turns, flags } = kiteFellRows();
+  const def: ShrineDef = { id: "kite-fell", name: "Kite Fell", blurb: "Kes's island: a plain dry oval with the brazier in the middle, and the wind always up.", full: true, scale: 1, rings: [], spawnBand: [10, 15], rows };
+  const sh = finish(def, rows, 2, null);
+  // The start marks are whole stones, under the starts too.
+  const ground = [...(sh.ground ?? []), ...flags.map((f) => ({ kind: "terrace" as const, ...f }))];
+  return { ...sh, ground, coast: kfCoast, outline: kfOutline, arms: true, lobes: KF_LOBES, far: KF_FAR, turns };
+}
 
 /** The home island to walk on: drawn from the maps thread's shapes, not an IsleShape. */
 function homeIsland(): Shrine {

@@ -1451,6 +1451,16 @@ export class World {
         // Leaning on the lamp post beside it (toward the model's +X).
         const turn = shrine.turns?.[`${p.x},${p.y}`] ?? 0;
         this.placeSlot("jarek-ladder", box(0.5, 2.2, 0.12, wood), wx + Math.cos(turn) * 0.45, wz - Math.sin(turn) * 0.45, turn);
+      } else if (p.kind === "streamer" || p.kind === "streamer-blue") {
+        // A pole with a long cloth flying east in the wind (a block-out until the maps thread draws one).
+        const pole = box(0.1, 3.2, 0.1, wood);
+        pole.position.x = wx;
+        pole.position.z = wz;
+        const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.5, 8, 1), new THREE.MeshStandardMaterial({ color: p.kind === "streamer" ? "#8e5ae0" : "#3f7fe0", emissive: p.kind === "streamer" ? "#3a1f70" : "#16356e", side: THREE.DoubleSide, roughness: 1 }));
+        cloth.position.set(wx + 1, 2.95, wz);
+        cloth.castShadow = true;
+        g.add(pole, cloth);
+        this.streamers.push({ cloth, seed: p.x * 1.7 + p.y * 2.3 });
       } else if (p.kind === "lookout") {
         this.placeSlot("lookout-post", box(0.2, 1.9, 0.2, wood), wx, wz);
       } else if (p.kind === "rail") {
@@ -1527,12 +1537,14 @@ export class World {
       const holder = new THREE.Group();
       holder.add(deck);
       // The maps thread's 5x3 landing, long axis east to west, turned so its lamp stands at the water end.
-      this.placeSlot("landing", holder, cx, cz, Math.PI, -1);
+      // (Kite Fell's runs east: turned the other way, its post at the east end.)
+      const lt = shrine.turns?.landing ?? Math.PI, ls = lt === 0 ? -1 : 1;
+      this.placeSlot("landing", holder, cx, cz, lt, -1);
       // Its lantern, on the post at the water end, burns with the path lamps (the last of them, for a walk's guttering or dead list).
       const glow = glowSprite("#ffb65a", 1.5, 0), core = glowSprite("#ffe2a0", 0.55, 0);
-      glow.position.set(cx - 2.2, 1.95, cz - 1.25);
-      this.landingPost = new THREE.Vector3(cx - 2.0, 0.95, cz - 0.72);
-      core.position.set(cx - 2.2, 2.25, cz - 1.25);
+      glow.position.set(cx - 2.2 * ls, 1.95, cz - 1.25 * ls);
+      this.landingPost = new THREE.Vector3(cx - 2.0 * ls, 0.95, cz - 0.72 * ls);
+      core.position.set(cx - 2.2 * ls, 2.25, cz - 1.25 * ls);
       g.add(glow, core);
       const lit = new THREE.Group();
       lit.userData.filled = true;
@@ -1650,6 +1662,7 @@ export class World {
     this.pathLamps = [];
     this.moored = null;
     this.landingPost = null;
+    this.streamers = [];
     if (this.storm) {
       for (const l of this.storm.links) this.scene.remove(l.core, l.halo);
       this.scene.remove(this.storm.flash, ...this.storm.sparks);
@@ -1822,7 +1835,7 @@ export class World {
     if (amb) g.add(amb);
 
     // A place to walk has no parapet and no monoliths: its paths, fence, wash line and bench instead.
-    if (th.place) this.addPlace(shrine, b);
+    if (th.place || th.dressed) this.addPlace(shrine, b);
     else {
       // A low rounded parapet runs round the edge of the flagstones: the limit of play.
       const curbPts: THREE.Vector3[] = [];
@@ -2434,6 +2447,18 @@ export class World {
     this.pathLamps.push({ slot: lit, glow, core, mats: [], state: "off", seed: 6.5 });
     this.stepMoored(0);
   }
+  private streamers: { cloth: THREE.Mesh; seed: number }[] = [];
+  /** Streamers ripple along their length, more toward the free end. */
+  private stepStreamers(time: number) {
+    for (const s of this.streamers) {
+      const pos = s.cloth.geometry.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < pos.count; i++) {
+        const u = pos.getX(i) / 1.9 + 0.5;
+        pos.setZ(i, Math.sin(time * 6 - u * 7 + s.seed) * 0.22 * u);
+      }
+      pos.needsUpdate = true;
+    }
+  }
   private stepMoored(time: number) {
     const m = this.moored;
     if (!m) return;
@@ -2588,6 +2613,7 @@ export class World {
     for (const u of this.timeUniforms) u.value = time;
     this.flickerLamps(time);
     this.stepMoored(time);
+    this.stepStreamers(time);
     for (const f of this.floaters) f.obj.position.y = f.y + Math.sin(time * 0.25 * f.drift + f.phase) * 0.8;
     this.brazierLight.intensity = 18 + Math.sin(time * 9) * 3 + Math.sin(time * 23) * 2;
     const { vents, portcullis } = this.gimmicks;

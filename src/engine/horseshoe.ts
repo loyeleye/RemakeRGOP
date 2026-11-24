@@ -96,7 +96,8 @@ export const HS_LOBES = [
 ];
 
 /** "The low one": the island the beacon is lit on, in clear view east of Wick's spur and well below it (spec coordinates). */
-export const HS_FAR = [{ x: 64, y: 12, r: 8, drop: 5 }];
+/** And Kite Fell, Kes's island: west, smaller, and higher than home (a negative drop is a rise). */
+export const HS_FAR = [{ x: 64, y: 12, r: 8, drop: 5 }, { x: -80, y: 28, r: 10, drop: -6 }];
 
 /** Houses: where each plot's top-left corner is, its size, its letter, and which way its door faces. */
 export const HS_HOUSES = [

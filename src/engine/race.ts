@@ -16,8 +16,10 @@ export const RACE = {
   target: 6,
   /** Wisps come in loose groups of this many for each side, the next group when the last is banked. */
   group: 3,
-  /** How far out a group arrives (tiles from the brazier), and how loose it is (tiles across). */
-  band: [14, 17] as const,
+  /** How far out a group arrives (as a share of the race oval's radius that way), and how loose it is (tiles across). */
+  band: [0.62, 0.92] as const,
+  /** How wide an arc round due west (Rook) and due east (Kes) a group may land in, radians. */
+  arc: (Math.PI * 2) / 3,
   spread: 3,
   /** Ticks after a side's group is all banked before its next one arrives. */
   groupPause: 3,

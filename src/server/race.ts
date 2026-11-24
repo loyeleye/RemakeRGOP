@@ -9,6 +9,7 @@ import { botCommand, planSpot } from "../engine/bot.js";
 import { Game, Grip, Rng, TICK_MS, type Action, type Command, type Guild, type Wisp } from "../engine/game.js";
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
+import { KF_OVAL, KF_REFEREE, kfRace } from "../engine/kitefell.js";
 import { RACE } from "../engine/race.js";
 import { lineTicks } from "./granny.js";
 import { realClock, type Clock } from "./room.js";
@@ -154,9 +155,7 @@ export class RaceRoom {
     for (const w of g.wisps) g.onReturn(w);
     // Lumi, the referee, at the south edge, out of the way.
     const lumi = this.player(LUMI_ID), b = g.board;
-    let y = b.height - 1;
-    while (y > b.center.y && !b.passable(pt(b.center.x, y - 1), Mover.Walker)) y--;
-    lumi.pos = lumi.prev = pt(b.center.x, y - 1);
+    lumi.pos = lumi.prev = pt(b.center.x + KF_REFEREE.x, b.center.y + KF_REFEREE.y);
     this.queue = [];
     this.busyUntil = 0;
     this.started = new Set();
@@ -250,12 +249,13 @@ export class RaceRoom {
     // The same draw for the same group number on either side, whoever gets to it first.
     const n = side === "both" ? 0 : this.groupN[side];
     const rng = new Rng(this.heatSeed + n * 7919);
-    const a = (rng.next() - 0.5) * ((Math.PI * 2) / 3);
-    const r = RACE.band[0] + rng.next() * (RACE.band[1] - RACE.band[0]);
+    const a = (rng.next() - 0.5) * RACE.arc;
+    // Kite Fell's race ground is an oval: a group lands in its outer band, as far out as the oval is wide that way.
+    const f = RACE.band[0] + rng.next() * (RACE.band[1] - RACE.band[0]);
     const offs: Pt[] = [];
     while (offs.length < RACE.group) {
-      const o = pt(Math.round(-Math.cos(a) * r) + rng.int(RACE.spread * 2 + 1) - RACE.spread, Math.round(Math.sin(a) * r) + rng.int(RACE.spread * 2 + 1) - RACE.spread);
-      if (offs.some((q) => cheb(q, o) < 2)) continue;
+      const o = pt(Math.round(-Math.cos(a) * f * KF_OVAL.rx) + rng.int(RACE.spread * 2 + 1) - RACE.spread, Math.round(Math.sin(a) * f * KF_OVAL.ry) + rng.int(RACE.spread * 2 + 1) - RACE.spread);
+      if (!kfRace(o.x, o.y) || offs.some((q) => cheb(q, o) < 2)) continue;
       offs.push(o);
     }
     for (const s of side === "both" ? ([0, 1] as const) : [side]) {

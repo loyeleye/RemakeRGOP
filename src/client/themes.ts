@@ -27,6 +27,8 @@ export interface Theme {
   particles: Particles;
   /** A place to walk, not an arena: grass, no parapet round the edge, no monoliths. */
   place?: boolean;
+  /** A shrine that is played on but dressed with a place's props (Kite Fell). */
+  dressed?: boolean;
   /** Tint for the plain wall/boulder models, if the island wants them darker or paler. */
   tint?: string;
   /** What deflector stones inside the archways look like, if not the island's boulders. */
@@ -122,9 +124,11 @@ export const THEMES: Record<string, Theme> = {
   get "home-pond-big"() {
     return THEMES["tidepool-steps"]!;
   },
-  // Run 5's race ground: plain dressing until the place is chosen.
+  // Kite Fell, Kes's island (run 5, the race): short wind-flattened grass, bare of palms, and dressed
+  // with its props like a place, but played on like a shrine.
   get "kite-fell"() {
-    return THEMES["tidepool-steps"]!;
+    const base = THEMES["tidepool-steps"]!;
+    return { ...base, name: "Kite Fell", floor: "home-island", grass: "#93b860", dressed: true, decorate() {} };
   },
   // The home island as a place to walk: the lagoon's sky and falls, on grass.
   get "home-island"() {
