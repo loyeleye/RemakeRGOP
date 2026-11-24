@@ -34,9 +34,18 @@ export const SHIP_LOOK = {
    * foreshortens the sea ahead, so tiles are not spread evenly between the two: `patchLens` is
    * how strongly (the bigger, the more evenly), set so that it slides evenly up the screen.
    */
-  patchNear: 1.5,
-  patchFar: 29,
+  patchNear: 0.6,
+  patchFar: 31,
   patchLens: 7.3,
+  /**
+   * So that the one meter can be read at a glance. The distance drawn runs from `patchBest`, the
+   * nearest a good hand gets in a run this long (drawn nearly under the prow), to the losing edge,
+   * and not from the nearest the number can go, which nobody reaches. And it is drawn as wide as it
+   * is near: `patchWide[0]` times its size at the losing edge, a speck, to `patchWide[1]` times at
+   * his best. It is always much smaller than any island.
+   */
+  patchBest: 5.5,
+  patchWide: [0.3, 1.35] as const,
   /** The patch: its dark, how uneven its edge is, and the faint cold line round it that lets it be seen at night. */
   dark: "#000001",
   ragged: 0.08,
@@ -134,10 +143,10 @@ export const SHIP_LOOK = {
   spark: { gap: 0.13, sec: 0.42 },
   /**
    * A cloud bank down one side: how high its top lies, how far past the farthest lane it runs, its
-   * colour at night and at first light, how much of it shows, and the billows standing on it (how
+   * colour at night and at first light, the darker grey of its front (never black: only the patch is), how much of it shows, and the billows standing on it (how
    * many, and how big).
    */
-  bank: { y: 2.0, past: 8, night: "#6f7a99", grey: "#d3d8e4", show: 0.9, billows: 35, size: [9, 13] as const },
+  bank: { y: 2.0, past: 8, night: "#66718f", grey: "#c4cad8", front: ["#2f3648", "#687083"] as const, show: 0.9, billows: 35, size: [9, 13] as const },
 } as const;
 
 const WHITE = new THREE.Color("#ffffff"), TMP = new THREE.Color();
@@ -179,12 +188,14 @@ float fbm(vec2 p) {
   return s;
 }
 // The cloud's height: swells and hollows that pass under the ship, a little wider than they are long.
-float high(vec2 p) { return 0.62 * noise(p * vec2(0.1, 0.085)) + 0.26 * noise(p * vec2(0.24, 0.2) + 3.1) + 0.12 * noise(p * vec2(0.55, 0.5) + 9.7); }
+// Each layer is turned a different way, so that the squares the noise is made on never line up with the ship.
+vec2 turn(vec2 p, float a) { return vec2(cos(a) * p.x - sin(a) * p.y, sin(a) * p.x + cos(a) * p.y); }
+float high(vec2 p) { return 0.5 * noise(turn(p, 0.6) * vec2(0.1, 0.085)) + 0.3 * noise(turn(p, 1.9) * vec2(0.21, 0.18) + 3.1) + 0.2 * noise(turn(p, 3.3) * vec2(0.47, 0.42) + 9.7); }
 void main() {
   // The sea goes by toward the stern.
   vec2 p = vec2(vW.x, vW.y - uScroll);
   float h = high(p);
-  float n2 = fbm(p * vec2(0.4, 0.34) + 7.3);
+  float n2 = fbm(turn(p, 1.1) * vec2(0.4, 0.34) + 7.3);
   // Lit from one side: the near flank of each ridge is a little paler, and the furrow beyond it a little deeper.
   float slope = (h - high(p + vec2(1.1, 0.0))) * 5.0;
   float tops = smoothstep(0.42, 0.7, h) * (0.55 + 0.9 * n2);
@@ -268,8 +279,8 @@ export class ShipFx {
   private goners: { s: THREE.Sprite; x: number; y?: number; at: number }[] = [];
   private fire = SHIP.speed.start as number;
   private bankAll = new THREE.Group();
-  private bankU = { uCol: { value: new THREE.Color("#ffffff") }, uShow: { value: 0 }, uTile: this.u.uTile, uSize: { value: new THREE.Vector2(1, 1) }, uOff: { value: 0 } };
-  private billows: { s: THREE.Sprite; u: number; v: number; k: number }[] = [];
+  private bankU = { uCol: { value: new THREE.Color("#ffffff") }, uFront: { value: new THREE.Color("#ffffff") }, uShow: { value: 0 }, uTile: this.u.uTile, uSize: { value: new THREE.Vector2(1, 1) }, uOff: { value: 0 } };
+  private billows: { s: THREE.Sprite; u: number; v: number; k: number; dark: number }[] = [];
   private sized = new Set<THREE.Object3D>();
   private sparks: { s: THREE.Sprite; at: number; a: number }[] = [];
   private fedTick = -1;
@@ -530,18 +541,19 @@ export class ShipFx {
         fragmentShader: `
 precision highp float;
 varying vec2 vUv;
-uniform vec3 uCol;
+uniform vec3 uCol, uFront;
 uniform float uShow, uOff;
 uniform vec2 uSize;
 uniform sampler2D uTile;
 void main() {
   // Lumps of the made cloud in it, going by with it; soft at both ends and along its outer side, firmer along the hull.
   float lump = texture2D(uTile, vec2(vUv.x * uSize.x / 22.0, vUv.y * uSize.y / 30.0 + uOff)).r;
-  float ends = smoothstep(0.0, 0.3, vUv.y) * (1.0 - smoothstep(0.7, 1.0, vUv.y));
+  // Its front (the end coming down on him) is hard and dark, a wall; behind that it pales, and it thins away at its tail and sides in lumps.
+  float ends = smoothstep(0.0, 0.06, vUv.y) * (1.0 - smoothstep(0.7, 1.0, vUv.y));
   float sides = smoothstep(0.0, 0.2, vUv.x) * (1.0 - smoothstep(0.7, 1.0, vUv.x));
-  // No straight side to it: it thins away all round, in lumps, and the billows standing on it break its outline.
   float a = clamp(smoothstep(0.08, 0.75, ends * sides * (0.5 + 1.1 * lump)), 0.0, 1.0);
-  gl_FragColor = vec4(uCol * (0.8 + 0.5 * lump), a * uShow);
+  float wall = 1.0 - smoothstep(0.0, 0.32, vUv.y);
+  gl_FragColor = vec4(mix(uCol * (0.8 + 0.5 * lump), uFront * (0.75 + 0.4 * lump), wall), min(1.0, a * (uShow + 0.3 * wall)));
 }`,
       }),
     );
@@ -554,8 +566,9 @@ void main() {
       // Small ones along the hull's side of it, so that none stands over the deck; the tall ones farther out.
       const col = i % 5, rows = K.bank.billows / 5, row = Math.floor(i / 5);
       // Smaller at its two ends and along both sides, so its outline is cloud and not a panel.
-      const edge = (col === 0 ? 0.42 : col === 1 ? 0.75 : 1) * (row === 0 || row === rows - 1 ? 0.7 : 1);
-      this.billows.push({ s: sp, u: [0.1, 0.28, 0.5, 0.72, 0.94][col]! + (((i * 37) % 10) - 5) * 0.012, v: (row + 0.5 + (((i * 53) % 10) - 5) * 0.06) / rows, k: edge });
+      // The rows count from its tail: the last is its front, where they stand tall and close, and dark.
+      const edge = (col === 0 ? 0.42 : col === 1 ? 0.75 : 1) * (row === 0 ? 0.7 : row === rows - 1 ? 1.12 : 1);
+      this.billows.push({ s: sp, u: [0.1, 0.28, 0.5, 0.72, 0.94][col]! + (((i * 37) % 10) - 5) * 0.012, v: (row + 0.5 + (((i * 53) % 10) - 5) * 0.06) / rows, k: edge, dark: row === rows - 1 ? 1 : row === rows - 2 ? 0.55 : 0 });
       this.bankAll.add(sp);
     }
     this.bankAll.visible = false;
@@ -712,9 +725,10 @@ void main() {
     this.lead += (r.lead - this.lead) * P.ease;
     const bow = -(SHIP_DECK.hl + 0.5);
     // Its distance is spread up the screen: just clear of the prow at its nearest, at the top edge when it is lost.
-    const away = Math.max(0, Math.min(1.05, (this.lead - P.nearest) / (P.gone - P.nearest)));
+    const away = Math.max(0, Math.min(1.05, (this.lead - K.patchBest) / (P.gone - K.patchBest)));
     const uNear = 1 / (K.patchNear + K.patchLens), uFar = 1 / (K.patchFar + K.patchLens);
-    this.u.uPatch.value.set(0, bow - PROW - (1 / (uNear + (uFar - uNear) * away) - K.patchLens) - P.size / 2, P.size / 2);
+    const wide = (P.size / 2) * (K.patchWide[1] + (K.patchWide[0] - K.patchWide[1]) * Math.min(1, away) ** 0.8);
+    this.u.uPatch.value.set(0, bow - PROW - (1 / (uNear + (uFar - uNear) * away) - K.patchLens) - wide, wide);
     const patchZ = this.u.uPatch.value.y;
 
     // The ship's own pool of lamplight on the cloud: it grows as he banks.
@@ -765,7 +779,7 @@ void main() {
 
     // The sail thins while the patch is close under the prow, so that the one meter is never behind it.
     if (this.sail.length) {
-      const ahead = bow - PROW - (patchZ + P.size / 2), S = K.sail;
+      const ahead = bow - PROW - (patchZ + this.u.uPatch.value.z), S = K.sail;
       const k = Math.max(0, Math.min(1, (ahead - S.to) / (S.from - S.to)));
       for (const m of this.sail) m.opacity += (S.thin + (1 - S.thin) * k * k * (3 - 2 * k) - m.opacity) * 0.08;
     }
@@ -889,6 +903,7 @@ void main() {
       this.bankAll.position.set(bank.side * (SHIP_DECK.hw + 1 + W / 2), B.y, front - bank.len / 2);
       this.bankAll.scale.x = bank.side;
       this.bankU.uCol.value.set(B.night).lerp(TMP.set(B.grey), r.light);
+      this.bankU.uFront.value.set(B.front[0]).lerp(TMP.set(B.front[1]), r.light);
       this.bankU.uShow.value = B.show;
       this.bankU.uSize.value.set(W, bank.len);
       this.bankU.uOff.value = bank.side * 0.37;
@@ -896,7 +911,7 @@ void main() {
         const size = (B.size[0] + ((i * 29) % 10) * 0.1 * (B.size[1] - B.size[0])) * b.k;
         b.s.position.set((b.u - 0.5) * W, 0, (b.v - 0.5) * bank.len * 0.96);
         b.s.scale.set(size, size, 1);
-        b.s.material.color.copy(this.bankU.uCol.value).lerp(WHITE, 0.22);
+        b.s.material.color.copy(this.bankU.uCol.value).lerp(WHITE, 0.12).lerp(this.bankU.uFront.value, b.dark);
         b.s.material.opacity = 0.92;
       }
     }

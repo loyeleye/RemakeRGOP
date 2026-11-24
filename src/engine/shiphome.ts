@@ -41,7 +41,7 @@ export const SHIP = {
    * (and it takes `near` more than that to hold it right under the prow); above it he gains
    * `rate` tiles a tick for a whole point of fire, below it he falls behind as fast.
    */
-  speed: { start: 0.7, burn: [0.008, 0.03] as readonly [number, number], feed: 0.08, wind: [0.5, 1.8] as readonly [number, number], rows: 3, even: 0.64, near: 0.2, rate: 0.5 },
+  speed: { start: 0.7, burn: [0.008, 0.03] as readonly [number, number], feed: 0.08, wind: [0.5, 1.8] as readonly [number, number], rows: 3, even: 0.58, near: 0.2, rate: 0.5 },
   /**
    * Cloud banks. The first comes at tick `first`, and the next between `every[0]` and `every[1]`
    * ticks after the one before, down the other side `swap` of the time. One is `len` tiles long,
@@ -54,7 +54,7 @@ export const SHIP = {
    * the lanes from `bigFrom` of the way out; `bigShare` of all of them are big. Each kind is worth
    * so many banks and takes so many ticks to come to the rail from its farthest lane.
    */
-  kinds: { small: 0.35, bigFrom: 0.5, bigShare: 0.4, worth: [1, 3] as readonly [number, number], worthPlain: 2, ticks: [2, 5] as readonly [number, number] },
+  kinds: { small: 0.35, bigFrom: 0.5, bigShare: 0.4, worth: [1, 3] as readonly [number, number], worthPlain: 2, ticks: [2, 7] as readonly [number, number] },
   /** Wisps there are (so at most this many in sight), and ticks between one showing ahead and the next: the first number at the start, the second from `rise.by` of the run on. */
   wisps: 22,
   every: [3, 2] as readonly [number, number],
