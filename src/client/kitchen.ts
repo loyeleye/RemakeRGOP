@@ -1,7 +1,8 @@
 // Rook's kitchen, from walk 2 (story/part1-lore-beats.md, beat 2; Ladi picked "Kitchen as a tappable
 // still"). Tapping his door shows one picture full screen, with three things to tap, each once a walk:
 // Rosalind's portrait (no words; her close-up if it's painted), her cup, and Lumi's lantern. Lumi
-// answers from the doorway in bubbles, not voiced. The house stays a closed model.
+// answers from the doorway in bubbles, not voiced. The house stays a closed model. The way out is
+// the Outside button, which glows from the moment he's in, or a tap on the door in the picture.
 
 import type { StoryLine } from "../engine/protocol.js";
 import { card } from "./ending.js";
@@ -15,6 +16,8 @@ export const KITCHEN = {
   slot: "walk-kitchen",
   /** Rosalind's close-up, shown for `for` seconds if story/walk-kitchen-portrait.webp exists. */
   portrait: { slot: "walk-kitchen-portrait", for: 4, fade: 0.8 },
+  /** The door, above the table's far edge: a tap on it goes back outside, like the button (Ladi). The lantern's spot lies over part of it and wins there. */
+  door: { label: "The door, to go outside", box: px(862, 240, 1262, 900) },
   /** How long a bubble stays up. */
   bubbleFor: 3.5,
   spots: [
@@ -43,6 +46,15 @@ export class Kitchen {
     r.appendChild(pic);
     const done = used.get(walk) ?? new Set<string>();
     used.set(walk, done);
+    // The door first, so the three things sit over it.
+    const door = document.createElement("button");
+    door.className = "spot door";
+    door.setAttribute("aria-label", KITCHEN.door.label);
+    const [dx, dy, dw, dh] = KITCHEN.door.box;
+    Object.assign(door.style, { left: `${dx}%`, top: `${dy}%`, width: `${dw}%`, height: `${dh}%` });
+    door.innerHTML = `<i class="ph">Door: outside</i>`;
+    door.onclick = (e) => (e.stopPropagation(), this.close());
+    pic.appendChild(door);
     for (const s of KITCHEN.spots) {
       const b = document.createElement("button");
       b.className = "spot";
