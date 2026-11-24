@@ -116,7 +116,7 @@ export const DYING = {
       cloudSize: [1536, 640] as const,
       clouds: [
         { file: "cloud-far", scale: 1.2, y: -40, x: -500, speed: 6, behind: true },
-        { file: "cloud-top", scale: 1.2, y: -590, x: -200, speed: -9, behind: true },
+        { file: "cloud-top", scale: 1.2, y: -470, x: -200, speed: -9, behind: true },
         { file: "cloud-back", scale: 1.2, y: 250, x: -340, speed: -10, behind: true },
         { file: "cloud-mid", scale: 1.2, y: 330, x: -620, speed: 22, behind: false },
         { file: "cloud-front", scale: 1.4, y: 470, x: -420, speed: -45, behind: false },
