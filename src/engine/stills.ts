@@ -52,7 +52,7 @@ export const STILLS: Record<string, StillCard> = {
   "r8-4": { who: "The event: his wisp at the end of a thin, shaking beam, over a black pit", faces: "No face." },
   "r8-5": { who: "Tilda near, Rook behind her braced on his staff", faces: "She is lost: eyes wide, brows up, mouth open. He looks back at her, eyes wide, mouth just open.", untilNextMs: 6000 },
   "r8-6": { who: "The same two, turned", faces: "She looks at him, waiting, mouth shut tight. He looks down at his staff, brows pulled hard together." },
-  "r8-7": { who: "Rook alone, head a little tilted", faces: "Listening: eyes up and aside, brows raised, mouth a little open.", extraMs: 1000 },
+  "r8-7": { who: "Rook alone, head a little tilted", faces: "Concerned: brows raised and drawn together, mouth open as if he has just asked.", extraMs: 1000 },
   "r8-8": { who: "The cutters in a row, hats in hand, backs to the wells", faces: "No faces." },
   "r8-9": { who: "Tilda, arms round the book, watching him", faces: "Shut. She has stopped expecting him to fix it." },
   "r8-10": { who: "Her hands on the book, the page of sixteens, the pen stopping", faces: "No face." },

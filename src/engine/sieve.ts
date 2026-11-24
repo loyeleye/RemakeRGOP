@@ -10,7 +10,7 @@ export const SIEVE = {
   shrine: "sieve",
   /** Ticks of talk before the stop starts. */
   bellTicks: 3,
-  /** What Tilda says when it starts again: about what just happened on the board, not an echo of Hesta (Ladi, 24 Nov, turning down "Again, please."). The story thread's working line until he picks. */
+  /** What Tilda says when it starts again: about what just happened on the board, not an echo of Hesta (Ladi, 24 Nov, turning down "Again, please."). He ruled for this one at 10:53 AM. */
   again: "Too many down the wells.",
   /** Height lost a tick untouched; gained on the tick a staff first reaches a wisp; gained each tick it stays. */
   fall: 1.6,
