@@ -8,6 +8,7 @@
 //   B  brazier      a  Dawn wisp spawn b  Dusk wisp spawn
 //   1  Dawn start   2  Dusk start
 
+import { DYING, craterBoard, craterTiles } from "./dying.js";
 import { KF_FAR, KF_OVAL, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
 import { HS_CENTRE, HS_FAR, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
 import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
@@ -398,6 +399,8 @@ export interface Shrine {
   lobes?: { x: number; y: number; r: number }[];
   /** Where the main plateau is hung from when that isn't the board's centre (the horseshoe's brazier is by its west rim): the middle of the land, in tiles from the centre, and the edge's distance from there at each angle. */
   core?: { x: number; y: number; outline: (a: number) => number };
+  /** Story: rime here is the comet's glass (dark, an ember glow under it), not frost. */
+  glass?: boolean;
   /** Story places: an oval of other ground round the brazier (Kite Fell's race ground), half-sizes in tiles; drawn from textures/floor-<id>-race.webp. */
   raceOval?: { rx: number; ry: number };
   /** Story places: where the lower terraces hang (radians, east is 0, south a quarter turn), to keep them clear of a landing or falls. */
@@ -1359,7 +1362,18 @@ export const STORY_SHRINES: Shrine[] = [
   kiteFell(),
   // The free walk between runs: the home island as a horseshoe round its lake (see horseshoe.ts).
   homeIsland(),
+  // Runs 6 and 7: the Kindling ground after Hesta's landing, with the glass crater by the brazier (see dying.ts).
+  kindlingCrater(),
 ];
+
+/** The Kindling ground with the crater in it: everything else as run 1's island. */
+function kindlingCrater(): Shrine {
+  const base = SHRINES.find((sh) => sh.id === DYING.shrine)!;
+  const board = craterBoard(base.board);
+  // The stones the comet struck are gone from the drawing too.
+  const gone = new Set(craterTiles(base.board).map((p) => `${p.x},${p.y}`));
+  return { ...base, id: DYING.craterShrine, name: "The Kindling ground", board, props: base.props?.filter((p) => !gone.has(`${p.x},${p.y}`)), glass: true };
+}
 
 /** Kite Fell: drawn from the maps thread's shapes, like the home island. */
 function kiteFell(): Shrine {

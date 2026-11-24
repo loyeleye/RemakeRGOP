@@ -91,6 +91,12 @@ export interface StoryView {
   called?: { x: number; y: number } | null;
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[] };
+  /**
+   * Runs 6 and 7, the dying brazier: where the piece is (run 6, its embers, the comet in the air,
+   * run 7, the fire roaring), where the comet strikes and how wide its crater is, whether Hesta's
+   * hold has faltered, and who she is once she has landed.
+   */
+  dying?: { part: "six" | "embers" | "landing" | "seven" | "roar"; strike: { x: number; y: number; r: number }; faltered?: boolean; hesta?: number };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */
   /** kitchen: how many times Rook has gone in his door this walk (from walk 2); a rise opens the kitchen still. */
   pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "night" | "dusk"; kitchen?: number };

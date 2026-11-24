@@ -167,7 +167,7 @@ export interface GameSnapshot {
   moss?: number[];
   /** One score per team in the round. */
   scores: number[];
-  wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null; rooted?: number; away?: boolean }[];
+  wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null; rooted?: number; away?: boolean; /** How far gone a wisp outside the light is: 0 just out of it, 1 about to go out. */ dim?: number }[];
   players: {
     id: number;
     guild: Guild;
@@ -190,6 +190,11 @@ export interface GameSnapshot {
   stringLive?: boolean;
   /** Who carries the storm light, so the view can run its sparks from their lantern. */
   stormLight?: number;
+  /** The light law (story runs 6 and 7): the flame's level (0 to 100), how far its light reaches in tiles, wisps that went out this tick, and whether wisps held in the ground stay lit. */
+  flame?: number;
+  lit?: number;
+  outs?: { tick: number; wisp: number }[];
+  rootLit?: boolean;
   /** Pulls stopped at the bank this tick (the laws of water): who, which wisp, and the water tile it met. */
   stops?: { player: number; wisp: number; x: number; y: number }[];
 }
@@ -327,6 +332,38 @@ export class Game {
   stringLive = false;
   /** This tick's joins and breaks, for the story's lines and the crackle. */
   stringEvents: { kind: "join" | "break"; wisp: number }[] = [];
+  /**
+   * The light law (story runs 6 and 7, gameplay/runs6-7-prototype-brief.md): the brazier's flame
+   * has a level, the ground is lit as far as the flame reaches, and a wisp left outside the light
+   * dims and goes out.
+   * 1. `flame` runs 0 to 100. Every tick it loses `flameDrain` (never below `flameFloor`); every
+   *    bank adds `flameFeed`.
+   * 2. The lit ground is a circle round the brazier, `lightRadius(flame)` tiles across the middle.
+   * 3. A wisp outside the light that no staff is on counts a tick; one back in the light, or
+   *    under a staff, starts again from nothing. At `dimTicks` it goes
+   *    out: it leaves play (`outs`), and comes back like a banked wisp, without scoring.
+   * 4. A wisp held in the ground (`rooted`) while `rootedLit` is set stays lit and never counts.
+   * null: no flame, and none of this applies.
+   */
+  flame: number | null = null;
+  flameFeed = 0;
+  flameDrain = 0;
+  flameFloor = 0;
+  /** Ticks outside the light before a wisp goes out (0: wisps don't dim). */
+  dimTicks = 0;
+  /** Ticks each wisp has counted outside the light. */
+  dark = new Map<number, number>();
+  /** This tick's wisps that went out. */
+  outs: { tick: number; wisp: number }[] = [];
+  /** Ticks a wisp that went out stays gone. */
+  outPause = 1;
+  /** Story run 7: wisps held in the ground stay lit lights, not stones (Hesta's helping hold). */
+  rootedLit = false;
+  /**
+   * Story run 7, the glass: a wisp on rime slides to the brazier by itself, out of every staff's
+   * grip, and banks.
+   */
+  slideHome = false;
   /** Story: nobody can push another side's wisps (run 5: no shoving). */
   noShove = false;
   /** Ticks a banked wisp stays gone before it comes back (0: straight back, as in a match). */
@@ -526,6 +563,7 @@ export class Game {
     this.stringLive = !!head && ((head.touched && head.holder === this.stormLight) || (this.stringLive && this.board.inBankZone(head.pos)));
     for (const w of this.wisps) this.stepWisp(w);
     if (this.string.length) this.stepString();
+    if (this.flame !== null) this.stepLight();
     for (const p of this.players) this.stepPlayer(p);
     for (const w of this.wisps) {
       if (!w.touched && w.grip !== Grip.Free) w.grip = (w.grip + 1) % 4;
@@ -533,6 +571,40 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- wisps
+
+  /** The light law: the flame drains, and wisps left outside its light dim and go out. */
+  private stepLight() {
+    this.outs = [];
+    this.flame = Math.max(Math.min(this.flame!, this.flameFloor), this.flame! - this.flameDrain);
+    if (this.dimTicks <= 0) return void this.dark.clear();
+    const lit = lightRadius(this.flame), c = this.board.center;
+    for (const w of this.wisps) {
+      if (this.away.has(w.id) || (this.rootedLit && this.rooted.has(w.id)) || Math.hypot(w.pos.x - c.x, w.pos.y - c.y) <= lit) {
+        this.dark.delete(w.id);
+        continue;
+      }
+      // A staff on it brings its light back: it starts again from nothing when he lets go.
+      if (w.touched || this.players.some((p) => p.beam === w.id)) {
+        this.dark.delete(w.id);
+        continue;
+      }
+      const n = (this.dark.get(w.id) ?? 0) + 1;
+      if (n < this.dimTicks) {
+        this.dark.set(w.id, n);
+        continue;
+      }
+      // Out: a fade, and it is gone. It comes back as a new wisp would.
+      this.dark.delete(w.id);
+      this.outs.push({ tick: this.tick, wisp: w.id });
+      this.letGo(w);
+      w.holder = null;
+      w.target = null;
+      w.skate = null;
+      this.rooted.delete(w.id);
+      this.string = this.string.filter((id) => id !== w.id);
+      this.away.set(w.id, this.tick + Math.max(1, this.outPause));
+    }
+  }
 
   /**
    * The tide puller took hold of a wisp on water: for as long as she holds it, the loose wisps on
@@ -674,6 +746,8 @@ export class Game {
       if (w.rimTicks >= BANK_TICKS) {
         this.scores[w.guild]!++;
         this.banks.push({ tick: this.tick, wisp: w.id, guild: w.guild });
+        if (this.flame !== null) this.flame = Math.min(100, this.flame + this.flameFeed);
+        this.dark.delete(w.id);
         // Banked: it leaves the string, and the one behind it moves up.
         this.string = this.string.filter((id) => id !== w.id);
         if (this.respawnPause > 0) {
@@ -691,6 +765,16 @@ export class Game {
     if (this.stringLive && this.string.indexOf(w.id) > 0) {
       w.target = null;
       w.skate = null;
+      return;
+    }
+    if (this.slideHome && this.board.tile(w.pos) === Tile.Rime) {
+      // On the glass: it knows the way. Whoever had it has let go.
+      this.letGo(w);
+      w.holder = null;
+      w.target = null;
+      const c = this.board.center;
+      w.skate = pt(sign(c.x - w.pos.x), sign(c.y - w.pos.y));
+      this.moveWisp(w, false);
       return;
     }
     if (held) {
@@ -1203,6 +1287,7 @@ export class Game {
         holder: w.holder,
         ...(this.rooted.has(w.id) ? { rooted: this.rooted.get(w.id)! } : {}),
         ...(this.away.has(w.id) ? { away: true } : {}),
+        ...(this.dark.has(w.id) && this.dimTicks > 0 ? { dim: this.dark.get(w.id)! / this.dimTicks } : {}),
       })),
       players: this.players.map((p) => ({
         id: p.id,
@@ -1222,6 +1307,7 @@ export class Game {
       banks: this.banks,
       ...(this.string.length ? { string: [...this.string], stringLive: this.stringLive } : {}),
       ...(this.stormLight != null ? { stormLight: this.stormLight } : {}),
+      ...(this.flame !== null ? { flame: this.flame, lit: lightRadius(this.flame), outs: this.outs.length ? this.outs : undefined, rootLit: this.rootedLit || undefined } : {}),
       stops: this.bankStops.length ? this.bankStops.map((b) => ({ player: b.player, wisp: b.wisp, x: b.water.x, y: b.water.y })) : undefined,
       moss: this.mossHp.size ? [...this.mossHp].flat() : undefined,
     };
@@ -1242,3 +1328,8 @@ export class Game {
 }
 
 const key = (p: Pt) => `${p.x},${p.y}`;
+
+/** How far the brazier's light reaches for a flame level: 14 tiles at 100, 4 at 10, and closing to nothing below that. */
+export function lightRadius(flame: number) {
+  return flame >= 10 ? 4 + ((Math.min(100, flame) - 10) / 90) * 10 : 0.4 * Math.max(0, flame);
+}

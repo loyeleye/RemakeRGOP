@@ -400,7 +400,7 @@ function pickTap(game: Game, me: Game["players"][number], rank = 0): number | nu
   const ranked: { id: number; score: number }[] = [];
   let moving: number | null = null;
   for (const w of game.wisps) {
-    if (w.guild !== me.guild || board.inBankZone(w.pos)) continue;
+    if (w.guild !== me.guild || board.inBankZone(w.pos) || game.away.has(w.id)) continue;
     if (!game.inReach({ ...me, mode: "pull" }, w)) continue;
     const now = bank[w.pos.y * W + w.pos.x]!;
     const { end, ticks } = simulatePull(board, me.pos, w.pos, 30, pullRules(game, me.id));
