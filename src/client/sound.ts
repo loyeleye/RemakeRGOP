@@ -242,6 +242,15 @@ export function stoneCast() {
   setTimeout(() => noise(0.05, "bandpass", 480, 0.09, 0.25), 660);
 }
 
+/** Kes strings a wisp (run 5): a small dry crackle, three quick snaps. */
+export function stormJoin() {
+  const s = out();
+  if (!s) return;
+  noise(0.03, "highpass", 2600, 0.16);
+  setTimeout(() => noise(0.025, "highpass", 3400, 0.12, 0.2), 55);
+  setTimeout(() => noise(0.04, "bandpass", 1900, 0.1, -0.2), 120);
+}
+
 /** Lumi's hand bell; `rings` times, half a second apart. */
 export function handBell(rings = 1) {
   const s = out();

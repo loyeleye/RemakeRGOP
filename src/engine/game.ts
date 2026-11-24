@@ -185,6 +185,9 @@ export interface GameSnapshot {
     walkTo: Pt | null;
   }[];
   banks: BankEvent[];
+  /** The storm light's string of wisps, head first (story run 5), and whether it is being pulled. */
+  string?: number[];
+  stringLive?: boolean;
   /** Pulls stopped at the bank this tick (the laws of water): who, which wisp, and the water tile it met. */
   stops?: { player: number; wisp: number; x: number; y: number }[];
 }
@@ -300,6 +303,30 @@ export class Game {
   rooted = new Map<number, number>();
   /** Story: wisps that sit on the rim without banking for now (Hesta waiting on her match point). */
   noBank = new Set<number>();
+  /**
+   * The storm law (story run 5, gameplay/run5-prototype-brief.md): a storm light strings wisps
+   * together, and a strung wisp follows the string.
+   * 1. When the storm light takes hold of one of her own wisps from within `stringReach` tiles, it
+   *    joins her string, at the end. A string holds up to `stringMax`.
+   * 2. While she pulls the wisp at the head, every wisp behind it steps toward the wisp in front
+   *    of it, a tile a tick, and stops beside it.
+   * 3. A wisp leaves the string when it is banked, or when the wisp in front is more than
+   *    `stringLink` tiles off or out of its sight; a broken link drops it and all behind it.
+   * Nobody else can string. `string` is head first.
+   */
+  stormLight: number | null = null;
+  string: number[] = [];
+  stringMax = 3;
+  stringReach = 2;
+  stringLink = 6;
+  /** How close a follower comes to the wisp in front before it stops (1: right beside it). */
+  stringGap = 1;
+  /** The head is being pulled this tick (or riding in on the rim), so the string is moving. */
+  stringLive = false;
+  /** This tick's joins and breaks, for the story's lines and the crackle. */
+  stringEvents: { kind: "join" | "break"; wisp: number }[] = [];
+  /** Story: nobody can push another side's wisps (run 5: no shoving). */
+  noShove = false;
   /** Ticks a banked wisp stays gone before it comes back (0: straight back, as in a match). */
   respawnPause = 0;
   /** Banked wisps that are gone for now, and the tick each comes back. They wait, unseen, on the rim. */
@@ -491,7 +518,12 @@ export class Game {
     }
     this.drift.clear();
     if (this.tidePuller !== null) this.tidePull();
+    this.stringEvents = [];
+    const head = this.string.length ? this.wisps[this.string[0]!] : undefined;
+    // Pulled last tick by the storm light, or already riding in on the rim behind such a pull.
+    this.stringLive = !!head && ((head.touched && head.holder === this.stormLight) || (this.stringLive && this.board.inBankZone(head.pos)));
     for (const w of this.wisps) this.stepWisp(w);
+    if (this.string.length) this.stepString();
     for (const p of this.players) this.stepPlayer(p);
     for (const w of this.wisps) {
       if (!w.touched && w.grip !== Grip.Free) w.grip = (w.grip + 1) % 4;
@@ -640,6 +672,8 @@ export class Game {
       if (w.rimTicks >= BANK_TICKS) {
         this.scores[w.guild]!++;
         this.banks.push({ tick: this.tick, wisp: w.id, guild: w.guild });
+        // Banked: it leaves the string, and the one behind it moves up.
+        this.string = this.string.filter((id) => id !== w.id);
         if (this.respawnPause > 0) {
           w.rimTicks = 0;
           this.away.set(w.id, this.tick + this.respawnPause);
@@ -649,6 +683,12 @@ export class Game {
         w.prev = w.pos;
         this.onReturn?.(w);
       }
+      return;
+    }
+    // Strung behind a moving head: it follows the wisp in front (stepString), whatever it was doing.
+    if (this.stringLive && this.string.indexOf(w.id) > 0) {
+      w.target = null;
+      w.skate = null;
       return;
     }
     if (held) {
@@ -685,6 +725,46 @@ export class Game {
     }
     // Petal beds hurry a moving wisp: a second step this tick.
     if (this.board.tile(w.pos) === Tile.Bloom && !samePt(w.pos, w.prev) && (w.target || w.skate) && !this.board.inBankZone(w.pos)) this.moveWisp(w, held);
+  }
+
+  /**
+   * The string, after the wisps have moved: each follower steps toward the wisp in front of it
+   * while the head is pulled, then any link that is too long or can't see breaks.
+   */
+  private stepString() {
+    const at = (i: number) => this.wisps[this.string[i]!]!;
+    if (this.stringLive)
+      for (let i = 1; i < this.string.length; i++) {
+        const w = at(i), front = at(i - 1);
+        if (this.board.inBankZone(w.pos) || this.away.has(w.id) || this.rooted.has(w.id)) continue;
+        // They close right up behind a wisp that has reached the rim.
+        if (cheb(w.pos, front.pos) > (this.board.inBankZone(front.pos) ? 1 : this.stringGap)) this.stringStep(w, front.pos);
+      }
+    for (let i = 1; i < this.string.length; i++) {
+      const w = at(i), front = at(i - 1);
+      if (cheb(w.pos, front.pos) <= this.stringLink && this.board.canSee(w.pos, front.pos)) continue;
+      for (const id of this.string.slice(i)) this.stringEvents.push({ kind: "break", wisp: id });
+      this.string.length = i;
+      break;
+    }
+  }
+
+  /**
+   * One step of a strung follower toward the wisp in front. Today it steps like any wisp: walls
+   * and the sky's edge stop it, and so does water without a light. (Run 9 means to pull a string
+   * across gaps: the exemption would go here, by stepping with its own mover instead of
+   * Mover.Wisp, since nothing else moves a follower while the string is live.)
+   */
+  private stringStep(w: Wisp, to: Pt) {
+    const dx = to.x - w.pos.x, dy = to.y - w.pos.y;
+    const s = slideStep(this.board, w.pos, sign(dx), sign(dy), Math.abs(dx), Math.abs(dy), Mover.Wisp);
+    if (!s) return;
+    const next = pt(w.pos.x + s[0], w.pos.y + s[1]);
+    if (isCrystal(this.board.tile(next))) return;
+    if (this.lawWater(next) && !this.lawWater(w.pos) && !this.hasLight(this.stormLight)) return;
+    const from = w.pos;
+    w.pos = next;
+    this.afterStep(w, from);
   }
 
   /** One tile of a wisp's travel this tick: its pull, its skate or crystal flight, or the tide. */
@@ -1038,6 +1118,7 @@ export class Game {
 
   /** Pull works on your own guild's wisps; push works on any wisp. */
   canAffect(p: Lamplighter, w: Wisp) {
+    if (this.noShove && w.guild !== p.guild) return false;
     return p.mode === "push" || w.guild === p.guild;
   }
 
@@ -1085,6 +1166,11 @@ export class Game {
     w.grip = Grip.Held;
     w.touched = true;
     w.pullers = p.mode === "pull" ? [p.id] : [];
+    // The storm law: her touch from close by strings it, at the end.
+    if (p.id === this.stormLight && p.mode === "pull" && w.guild === p.guild && !this.string.includes(w.id) && this.string.length < this.stringMax && cheb(p.pos, w.pos) <= this.stringReach) {
+      this.string.push(w.id);
+      this.stringEvents.push({ kind: "join", wisp: w.id });
+    }
   }
 
   /**
@@ -1132,6 +1218,7 @@ export class Game {
         walkTo: p.action.kind === "walk" ? p.action.to : null,
       })),
       banks: this.banks,
+      ...(this.string.length ? { string: [...this.string], stringLive: this.stringLive } : {}),
       stops: this.bankStops.length ? this.bankStops.map((b) => ({ player: b.player, wisp: b.wisp, x: b.water.x, y: b.water.y })) : undefined,
       moss: this.mossHp.size ? [...this.mossHp].flat() : undefined,
     };

@@ -8,6 +8,7 @@ import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlaye
 import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
 import { GrannyRoom } from "../server/granny.js";
+import { RaceRoom } from "../server/race.js";
 import { PondRoom } from "../server/pond.js";
 import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
@@ -123,14 +124,14 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | null = null;
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | "pond" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | "pond" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
@@ -373,6 +374,7 @@ function noteProgress() {
     if (st.run === "The Grand Kindling") reach({ next: 2 });
     else if (st.end.lines[0]?.text === "So I'm coming tomorrow.") reach({ next: 3 });
     else if (st.run === "A job") reach({ next: 5 });
+    else if (st.run === "The race") reach({ next: 6 });
     else if (storyRoom instanceof GrannyRoom || st.run === "Granny's game") reach({ next: 4 });
   }
   renderProgress();
@@ -711,6 +713,8 @@ function storyTickSound(s: GameSnapshot) {
   if (prev && (s.scores[1] ?? 0) > (prev.scores[1] ?? 0)) sound.kesChime();
   // Hesta stones the wisps: the boulder sound, once for all of them.
   if (prev && s.wisps.some((w) => w.rooted) && !prev.wisps.some((w) => w.rooted)) sound.stoneCast();
+  // Kes strings a wisp: a small crackle.
+  if (prev && (s.string?.length ?? 0) > (prev.string?.length ?? 0)) sound.stormJoin();
   const mine = s.players.find((p) => p.id === me);
   const was = prev?.players.find((p) => p.id === me);
   if (!mine) return;
@@ -1162,6 +1166,7 @@ $("story").onclick = () => connectStory(playerName());
 $("story2").onclick = () => connectStory(playerName(), 2);
 $("story3").onclick = () => connectStory(playerName(), 3);
 $("story4").onclick = () => connectStory(playerName(), 4);
+$("story5").onclick = () => connectStory(playerName(), 5);
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Saved progress: continue from where this browser got to, jump to any walk, or start over.
 function renderProgress() {
@@ -1174,7 +1179,7 @@ $("story-continue").onclick = () => {
   const p = loadProgress();
   const nextWalk = WALKS.find((w) => w.after === p.next - 1 && w.n > p.walk);
   if (nextWalk) return connectStory(playerName(), "pond", nextWalk.n);
-  if (p.next >= 1 && p.next <= 4) return connectStory(playerName(), p.next as 1 | 2 | 3 | 4);
+  if (p.next >= 1 && p.next <= 5) return connectStory(playerName(), p.next as 1 | 2 | 3 | 4 | 5);
   // Runs 5 on aren't built: the latest walk reached.
   connectStory(playerName(), "pond", Math.max(1, p.walk));
 };

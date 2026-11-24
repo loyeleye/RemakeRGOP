@@ -122,6 +122,10 @@ export const THEMES: Record<string, Theme> = {
   get "home-pond-big"() {
     return THEMES["tidepool-steps"]!;
   },
+  // Run 5's race ground: plain dressing until the place is chosen.
+  get "kite-fell"() {
+    return THEMES["tidepool-steps"]!;
+  },
   // The home island as a place to walk: the lagoon's sky and falls, on grass.
   get "home-island"() {
     const base = THEMES["tidepool-steps"]!;

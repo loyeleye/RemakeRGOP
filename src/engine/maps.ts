@@ -1316,6 +1316,15 @@ function homePondRows(k = 1): string[] {
   return g.map((r) => r.join(""));
 }
 
+/** Run 5's race ground: open dry ground, Rook starting south-west of the fire and Kes south-east. */
+function raceRows(): string[] {
+  const N = 47, c = (N - 1) / 2;
+  const g = Array.from({ length: N }, () => Array<string>(N).fill("."));
+  g[c + 6]![c - 4] = "1";
+  g[c + 6]![c + 4] = "2";
+  return g.map((r) => r.join(""));
+}
+
 export const STORY_SHRINES: Shrine[] = [
   buildShrine({
     id: "home-pond",
@@ -1339,6 +1348,19 @@ export const STORY_SHRINES: Shrine[] = [
     rings: [],
     spawnBand: [15, 21],
     rows: homePondRows(1.5),
+  }),
+  // Run 5, the race with Kes: a plain dry oval, one brazier in the middle. A neutral board of its
+  // own, so the place can be dressed either way once Ladi has chosen it.
+  buildShrine({
+    id: "kite-fell",
+    name: "Kite Fell",
+    blurb: "A plain dry oval with the brazier in the middle: room to race.",
+    full: true,
+    scale: 1,
+    isle: { radius: 21.5, squareness: 2.1, coves: 0.03, heads: 0.03, seed: 11, stretch: [1.08, 0.95] },
+    rings: [],
+    spawnBand: [14, 17],
+    rows: raceRows(),
   }),
   // The free walk between runs: the home island as a horseshoe round its lake (see horseshoe.ts).
   homeIsland(),

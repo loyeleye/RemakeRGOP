@@ -753,6 +753,8 @@ interface WispRig {
 /** Seconds the earth line takes to reach a wisp before the stone starts closing over it. */
 const EARTH_LINE = 0.35;
 /** The snack bubble against the snack clip's own time (cast thread's timing.json): in at 0.3 s, a bite at each of `bites` (then crumbs, then a sparkle), out over `out`; `size` in tiles. */
+/** The storm string: its violet, the light that runs along it, and how long a join flashes (seconds). */
+const STORM = { line: "#7b2ff2", light: "#c9a2ff", flash: 0.45 };
 /** The moored skiff: bob in tiles (tie is the bow lantern in the model's own space), roll in radians, seconds a bob, rope links and slack, shade strength. */
 const MOORING = { bob: 0.06, roll: 0.026, period: 3.6, links: 10, slack: 0.3, shade: 0.4, tie: [1.1, 0.65, -0.05] as const };
 const SNACK = { frames: 7, in: 0.3, bites: [1.45, 1.85, 2.25, 2.65, 2.95, 3.1], outFrom: 3.3, outTo: 3.45, size: 3.4 };
@@ -851,7 +853,7 @@ const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number; y?: n
   "sefa-house": { model: "sefa-house" },
   offering: { model: "offering-stone", y: -0.6 },
   mooring: { model: "offering-mooring", dx: 0.5 },
-  boat: { model: "offering-boat", y: -0.15 },
+  boat: { model: "offering-boat", y: 0.08 },
   "hesta-house": { model: "hesta-house" },
   chair: { model: "hesta-chair" },
   shrine: { model: "shrine", rot: Math.PI },
@@ -1648,6 +1650,11 @@ export class World {
     this.pathLamps = [];
     this.moored = null;
     this.landingPost = null;
+    if (this.storm) {
+      for (const l of this.storm.links) this.scene.remove(l.core, l.halo);
+      this.scene.remove(this.storm.flash, ...this.storm.sparks);
+      this.storm = null;
+    }
     this.statueSlot = this.flowers = null;
     this.isPlace = !!themeFor(shrine.id).place;
     this.lightKey = "";
@@ -2329,6 +2336,70 @@ export class World {
     }
   }
   /** A slot for a place model at (x, z), turned `rot`, showing `blockout` until the model is in. */
+  /**
+   * The storm string (run 5): a clear violet line from wisp to wisp along Kes's string, bright
+   * and running with light while she pulls, and a flash on a wisp as it joins. Made to read at a
+   * glance, like the earth line in Granny's game.
+   */
+  private storm: { links: { core: THREE.Mesh; halo: THREE.Mesh }[]; sparks: THREE.Sprite[]; flash: THREE.Sprite; had: number[]; flashAt: number } | null = null;
+  private stepStormString(ids: number[], live: boolean, at: Map<number, THREE.Vector3>, time: number) {
+    if (!ids.length && !this.storm) return;
+    if (!this.storm) {
+      const flash = glowSprite(STORM.light, 3.2, 0);
+      this.scene.add(flash);
+      this.storm = { links: [], sparks: [], flash, had: [], flashAt: -9 };
+    }
+    const s = this.storm;
+    const up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < Math.max(s.links.length, ids.length - 1); i++) {
+      let l = s.links[i];
+      const a = at.get(ids[i]!), b = at.get(ids[i + 1]!);
+      if (!a || !b || i >= ids.length - 1) {
+        if (l) l.core.visible = l.halo.visible = s.sparks[i]!.visible = false;
+        continue;
+      }
+      if (!l) {
+        const geo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
+        // A solid violet core (pale ground washes out a line that is only light), in a soft glow.
+        const core = new THREE.MeshBasicMaterial({ color: STORM.line, transparent: true, depthWrite: false, fog: false, toneMapped: false });
+        const halo = new THREE.MeshBasicMaterial({ color: STORM.light, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+        l = { core: new THREE.Mesh(geo, core), halo: new THREE.Mesh(geo, halo) };
+        l.core.renderOrder = 6;
+        const spark = glowSprite(STORM.light, 0.9, 0);
+        this.scene.add(l.core, l.halo, spark);
+        s.links[i] = l;
+        s.sparks[i] = spark;
+      }
+      const dir = b.clone().sub(a), len = dir.length();
+      const flick = live ? 0.85 + 0.15 * Math.sin(time * 31 + i * 2.1) * Math.sin(time * 17 + i) : 1;
+      for (const [m, r, o] of [[l.core, live ? 0.1 : 0.06, live ? 1 : 0.7], [l.halo, live ? 0.3 : 0.16, live ? 0.45 : 0.18]] as const) {
+        m.visible = len > 0.05;
+        m.position.copy(a).lerp(b, 0.5);
+        m.scale.set(r * flick, len, r * flick);
+        if (len > 0.05) m.quaternion.setFromUnitVectors(up, dir.clone().divideScalar(len));
+        (m.material as THREE.MeshBasicMaterial).opacity = o * flick;
+      }
+      // While she pulls, a bead of light runs up each link toward the head.
+      const spark = s.sparks[i]!;
+      spark.visible = live;
+      spark.position.copy(b).lerp(a, (time * 1.6 + i * 0.37) % 1);
+      spark.material.opacity = 0.9;
+    }
+    // A wisp joins: a quick violet flash on it.
+    const joined = ids.find((id) => !s.had.includes(id));
+    if (joined !== undefined && at.get(joined)) {
+      s.flashAt = time;
+      s.flash.position.copy(at.get(joined)!);
+    }
+    s.had = [...ids];
+    const k = (time - s.flashAt) / STORM.flash;
+    s.flash.visible = k >= 0 && k < 1;
+    if (s.flash.visible) {
+      s.flash.material.opacity = (1 - k) * 0.95;
+      s.flash.scale.setScalar(1.6 + k * 2.6);
+    }
+  }
+
   /** The moored skiff: what it hangs from, its rope and the shade under it. */
   private moored: { slot: THREE.Group; y: number; post: THREE.Vector3; bow: THREE.Vector3; rope: THREE.Mesh[]; shade: THREE.Mesh; flame?: [THREE.Sprite, THREE.Sprite] } | null = null;
   private landingPost: THREE.Vector3 | null = null;
@@ -2700,6 +2771,7 @@ export class World {
       if (w.rim > 0) rimPulse = Math.max(rimPulse, 1);
       wispPos.set(w.id, rig.root.position.clone());
     }
+    this.stepStormString(st.snap.string ?? [], !!st.snap.stringLive, wispPos, time);
     for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), rig.stones && this.scene.remove(rig.stones), rig.earth && this.scene.remove(rig.earth), this.wisps.delete(id));
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
