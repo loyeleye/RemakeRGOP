@@ -11,6 +11,7 @@ import { Game, Grip, Rng, TICK_MS, type Action, type Guild, type Wisp } from "..
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
 import { SIEVE, SV_WELLS } from "../engine/sieve.js";
+import { STILL, stillMs, type StillCue } from "../engine/stills.js";
 import { lineTicks } from "./granny.js";
 import { realClock, type Clock } from "./room.js";
 
@@ -62,6 +63,24 @@ export class SieveRoom {
   pullStaged = false;
   pullMoved = 0;
   pullOnWell = 0;
+  /** Reaction stills (engine/stills.ts): the room's own clock in ticks (it runs in the bells too), when the one up ends, and when the last one ended. */
+  private clockTicks = 0;
+  private stillUntil = -1;
+  private stillEnd = -1e9;
+  /** Wisps held back by the still up now, so they can be let out one by one. */
+  private heldBack = 0;
+  /** When the still up now came, and whether it has a line (the next in a sequence lets that one have its hold first). */
+  private stillFrom = -1;
+  private stillSpoken = false;
+  private stillId = "";
+  /** When the tug let go, for "Granny?". */
+  private tugEndedAt = -1;
+  /** Which stills have been shown, in order (for tests). */
+  stillsShown: string[] = [];
+  /** Picture 4 (the tug itself, no face) is off by default: the board already shows it in his hand (gameplay thread). ?still4 in the page. */
+  stillFour = false;
+  /** All the stills off (?nostills in the page). */
+  stillsOn = true;
   /** For the measurements: wisps lost (the first not counted), how many of those over a well, restarts, and the ticks the last try took. */
   lost = 0;
   lostWell = 0;
@@ -124,6 +143,13 @@ export class SieveRoom {
     this.pull = { phase: this.pullOn ? "wait" : "done", left: 0, spared: new Set(), moved: [], torn: null, focus: null };
     this.pulledAt = -1;
     this.pullStaged = false;
+    this.clockTicks = 0;
+    this.stillUntil = -1;
+    this.stillEnd = -1e9;
+    this.stillFrom = -1;
+    this.stillSpoken = false;
+    this.tugEndedAt = -1;
+    this.stillsShown = [];
     this.pullMoved = this.pullOnWell = 0;
     this.endClock();
     this.start(true);
@@ -175,7 +201,7 @@ export class SieveRoom {
     if (first) {
       const before = this.lines.length;
       this.say(HESTA, "The Sieve this morning, Rook. Young Tilda sent word. Keep them all moving. Don't settle on one.", { talk: true });
-      this.say(KEEPER, "You're Rook. I'm Tilda. I keep this now.", { talk: true });
+      this.say(KEEPER, "You're Rook. I'm Tilda. I keep this now.", { talk: true, ...this.still("r8-1") });
       this.countdown = S.bellTicks + this.lines.slice(before).reduce((n, l) => n + lineTicks(l), 0);
     }
     this.flush();
@@ -185,6 +211,9 @@ export class SieveRoom {
   /** A wisp of the supply comes onto the board, in the outer band, lower the later it comes. None once the supply is spent. */
   private arrive(w: Wisp) {
     const g = this.game, S = SIEVE, b = g.board, c = b.center;
+    // While a still is up, none comes: it waits off the board until the panel has gone.
+    // Held back ones come one at a time after it, not in a crowd.
+    if (this.clockTicks < this.stillUntil && this.phase === "playing") return void g.away.set(w.id, g.tick + (this.stillUntil - this.clockTicks) + SIEVE.stillSpacing * this.heldBack++);
     // One that was warned of: it appears over its well now.
     const due = this.warned.get(w.id);
     if (due) {
@@ -227,6 +256,7 @@ export class SieveRoom {
   }
 
   onTick() {
+    this.clockTicks++;
     if (this.phase === "countdown") {
       this.countdown--;
       if (this.countdown <= 0) this.phase = "playing";
@@ -245,10 +275,11 @@ export class SieveRoom {
     // The first one has just gone down the well: a moment of looking after it, in silence, and then her line.
     if (this.lookLeft > 0) {
       if (--this.lookLeft === 0) {
+        const looked = this.look;
         this.look = null;
         if (!this.said.has("there")) {
           this.said.add("there");
-          this.say(KEEPER, "There. That's what I sent for you about.", { player: KEEPER_ID }, "key");
+          this.say(KEEPER, "There. That's what I sent for you about.", { player: KEEPER_ID, ...this.still("r8-2", false, looked) }, "key");
           if (this.pullOn) {
             // Calm, so the pull can answer her. These take the place of her old line about knocking them up.
             this.said.add("knock");
@@ -300,6 +331,15 @@ export class SieveRoom {
       this.said.add("half");
       this.say(KEEPER, "Mum kept this thirty years. Nothing ever went down a well.", { player: KEEPER_ID }, "key");
     }
+    // Picture 7: the first quiet moment well after the tug (his staff idle, nothing low), or after a while regardless. He asks for her, and nothing comes.
+    if (this.tugEndedAt >= 0 && !this.said.has("granny")) {
+      const since = g.tick - this.tugEndedAt, rook = this.player(YOU), Q = SIEVE.tug;
+      const quiet = rook.beam === null && rook.action.kind !== "staff" && g.wisps.every((w) => g.away.has(w.id) || w.id === this.doomed || (g.height.get(w.id) ?? 100) >= Q.grannyLow);
+      if (since >= Q.grannyAfter && (quiet || since >= Q.grannyBy) && this.stillReady()) {
+        this.said.add("granny");
+        this.say(ROOK, "Granny?", { player: YOU, ...this.still("r8-7") }, "key");
+      }
+    }
     if (!this.said.has("knock") && this.said.has("there") && g.wisps.some((w) => w.touched)) {
       this.said.add("knock");
       this.say(KEEPER, "If I leave one, it goes down. If I knock it, it comes up. For a while.", { player: KEEPER_ID }, "key");
@@ -337,6 +377,7 @@ export class SieveRoom {
       p.tugged = near?.id ?? null;
       p.moved = [];
       this.pulledAt = g.tick;
+      if (this.stillFour) this.picture("r8-4", true, near ? this.wellTile(near.pos) : null);
       return;
     }
     if (p.phase === "wait") {
@@ -440,7 +481,8 @@ export class SieveRoom {
       }
     }
     p.held = held;
-    if (n + 1 === T.saidAt) this.say(KEEPER, "They don't do that.", { player: KEEPER_ID }, "key");
+    const at = p.tugged != null ? this.wellTile(g.wisps[p.tugged]!.pos) : null;
+    if (n + 1 === T.saidAt) this.say(KEEPER, "They don't do that.", { player: KEEPER_ID, ...this.still("r8-5", true, at) }, "key");
     if (--p.left > 0) return;
     // The wells let go, all at once.
     if (p.tugged !== null && rook.beam === p.tugged) {
@@ -453,7 +495,8 @@ export class SieveRoom {
     p.phase = "after";
     p.left = 3;
     this.queue = this.queue.filter((q) => q.key);
-    this.say(KEEPER, "They've never done that.", { player: KEEPER_ID }, "key");
+    this.tugEndedAt = g.tick;
+    this.say(KEEPER, "They've never done that.", { player: KEEPER_ID, ...this.still("r8-6", true, at, "r8-5") }, "key");
     // She steps back from the nearest well, of her own accord.
     const tilda = this.player(KEEPER_ID), k = SV_WELLS[this.nearestWell(tilda.pos)]!, c = g.board.center;
     const dx = tilda.pos.x - (c.x + k.x), dy = tilda.pos.y - (c.y + k.y), dl = Math.hypot(dx, dy) || 1;
@@ -572,12 +615,12 @@ export class SieveRoom {
       kes: 0,
       summary: "",
       lines: [
-        { who: KEEPER, text: `${COUNT[banked] ?? banked}.` },
+        { who: KEEPER, text: `${COUNT[banked] ?? banked}.`, ...this.still("r8-10") },
         { who: KEEPER, text: `The book says ${(COUNT[SIEVE.supply] ?? String(SIEVE.supply)).toLowerCase()}. Every year, back to the first page.` },
         { who: KEEPER, text: "Is it me?" },
         { who: ROOK, text: "It's not you." },
-        { who: KEEPER, text: "Then what is it?" },
-        { who: HESTA, text: "Come home, Rook." },
+        { who: KEEPER, text: "Then what is it?", ...this.still("r8-11a") },
+        { who: HESTA, text: "Come home, Rook.", ...this.still("r8-11b", true) },
       ],
     };
     this.endClock();
@@ -587,9 +630,53 @@ export class SieveRoom {
 
   // ---------------------------------------------------------------- wire
 
+  /** The still to show with a line: spread into the line's options. Nothing when the stills are off. */
+  private still(id: string, seq = false, at: Pt | null = null, after = ""): { still?: StillCue } {
+    if (!this.stillsOn) return {};
+    return { still: { id, ...(seq ? { seq } : {}), ...(after ? { after } : {}), ...(at ? { at: { x: at.x, y: at.y } } : {}) } };
+  }
+
+  /** A still with no line: the picture alone. */
+  private picture(id: string, seq = false, at: Pt | null = null) {
+    const s = this.still(id, seq, at);
+    if (!s.still) return;
+    const line: StoryLine = { who: "", text: "", ...s };
+    this.shown(line);
+    this.lines.push(line);
+  }
+
+  /** Not within the gap after the last one. */
+  private stillReady() {
+    return this.clockTicks >= this.stillEnd + Math.ceil(STILL.gapMs / TICK_MS);
+  }
+
+  /** A line with a still goes out: the panel is up from now (or from `from`, for lines in the bells that wait their turn) until it fades. */
+  private shown(line: StoryLine, from = this.clockTicks) {
+    if (!line.still) return;
+    const ms = stillMs(line.still.id, line.text ? lineTicks(line) * TICK_MS : 0);
+    this.stillUntil = from + Math.ceil(ms / TICK_MS);
+    this.stillFrom = from;
+    this.stillSpoken = !!line.text;
+    this.stillId = line.still.id;
+    // The gap is for play: one shown in the bells (picture 1) doesn't hold back the first in play.
+    if (this.phase === "playing") this.stillEnd = this.stillUntil;
+    this.heldBack = 0;
+    this.stillsShown.push(line.still.id);
+  }
+
+  /** The well tile nearest a tile. */
+  private wellTile(at: Pt): Pt {
+    const k = SV_WELLS[this.nearestWell(at)]!, c = this.game.board.center;
+    return pt(Math.round(c.x + k.x), Math.round(c.y + k.y));
+  }
+
   private say(who: string, text: string, how: Omit<StoryLine, "who" | "text"> = {}, kind: "key" | "quip" = how.talk ? "key" : "quip") {
     const line = { who, text, ...how };
-    if (this.phase !== "playing") return void this.lines.push(line);
+    if (this.phase !== "playing") {
+      // In the bells: it waits for the lines before it in this batch.
+      this.shown(line, this.clockTicks + this.lines.reduce((n, l) => n + lineTicks(l), 0));
+      return void this.lines.push(line);
+    }
     this.queue.push({ line, trigger: this.game.tick, key: kind === "key" });
     this.due();
   }
@@ -597,8 +684,14 @@ export class SieveRoom {
   private due() {
     const now = this.game.tick;
     while (this.queue.length && now >= this.busyUntil) {
-      const q = this.queue.shift()!;
+      const q = this.queue[0]!;
+      // A still that isn't part of a sequence waits out the gap after the last one (its line with it).
+      if (q.line.still && !q.line.still.seq && !this.stillReady()) break;
+      // The next in a sequence lets a still with a line have its shortest hold first (a picture alone, like 4, it fades straight over).
+      if (q.line.still?.seq && q.line.still.after === this.stillId && this.stillSpoken && this.clockTicks < this.stillUntil && this.clockTicks < this.stillFrom + Math.ceil((STILL.inMs + STILL.holdMs) / TICK_MS)) break;
+      this.queue.shift();
       if (!q.key && now - q.trigger > 4) continue;
+      this.shown(q.line);
       this.lines.push(q.line);
       this.busyUntil = now + lineTicks(q.line);
     }

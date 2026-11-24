@@ -62,8 +62,12 @@ export const SIEVE = {
    * end, the well lets go and it springs `spring` tiles toward him; let go, it slides to the lip.
    * Every other wisp creeps to its well's lip the same way. Nothing falls in. If he never gives it
    * the moment, it comes anyway (with nothing on his staff) once `lateShare` of the supply has come.
+   * "Granny?" (still 7) comes at the first tick at least `grannyAfter` ticks after the tug with his
+   * staff idle and no wisp below height `grannyLow`, or at `grannyBy` ticks regardless.
    */
-  tug: { ticks: 5, every: 2, nearWell: 4, spring: 2, lateShare: 0.66, saidAt: 2 },
+  tug: { ticks: 5, every: 2, nearWell: 4, spring: 2, lateShare: 0.66, saidAt: 2, grannyAfter: 10, grannyBy: 25, grannyLow: 45 },
+  /** Wisps held back while a reaction still is up come out this many ticks apart after it (engine/stills.ts). */
+  stillSpacing: 3,
   rook: [0, 4] as const,
   keeper: [5, 12] as const,
 } as const;

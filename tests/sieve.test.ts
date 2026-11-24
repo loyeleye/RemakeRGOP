@@ -5,6 +5,8 @@ import { shrineById } from "../src/engine/maps.js";
 import type { ServerMsg } from "../src/engine/protocol.js";
 import { SIEVE, SV_WELLS } from "../src/engine/sieve.js";
 import { SieveRoom, type Stand } from "../src/server/sieve.js";
+import { lineTicks } from "../src/server/granny.js";
+import { STILL, STILLS, stillMs } from "../src/engine/stills.js";
 
 /** Rook alone on the Sieve with one wisp, under the falling law. */
 function sieve() {
@@ -342,7 +344,15 @@ describe("Run 8: a harder job, on the Sieve", () => {
     conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
     const said = () => msgs.flatMap((m) => (m.t === "say" ? m.lines.map((l) => l.text) : []));
     const talking = () => (room as unknown as { talking(): boolean }).talking();
-    while (!room.state.said.has("calm") || room.state.phase !== "playing" || talking()) room.onTick();
+    // Once she has started talking, his staff comes away and the stand-in stops, so nothing is on it when the tug can come.
+    while (!room.state.said.has("calm") || room.state.phase !== "playing" || talking()) {
+      if (room.state.said.has("there")) {
+        (room as unknown as { stand: Stand }).stand = "idle";
+        room.state.game.players[0]!.action = { kind: "idle" };
+        room.state.game.players[0]!.beam = null;
+      }
+      room.onTick();
+    }
     (room as unknown as { stand: Stand }).stand = "idle";
     const g = room.state.game, c = g.board.center, rook = g.players[0]!, well = SV_WELLS[0]!;
     const wc = pt(c.x + well.x, c.y + well.y);
@@ -354,6 +364,9 @@ describe("Run 8: a harder job, on the Sieve", () => {
     w.target = null;
     g.height.set(w.id, 100);
     rook.pos = rook.prev = g.nearestFree(pt(Math.round(spot.x + (dx / dl) * 6), Math.round(spot.y + (dy / dl) * 6)), 0);
+    // Whatever the stand-in had on his staff, he lets go of it.
+    rook.action = { kind: "idle" };
+    rook.beam = null;
     const lip = (at: { x: number; y: number }) => Math.min(...SV_WELLS.map((k) => Math.hypot(c.x + k.x - at.x, c.y + k.y - at.y) - k.r));
     const staff = () => conn.message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: w.id } }));
     for (let t = 0; t < 30 && room.state.pull.phase === "wait"; t++) {
@@ -426,5 +439,85 @@ describe("Run 8: a harder job, on the Sieve", () => {
     }
     expect(pass).toBeGreaterThanOrEqual(3);
     expect(play("juggle", 8, 1500, "tug").room.state.phase).toBe("results");
+  });
+});
+
+describe("Run 8: the reaction stills", () => {
+  /** A whole game played by the juggler, with every line it says and when the room's clock said it, and every wisp's arrivals. */
+  function playThrough(stillFour = false) {
+    let s = 7;
+    const msgs: { at: number; m: ServerMsg }[] = [];
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "juggle");
+    room.stillFour = stillFour;
+    let clock = 0;
+    const conn = room.connect((m) => msgs.push({ at: clock, m }));
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const arrivals: number[] = [];
+    let onBoard = new Set<number>();
+    for (let t = 0; t < 3000 && room.state.phase !== "results"; t++) {
+      clock = t + 1;
+      room.onTick();
+      const g = room.state.game;
+      const now = new Set(g.wisps.filter((w) => !g.away.has(w.id)).map((w) => w.id));
+      for (const id of now) if (!onBoard.has(id)) arrivals.push(clock);
+      onBoard = now;
+    }
+    const lines = msgs.flatMap(({ at, m }) => (m.t === "say" ? m.lines.map((l) => ({ at, l })) : []));
+    return { room, lines, arrivals };
+  }
+
+  it("the core stills come in order with their lines, picture 4 stays off, and the end brings 10 and 11", () => {
+    const { room, lines } = playThrough();
+    expect(room.state.phase).toBe("results");
+    const shown = lines.filter((x) => x.l.still).map((x) => x.l.still!.id);
+    expect(shown.slice(0, 2)).toEqual(["r8-1", "r8-2"]);
+    expect(shown).toContain("r8-5");
+    expect(shown).toContain("r8-6");
+    expect(shown).toContain("r8-7");
+    expect(shown).not.toContain("r8-4");
+    expect(shown.indexOf("r8-5")).toBeLessThan(shown.indexOf("r8-6"));
+    expect(shown.indexOf("r8-6")).toBeLessThan(shown.indexOf("r8-7"));
+    // The line is the caption: each still's line is the one the story gives it.
+    const text = (id: string) => lines.find((x) => x.l.still?.id === id)!.l;
+    expect(text("r8-1").text).toBe("You're Rook. I'm Tilda. I keep this now.");
+    expect(text("r8-2").text).toBe("There. That's what I sent for you about.");
+    expect(text("r8-5").text).toBe("They don't do that.");
+    expect(text("r8-6").text).toBe("They've never done that.");
+    expect(text("r8-7")).toMatchObject({ who: "Rook", text: "Granny?" });
+    expect(text("r8-5").still!.seq && text("r8-6").still!.seq).toBe(true);
+    const end = room.state.end!.lines.filter((l) => l.still).map((l) => l.still!.id);
+    expect(end).toEqual(["r8-10", "r8-11a", "r8-11b"]);
+    expect(room.stillsShown.slice(0, 2)).toEqual(["r8-1", "r8-2"]);
+  });
+
+  it("no new wisp arrives while a still is up, and stills outside a sequence are at least the gap apart", () => {
+    const { room, lines, arrivals } = playThrough();
+    const ticks = (ms: number) => Math.ceil(ms / 600);
+    const up: { id: string; from: number; to: number; seq: boolean }[] = [];
+    for (const { at, l } of lines) {
+      if (!l.still || room.state.phase !== "results" || !l.text) continue;
+      const len = Math.ceil(stillMs(l.still.id, lineTicks(l) * 600) / 600);
+      up.push({ id: l.still.id, from: at, to: at + len, seq: !!l.still.seq });
+    }
+    // In play (still 1 is in the bells, where nothing arrives anyway).
+    for (const u of up.slice(1)) for (const a of arrivals) expect(a > u.from && a < u.to - 1).toBe(false);
+    for (let i = 1; i < up.length; i++) if (!up[i]!.seq) expect(up[i]!.from - up[i - 1]!.to).toBeGreaterThanOrEqual(ticks(STILL.gapMs) - 1);
+  });
+
+  it("picture 4 (the tug itself, no line) shows when switched on, and 5 cross-fades over it", () => {
+    const { lines } = playThrough(true);
+    const shown = lines.filter((x) => x.l.still).map((x) => x.l.still!.id);
+    expect(shown).toContain("r8-4");
+    const four = lines.find((x) => x.l.still?.id === "r8-4")!;
+    expect(four.l.text).toBe("");
+    expect(shown.indexOf("r8-4")).toBeLessThan(shown.indexOf("r8-5"));
+  });
+
+  it("every still the run calls has a placeholder card", () => {
+    for (const id of ["r8-1", "r8-2", "r8-4", "r8-5", "r8-6", "r8-7", "r8-10", "r8-11a", "r8-11b"]) expect(STILLS[id]?.who).toBeTruthy();
+    // Held for its line plus a second, never shorter than the floor; seven holds longer.
+    expect(stillMs("r8-1", 0)).toBe(STILL.inMs + STILL.holdMs + STILL.outMs);
+    expect(stillMs("r8-1", 4000)).toBe(STILL.inMs + 5000 + STILL.outMs);
+    expect(stillMs("r8-7", 0)).toBe(STILL.inMs + STILL.holdMs + 1000 + STILL.outMs);
   });
 });

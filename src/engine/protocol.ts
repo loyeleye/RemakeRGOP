@@ -1,5 +1,6 @@
 // Messages between the browser and a room. JSON over one WebSocket per player.
 
+import type { StillCue } from "./stills.js";
 import type { Action, GameSnapshot, Guild } from "./game.js";
 
 export const FLAMES = ["amber", "rose", "jade", "frost", "ember", "pearl"] as const;
@@ -61,6 +62,8 @@ export interface StoryLine {
   player?: number;
   /** The portrait's mood, e.g. "smug"; left out, it's picked from the line (engine/moods.ts). */
   mood?: string;
+  /** A reaction still shown with it (engine/stills.ts): the line is its caption, with no bubble. A line with no text is the picture alone. */
+  still?: StillCue;
 }
 
 export interface StoryView {

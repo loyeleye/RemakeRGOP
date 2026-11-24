@@ -7,7 +7,9 @@ import { faceOf as faceFile } from "../engine/moods.js";
 import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg, type StoryLine, type StoryView } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
-import { GrannyRoom } from "../server/granny.js";
+import { GrannyRoom, lineTicks } from "../server/granny.js";
+import { stillMs } from "../engine/stills.js";
+import { StillsPanel } from "./stills.js";
 import { RaceRoom } from "../server/race.js";
 import { DyingRoom } from "../server/dying.js";
 import { SieveRoom } from "../server/sieve.js";
@@ -184,7 +186,25 @@ interface Bark {
 }
 const barks: Record<"bark" | "chip", Bark | null> = { bark: null, chip: null };
 
+/** Reaction stills over the map (engine/stills.ts). */
+const stills = new StillsPanel(() => sound.paper());
+let stillTimers: number[] = [];
+
+/** A line that comes with a still: the panel shows it and its words as the caption, and it gets no bubble or box of its own. */
+function stillLine(l: StoryLine) {
+  const c = l.still!;
+  const ms = stillMs(c.id, l.text ? lineTicks(l) * TICK_MS : 0);
+  // The corner farther from the wisp on his staff, or else from the event.
+  const mine = snap?.players.find((p) => p.id === me);
+  const held = mine?.beam != null ? snap?.wisps.find((w) => w.id === mine.beam) : null;
+  const from = held ? cam.toScreen(held.x + 0.5, held.y + 0.5, 1) : c.at ? cam.toScreen(c.at.x + 0.5, c.at.y + 0.5, 0) : null;
+  stills.show({ cue: c, caption: l.text, who: l.who, ms }, from);
+  if (l.text && l.who) sound.speak(l.who, l.text);
+  return ms;
+}
+
 function sayLine(l: StoryLine) {
+  if (l.still && !l.talk) return void stillLine(l);
   if (l.talk || room?.phase !== "playing" || !l.who) return talk(l);
   // A line about nothing in particular sits over its speaker's model when they're on the field.
   const speaker = l.wisp == null && !l.ring && l.player == null ? speakerAt(l.who) && l.who.toLowerCase() : undefined;
@@ -268,6 +288,13 @@ function nextTalk() {
     callHint();
     return;
   }
+  if (l.still) {
+    // In the bells: the still in place of the box, for as long as it takes to say.
+    el.hidden = true;
+    stillLine(l);
+    talkTimer = window.setTimeout(nextTalk, Math.max(1800, lineTicks(l) * TICK_MS));
+    return;
+  }
   el.hidden = false;
   el.className = l.who ? "" : "tell";
   const face = $<HTMLImageElement>("dialog-face");
@@ -345,6 +372,9 @@ function leave() {
   room = null;
   snap = prevSnap = null;
   clearCaptions();
+  for (const t of stillTimers) clearTimeout(t);
+  stillTimers = [];
+  stills.clear();
   inPlace = false;
   jumped = false;
   placeFade?.remove();
@@ -694,6 +724,8 @@ function renderStoryEnd() {
       if (!l.who) li.className = "tell";
       li.innerHTML = (l.who ? `${faceHtml(l)}<b class="${l.who.toLowerCase()}">${esc(l.who)}</b>` : "") + lineHtml(l.text);
       li.style.animationDelay = `${0.6 + i * 1.8}s`;
+      // A still comes with its line as the line comes up (the line is on the card, so no caption).
+      if (l.still) stillTimers.push(window.setTimeout(() => stills.show({ cue: l.still!, caption: "", who: "", ms: stillMs(l.still!.id, lineTicks(l) * TICK_MS) }, null), (0.6 + i * 1.8) * 1000));
       return li;
     }),
   );
@@ -783,6 +815,9 @@ function sieveRoom() {
   if (q.has("nopull")) r.pullMode = "off";
   else if (q.get("pull") === "1") r.pullMode = "quiet";
   else if (q.get("pull") === "2") r.pullMode = "loud";
+  // Reaction stills: picture 4 (the tug itself) is off unless asked for; all of them off with ?nostills.
+  if (q.has("still4")) r.stillFour = true;
+  if (q.has("nostills")) r.stillsOn = false;
   return r;
 }
 
@@ -1540,6 +1575,8 @@ function frame(now: number) {
   if (!world) {
     world = new World(canvas, cam);
     world.resize(cam.w, cam.h, window.devicePixelRatio || 1);
+    // For looking things over in a headless browser.
+    if (new URLSearchParams(location.search).has("dbg")) (window as unknown as { __world: World }).__world = world;
   }
   cam.board = shrine.board;
   if (cam.scale === 0) {
@@ -1553,15 +1590,21 @@ function frame(now: number) {
   dyingCard(room?.story?.dying);
   if (room?.story?.sieve || pullView) stepPull(room?.story?.sieve?.pull, shrine.board);
   dyingZoom(room?.story?.dying, shrine.board);
+  // A still up over something that matters: the view eases a little the other way.
+  {
+    const held = mine?.beam != null ? snap.wisps.find((w) => w.id === mine.beam) : null;
+    const c = shrine.board.center;
+    stills.step([{ x: c.x + 0.5, y: c.y + 0.5 }, held ? { x: held.x + 0.5, y: held.y + 0.5 } : null], (p) => cam.toScreen(p.x, p.y, 0.5), cam.scale);
+  }
   if (cam.follow && mine) {
     if (cam.compact || cam.zoomedIn) {
-      const tx = mine.px + (mine.x - mine.px) * t + 0.5;
-      const ty = mine.py + (mine.y - mine.py) * t + 0.5;
+      const tx = mine.px + (mine.x - mine.px) * t + 0.5 + stills.shove.x;
+      const ty = mine.py + (mine.y - mine.py) * t + 0.5 + stills.shove.y;
       cam.cx += (tx - cam.cx) * 0.2;
       cam.cy += (ty - cam.cy) * 0.2;
     } else {
-      cam.cx = shrine.board.width / 2;
-      cam.cy = shrine.board.height / 2 + 0.5;
+      cam.cx = shrine.board.width / 2 + stills.shove.x;
+      cam.cy = shrine.board.height / 2 + 0.5 + stills.shove.y;
     }
   }
   cam.clamp(shrine.board);

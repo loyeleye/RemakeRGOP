@@ -259,3 +259,22 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 @keyframes still-in { from { opacity: 0; } to { opacity: 1; } }
 #still.inout { animation: still-inout 2.4s linear both; }
 @keyframes still-inout { 0% { opacity: 0; } 18% { opacity: 1; } 78% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Reaction stills (engine/stills.ts): ink on paper, in an upper corner, over play. Takes no taps. */
+#stills { position: fixed; top: 60px; width: 30vw; aspect-ratio: 4 / 3; z-index: 30; pointer-events: none; }
+#stills.right { right: 14px; }
+#stills.left { left: 14px; }
+#stills.top { left: 10px; right: 10px; width: auto; aspect-ratio: auto; height: 24vh; top: 56px; }
+#stills .still { position: absolute; inset: 0; opacity: 0; transform: rotate(var(--tilt, 0deg)) scale(0.985); transition: opacity var(--in, 400ms) ease-out, transform var(--in, 400ms) ease-out; background: #efe4cc; border-radius: 3px 6px 4px 5px / 5px 3px 6px 4px; box-shadow: 0 6px 22px rgba(10, 6, 18, 0.45), 0 0 0 1px rgba(60, 40, 20, 0.18) inset; overflow: hidden; }
+#stills .still.in { opacity: 1; transform: rotate(var(--tilt, 0deg)); }
+#stills .still.gone { opacity: 0; transition: opacity var(--out, 600ms) ease-in; }
+#stills .art { position: absolute; inset: 0; }
+#stills .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#stills .ph { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 40px; color: #3b2c1c; font: 13px/1.35 Georgia, serif; background: repeating-linear-gradient(0deg, rgba(90, 60, 30, 0.05) 0 1px, transparent 1px 7px), radial-gradient(ellipse at 50% 40%, #f6edd8 0%, #e6d7b6 100%); }
+#stills .ph small { font: 600 10px system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.45; }
+#stills .ph b { font: 600 15px/1.3 Georgia, serif; }
+#stills .ph span { font-style: italic; opacity: 0.85; }
+#stills .cap { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; padding: 8px 12px 9px; background: linear-gradient(transparent, rgba(20, 12, 6, 0.78) 35%); color: #f6ecd6; font: 14px/1.3 system-ui, sans-serif; }
+#stills .cap b { font-weight: 700; margin-right: 4px; }
+#stills.top .ph { padding: 10px 12px 36px; font-size: 12px; }
+#stills.top .ph b { font-size: 13px; }

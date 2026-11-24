@@ -11,6 +11,7 @@ for (const stand of ["juggle", "hold", "idle"] as Stand[]) {
   for (let i = 0; i < N; i++) {
     let s = 1000 + i * 7 + stand.length * 100000;
     const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), stand);
+    if (process.env.NOSTILLS) room.stillsOn = false;
     room.pullOn = pullOn;
     room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
     let n = 0;

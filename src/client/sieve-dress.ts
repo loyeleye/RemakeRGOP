@@ -45,7 +45,7 @@ export const DRESS = {
   pitBottom: -4.0,
   pitShaft: 0.64,
   /** The floor's slab texture repeats every this many tiles. */
-  slab: 4,
+  slab: 8,
 };
 
 /** A well's edge: a true circle, to meet the drawn pit's round top. */

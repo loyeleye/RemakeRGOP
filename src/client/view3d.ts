@@ -2583,7 +2583,14 @@ export class World {
       const m = models[s.model];
       if (!m || s.group.userData.filled) continue;
       s.group.clear();
-      s.group.add(m.clone());
+      const c = m.clone();
+      // The pit wall runs light at the lip to black at the bottom: clamped, so no light band wraps in below (maps thread).
+      if (s.model === "sieve-well-pit")
+        c.traverse((o) => {
+          const t = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined)?.map;
+          if (t && t.wrapT !== THREE.ClampToEdgeWrapping) (t.wrapT = THREE.ClampToEdgeWrapping), (t.needsUpdate = true);
+        });
+      s.group.add(c);
       s.group.userData.filled = true;
     }
   }

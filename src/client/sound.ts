@@ -614,6 +614,32 @@ export function hush(sec: number) {
   master.gain.linearRampToValueAtTime(SOUND.volume, t + sec + 0.4);
 }
 
+/** A reaction still arriving: one soft brush of paper, under half a second, never repeated. */
+export function paper() {
+  const s = out();
+  if (!s) return;
+  const { c, o } = s;
+  const t = c.currentTime, sec = 0.42;
+  const len = Math.ceil(c.sampleRate * sec);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const f = c.createBiquadFilter();
+  f.type = "bandpass";
+  f.Q.value = 0.8;
+  f.frequency.setValueAtTime(2600, t);
+  f.frequency.exponentialRampToValueAtTime(1500, t + sec);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.09, t + 0.06);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + sec);
+  src.connect(f).connect(g).connect(o);
+  src.start(t);
+  src.stop(t + sec + 0.05);
+}
+
 /** Run 8's pull, placeholder: a low suck of air as the rings close, rising to the snap. */
 export function pullWind(sec: number) {
   const s = out();
