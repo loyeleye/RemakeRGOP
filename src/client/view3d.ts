@@ -16,7 +16,7 @@ import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js
 import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeCurtain, makeIsland, makeWaterfall } from "./islands.js";
-import { DYING, crowdRadius, crowdSpot } from "../engine/dying.js";
+import { DYING, crowdSpot } from "../engine/dying.js";
 import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
 export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff", "#6fe07a"];
@@ -3003,7 +3003,7 @@ export class World {
     const sx = this.worldX(b, d.strike.x), sz = this.worldZ(b, d.strike.y);
     fx.burst.position.set(sx + 2, 16 - 6 * orange, sz - 6);
     fx.burst.intensity = orange > 0 ? 500 * orange : since >= 0 && since < 1.6 ? 300 * (1 - since / 1.6) : 0;
-    // The village. In run 6 they stand just inside the cloud's edge and back in as it comes; after, they stand off and are the meter; at the end they close round her, and Lumi goes to her father.
+    // The village, never on the field while there is play: at the island's edge in the cloud through run 6, in round the fire at its bottom, back at the edge as the meter in run 7, and round her at the end, with Lumi going to her father.
     const rook = st.snap.players.find((p) => p.id === st.me);
     const n = DYING.crowd.length;
     fx.up += (share - fx.up) * 0.05;
@@ -3013,7 +3013,7 @@ export class World {
       if (d.part === "after") {
         const a = Math.PI * (1 + (i + 0.5) / n), r = d.strike.r + 1.3 + (i % 2) * 0.9;
         to = m.who === "Lumi" && rook ? { x: rook.x + 1.4, y: rook.y + 0.6 } : { x: d.strike.x + 0.5 + Math.cos(a) * r, y: d.strike.y + 0.5 + Math.sin(a) * r };
-      } else to = crowdSpot(b, i, after ? DYING.crowdSeven + (i % 3) * 0.7 : crowdRadius(d.cloud ?? DYING.cloud.start));
+      } else to = crowdSpot(b, i, d.part);
       const tx = this.worldX(b, 0) + to.x, tz = this.worldZ(b, 0) + to.y;
       if (Number.isNaN(f.x)) (f.x = tx), (f.z = tz);
       const dx = tx - f.x, dz = tz - f.z, far = Math.hypot(dx, dz);
@@ -3027,8 +3027,8 @@ export class World {
       f.lamp.position.y = 1.0 + cheer * (1.15 + 0.12 * Math.sin(time * 7 + i));
       f.lamp.material.opacity = Math.min(1, (m.who === "Lumi" ? 1 : 0.75 + 0.1 * Math.sin(time * 0.9 + i * 1.7)) + cheer * 0.2);
       f.lamp.scale.setScalar(m.s * CROWD_LAMP * (1 + cheer * 0.35));
-      // In run 6 they face the cloud, backs to the fire. After, they face her; walking in at the end, the way they are going.
-      const face = after ? (far > 0.3 && d.part === "after" ? Math.atan2(dx, dz) : Math.atan2(sx - f.x, sz - f.z)) : Math.atan2(f.x - cx, f.z - cz);
+      // In run 6 they face the fire and him. After, they face her; walking in at the end, the way they are going.
+      const face = after ? (far > 0.3 && d.part === "after" ? Math.atan2(dx, dz) : Math.atan2(sx - f.x, sz - f.z)) : Math.atan2(cx - f.x, cz - f.z);
       f.root.rotation.y = lerpAngle(f.root.rotation.y, face, 0.08);
       if (f.anim) (f.anim.set(far > 0.15 ? "walk" : "idle"), f.anim.update(time));
       if (f.kid) (f.kid.set("idle"), f.kid.update(time));

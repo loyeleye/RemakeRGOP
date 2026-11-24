@@ -858,7 +858,7 @@ function dyingSound(d: NonNullable<StoryView["dying"]>, s: GameSnapshot) {
 let dyingOrange = false;
 let dyingRung = "";
 
-/** Run 6: the eye comes in with the cloud, so that by the bottom the fire and the people round it fill the picture; after the stills it goes back out to the whole ground. */
+/** Run 6: the eye once came in with the cloud; it now keeps the whole ground in view, with the village at its edge. Kept so a zoom left over is undone. */
 let dyingZoomed = false;
 function dyingZoom(d: NonNullable<StoryView["dying"]> | undefined, board: Board) {
   if (!d) return void (dyingZoomed = false);
@@ -870,7 +870,8 @@ function dyingZoom(d: NonNullable<StoryView["dying"]> | undefined, board: Board)
     if (Math.abs(cam.scale - fit) < 0.2) (cam.scale = fit), (dyingZoomed = false);
     return;
   }
-  const want = Math.max(fit, Math.min(cam.w, cam.h) / (2 * ((d.cloud ?? DYING.cloud.start) + 5)));
+  // Not now the village stands at the island's edge: they would go out of the picture. The whole ground stays in view.
+  const want = fit;
   if (want > fit * 1.02) dyingZoomed = true;
   if (dyingZoomed) cam.scale += (want - cam.scale) * 0.03;
 }

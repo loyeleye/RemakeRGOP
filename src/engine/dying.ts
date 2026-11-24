@@ -127,23 +127,28 @@ export const DYING = {
     { who: "Garrick", a: 0.99, c: "#d8c8a0", s: 0.8 },
     { who: "Marit", a: 0.94, c: "#c0e8c0", s: 0.8 },
   ] as readonly { who: string; a: number; c: string; s: number; cast?: string; carries?: string }[],
-  /** How far inside the cloud's edge they stand, never nearer the brazier than `crowdNear` nor farther than `crowdFar`; and where they stand through run 7. */
-  crowdIn: 1.2,
+  /**
+   * Where they stand. Never on the field while there is play (Ladi, 24 Nov: "Why is everyone on the
+   * field"): at the island's edge, `crowdEdge` tiles past the last floor tile, in run 6 standing in the
+   * cloud with their lamps showing through it, and in run 7 watching. Only at the bottom of run 6,
+   * when nobody can play, do they come in close round the fire, `crowdNear` out; and after the last
+   * bank of run 7 they gather round her.
+   */
+  crowdEdge: 1.2,
   crowdNear: 3.1,
-  crowdFar: 11.5,
-  crowdSeven: 8.5,
 } as const;
 
-/** How far from the brazier the crowd stands for a cloud this far out (run 6 and its bottom). */
-export function crowdRadius(cloud: number) {
-  return Math.max(DYING.crowdNear, Math.min(DYING.crowdFar, cloud - DYING.crowdIn));
-}
-
-/** Where one of the crowd stands (tile coordinates, fractions allowed), `r` tiles from the brazier; they stand in two rows when pressed close. */
-export function crowdSpot(board: Board, i: number, r: number): { x: number; y: number } {
-  const m = DYING.crowd[i]!, a = m.a * Math.PI * 2;
-  const row = r < 5 ? (i % 2) * 1.1 : 0;
-  return { x: board.center.x + 0.5 + Math.cos(a) * (r + row), y: board.center.y + 0.5 + Math.sin(a) * (r + row) };
+/** Where one of the crowd stands (tile coordinates, fractions allowed) in each part of runs 6 and 7 (the gathering after the last bank has its own places). Off the field: past the last floor tile on their side, in two rows; at the bottom, close round the fire. */
+export function crowdSpot(board: Board, i: number, part: string): { x: number; y: number } {
+  const m = DYING.crowd[i]!, a = m.a * Math.PI * 2, c = board.center;
+  const at = (r: number) => ({ x: c.x + 0.5 + Math.cos(a) * r, y: c.y + 0.5 + Math.sin(a) * r });
+  if (part === "bottom" || part === "stills") return at(DYING.crowdNear + (i % 2) * 1.1);
+  let edge = 0;
+  for (let r = 0; r < Math.max(board.width, board.height); r += 0.25) {
+    const x = Math.round(c.x + Math.cos(a) * r), y = Math.round(c.y + Math.sin(a) * r);
+    if (board.inside({ x, y }) && board.tile({ x, y }) === Tile.Floor) edge = r;
+  }
+  return at(edge + DYING.crowdEdge + (i % 2) * 0.8);
 }
 
 /** The crater's glass tiles on a board: the circle the comet leaves, and every tile a wisp crosses sliding from it to the brazier's rim. */
