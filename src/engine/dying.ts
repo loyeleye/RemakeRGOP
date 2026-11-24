@@ -67,16 +67,30 @@ export const DYING = {
   /** The picture at the end of run 7 (its file in public/stills/), and how long it is up, fading in and out. */
   risen: { ticks: 7, name: "The island clears the cloud", file: "r7-end-1" },
   /**
-   * The alarm, before run 6: five held pictures, full screen, each for `holdMs` and cross-fading over
-   * `fadeMs` into the next (forty seconds in all). The timbers groan at `groanMs`; the great bell
-   * starts at `bellFromMs`, far off (`bellFar` of its full sound), and has grown to `bellNear` by the
-   * end; nobody speaks until Lumi's line, `lineAfterMs` into the last picture. ?noalarm leaves it out.
+   * The alarm, before run 6: five short shots, full screen, none of them still (Ladi, 24 Nov: the
+   * first cut was too long and too quiet). `shots` is the order: each is up for `ms`, pushes in by
+   * `push` of its size, and cross-fades over `fadeMs` into the next. The great bell tolls through
+   * all of it from `bellFromMs`, every `bellEveryMs`, growing from `bellFar` of its full sound to
+   * `bellNear`. Lumi's line comes `lineAfterMs` into her shot. ?noalarm leaves the alarm out.
    */
   alarm: {
-    files: ["r6-alarm-1", "r6-alarm-2", "r6-alarm-3", "r6-alarm-4", "r6-alarm-5"] as const,
-    names: ["The kitchen, dark", "From Rook's door: the falls", "Down the lake", "The island from the side", "Lumi at the door"] as const,
-    holdMs: 8000, fadeMs: 1600, groanMs: 1200, bellFromMs: 3600, bellEveryMs: 2400, bellFar: 0.25, bellNear: 0.8, lineAfterMs: 2200,
+    shots: [
+      { id: "kitchen", name: "The kitchen, dark", ms: 3000, push: 0.03 },
+      { id: "falls", name: "From Rook's door: the falls", ms: 3000, push: 0.08 },
+      { id: "lake", name: "Down the lake", ms: 4000, push: 0.04 },
+      { id: "side", name: "The island from the side", ms: 4500, push: 0 },
+      { id: "lumi", name: "Lumi at the door", ms: 3000, push: 0.03 },
+    ] as readonly { id: "kitchen" | "falls" | "lake" | "side" | "lumi"; name: string; ms: number; push: number }[],
+    fadeMs: 500, bellFromMs: 300, bellEveryMs: 2400, bellFar: 0.6, bellNear: 1, lineAfterMs: 300,
+    /** The board is asked for this long before the end, under the last shot, so building it holds nothing up. */
+    readyMs: 2200,
     line: { who: "Lumi", text: "Dad. The falls." },
+    /** The lamp and the three cups (where each hangs on the 1024 by 768 picture): they start still and build over `build` seconds to `swing` degrees either way, each at its own rate (swings a second). Cups knock at `clinks` (ms). */
+    kitchen: { lamp: [403, 40] as const, cups: [[338, 245], [405, 245], [463, 245]] as const, build: 0.6, swing: 9, rates: [1.7, 2.05, 1.85] as const, lampSwing: 5, lampRate: 1.1, clinks: [700, 1150, 1900, 2450] as const },
+    /** The brazier's fire, by seconds into the shot: it flickers tall and middling for a second, then is low with a brief catch now and then, and ends low. */
+    lake: { fire: [[0, "tall"], [0.16, "mid"], [0.34, "tall"], [0.48, "mid"], [0.66, "tall"], [0.8, "mid"], [1, "low"], [1.55, "mid"], [1.68, "low"], [2.4, "mid"], [2.5, "low"], [3.2, "mid"], [3.27, "low"]] as readonly (readonly [number, "tall" | "mid" | "low"])[] },
+    /** The heart flickers for `flickerMs` (how dim, 0 bright to 1 dim, along the way) and ends dim; then the cloud in front slides up from `from` to `to` (pixels down the picture) over `riseMs`. */
+    side: { flickerMs: 2000, riseMs: 2500, from: 60, to: -120, flicker: [[0, 0], [0.1, 0.9], [0.18, 0.15], [0.32, 1], [0.4, 0.1], [0.52, 0.8], [0.6, 0.3], [0.74, 1], [0.82, 0.45], [0.92, 1], [1, 1]] as readonly (readonly [number, number])[] },
   },
   /** What Ladi ruled on 24 Nov, each on a switch so the other way can be tried. */
   switches: {

@@ -733,6 +733,122 @@ export function greatBell(level = 1) {
   noise(0.12 * level, "bandpass", 2600, 0.06, 0.1);
 }
 
+// The alarm before run 6 (client/alarm.ts): a sound for each shot, under the bell.
+
+let alarmStops: (() => void)[] = [];
+/** Cuts the alarm's held sounds short (it was skipped). */
+export function alarmQuiet() {
+  for (const f of alarmStops) f();
+  alarmStops = [];
+}
+
+/** A held rush of soft noise through one filter, for `sec` seconds, in over `rise` and out over the last `fall`. */
+function rush(sec: number, type: BiquadFilterType, freq: number, gain: number, rise = 0.3, fall = 0.6, q = 0.7) {
+  const s = out();
+  if (!s) return;
+  const { c, o } = s;
+  const len = Math.ceil(c.sampleRate * 2);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  let b = 0, peak = 0;
+  for (let i = 0; i < len; i++) (d[i] = b = (b + 0.03 * (Math.random() * 2 - 1)) / 1.03), (peak = Math.max(peak, Math.abs(b)));
+  for (let i = 0; i < len; i++) d[i]! /= peak || 1;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  const f = c.createBiquadFilter();
+  f.type = type;
+  f.frequency.value = freq;
+  f.Q.value = q;
+  const g = c.createGain(), t = c.currentTime;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + rise);
+  g.gain.setValueAtTime(gain, t + Math.max(rise, sec - fall));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + sec);
+  src.connect(f).connect(g).connect(o);
+  src.start(t);
+  src.stop(t + sec + 0.1);
+  alarmStops.push(() => {
+    const n = c.currentTime;
+    g.gain.cancelScheduledValues(n);
+    g.gain.setTargetAtTime(0.0001, n, 0.05);
+  });
+}
+
+/** The falls going into the cloud: a short roar with the top taken off it. */
+export function alarmFalls(sec: number) {
+  rush(sec, "lowpass", 340, 0.32, 0.25, 0.8);
+  rush(sec, "bandpass", 900, 0.05, 0.4, 0.8, 0.5);
+}
+
+/** The cloud coming up over the island: a low roll under everything. */
+export function alarmRumble(sec: number) {
+  rush(sec, "lowpass", 95, 0.6, 0.5, 0.9);
+}
+
+/** A cup knocking on its hook. */
+export function cupClink() {
+  strike(1750 + Math.random() * 500, 0.035, Math.random() * 0.6 - 0.3, [[1, 1, 0.11], [2.32, 0.4, 0.06], [3.9, 0.15, 0.04]]);
+}
+
+/**
+ * People calling to each other along the lake path, too far off for words: a handful of voices,
+ * each a buzz through two vowel bands, speaking in bursts of syllables with gaps between.
+ */
+export function alarmChatter(sec: number) {
+  const s = out();
+  if (!s) return;
+  const { c, o } = s;
+  const t = c.currentTime;
+  const bus = c.createGain();
+  bus.gain.setValueAtTime(0.0001, t);
+  bus.gain.exponentialRampToValueAtTime(0.5, t + 0.4);
+  bus.gain.setValueAtTime(0.5, t + Math.max(0.4, sec - 0.6));
+  bus.gain.exponentialRampToValueAtTime(0.0001, t + sec);
+  const top = c.createBiquadFilter();
+  top.type = "lowpass";
+  top.frequency.value = 2400;
+  bus.connect(top).connect(o);
+  for (let v = 0; v < 7; v++) {
+    const osc = c.createOscillator(), g = c.createGain(), p = c.createStereoPanner();
+    osc.type = "sawtooth";
+    const pitch = 105 + Math.random() * 150;
+    osc.frequency.setValueAtTime(pitch, t);
+    p.pan.value = Math.random() * 1.6 - 0.8;
+    g.gain.setValueAtTime(0, t);
+    // Syllables: a bump of sound every fifth of a second or so, the pitch moving with each, and a breath between phrases.
+    let at = t + Math.random() * 0.5;
+    while (at < t + sec - 0.2) {
+      const n = 2 + Math.floor(Math.random() * 5);
+      for (let k = 0; k < n && at < t + sec - 0.2; k++) {
+        const len = 0.09 + Math.random() * 0.1, loud = 0.05 + Math.random() * 0.07;
+        g.gain.setValueAtTime(0, at);
+        g.gain.linearRampToValueAtTime(loud, at + len * 0.3);
+        g.gain.linearRampToValueAtTime(0, at + len);
+        osc.frequency.setValueAtTime(pitch * (0.9 + Math.random() * 0.35), at);
+        at += len + 0.02 + Math.random() * 0.06;
+      }
+      at += 0.25 + Math.random() * 0.6;
+    }
+    const f1 = c.createBiquadFilter(), f2 = c.createBiquadFilter();
+    f1.type = f2.type = "bandpass";
+    f1.frequency.value = 450 + Math.random() * 350;
+    f2.frequency.value = 1100 + Math.random() * 700;
+    f1.Q.value = 5;
+    f2.Q.value = 7;
+    osc.connect(f1).connect(g);
+    osc.connect(f2).connect(g);
+    g.connect(p).connect(bus);
+    osc.start(t);
+    osc.stop(t + sec + 0.1);
+  }
+  alarmStops.push(() => {
+    const n = c.currentTime;
+    bus.gain.cancelScheduledValues(n);
+    bus.gain.setTargetAtTime(0.0001, n, 0.05);
+  });
+}
+
 /** The ground lurches: the island's timbers and rock groan, and something heavy shifts. Up (run 7) it is shorter and rises. */
 export function lurchGroan(up = false) {
   const s = out();

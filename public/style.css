@@ -262,15 +262,16 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 @keyframes still-inout { 0% { opacity: 0; } 18% { opacity: 1; } 78% { opacity: 1; } 100% { opacity: 0; } }
 
 /* The alarm before run 6 (client/alarm.ts): held pictures, full screen, cross-fading slowly. */
-#alarm { position: fixed; inset: 0; z-index: 50; background: #0b0a12; overflow: hidden; color: #e9dcc4; transition: opacity var(--fade, 1600ms) ease-in-out; }
+#alarm { position: fixed; inset: 0; z-index: 50; background: #0b0a12; overflow: hidden; color: #e9dcc4; transition: opacity var(--fade, 500ms) ease-in-out; }
 #alarm.gone { opacity: 0; pointer-events: none; }
-#alarm .pic { position: absolute; inset: 0; opacity: 0; display: grid; place-items: center; text-align: center; background: #0b0a12; transition: opacity var(--fade, 1600ms) ease-in-out; }
+#alarm .stage { position: absolute; left: 50%; top: 50%; width: 1024px; height: 768px; overflow: hidden; transform: translate(-50%, -50%) scale(var(--s, 1)); }
+#alarm .pic { position: absolute; inset: 0; opacity: 0; display: grid; place-items: center; text-align: center; background: #0b0a12; transition: opacity var(--fade, 500ms) ease-in-out; }
 #alarm .pic.on { opacity: 1; }
 #alarm .pic .ph { display: grid; gap: 10px; padding: 24px; }
 #alarm .pic small { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.45; }
-#alarm .pic b { font: 600 clamp(20px, 4.2vw, 34px)/1.25 Georgia, serif; }
-#alarm .pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #0b0a12; transform: scale(1); transition: transform var(--hold, 9600ms) linear; }
-#alarm .pic.on img { transform: scale(1.035); }
+#alarm .pic b { font: 600 34px/1.25 Georgia, serif; }
+#alarm .cam { position: absolute; inset: 0; transform-origin: 50% 50%; will-change: transform; }
+#alarm .cam img { position: absolute; left: 0; top: 0; max-width: none; }
 #alarm .say { position: absolute; left: 50%; bottom: max(9vh, 54px); transform: translate(-50%, 8px); margin: 0; padding: 10px 16px 11px; max-width: min(86vw, 520px); border-radius: 12px; border: 1px solid #ffd36a88; background: rgba(18, 14, 26, 0.88); color: #f6ecd6; font: 17px/1.3 system-ui, sans-serif; opacity: 0; transition: opacity 0.4s ease-out, transform 0.4s ease-out; }
 #alarm .say.on { opacity: 1; transform: translate(-50%, 0); }
 #alarm .say b { margin-right: 6px; }

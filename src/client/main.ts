@@ -150,9 +150,12 @@ function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | "pond" = 1,
   }
   // Run 6 opens on the alarm: five held pictures, then the board.
   else if (run === 6 && !new URLSearchParams(location.search).has("noalarm")) {
-    alarmCards({ groan: () => sound.lurchGroan(), bell: (v) => sound.greatBell(v) }, () => {
+    (r as DyingRoom).lead = Math.ceil(DYING.alarm.readyMs / TICK_MS);
+    talkHold = performance.now() + 60000;
+    alarmCards(hello, () => {
+      // Her first line waits for the picture to go, then comes at once.
       talkHold = performance.now() + DYING.alarm.fadeMs;
-      hello();
+      if (talkQueue.length) nextTalk();
     });
   }
   else hello();
