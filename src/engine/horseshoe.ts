@@ -95,6 +95,9 @@ export const HS_LOBES = [
   ...[29, 32, 35, 38, 41, 43].map((x) => ({ x, y: 13.5, r: 2.6 })),
 ];
 
+/** "The low one": the island the beacon is lit on, in clear view east of Wick's spur and well below it (spec coordinates). */
+export const HS_FAR = [{ x: 64, y: 12, r: 8, drop: 5 }];
+
 /** Houses: where each plot's top-left corner is, its size, its letter, and which way its door faces. */
 export const HS_HOUSES = [
   { kind: "maudie-house", ch: "M", x: -22, y: -20, w: 7, h: 7, door: "e" },
@@ -273,6 +276,32 @@ export function horseshoeRows(): { rows: string[]; turns: Record<string, number>
   block(-1, 53, 3, 3, ":", ".,");
   // Wick's post near the spur's tip.
   set(42, 13, "J", ".,");
+
+  // Lamp posts along the lake path: on its landward side, about nine tiles apart, each lantern
+  // hanging out over the path. The lamp trimmer's ladder leans on the one nearest Nell's house.
+  const lamps: [number, number][] = [];
+  const ringOut = [...lakeD].filter(([, d]) => d === 4).map(([k]) => k.split(",").map(Number) as [number, number]);
+  for (const [px, py] of ringOut.sort((a, b) => a[1] - b[1] || a[0] - b[0])) {
+    // Away from the water: the tile just past the path.
+    const tx = 0, ty = Math.min(py, 19), n = Math.hypot(px - tx, py - ty) || 1;
+    const ux = (px - tx) / n, uy = (py - ty) / n;
+    const x = Math.round(px + ux * 1.2), y = Math.round(py + uy * 1.2);
+    if (get(x, y) !== "." || y < -44 || lamps.some(([lx, ly]) => Math.hypot(lx - x, ly - y) < 9)) continue;
+    // Clear of the open apron, the shrine yard's crowd room and the chair's view up the lake.
+    if ((x >= -27 && x <= -20 && y >= 8 && y <= 14) || (Math.abs(x) <= 3 && y >= 30)) continue;
+    lamps.push([x, y]);
+    set(x, y, "l");
+    // The model's lantern hangs to +X: turned back toward the path.
+    turnAt(x, y, Math.atan2(uy, -ux));
+  }
+  const byNell = lamps.reduce((b, l) => (Math.hypot(l[0] - 10, l[1] + 24) < Math.hypot(b[0] - 10, b[1] + 24) ? l : b), lamps[0]!);
+  {
+    const a = turns[`${X(byNell[0])},${Y(byNell[1])}`]!;
+    // Behind the post, away from the path (the model's -X).
+    const x = byNell[0] - Math.round(Math.cos(a)), y = byNell[1] + Math.round(Math.sin(a));
+    set(x, y, "k");
+    turnAt(x, y, a);
+  }
 
   // Where the walk starts: Rook and Lumi by the pond brazier.
   set(-17, -3, "1", ".,");

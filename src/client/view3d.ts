@@ -179,7 +179,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "cottage-house", "offering-stone", "offering-boat", "offering-mooring"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "offering-stone", "offering-boat", "offering-mooring"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -836,8 +836,9 @@ const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number; y?: n
   "mabry-house": { model: "mabry-house" },
   "orrin-house": { model: "orrin-house" },
   "wick-house": { model: "wick-house" },
-  "nell-house": { model: "cottage-house" },
-  "sefa-house": { model: "cottage-house" },
+  // Nell's and Sefa's fronts (the serving hatch, the porch) are on +Z, like the doors of the rest.
+  "nell-house": { model: "nell-house" },
+  "sefa-house": { model: "sefa-house" },
   offering: { model: "offering-stone", y: -0.6 },
   mooring: { model: "offering-mooring", dx: 0.5 },
   boat: { model: "offering-boat", y: -0.15 },
@@ -856,9 +857,23 @@ const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number; y?: n
  */
 const WINDOW_LIT: Record<string, string> = {
   "rook-house-big": "rook", "maudie-house": "maudie", "moth-house": "moth", "orrin-house": "orrin", "wick-house": "wick",
-  "cottage-house": "cottage", "mabry-house": "mabry", "hesta-house": "hesta",
+  "nell-house": "nell", "sefa-house": "sefa", "mabry-house": "mabry", "hesta-house": "hesta",
 };
 const litMaps = new Map<string, THREE.Texture>();
+/**
+ * Which path lamps are out of sorts on each walk, by their order on the island (north to south):
+ * guttering ones flicker, dead ones stay dark. Walk 5 has two guttering (story thread, 23 Nov).
+ */
+const LAMP_ODD: Record<number, { gutter?: number[]; dead?: number[] }> = { 5: { gutter: [3, 10] } };
+let lampLitMap: THREE.Texture | null = null;
+function lampLit() {
+  if (!lampLitMap) {
+    lampLitMap = new THREE.TextureLoader().load("models/lit/path-lamp-lit.webp");
+    lampLitMap.flipY = false;
+    lampLitMap.colorSpace = THREE.SRGBColorSpace;
+  }
+  return lampLitMap;
+}
 function setWindows(on: boolean) {
   for (const [model, file] of Object.entries(WINDOW_LIT)) {
     const root = models[model];
@@ -885,7 +900,7 @@ function setWindows(on: boolean) {
 }
 
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
-const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail"]);
+const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder"]);
 
 function makePlace(kind: string, w: number, d: number): THREE.Group {
   const g = new THREE.Group();
@@ -1369,6 +1384,20 @@ export class World {
         this.flowers = this.placeSlot("statue-flowers", box(0.5, 0.3, 0.4, new THREE.MeshStandardMaterial({ color: "#e8d27a", roughness: 1 })), wx, wz + 0.85);
         this.flowers.visible = false;
         this.statueWalk = -1;
+      } else if (p.kind === "path-lamp") {
+        const post = new THREE.Group();
+        post.add(box(0.14, 2.4, 0.14, wood, 0), box(0.3, 0.4, 0.3, new THREE.MeshStandardMaterial({ color: "#d9c88a", roughness: 1 }), 2));
+        const turn = shrine.turns?.[`${p.x},${p.y}`] ?? 0;
+        const slot = this.placeSlot("path-lamp", post, wx, wz, turn);
+        // Its glow: a soft light where the lantern hangs (the model's +X), on when the lamp is lit.
+        const glow = glowSprite("#ffb65a", 1.5, 0);
+        glow.position.set(wx + Math.cos(turn) * 0.42, 2.05, wz - Math.sin(turn) * 0.42);
+        g.add(glow);
+        this.pathLamps.push({ slot, glow, mats: [], state: "off", seed: p.x * 7.3 + p.y * 3.1 });
+      } else if (p.kind === "ladder") {
+        // Leaning on the lamp post beside it (toward the model's +X).
+        const turn = shrine.turns?.[`${p.x},${p.y}`] ?? 0;
+        this.placeSlot("jarek-ladder", box(0.5, 2.2, 0.12, wood), wx + Math.cos(turn) * 0.45, wz - Math.sin(turn) * 0.45, turn);
       } else if (p.kind === "lookout") {
         this.placeSlot("lookout-post", box(0.2, 1.9, 0.2, wood), wx, wz);
       } else if (p.kind === "rail") {
@@ -1553,6 +1582,7 @@ export class World {
     this.shrineId = shrine.id + "~" + shrine.teams;
     this.shrineGroup.clear();
     this.placeSlots = [];
+    this.pathLamps = [];
     this.statueSlot = this.flowers = null;
     this.isPlace = !!themeFor(shrine.id).place;
     this.lightKey = "";
@@ -1649,6 +1679,17 @@ export class World {
         lobe.position.set(p.x, -0.035 - (i % 7) * 0.002, p.y);
         g.add(lobe);
       });
+    }
+    // Named islands that must be in view from here (the low one, east of Wick's spur): wide, flat and well below.
+    for (const [i, f] of (shrine.far ?? []).entries()) {
+      const isl = makeIsland({ rx: f.r, rz: f.r * 0.75, depth: f.r * 1.4, squareness: 2.2, seed: 91 + i, lobes: 0.4, spires: 2, grass: th.grass, soil: th.soil, rock: th.rock, segments: 72, rings: 22 });
+      isl.position.set(f.x, -f.drop, f.y);
+      for (let t = 0; t < 4; t++) {
+        const tree = th.scatter(f.r * 0.22, 40 + t);
+        tree.position.set(Math.cos(t * 1.9) * f.r * 0.5, 0, Math.sin(t * 1.9) * f.r * 0.35);
+        isl.add(tree);
+      }
+      g.add(isl);
     }
     // Story places with their own shape: plateaus under the parts that stick out of the main one.
     for (const [i, l] of (shrine.lobes ?? []).entries()) {
@@ -2081,8 +2122,47 @@ export class World {
   private placeSlots: { group: THREE.Group; model: string }[] = [];
   /** Lit windows for this walk's light (dusk and night). */
   private windowsOn = false;
+  /** The lake path's lamps: each its own lantern, so one can gutter or go dark while the rest burn. */
+  private pathLamps: { slot: THREE.Group; glow: THREE.Sprite; mats: THREE.MeshStandardMaterial[]; state: "off" | "lit" | "gutter" | "dead"; seed: number }[] = [];
+  private lampWalk = 1;
+  /** Sets each lamp for this walk and light: off by day, lit at dusk and night, bar the walk's guttering and dead ones. */
+  private dressLamps() {
+    const odd = LAMP_ODD[this.lampWalk] ?? {};
+    this.pathLamps.forEach((l, i) => {
+      if (!l.slot.userData.filled) return;
+      if (!l.mats.length)
+        l.slot.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          const mat = (m.material = (m.material as THREE.MeshStandardMaterial).clone());
+          mat.userData.paint = { map: mat.emissiveMap, k: mat.emissiveIntensity };
+          l.mats.push(mat);
+        });
+      const state = odd.dead?.includes(i) ? "dead" : !this.windowsOn ? "off" : odd.gutter?.includes(i) ? "gutter" : "lit";
+      if (state === l.state) return;
+      l.state = state;
+      const on = state === "lit" || state === "gutter";
+      for (const mat of l.mats) {
+        mat.emissiveMap = on ? lampLit() : mat.userData.paint.map;
+        mat.emissiveIntensity = on ? 1 : mat.userData.paint.k * (state === "dead" ? 0.5 : 1);
+        mat.emissive = new THREE.Color("#ffffff");
+        mat.needsUpdate = true;
+      }
+      l.glow.material.opacity = on ? 0.55 : 0;
+    });
+  }
+  /** A guttering lamp flickers: mostly low, with fits of brightness. */
+  private flickerLamps(time: number) {
+    for (const l of this.pathLamps) {
+      if (l.state !== "gutter") continue;
+      const k = 0.25 + 0.75 * Math.max(0, Math.sin(time * 9 + l.seed) * Math.sin(time * 2.3 + l.seed * 2)) ** 0.6;
+      for (const mat of l.mats) mat.emissiveIntensity = k;
+      l.glow.material.opacity = 0.55 * k;
+    }
+  }
   private fillHouse() {
     setWindows(this.windowsOn);
+    queueMicrotask(() => this.dressLamps());
     for (const s of this.placeSlots) {
       const m = models[s.model];
       if (!m || s.group.userData.filled) continue;
@@ -2221,6 +2301,7 @@ export class World {
     this.cam.update();
     const time = st.now / 1000;
     for (const u of this.timeUniforms) u.value = time;
+    this.flickerLamps(time);
     for (const f of this.floaters) f.obj.position.y = f.y + Math.sin(time * 0.25 * f.drift + f.phase) * 0.8;
     this.brazierLight.intensity = 18 + Math.sin(time * 9) * 3 + Math.sin(time * 23) * 2;
     const { vents, portcullis } = this.gimmicks;
@@ -2450,6 +2531,8 @@ export class World {
       this.windowsOn = st.light === "dusk" || st.light === "night";
       setWindows(this.windowsOn);
     }
+    this.lampWalk = st.walk ?? 1;
+    this.dressLamps();
 
     // The free walk: Lumi's lantern by the water, glowing a little.
     if (st.lantern && !this.lantern) {

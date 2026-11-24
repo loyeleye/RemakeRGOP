@@ -8,7 +8,7 @@
 //   B  brazier      a  Dawn wisp spawn b  Dusk wisp spawn
 //   1  Dawn start   2  Dusk start
 
-import { HS_CENTRE, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
+import { HS_CENTRE, HS_FAR, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
 import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
 
 export interface ShrineDef {
@@ -339,11 +339,13 @@ export function ringWalls(ring: Ring): Pt[] {
 
 /** Story places: solid things drawn as themselves. Multi-tile ones are one block of their letter. */
 export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling"
-  | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat";
+  | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat" | "path-lamp" | "ladder";
 export const PROP_CHARS: Record<string, PropKind> = {
   F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling",
   // The horseshoe island's houses, the Offering stone, and the one boat at its mooring.
   M: "maudie-house", D: "moth-house", g: "mabry-house", I: "orrin-house", e: "nell-house", f: "sefa-house", X: "wick-house", h: "offering", i: "mooring", j: "boat", v: "falls",
+  // The lake path's lamp posts, and the lamp trimmer's ladder against one.
+  l: "path-lamp", k: "ladder",
 };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
 export const GROUND_CHARS: Record<string, "path" | "planks" | "terrace"> = { ",": "path", ";": "planks", ":": "terrace" };
@@ -390,6 +392,8 @@ export interface Shrine {
   core?: { x: number; y: number; outline: (a: number) => number };
   /** Story places: model turns (radians) by prop kind, or by tile as "x,y", over the usual. */
   turns?: Record<string, number>;
+  /** Story places: named islands of the sky that must be in view from here, in tiles from the centre; `drop` is how far below this one they hang. */
+  far?: { x: number; y: number; r: number; drop: number }[];
 }
 
 /**
@@ -829,6 +833,8 @@ const TILE_OF: Record<string, Tile> = {
   "#": Tile.Wall,
   // A house (story islands): solid like a wall, drawn as a building.
   H: Tile.Wall,
+  l: Tile.Wall,
+  k: Tile.Wall,
   // Story places: a fence, a wash-line post, a bench (solid), and a worn path (open ground).
   F: Tile.Wall,
   Y: Tile.Wall,
@@ -1345,7 +1351,7 @@ function homeIsland(): Shrine {
     while (r < 200 && hsOval(Math.cos(a) * r + mid.x, Math.sin(a) * r + mid.y) < 0) r += 0.25;
     return r;
   };
-  return { ...sh, coast: at, outline, arms: true, core: { x: mid.x - HS_CENTRE.x, y: mid.y - HS_CENTRE.y, outline: fromMid }, lobes: HS_LOBES.map((l) => ({ x: l.x - HS_CENTRE.x, y: l.y - HS_CENTRE.y, r: l.r })), turns };
+  return { ...sh, coast: at, outline, arms: true, far: HS_FAR.map((f) => ({ ...f, x: f.x - HS_CENTRE.x, y: f.y - HS_CENTRE.y })), core: { x: mid.x - HS_CENTRE.x, y: mid.y - HS_CENTRE.y, outline: fromMid }, lobes: HS_LOBES.map((l) => ({ x: l.x - HS_CENTRE.x, y: l.y - HS_CENTRE.y, r: l.r })), turns };
 }
 
 export function shrineById(id: string): Shrine {
