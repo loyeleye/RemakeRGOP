@@ -30,8 +30,13 @@ export class DyingRoom {
   private send: ((m: ServerMsg) => void) | null = null;
   private phase: Phase = "countdown";
   private countdown = 0;
-  /** Ticks added before run 6's first countdown: the board is asked for this long before the alarm's last shot ends, so it is built under the picture. */
+  /** Ticks added before run 6's first countdown: the board is asked for under the alarm, this long before its end, so it is built under a picture. */
   lead = 0;
+  private opening = 0;
+  /** The alarm was skipped: run 6's countdown is no longer than it is without one. */
+  cutLead() {
+    if (this.phase === "countdown" && this.part === "six") this.countdown = Math.min(this.countdown, this.opening);
+  }
   private game!: Game;
   private rng: Rng;
   private stop: (() => void) | null = null;
@@ -169,7 +174,8 @@ export class DyingRoom {
     this.phase = "countdown";
     const before = this.lines.length;
     this.say(HESTA, "It's low, Rook. Feed it. Nearest first.", { talk: true });
-    this.countdown = DYING.bellTicks + this.lead + this.lines.slice(before).reduce((n, l) => n + lineTicks(l), 0);
+    this.opening = DYING.bellTicks + this.lines.slice(before).reduce((n, l) => n + lineTicks(l), 0);
+    this.countdown = this.opening + this.lead;
     this.flush();
     this.broadcastTick();
   }

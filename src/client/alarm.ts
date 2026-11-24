@@ -1,12 +1,12 @@
 // The alarm before run 6 (story/runs6-7-reimagined.md, section 1): five short shots, full screen,
-// about seventeen seconds in all, and none of them still (Ladi, 24 Nov). The kitchen's cups and lamp
-// swing; the falls drop into the cloud; close on the Kindling ground the brazier's fire fails and
-// its sparks dim; the island's heart dies and it goes down through the cloud, shedding rock; Lumi
-// is at the door. The shrine's great bell tolls through all five. The layers are the gameplay thread's drafts
+// about twenty seconds in all, and none of them still (Ladi, 24 Nov). The kitchen's cups and lamp
+// swing; Lumi is at the door; the falls drop into the cloud; close on the Kindling ground the
+// brazier's fire fails and its sparks dim; the island's heart dies and it goes down through the
+// cloud, shedding rock. The shrine's great bell tolls through all five. The layers are the gameplay thread's drafts
 // (project files gameplay/stills/run6/alarm-layers/), picked up by name from public/stills/alarm/,
 // on a 1024 by 768 stage. The order, the lengths and every other number are in DYING.alarm.
 
-import { DYING } from "../engine/dying.js";
+import { DYING, alarmTimes } from "../engine/dying.js";
 import * as sound from "./sound.js";
 
 const W = 1024, H = 768;
@@ -32,10 +32,11 @@ function along(pts: readonly (readonly [number, number])[], t: number) {
 }
 
 /**
- * Plays the alarm. `ready` is called once, DYING.alarm.readyMs before the end (or when it is skipped),
- * to have the board built under the last shot; `then` once, as that shot starts to fade.
+ * Plays the alarm. `ready` is called once, under Lumi's shot (or when it is skipped), to have the
+ * board built where nothing is moving, with how long the alarm has left (ms); `then` once, as the
+ * last shot starts to fade, with whether it was skipped.
  */
-export function alarmCards(ready: () => void, then: () => void) {
+export function alarmCards(ready: (leftMs: number) => void, then: (skipped: boolean) => void) {
   const A = DYING.alarm;
   const el = document.createElement("div");
   el.id = "alarm";
@@ -187,7 +188,8 @@ export function alarmCards(ready: () => void, then: () => void) {
     },
     lumi(cam) {
       cam.append(layer("r6-alarm-5"));
-      return { start: (at) => at(A.lineAfterMs, () => say.classList.add("on")) };
+      // Her line is up for her shot and goes with it.
+      return { start: (at, sec) => (at(A.lineAfterMs, () => say.classList.add("on")), at(sec * 1000, () => say.classList.remove("on"))) };
     },
   };
 
@@ -217,16 +219,16 @@ export function alarmCards(ready: () => void, then: () => void) {
   let total = 0;
   for (const s of A.shots) starts.push(total), (total += s.ms);
   let over = false, asked = false, t0 = 0, frame = 0;
-  const ask = () => {
-    if (!asked) (asked = true), ready();
+  const ask = (leftMs: number) => {
+    if (!asked) (asked = true), ready(leftMs);
   };
-  const end = () => {
+  const end = (skipped = false) => {
     if (over) return;
     over = true;
     for (const t of timers) clearTimeout(t);
     removeEventListener("resize", fit);
-    ask();
-    then();
+    ask(0);
+    then(skipped);
     el.classList.add("gone");
     window.setTimeout(() => (cancelAnimationFrame(frame), el.remove()), A.fadeMs + 80);
   };
@@ -252,11 +254,11 @@ export function alarmCards(ready: () => void, then: () => void) {
     });
     // The great bell, rung over and over, through all of it; run 6's own takes over from it.
     for (let t = A.bellFromMs; t < total; t += A.bellEveryMs) at(t, () => sound.greatBell(A.bellFar + ((A.bellNear - A.bellFar) * t) / total));
-    at(Math.max(0, total - A.readyMs), ask);
-    at(total, end);
+    at(alarmTimes().readyAt, () => ask(total - alarmTimes().readyAt));
+    at(total, () => end());
     tick();
   };
-  skip.onclick = () => (sound.alarmQuiet(), end());
+  skip.onclick = () => (sound.alarmQuiet(), end(true));
   // Not before its pictures are there (or two seconds, whichever is first).
   void Promise.race([Promise.all(imgs.map((i) => i.decode().catch(() => {}))), new Promise((r) => setTimeout(r, 2000))]).then(go);
 }

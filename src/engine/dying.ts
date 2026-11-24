@@ -71,19 +71,20 @@ export const DYING = {
    * first cut was too long and too quiet). `shots` is the order: each is up for `ms`, pushes in by
    * `push` of its size, and cross-fades over `fadeMs` into the next. The great bell tolls through
    * all of it from `bellFromMs`, every `bellEveryMs`, growing from `bellFar` of its full sound to
-   * `bellNear`. Lumi's line comes `lineAfterMs` into her shot. ?noalarm leaves the alarm out.
+   * `bellNear`. Lumi's line comes `lineAfterMs` into her shot, which Ladi put straight after the
+   * kitchen (24 Nov, 10:25 AM). ?noalarm leaves the alarm out.
    */
   alarm: {
     shots: [
       { id: "kitchen", name: "The kitchen, dark", ms: 3000, push: 0.03 },
+      { id: "lumi", name: "Lumi at the door", ms: 3000, push: 0.03 },
       { id: "falls", name: "From Rook's door: the falls", ms: 3000, push: 0.08 },
       { id: "brazier", name: "The Kindling ground, close", ms: 5000, push: 0.05, at: [497, 300] },
       { id: "descent", name: "The island going down", ms: 6000, push: 0 },
-      { id: "lumi", name: "Lumi at the door", ms: 3000, push: 0.03 },
     ] as readonly { id: "kitchen" | "falls" | "brazier" | "descent" | "lumi"; name: string; ms: number; push: number; at?: readonly [number, number] }[],
     fadeMs: 500, bellFromMs: 300, bellEveryMs: 2400, bellFar: 0.6, bellNear: 1, lineAfterMs: 300,
-    /** The board is asked for this long before the end, under the last shot, so building it holds nothing up. */
-    readyMs: 2200,
+    /** The board is asked for under Lumi's shot, the one that does not move, this long into it, so building it holds nothing up. */
+    readyAfterMs: 800,
     line: { who: "Lumi", text: "Dad. The falls." },
     /** The lamp and the three cups (where each hangs on the 1024 by 768 picture): they start still and build over `build` seconds to `swing` degrees either way, each at its own rate (swings a second). Cups knock at `clinks` (ms). */
     kitchen: { lamp: [403, 40] as const, cups: [[338, 245], [405, 245], [463, 245]] as const, build: 0.6, swing: 9, rates: [1.7, 2.05, 1.85] as const, lampSwing: 5, lampRate: 1.1, clinks: [700, 1150, 1900, 2450] as const },
@@ -222,6 +223,17 @@ export const DYING = {
     slots: [[-2.3, 0], [-3.5, 0], [-5.0, 0], [-4.2, 1], [-6.6, 0], [-5.9, 1], [-8.3, 0], [2.4, 0], [3.8, 0], [5.3, 0], [4.5, 1], [6.9, 0], [8.4, 0]] as readonly (readonly [number, number])[],
   },
 } as const;
+
+/** The alarm's length, and when in it the board is asked for (ms from its start). */
+export function alarmTimes() {
+  const A = DYING.alarm;
+  let total = 0, readyAt = 0;
+  for (const s of A.shots) {
+    if (s.id === "lumi") readyAt = total + Math.min(A.readyAfterMs, s.ms);
+    total += s.ms;
+  }
+  return { total, readyAt };
+}
 
 /** Which of her lines a bank in run 7 gets (the `n`th, from 1), by what it visibly does; null for a silent bank. */
 export function bankLine(n: number): keyof typeof DYING.seven.bank | null {

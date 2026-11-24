@@ -150,9 +150,15 @@ function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | "pond" = 1,
   }
   // Run 6 opens on the alarm: five held pictures, then the board.
   else if (run === 6 && !new URLSearchParams(location.search).has("noalarm")) {
-    (r as DyingRoom).lead = Math.ceil(DYING.alarm.readyMs / TICK_MS);
+    // The board is asked for early, under Lumi's shot, and its countdown waits out the rest of the alarm, in silence.
+    const six = r as DyingRoom;
     talkHold = performance.now() + 60000;
-    alarmCards(hello, () => {
+    alarmUp = true;
+    alarmDrawn = 0;
+    alarmCards((leftMs) => ((six.lead = Math.ceil(leftMs / TICK_MS)), hello()), (skipped) => {
+      alarmUp = false;
+      if (skipped) six.cutLead();
+      if (snap && room?.story?.dying) dyingSound(room.story.dying, snap);
       // Her first line waits for the picture to go, then comes at once.
       talkHold = performance.now() + DYING.alarm.fadeMs;
       if (talkQueue.length) nextTalk();
@@ -911,7 +917,11 @@ function dyingRoom() {
  * timbers at each lurch. At the bottom they go one at a time, and her bell is the last. Then the
  * rush from above, the strike under the pictures, and in run 7 each lift.
  */
+/** The alarm's pictures are up: the run under them makes no sound yet. */
+let alarmUp = false;
+let alarmDrawn = 0;
 function dyingSound(d: NonNullable<StoryView["dying"]>, s: GameSnapshot) {
+  if (alarmUp) return;
   const flame = s.flame ?? 0;
   const after = d.part !== "six" && d.part !== "bottom" && d.part !== "stills";
   if (d.part !== dyingPart) {
@@ -1619,6 +1629,8 @@ resize();
 function frame(now: number) {
   requestAnimationFrame(frame);
   if (!room || room.phase === "lobby" || !snap) return;
+  // Under the alarm's pictures the board is drawn a few times, to have it built, and then left alone until they go.
+  if (alarmUp && ++alarmDrawn > 4) return;
   const shrine = shrineFor(room.shrine, room.teams);
   if (!world) {
     world = new World(canvas, cam);
