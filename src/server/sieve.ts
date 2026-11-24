@@ -354,7 +354,7 @@ export class SieveRoom {
     // So many lost that ten can't be reached: again, at once, and no blame.
     if (banked + live + (S.supply - this.arrived) < S.need) {
       this.restarts++;
-      // Tilda says it, in a bubble: Hesta is not on the Sieve (Ladi, 24 Nov: "Tilda should say something"). The story thread's working line, until he picks.
+      // Tilda says it, in a bubble: Hesta is not on the Sieve (Ladi, 24 Nov: "Tilda should say something"). The line is in SIEVE.again.
       this.lines.push({ who: KEEPER, text: SIEVE.again, player: KEEPER_ID });
       this.start(false);
     }
