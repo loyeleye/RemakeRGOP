@@ -21,6 +21,7 @@ import { PondRoom, answersTap } from "../server/pond.js";
 import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
 import { loadProgress, reach, resetProgress } from "./progress.js";
+import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
 import { ENDING, ENDING_CUTS, endingCut, KindlingEnding, lanternCard, setEndingCut } from "./ending.js";
@@ -134,13 +135,25 @@ function connectPractice(name: string) {
 
 let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | null = null;
 
+/** The walkable map, at the speed on trial: ?walkspeed=1.5, 2 or 2.5 shortens the map's beat; with &only=rook only his stride is longer. */
+function pondRoom(walk: number) {
+  const r = new PondRoom(undefined, undefined, walk);
+  const q = new URLSearchParams(location.search), f = Number(q.get("walkspeed"));
+  if ([1.5, 2, 2.5].includes(f)) {
+    if (q.get("only") === "rook") r.rookStride = f;
+    else r.beatMs = TICK_MS / f;
+  }
+  return r;
+}
+
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
 function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | "pond" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "pond" ? pondRoom(walk) : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
+  runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
   const hello = () => link?.send({ t: "hello", name: name || "Rook" });
@@ -1104,8 +1117,14 @@ function renderPad(s: GameSnapshot | null) {
   const p = s?.players.find((q) => q.id === me);
   $("mode").textContent = p?.mode === "push" ? "Push" : "Pull";
   $("mode").classList.toggle("push", p?.mode === "push");
-  $("run").textContent = $("run2").textContent = p?.run === false ? "Walk" : "Run";
-  $("run2").classList.toggle("walking", p?.run === false);
+  // The button always says which he is doing; a press changes it.
+  const walking = p?.run === false;
+  $("run").textContent = walking ? "🚶 Walking" : "🏃 Running";
+  $("run2").textContent = walking ? "Walking" : "Running";
+  for (const id of ["run", "run2"]) {
+    $(id).classList.toggle("walking", walking);
+    $(id).setAttribute("aria-label", walking ? "Walking. Press to run" : "Running. Press to walk");
+  }
   const staff = $("staff");
   staff.textContent = p?.mode === "push" ? "Push" : "Pull";
   staff.classList.toggle("push", p?.mode === "push");
@@ -1159,7 +1178,7 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
   const radius = cam.compact ? 1.3 : 0.9;
   // On a phone the focused wisp always has a finger-sized target, however far out you've zoomed.
   if (document.body.classList.contains("touch")) {
-    const f = padFocus ? snap.wisps.find((w) => w.id === padWisp) : undefined;
+    const f = snap.wisps.find((w) => w.id === padWisp);
     if (f) {
       const c = cam.toScreen(f.x + 0.5, f.y + 0.5, 0.75);
       if (Math.hypot(c.x - sx, c.y - sy) <= FOCUS_TAP_PX) return { action: { kind: "staff", wisp: f.id }, wisp: f.id };
@@ -1171,14 +1190,14 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
     const c = cam.toScreen(mk.x + 0.5, mk.y + 0.5, 0.75);
     if (Math.hypot(c.x - sx, c.y - sy) <= bigTapRadius()) return { action: { kind: "staff", wisp: mk.id }, wisp: mk.id };
   }
-  // Big taps (O on a laptop): every wisp gets a finger-sized circle on screen, nearest wins.
-  if (bigTaps) {
+  // Focus mode: every wisp gets a finger-sized circle on screen, and the nearer centre wins.
+  if (focusMode) {
     let near: { id: number; d: number } | null = null;
     for (const w of snap.wisps) {
       const c = cam.toScreen(w.x + 0.5, w.y + 0.5, 0.75);
       const d = Math.hypot(c.x - sx, c.y - sy);
       const usable = p && (p.mode === "push" || w.guild === p.guild);
-      const score = d - (usable ? 6 : 0);
+      const score = d - (usable ? CONTROLS.focus.usablePx : 0);
       if (d <= bigTapRadius() && (!near || score < near.d)) near = { id: w.id, d: score };
     }
     if (near) return { action: { kind: "staff", wisp: near.id }, wisp: near.id };
@@ -1226,8 +1245,24 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
 /** Radius in CSS pixels of the focused wisp's tap target: a 56 px circle, above the 44-48 px minimum. */
 const FOCUS_TAP_PX = 28;
 
-/** Big taps: O switches every wisp to a large, ringed click target (and back). */
-let bigTaps = false;
+/** Focus mode: every wisp has a large, ringed target. O on a keyboard, a long press on Next on a phone. It lasts the session. */
+let focusMode = false;
+/** On a phone: Next has become the Focus button (a long press on it changes it, and changes it back). */
+let focusBtn = false;
+function setFocusMode(on: boolean) {
+  focusMode = on;
+  if (on && document.body.classList.contains("touch")) focusBtn = true;
+  if (on) markHint("focus");
+  renderFocusBtn();
+  toast(on ? "Focus mode on" : "Focus mode off");
+}
+function renderFocusBtn() {
+  const b = $("next");
+  b.classList.toggle("focus", focusBtn);
+  b.classList.toggle("off", focusBtn && !focusMode);
+  b.textContent = focusBtn ? "Focus" : "Next";
+  b.setAttribute("aria-label", focusBtn ? `Focus mode ${focusMode ? "on" : "off"}. Hold for Next` : "Next wisp. Hold for focus mode");
+}
 /** A big tap target's radius in CSS pixels: never under the focus target, and never smaller than a normal click. */
 const bigTapRadius = () => Math.max(FOCUS_TAP_PX, cam.scale * (cam.compact ? 1.3 : 0.9));
 
@@ -1299,7 +1334,10 @@ const endPointer = (e: PointerEvent) => {
     return;
   }
   const t = targetAt(x, y);
-  if (t) act({ action: t.action });
+  if (t) {
+    noteTap(t.wisp, x, y);
+    act({ action: t.action });
+  }
 };
 canvas.addEventListener("pointerup", endPointer);
 canvas.addEventListener("pointercancel", (e) => {
@@ -1322,10 +1360,8 @@ window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if (k === "`") return void (toggleDebug(), e.preventDefault());
   if (room.story?.canCall && (k === "c" || (k === "escape" && callMode))) return void (setCallMode(k === "c" ? !callMode : false), e.preventDefault());
-  if (k === "o") {
-    bigTaps = !bigTaps;
-    toast(bigTaps ? "Big taps on: every wisp has a larger target. O to turn off" : "Big taps off");
-  } else if (k === "q") act({ toggleMode: true });
+  if (k === "o") setFocusMode(!focusMode);
+  else if (k === "q") act({ toggleMode: true });
   else if (k === "r") act({ toggleRun: true });
   else if (k === " " || k === "s") act({ action: { kind: "idle" } });
   else if (k === "c") cam.follow = true;
@@ -1355,8 +1391,6 @@ setTouch();
 
 /** The wisp the pad's Staff button works on. */
 let padWisp: number | null = null;
-/** Whether the pad keeps a wisp in focus at all (long-press Next to switch it off or on). */
-let padFocus = true;
 
 /** Wisps your staff can work in the current mode, nearest first. */
 function padChoices() {
@@ -1371,13 +1405,12 @@ function padChoices() {
 
 /** Keeps the pad's wisp valid: if it's gone or the wrong kind, take the nearest one. */
 function padTarget(): number | null {
-  if (!padFocus) return null;
   const c = padChoices();
   if (!c.some((w) => w.id === padWisp)) padWisp = c[0]?.id ?? null;
   return padWisp;
 }
 
-// Long-press Next to switch focus off (no wisp is picked out) or back on.
+// A long press on Next makes it the Focus button, with focus mode on; a long press on that gives Next back.
 let nextHold = 0;
 let nextLong = false;
 const nextBtn = $("next");
@@ -1386,21 +1419,18 @@ nextBtn.addEventListener("pointerdown", () => {
   clearTimeout(nextHold);
   nextHold = window.setTimeout(() => {
     nextLong = true;
-    padFocus = !padFocus;
-    nextBtn.classList.toggle("off", !padFocus);
+    focusBtn = !focusBtn;
     navigator.vibrate?.(30);
-    toast(padFocus ? "Focus on: Next picks a wisp" : "Focus off. Long-press Next to turn it back on");
-  }, 550);
+    setFocusMode(focusBtn);
+  }, CONTROLS.focus.holdMs);
 });
 for (const ev of ["pointerup", "pointercancel", "pointerleave"]) nextBtn.addEventListener(ev, () => clearTimeout(nextHold));
 nextBtn.addEventListener("contextmenu", (e) => e.preventDefault());
 $("next").onclick = () => {
-  // The click that ends a long press doesn't also step to the next wisp.
+  // The click that ends a long press doesn't also count as a tap.
   if (nextLong) return void (nextLong = false);
-  if (!padFocus) {
-    padFocus = true;
-    nextBtn.classList.remove("off");
-  }
+  // As the Focus button, a tap switches focus mode off and on.
+  if (focusBtn) return setFocusMode(!focusMode);
   const c = padChoices();
   if (!c.length) return;
   const i = c.findIndex((w) => w.id === padWisp);
@@ -1563,6 +1593,7 @@ $("walk-go").onclick = () => {
 }
 $("progress-reset").onclick = () => {
   resetProgress();
+  resetHints();
   renderProgress();
 };
 renderProgress();
@@ -1719,7 +1750,6 @@ function frame(now: number) {
   const mark = room.story?.mark?.wisp ?? null;
   if (mark !== null && mark !== lastMark && document.body.classList.contains("touch")) {
     padWisp = mark;
-    padFocus = true;
   }
   lastMark = mark;
   const lit = document.body.classList.contains("touch") ? padTarget() : hoverWisp;
@@ -1761,7 +1791,8 @@ function frame(now: number) {
     g.stroke();
     g.restore();
   }
-  if (bigTaps) drawBigTaps(g, mine?.mode === "push", mine?.guild, lit, t, now);
+  if (focusMode) drawBigTaps(g, mine?.mode === "push", mine?.guild, lit, t, now);
+  hintsFrame(now);
   drawTide(g, shrine, now);
   if (room.story) drawStory(g, t, now);
   releaseBarks(now);
@@ -2041,7 +2072,7 @@ function edgeArrow(g: CanvasRenderingContext2D, p: { x: number; y: number }, col
   g.restore();
 }
 
-/** Big taps: a dashed ring around each wisp showing its click target. Ones your staff can work now are bright; the hovered one is solid. */
+/** Focus mode: a dashed ring around each wisp showing its tap target. Ones your staff can work now are bright; the hovered one is solid. */
 function drawBigTaps(g: CanvasRenderingContext2D, push: boolean, guild: number | undefined, hover: number | null, t: number, now: number) {
   if (!snap) return;
   const r = bigTapRadius();
@@ -2061,6 +2092,81 @@ function drawBigTaps(g: CanvasRenderingContext2D, push: boolean, guild: number |
     g.stroke();
   }
   g.restore();
+}
+
+// ------------------------------------------------------------------ control hints
+// One line of help at a time, with the button it is about pulsing. Play never stops for one.
+
+type HintId = "focus" | "run" | "walking" | "rescue";
+let hintUp: { id: HintId; until: number; btn: HTMLElement | null } | null = null;
+let lastHintAt = -1e9;
+/** This run: when he started walking, whether he has been reminded, the misses in a row, and whether the focus hint has come back. */
+let runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
+
+function showHint(id: HintId, text: string, btn: HTMLElement | null) {
+  const now = performance.now();
+  if (hintUp || now - lastHintAt < CONTROLS.hints.gapMs) return false;
+  const el = $("tip");
+  el.textContent = text;
+  el.hidden = false;
+  btn?.classList.add("nudge");
+  hintUp = { id, until: now + CONTROLS.hints.showMs, btn };
+  return true;
+}
+function hideHint() {
+  if (!hintUp) return;
+  hintUp.btn?.classList.remove("nudge");
+  $("tip").hidden = true;
+  lastHintAt = performance.now();
+  hintUp = null;
+}
+const focusHintText = (touch: boolean) => (touch ? "Wisps hard to tap? Hold Next for focus mode." : "Wisps hard to click? Press O for focus mode.");
+
+function hintsFrame(now: number) {
+  const touch = document.body.classList.contains("touch");
+  const p = snap?.players.find((q) => q.id === me);
+  const playing = room?.phase === "playing";
+  // A hint goes when its time is up, or when he has done the thing.
+  if (hintUp) {
+    const done = hintUp.id === "run" ? p?.run === false : hintUp.id === "walking" ? p?.run !== false : focusMode;
+    if (now >= hintUp.until || !playing || done) hideHint();
+  }
+  if (!playing || !p || !snap) return;
+  const st = room!.story, runBtn = touch ? $("run2") : $("run");
+  if (storyRoom instanceof StoryRoom && st) {
+    // Run 1, as soon as there are wisps to pull: how to get bigger targets.
+    if (st.movement === 0 && !hintSeen("focus") && !focusMode && $("dialog").hidden && snap.wisps.some((w) => w.guild === p.guild && w.rim === 0)) {
+      if (showHint("focus", focusHintText(touch), touch ? $("next") : null)) markHint("focus");
+    }
+    // Run 1's coordination part, where he holds a side: walking is for exact spots.
+    if (st.movement === 1 && !hintSeen("run")) {
+      if (p.run === false) markHint("run");
+      else if (showHint("run", touch ? "Need an exact spot? Tap Running to walk." : "Need an exact spot? Press R to walk.", runBtn)) markHint("run");
+    }
+  }
+  // The runs against a clock: left on Walk, he is told once.
+  const timed = storyRoom instanceof RaceRoom || storyRoom instanceof DyingRoom || storyRoom instanceof RescueRoom;
+  if (timed && p.run === false) {
+    if (!runHints.walkSince) runHints.walkSince = now;
+    else if (!runHints.reminded && now - runHints.walkSince >= CONTROLS.hints.walkAfterMs && showHint("walking", touch ? "Walking. Tap to run." : "Walking. Press R to run.", runBtn)) runHints.reminded = true;
+  } else runHints.walkSince = 0;
+}
+
+/** A tap on the board: on a wisp, or not. Misses close to a wisp, three in a row, bring the focus hint back once a run. */
+function noteTap(wisp: number | null, sx: number, sy: number) {
+  if (wisp !== null) {
+    runHints.misses = 0;
+    // In focus mode Next no longer steps through them, so a tapped wisp is the one the Staff button works.
+    if (focusMode) padWisp = wisp;
+    return;
+  }
+  if (!snap) return;
+  const at = cam.toTile(sx, sy);
+  const near = snap.wisps.some((w) => Math.hypot(w.x + 0.5 - at.x, w.y + 0.5 - at.y) <= CONTROLS.hints.missTiles);
+  runHints.misses = near ? runHints.misses + 1 : 0;
+  if (runHints.misses < CONTROLS.hints.misses || runHints.rescued || focusMode) return;
+  const touch = document.body.classList.contains("touch");
+  if (showHint("rescue", focusHintText(touch), touch ? $("next") : null)) (runHints.rescued = true), (runHints.misses = 0);
 }
 
 loadModels();

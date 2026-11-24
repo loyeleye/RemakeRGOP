@@ -32,6 +32,9 @@ export const RESCUE_LOOK = {
   berths: [[8.4, 4.1], [-8.4, 4.1]] as const,
   /** People waiting on the landing's wings: this many go with each boat, some as each bank goes in. */
   perBoat: 8,
+  /** The lane on the ground along its course, ahead of it: its colour and how strong it is (0 is none). */
+  lane: "#1b2440",
+  laneShow: 1,
   /** A lamp gone cold ahead of the patch: its ember's colour and how bright it is (a lit one is 1). */
   ember: "#ff4a1a",
   emberLit: 0.07,
@@ -50,7 +53,8 @@ void main() {
 const FS = `
 precision highp float;
 varying vec2 vW;
-uniform float uTime, uCloud, uBase, uVeil, uPatchA, uRag, uShow;
+uniform float uTime, uCloud, uBase, uVeil, uPatchA, uRag, uShow, uLane;
+uniform vec3 uCold;
 uniform vec3 uPatch, uLo, uHi, uDark;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -77,6 +81,11 @@ void main() {
   float ang = atan(d.y, d.x);
   float edge = uPatch.z * (1.0 + uRag * (sin(ang * 3.0 + 1.3) + 0.6 * sin(ang * 5.0 - uTime * 0.5) + 0.5 * sin(ang * 9.0 + uTime * 0.8))) + (n2 - 0.5) * 0.5;
   float k = (1.0 - smoothstep(edge - 0.12, edge, length(d))) * uPatchA * (1.0 - uVeil);
+  // Its course ahead of it: a faint cold lane on the ground, with a thin line down its middle, as far as the land goes.
+  float ahead = step(uPatch.x, vW.x) * (1.0 - smoothstep(20.0, 23.0, abs(vW.x))) * (1.0 - wall) * (1.0 - uVeil) * uLane;
+  float lane = (1.0 - smoothstep(uPatch.z * 0.8, uPatch.z, abs(d.y))) * 0.22 + (1.0 - smoothstep(0.05, 0.16, abs(d.y))) * 0.5;
+  col = mix(col, uCold, clamp(lane * ahead, 0.0, 1.0));
+  a = max(a, lane * ahead * 0.9);
   col = mix(col, uDark + col * uShow * (0.3 + 1.2 * n2 * n), k);
   a = mix(a, 0.97, k);
   gl_FragColor = vec4(col, a);
@@ -116,7 +125,7 @@ export class RescueFx {
   readonly all = new THREE.Group();
   private u = {
     uTime: { value: 0 }, uCloud: { value: RESCUE.cloud.start as number }, uBase: { value: RESCUE_LOOK.sea as number }, uVeil: { value: 0 }, uPatchA: { value: 0 },
-    uRag: { value: RESCUE_LOOK.ragged as number }, uShow: { value: RESCUE_LOOK.stainShow as number },
+    uRag: { value: RESCUE_LOOK.ragged as number }, uShow: { value: RESCUE_LOOK.stainShow as number }, uLane: { value: 0 }, uCold: { value: new THREE.Color(RESCUE_LOOK.lane) },
     uPatch: { value: new THREE.Vector3(0, 0, 3) }, uLo: { value: new THREE.Color(RESCUE_LOOK.pale[0]) }, uHi: { value: new THREE.Color(RESCUE_LOOK.pale[1]) }, uDark: { value: new THREE.Color(RESCUE_LOOK.dark) },
   };
   private lamps: Lamp[] = [];
@@ -286,7 +295,7 @@ export class RescueFx {
     // Benches across, two to a bench.
     const seats = K.perBoat / 2, gap = (B.l * 1.25) / seats, z0 = -((seats - 1) * gap) / 2 + 0.35;
     const riders: THREE.Object3D[] = [];
-    const cloth = ["#4b5a6e", "#6a5746", "#5d6b52", "#70606e", "#4f4f5c", "#7a6a50"];
+    const hoods = ["#8c98ad", "#a58b6f", "#93a384", "#a892a6", "#b3a27c", "#7f93a0"];
     for (let k = 0; k < seats; k++) {
       const z = z0 + k * gap, half = B.w * Math.sqrt(Math.max(0.05, 1 - (z / B.l) ** 2));
       const bench = new THREE.Mesh(new THREE.BoxGeometry(half * 1.8, 0.07, 0.34), std("#7d5c3c"));
@@ -295,9 +304,16 @@ export class RescueFx {
       for (const sx of [-1, 1]) {
         const r = new THREE.Group();
         const small = i === 0 && riders.length < 5;
-        r.add(...figure(std, cloth[(riders.length * 5 + i) % cloth.length]!, small ? 0.6 : 0.85, small));
-        const glow = this.glow(["#ffcf8a", "#bfe0ff", "#ffd9c0", "#c9f0c0"][riders.length % 4]!, 1.1, 0.45);
-        glow.position.set(0.2, 0.7, 0.1);
+        // Seated: shoulders and a hood, seen mostly from above, with a small glow in the lap.
+        const tone = hoods[(riders.length * 3 + i) % hoods.length]!;
+        const body = new THREE.Mesh(new THREE.SphereGeometry(small ? 0.3 : 0.4, 12, 8), std(tone));
+        body.scale.set(1.15, 0.8, 0.9);
+        body.position.y = small ? 0.28 : 0.36;
+        const hood = new THREE.Mesh(new THREE.SphereGeometry(small ? 0.19 : 0.24, 12, 8), std(tone));
+        hood.position.y = small ? 0.62 : 0.8;
+        r.add(body, hood);
+        const glow = this.glow(["#ffcf8a", "#bfe0ff", "#ffd9c0", "#c9f0c0"][riders.length % 4]!, 0.5, 0.35);
+        glow.position.set(0, 0.45, 0.42);
         glow.renderOrder = 6;
         r.add(glow);
         r.position.set(sx * Math.min(0.62, half * 0.5), 0.6, z);
@@ -360,6 +376,7 @@ export class RescueFx {
       pr = p.r;
       this.u.uPatch.value.set(px, pz, pr);
       this.u.uPatchA.value = Math.min(1, this.u.uPatchA.value + 0.08);
+      this.u.uLane.value = Math.min(L.laneShow, this.u.uLane.value + 0.05);
       if (this.patchN !== p.n) {
         // It has just set out: the lamps on its course go cold one after another, west to east, over the warning.
         this.patchN = p.n;
@@ -370,6 +387,7 @@ export class RescueFx {
       }
     } else {
       this.u.uPatchA.value = Math.max(0, this.u.uPatchA.value - 0.05);
+      this.u.uLane.value = 0;
       this.patchN = 0;
     }
     const under = (x: number, z: number, grow = 0) => !!p && Math.hypot(x - px, z - pz) < pr + grow;

@@ -148,6 +148,13 @@ export class PondRoom {
     this.walkDef = walkByN(walkN);
   }
   readonly walkDef: Walk;
+  /**
+   * A trial of Rook's speed on the walkable map (the page's ?walkspeed=1.5, 2 or 2.5): either the
+   * map's whole beat is shortened, so he and everyone on it stay in step, or (with &only=rook) only
+   * his stride is longer. Never inside a run.
+   */
+  beatMs = TICK_MS;
+  rookStride = 1;
   /** Lines for this walk's people, by name. */
   private walkLines = new Map<string, string[]>();
   /** A note for the player once the thing that goes on is tapped, when what's next isn't built. */
@@ -200,6 +207,7 @@ export class PondRoom {
     ];
     // No wisps and a clock that never runs out: nothing happens unless the player does something.
     this.game = new Game(shrine, roster, this.seed(), [0, 0], 1e9);
+    if (this.rookStride !== 1) this.game.stride.set(ROOK_ID, this.rookStride);
     const S = (this.spots = pondSpots(this.game.board, shrine.starts, shrine.house));
     const place = (id: number, at: Pt) => {
       const p = this.player(id);
@@ -213,7 +221,7 @@ export class PondRoom {
     this.player(HESTA_ID).run = false;
     this.player(NELL_ID).run = this.player(SEFA_ID).run = false;
     this.endClock();
-    this.stop = this.clock.every(TICK_MS, () => this.onTick());
+    this.stop = this.clock.every(this.beatMs, () => this.onTick());
     this.broadcast();
   }
 
@@ -223,6 +231,7 @@ export class PondRoom {
     const shrine = shrineById(POND.shrine);
     const roster = [{ id: ROOK_ID, guild: 0 as Guild, name: "Rook" }, ...W.people.map((p, i) => ({ id: 10 + i, guild: (p.name === "Hesta" ? 1 : 0) as Guild, name: p.name }))];
     this.game = new Game(shrine, roster, this.seed(), [0, 0], 1e9);
+    if (this.rookStride !== 1) this.game.stride.set(ROOK_ID, this.rookStride);
     this.spots = pondSpots(this.game.board, shrine.starts, shrine.house);
     this.gatheredAt = 1e9;
     const taken: Pt[] = [];
@@ -243,7 +252,7 @@ export class PondRoom {
     });
     put(ROOK_ID, W.start);
     this.endClock();
-    this.stop = this.clock.every(TICK_MS, () => this.onTick());
+    this.stop = this.clock.every(this.beatMs, () => this.onTick());
     this.broadcast();
   }
 
@@ -547,7 +556,7 @@ export class PondRoom {
   private broadcast() {
     this.flush();
     this.send?.({ t: "room", room: this.view() });
-    this.send?.({ t: "tick", snap: this.game.snapshot(), tickMs: TICK_MS });
+    this.send?.({ t: "tick", snap: this.game.snapshot(), tickMs: this.beatMs });
   }
 
   private endClock() {

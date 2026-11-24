@@ -437,6 +437,9 @@ export class Game {
    *  never puts it ashore; it stops at the water's edge. On in the story runs that set it (run 4);
    *  every board once the water laws are settled. */
   tideStaysWet = false;
+  /** A walker whose stride is scaled (tiles a tick times this), for the walkable map's speed trial. */
+  stride = new Map<number, number>();
+  private strideOwed = new Map<number, number>();
   /** Story: where a wisp comes back, if not the usual spawn (called after it's placed). */
   onReturn: ((w: Wisp) => void) | null = null;
   /**
@@ -1221,7 +1224,14 @@ export class Game {
   }
 
   private walk(p: Lamplighter) {
-    const steps = p.run ? 2 : 1;
+    let steps = p.run ? 2 : 1;
+    // A trial on the walkable map: one walker's stride scaled, the part-tiles carried to the next tick.
+    const f = this.stride.get(p.id);
+    if (f !== undefined) {
+      const due = (this.strideOwed.get(p.id) ?? 0) + steps * f;
+      steps = Math.floor(due);
+      this.strideOwed.set(p.id, due - steps);
+    }
     for (let i = 0; i < steps && p.path.length > 0; i++) {
       const next = p.path.shift()!;
       p.facing = pt(sign(next.x - p.pos.x), sign(next.y - p.pos.y));

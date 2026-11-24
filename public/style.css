@@ -86,11 +86,16 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 /* Painted controls (Sogni). Icons carry the meaning; only the mode switch keeps a caption. */
 .touch .thumb { background: center / cover no-repeat; border: none; box-shadow: 0 4px 14px #0008; text-shadow: 0 1px 3px #000, 0 0 6px #000; }
 .touch .thumb:active { transform: scale(0.94); }
-.touch #staff, .touch #next, .touch #run2 { font-size: 0; }
+.touch #staff, .touch #next { font-size: 0; }
 .touch #staff { background-image: url(ui/pull.webp); }
 .touch #staff.push { background-image: url(ui/push.webp); }
 .touch #next { background-image: url(ui/next.webp); }
-.touch #run2 { background-image: url(ui/run.webp); }
+.touch #run2 { background-image: url(ui/run.webp); color: #fff; font-size: 10.5px; font-weight: 700; display: flex; align-items: flex-end; justify-content: center; padding: 0 0 5px; }
+#run { font-size: 13px; }
+#run.walking { color: #c9d2e6; border-style: dashed; }
+/* Next as the Focus button: the dashed ring that focus mode puts round every wisp. */
+.touch #next.focus { font-size: 13px; font-weight: 700; color: #fff; background: #1b2030e6; border: 2px dashed #ffffffd0; box-shadow: 0 0 0 3px #ffd36a66, 0 4px 14px #0008; }
+.touch #next.focus.off { opacity: 0.6; border-color: #ffffff66; box-shadow: 0 4px 14px #0008; text-decoration: none; }
 .touch #run2.walking { filter: grayscale(0.9) brightness(0.7); }
 .touch #mode { background-image: url(ui/push.webp); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; }
 .touch #mode.push { background-image: url(ui/pull.webp); color: #fff; }
@@ -208,7 +213,9 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 /* Run 2: how to call Rook, until she has. */
 #hint { position: fixed; z-index: 8; pointer-events: none; background: #ffd36a; color: #201a10; font-weight: 600; border-radius: 10px; padding: 8px 12px; font-size: 14px; width: max-content; max-width: min(80vw, 300px); box-shadow: 0 4px 16px #0006; animation: bark-in 0.25s ease-out; }
 #hint::before { content: ""; position: absolute; top: -6px; right: calc(var(--arrow, 20px) - 6px); border: 6px solid transparent; border-top: 0; border-bottom-color: #ffd36a; }
-#call.nudge { animation: nudge 1.2s ease-in-out infinite; }
+#call.nudge, .thumb.nudge { animation: nudge 1.2s ease-in-out infinite; }
+/* A control hint: one line over the pad, while the button it is about pulses. */
+#tip { position: fixed; z-index: 8; left: 50%; bottom: max(104px, 24vh); transform: translateX(-50%); pointer-events: none; background: #ffd36a; color: #201a10; font-weight: 600; border-radius: 10px; padding: 8px 12px; font-size: 14px; width: max-content; max-width: min(86vw, 340px); text-align: center; box-shadow: 0 4px 16px #0006; animation: bark-in 0.25s ease-out; }
 @keyframes nudge { 0%, 100% { box-shadow: 0 0 0 0 #ffd36a00; } 50% { box-shadow: 0 0 0 6px #ffd36a88; } }
 
 /* The descent: Fairy Ring's underside (taller than the screen, slid up to reach the heart at its tip),
