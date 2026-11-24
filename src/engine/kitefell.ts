@@ -34,8 +34,8 @@ export function kfOutline(a: number) {
   while (r < 60 && coast(Math.cos(a) * r, Math.sin(a) * r)) r += 0.25;
   return r;
 }
-/** Plateaus under the landing, which sticks out of the edge. */
-export const KF_LOBES = [34, 36, 38].map((x) => ({ x, y: 5, r: 2.4 }));
+/** No plateaus under the landing: its planks hang out over the sky. (An empty list still keeps the cliff tight to the edge.) */
+export const KF_LOBES: { x: number; y: number; r: number }[] = [];
 /** Home, in view to the east and lower than here. */
 export const KF_FAR = [{ x: 95, y: 4, r: 16, drop: 7 }];
 /** Where Lumi stands to referee: her stand, south, on the halfway line. */

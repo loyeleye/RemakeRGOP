@@ -1798,7 +1798,7 @@ export class World {
     const spin = [...shrine.id].reduce((h, ch) => h + ch.charCodeAt(0), 0) * 0.37;
     tiers.forEach(([a0, size, ty], i) => {
       // A story place keeps its tiers clear of the landing and the falls: off the west, north-east and east rims.
-      const a = shrine.lobes ? [3.5, 5.5, 0.2][i]! : a0 + spin;
+      const a = shrine.lobes ? (shrine.tierAngles ?? [3.5, 5.5, 0.2])[i]! : a0 + spin;
       const e = edge(a);
       // Sized by the core, not the board: a tentacle island's board is mostly sky.
       const r = (shrine.lobes ? 40 : shrine.arms ? coast(0) + coast(Math.PI / 2) : Math.min(W, H)) * size;

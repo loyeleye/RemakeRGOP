@@ -396,6 +396,8 @@ export interface Shrine {
   lobes?: { x: number; y: number; r: number }[];
   /** Where the main plateau is hung from when that isn't the board's centre (the horseshoe's brazier is by its west rim): the middle of the land, in tiles from the centre, and the edge's distance from there at each angle. */
   core?: { x: number; y: number; outline: (a: number) => number };
+  /** Story places: where the lower terraces hang (radians, east is 0, south a quarter turn), to keep them clear of a landing or falls. */
+  tierAngles?: number[];
   /** Story places: model turns (radians) by prop kind, or by tile as "x,y", over the usual. */
   turns?: Record<string, number>;
   /** Story places: wash lines (by their west post, "x,y") hung with small pale cloths (a baby's things). */
@@ -1359,7 +1361,7 @@ function kiteFell(): Shrine {
   const sh = finish(def, rows, 2, null);
   // The start marks are whole stones, under the starts too.
   const ground = [...(sh.ground ?? []), ...flags.map((f) => ({ kind: "terrace" as const, ...f }))];
-  return { ...sh, ground, coast: kfCoast, outline: kfOutline, arms: true, lobes: KF_LOBES, far: KF_FAR, turns };
+  return { ...sh, ground, coast: kfCoast, outline: kfOutline, arms: true, lobes: KF_LOBES, far: KF_FAR, turns, tierAngles: [3.3, 4.4, 1.9] };
 }
 
 /** The home island to walk on: drawn from the maps thread's shapes, not an IsleShape. */
