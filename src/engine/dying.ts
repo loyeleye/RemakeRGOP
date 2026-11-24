@@ -77,7 +77,7 @@ export const DYING = {
     shots: [
       { id: "kitchen", name: "The kitchen, dark", ms: 3000, push: 0.03 },
       { id: "falls", name: "From Rook's door: the falls", ms: 3000, push: 0.08 },
-      { id: "brazier", name: "The Kindling ground, close", ms: 5000, push: 0.05, at: [512, 300] },
+      { id: "brazier", name: "The Kindling ground, close", ms: 5000, push: 0.05, at: [497, 300] },
       { id: "descent", name: "The island going down", ms: 6000, push: 0 },
       { id: "lumi", name: "Lumi at the door", ms: 3000, push: 0.03 },
     ] as readonly { id: "kitchen" | "falls" | "brazier" | "descent" | "lumi"; name: string; ms: number; push: number; at?: readonly [number, number] }[],
@@ -94,7 +94,7 @@ export const DYING = {
      */
     brazier: {
       fire: [[0, 3], [0.9, 3], [1.1, 2], [1.35, 3], [1.6, 2], [1.8, 3], [2.1, 2], [2.6, 2], [2.9, 1], [3.1, 2], [3.5, 1], [4.2, 0], [5, 0]] as readonly (readonly [number, number])[],
-      sparks: { at: [512, 262] as const, spread: 42, rise: 150, until: 3.5, count: 46 },
+      sparks: { at: [497, 226] as const, spread: 42, rise: 150, until: 3.5, count: 46 },
     },
     /**
      * The island going down. Its heart flickers for `heartMs` (how dim along the way) and is dead. From
@@ -109,6 +109,8 @@ export const DYING = {
       heart: [[0, 0], [0.1, 0.9], [0.18, 0.15], [0.32, 1], [0.4, 0.1], [0.52, 0.8], [0.6, 0.3], [0.74, 1], [0.82, 0.45], [0.92, 1], [1, 1]] as readonly (readonly [number, number])[],
       island: { size: [934, 632] as const, scale: 0.8, top: 18 },
       under: { tip: 470, slope: 0.75, half: 190 },
+      /** The waterfall: a strip that repeats down from this spot on the island's picture (before `scale`), `wide` across and `tall` to a repeat, to the bottom of the screen and into the cloud, its water running down at `speed` pixels a second. It goes down with the island. */
+      fall: { at: [77, 350] as const, wide: 58, tall: 240, speed: 330 },
       cloudSize: [1536, 640] as const,
       clouds: [
         { file: "cloud-back", scale: 1.2, y: 250, x: -340, speed: -10 },

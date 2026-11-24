@@ -128,6 +128,17 @@ export function alarmCards(ready: () => void, then: () => void) {
       const w = D.island.size[0] * D.island.scale, h = D.island.size[1] * D.island.scale, left = (W - w) / 2;
       const bright = layer("alarm/shot4/island-bright");
       for (const img of [layer("alarm/shot4/island-dim"), bright]) (img.style.width = `${w}px`), (img.style.height = `${h}px`), isle.append(img);
+      // The waterfall, behind the island and going down with it: one strip repeated to below the screen, its water running.
+      const fall = document.createElement("div");
+      fall.className = "fall";
+      const strip = layer("alarm/shot4/waterfall-strip");
+      fall.style.backgroundImage = `url(${strip.src})`;
+      fall.style.backgroundSize = `${D.fall.wide * D.island.scale}px ${D.fall.tall * D.island.scale}px`;
+      fall.style.left = `${D.fall.at[0] * D.island.scale}px`;
+      fall.style.top = `${D.fall.at[1] * D.island.scale}px`;
+      fall.style.width = `${D.fall.wide * D.island.scale}px`;
+      fall.style.height = `${H}px`;
+      isle.prepend(fall);
       isle.style.left = `${left}px`;
       isle.style.top = `${D.island.top}px`;
       const clouds = D.clouds.map((c) => {
@@ -152,7 +163,8 @@ export function alarmCards(ready: () => void, then: () => void) {
       });
       cam.append(layer("alarm/shot4/sky"), clouds[0]!, isle, ...rocks.map((r) => r.el), ...clouds.slice(1));
       return {
-        start(at) {
+        start(at, sec) {
+          at(0, () => sound.alarmHiss(sec));
           at(D.dropAt * 1000, () => (sound.lurchGroan(), sound.alarmRumble(A.shots.find((x) => x.id === "descent")!.ms / 1000 - D.dropAt)));
           for (const r of rocks) at(r.at * 1000, () => sound.rockCrack((r.x - W / 2) / (W / 2)));
         },
@@ -160,6 +172,7 @@ export function alarmCards(ready: () => void, then: () => void) {
           bright.style.opacity = t * 1000 >= D.heartMs ? "0" : (1 - along(D.heart, (t * 1000) / D.heartMs)).toFixed(2);
           const y = drop(t), going = t > D.dropAt ? 1 : 0;
           isle.style.transform = `translate(${(going * D.shake * Math.sin(t * 53) * Math.sin(t * 7.1)).toFixed(1)}px, ${(y + going * D.shake * 0.7 * Math.sin(t * 61 + 1)).toFixed(1)}px)`;
+          fall.style.backgroundPositionY = `${((D.fall.speed * t) % (D.fall.tall * D.island.scale)).toFixed(1)}px`;
           D.clouds.forEach((c, i) => (clouds[i]!.style.transform = `translateX(${(c.x + c.speed * t).toFixed(1)}px)`));
           for (const r of rocks) {
             const f = t - r.at;

@@ -781,6 +781,12 @@ export function alarmFalls(sec: number) {
   rush(sec, "bandpass", 900, 0.05, 0.4, 0.8, 0.5);
 }
 
+/** The waterfall heard from off the island: a thin hiss that goes as the island goes under. */
+export function alarmHiss(sec: number) {
+  rush(sec, "bandpass", 2600, 0.05, 0.3, sec * 0.65, 0.6);
+  rush(sec, "lowpass", 500, 0.12, 0.3, sec * 0.65);
+}
+
 /** The cloud coming up over the island: a low roll under everything. */
 export function alarmRumble(sec: number) {
   rush(sec, "lowpass", 95, 0.6, 0.5, 0.9);

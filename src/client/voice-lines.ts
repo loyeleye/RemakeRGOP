@@ -185,11 +185,16 @@ export const VOICE_LINES: Record<string, string> = {
   "Hesta|North one. Then the...": "voice/hesta-north-one-felt.mp3",
   "Hesta|Budge up, Rook.": "voice/hesta-budge-up.mp3",
   "Hesta|I'll hold them. You fetch.": "voice/hesta-ill-hold.mp3",
-  "Hesta|My hands, your legs.": "voice/hesta-my-hands.mp3",
   "Hesta|Let go at the glass. It knows the way.": "voice/hesta-let-go-glass.mp3",
   "Hesta|Still warm, this. Somebody taught you well.": "voice/hesta-still-warm-felt.mp3",
   // Runs 6 and 7, said with feeling (Gemini, Ladi 24 Nov); the Sogni takes stay in voice/ for comparison.
   "Hesta|Slow. I used to be quick.": "voice/hesta-slow-felt.mp3",
   "Hesta|That one's yours, Rook. At my age?": "voice/hesta-thats-yours.mp3",
   "Hesta|There. That'll hold.": "voice/hesta-thatll-hold-felt.mp3",
+  // Run 7, what she says on a bank (Ladi approved the lines, 24 Nov).
+  "Hesta|Feel that, Rook? Up she comes.": "voice/hesta-up-she-comes.mp3",
+  "Hesta|Again. My knees felt that one.": "voice/hesta-my-knees.mp3",
+  "Hesta|They can see us now. Look busy.": "voice/hesta-look-busy.mp3",
+  "Hesta|Down goes the wall. Don't stop.": "voice/hesta-down-goes-the-wall.mp3",
+  "Hesta|There's a star, Rook. Fetch me the rest.": "voice/hesta-theres-a-star.mp3",
 };
