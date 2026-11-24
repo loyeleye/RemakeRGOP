@@ -9,7 +9,7 @@
 
 import * as THREE from "three";
 import type { StoryView } from "../engine/protocol.js";
-import { SHIP, SHIP_DECK, onDeck } from "../engine/shiphome.js";
+import { SHIP, SHIP_DECK, SHIP_SEA, onDeck } from "../engine/shiphome.js";
 import { figure, smokeTexture } from "./rescue-dress.js";
 import { SHIP_WOOD, brassOf, buildBars, buildBoards, buildFittings, buildFixer, buildIsland, buildLamp, buildRail, plankTexture, type IslandSpec } from "./ship-fit.js";
 
@@ -68,26 +68,37 @@ export const SHIP_LOOK = {
    * doors have a lamp left burning. One is Kite Fell. Then how far outside the farthest lane they
    * pass, how fast (tiles a second), how wide and strong each one's pool of colour on the cloud is
    * (times its own width; strength at night and at first light), and how much of a pool is left
-   * while the patch is level with it.
+   * while the patch is level with it. `out` is how far outside the farthest lane each one's middle
+   * passes: two pass among the outer lanes, their land over the last few, and two well beyond.
+   * `model` is the made island that takes the block-out's place, and `doors` where its lit doors are.
    */
   islands: [
-    { at: 0.16, side: -1, r: 6.2, heart: "#62d6a0", lamps: 2, seed: 11 },
-    { at: 0.42, side: 1, r: 6.8, heart: "#6fb4ff", lamps: 0, seed: 23, kite: true },
-    { at: 0.62, side: -1, r: 5.6, heart: "#f08ab0", lamps: 1, seed: 37 },
-    { at: 0.76, side: 1, r: 6.0, heart: "#b99cff", lamps: 2, seed: 41 },
-  ] as readonly (IslandSpec & { at: number; side: number })[],
-  islandOff: 4,
+    { at: 0.16, side: -1, r: 6.0, heart: "#62d6a0", lamps: 2, seed: 11, out: 2, model: "isle-orchard", doors: [[2.8, -0.8], [0.3, 3.5]] },
+    { at: 0.42, side: 1, r: 6.0, heart: "#6fb4ff", lamps: 0, seed: 23, kite: true, out: 15, model: "isle-kite-fell", doors: [] },
+    { at: 0.62, side: -1, r: 5.6, heart: "#f08ab0", lamps: 1, seed: 37, out: 14, model: "isle-mill", doors: [[-1.1, -0.9]] },
+    { at: 0.76, side: 1, r: 5.6, heart: "#b99cff", lamps: 2, seed: 41, out: 2, model: "isle-steps", doors: [[-2.0, 2.6], [-0.4, 4.2]] },
+  ] as readonly (IslandSpec & { at: number; side: number; out: number; model: string; doors: readonly (readonly [number, number])[] })[],
+  /** How fast the islands pass (tiles a second), how much of their own paint the made ones give off at night, and how high a wisp rides while it crosses one's land. */
   islandSpeed: 2.4,
+  islandGlow: 0.13,
+  islandDim: 0.6,
+  overLand: 2.3,
   pool: 2.3,
   poolShow: [0.46, 0.34] as const,
   poolDark: 0.1,
   /** Home's two hearts, under its two halves: their colours, and how wide and strong their pools are. */
   homeHearts: ["#ffb45e", "#a898ff"] as const,
-  homePool: [22, 0.2] as const,
-  /** Cloud banks standing up out of the sea, off beyond the lanes: how many, how much of them shows, and how much faster a tall one goes by than the sea (for each tile of its height). */
-  banks: 14,
-  bankShow: 0.5,
+  /** Each lies under a tip and out ahead of it, so the two colours on the cloud are seen before the land: how far out from the mouth and how far ahead of the tips its middle is, how wide, and how fully it takes the cloud's colour. */
+  homePool: { x: 10, ahead: 6, r: 11, show: 0.85 },
+  /** Low streaks of cloud lying on the sea, well off beyond the lanes (never a tall bank: those are the ones that sweep a side, and must not be mistaken): how many, how much of them shows, and how much faster a tall one goes by than the sea (for each tile of its height). */
+  banks: 8,
+  bankShow: 0.3,
   bankLift: 0.14,
+  /** The made cloud's grain over the sea: how many tiles one tile of it covers across and along, and how strongly it shows at first light. */
+  tile: [30, 60] as const,
+  tileShow: 0.9,
+  /** The sail: how much of it is left when the patch is right under the prow, how far ahead of the prow the patch's near edge is when it starts to thin and when it is thinnest, and how much of the lamp's colour it takes at a bank. */
+  sail: { thin: 0.35, from: 11, to: 6, warm: 0.5 },
   /** The first seconds: a pale ring closing in the cloud astern, where the low one was. Seconds it lasts, its width at first and at last (tiles), and how strongly it shows. */
   ring: { sec: 10, from: 19, to: 2, show: 0.5 },
   /** Once, early: three small lamps in a line far off to starboard, going another way. Ticks they are in sight from and until, and how big each is. */
@@ -99,16 +110,38 @@ export const SHIP_LOOK = {
   streaks: 26,
   streakSpeed: 9,
   /** Home at the end: how far it comes in over the last seconds (tiles), how far ahead of the prow its tips stop, how far east of the ship the falls' mouth lies, the landing's length, and the crowd on the tips. */
-  approach: 20,
+  approach: 30,
   homeGap: 0.5,
   mouthEast: 9,
   pier: 6,
   crowd: 56,
   /** Seconds the cloud takes to lift again after a restart. */
   clearSec: 1.2,
+  /**
+   * Speed, which is the lamp's fire: how fast the sea goes by with the fire out and with it full
+   * (times `stream`), how big the lamp's glow is with the fire out and full (times `lampSize`), how
+   * bright, and how quickly the picture follows the number.
+   */
+  fireSpeed: [0.4, 2.3] as const,
+  fireSize: [0.4, 1.25] as const,
+  fireLit: [0.3, 1] as const,
+  fireEase: 0.06,
+  /** The two kinds of wisp: how big a small one and a big one are drawn (1 is the game's own). */
+  kinds: [0.8, 1.6] as const,
+  /**
+   * A cloud bank down one side: how high its top lies, how far past the farthest lane it runs, its
+   * colour at night and at first light, how much of it shows, and the billows standing on it (how
+   * many, and how big).
+   */
+  bank: { y: 2.0, past: 8, night: "#6f7a99", grey: "#d3d8e4", show: 0.96, billows: 24, size: [9, 13] as const },
 } as const;
 
 const WHITE = new THREE.Color("#ffffff"), TMP = new THREE.Color();
+const blank = () => {
+  const t = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+  t.needsUpdate = true;
+  return t;
+};
 /** How far the prow runs ahead of the deck (tiles). */
 const PROW = 4.2;
 
@@ -122,7 +155,9 @@ void main() {
 const FS = `
 precision highp float;
 varying vec2 vW;
-uniform float uTime, uScroll, uGrain, uRag, uRimShow, uLamp, uRidge, uDawn;
+uniform float uTime, uScroll, uGrain, uRag, uRimShow, uLamp, uRidge, uDawn, uTileOn;
+uniform sampler2D uTile;
+uniform vec2 uTileSize;
 uniform vec3 uPatch, uSea, uDark, uRim, uWarm, uDawnCol;
 uniform vec2 uOwn;
 uniform vec4 uRing;
@@ -153,11 +188,16 @@ void main() {
   vec3 pale = uSea + vec3(0.42, 0.47, 0.6);
   vec3 col = uSea * (0.72 + 0.5 * h) + pale * (tops + uRidge * clamp(slope, 0.0, 1.0) * 0.8) * uGrain;
   col *= 1.0 - 0.22 * uRidge * furrow * clamp(uGrain * 2.0, 0.0, 1.0);
+  // The made cloud, drawn out the way the ship is going, over the ridges.
+  float tile = texture2D(uTile, p / uTileSize).r;
+  col *= mix(1.0, 0.2 + 0.8 * tile, uTileOn * clamp(uGrain * 2.4, 0.0, 1.0));
   float body = 0.55 + 0.9 * tops + 0.5 * h;
-  // The islands' hearts light the cloud under them, each in its own colour.
+  // The islands' hearts light the cloud under them, each in its own colour. Home's two take the cloud's colour over.
   for (int i = 0; i < 6; i++) {
     vec2 dp = vW - uPool[i].xy;
-    col += uPoolCol[i] * uPool[i].w * exp(-dot(dp, dp) / (uPool[i].z * uPool[i].z)) * body;
+    float e = uPool[i].w * exp(-dot(dp, dp) / (uPool[i].z * uPool[i].z));
+    if (i < 4) col += uPoolCol[i] * e * body;
+    else col = mix(col, uPoolCol[i] * (0.5 + 0.42 * body), min(1.0, e));
   }
   // Where the low one was: a pale ring closing.
   float rr = length(vW - uRing.xy) - uRing.z;
@@ -184,10 +224,12 @@ export interface ShipFrame {
   /** How far through the tick (0 to 1), and the time in seconds. */
   t: number;
   time: number;
+  /** The eye, for what has to face it. */
+  eye?: THREE.Camera;
   players: Map<number, { root: THREE.Object3D; beam: THREE.Object3D }>;
   /** Each wisp's drawing, and where each is (tiles from the lamp) and whether his staff is on it. */
   wisps: Map<number, { root: THREE.Object3D; halo: THREE.Sprite; light: THREE.PointLight }>;
-  at: Map<number, { x: number; y: number; held: boolean }>;
+  at: Map<number, { x: number; y: number; held: boolean; away?: boolean }>;
 }
 
 export class ShipFx {
@@ -199,6 +241,7 @@ export class ShipFx {
     uPatch: { value: new THREE.Vector3(0, -30, SHIP.patch.size / 2) }, uSea: { value: new THREE.Color(SHIP.sky.night) }, uDark: { value: new THREE.Color(SHIP_LOOK.dark) }, uRim: { value: new THREE.Color(SHIP_LOOK.rim) }, uWarm: { value: new THREE.Color(SHIP_LOOK.lamp) },
     uRidge: { value: SHIP_LOOK.ridge as number }, uDawn: { value: 0 }, uDawnCol: { value: new THREE.Color(SHIP_LOOK.dawn) }, uOwn: { value: new THREE.Vector2(SHIP_LOOK.own[0][0], SHIP_LOOK.own[0][1]) }, uRing: { value: new THREE.Vector4(0, 0, 1, 0) },
     uPool: { value: Array.from({ length: 6 }, () => new THREE.Vector4(0, 0, 1, 0)) }, uPoolCol: { value: Array.from({ length: 6 }, () => new THREE.Color("#000000")) },
+    uTile: { value: blank() as THREE.Texture }, uTileOn: { value: 0 }, uTileSize: { value: new THREE.Vector2(SHIP_LOOK.tile[0], SHIP_LOOK.tile[1]) },
   };
   private night = new THREE.Color(SHIP.sky.night);
   private grey = new THREE.Color(SHIP.sky.grey);
@@ -218,7 +261,12 @@ export class ShipFx {
   /** How far each wisp is sunk in the cloud (0 clear of it, 1 riding in it). */
   private sunk = new Map<number, number>();
   /** Wisps the wind has taken, going astern. */
-  private goners: { s: THREE.Sprite; x: number; at: number }[] = [];
+  private goners: { s: THREE.Sprite; x: number; y?: number; at: number }[] = [];
+  private fire = SHIP.speed.start as number;
+  private bankAll = new THREE.Group();
+  private bankU = { uCol: { value: new THREE.Color("#ffffff") }, uShow: { value: 0 }, uTile: this.u.uTile, uSize: { value: new THREE.Vector2(1, 1) }, uOff: { value: 0 } };
+  private billows: { s: THREE.Sprite; u: number; v: number; k: number }[] = [];
+  private sized = new Set<THREE.Object3D>();
   private goneSeen = new Set<string>();
   /** The cloud lying over each wisp that is out in it. */
   private puffs = new Map<number, THREE.Sprite>();
@@ -231,8 +279,15 @@ export class ShipFx {
   private boats: THREE.Sprite[] = [];
   private born = -1;
   private own = 0;
+  /** Made pieces still to come: each takes its block-out's place when its model is in. */
+  private slots: { name: string; put: (m: THREE.Object3D) => void }[] = [];
+  private maps: THREE.Texture[] = [];
+  private sail: THREE.MeshStandardMaterial[] = [];
+  /** Where each island's land is now, for a wisp that crosses it. */
+  private lands: { x: number; z: number; r: number }[] = [];
+  private lifted = new Map<number, number>();
 
-  constructor(private glow: Glow) {
+  constructor(private glow: Glow, private model: (name: string) => THREE.Object3D | undefined) {
     const std: Std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, ...extra });
     const K = SHIP_LOOK, hw = SHIP_DECK.hw + 0.5, hl = SHIP_DECK.hl + 0.5;
 
@@ -259,14 +314,17 @@ export class ShipFx {
     const hull = new THREE.Mesh(hullGeo, std(SHIP_WOOD.hull, { roughness: 0.6 }));
     hull.position.y = 0.04;
     hull.receiveShadow = true;
-    this.all.add(hull);
+    // The block-out ship: it stands until the made hull is in, and then gives way to it.
+    const own = new THREE.Group();
+    this.all.add(own);
+    own.add(hull);
     // A paler strake along the hull's side, just under the rail, so its line reads from above.
     const wale = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.16, bevelEnabled: false, curveSegments: 10 }).rotateX(Math.PI / 2).scale(1.012, 1, 1.004), std("#4a3525", { roughness: 0.5 }));
     wale.position.y = -0.15;
-    this.all.add(wale);
+    own.add(wale);
 
     // The planking: long scrubbed boards bow to stern, and the same boards on the prow and the round of the stern.
-    this.all.add(buildBoards(std, this.plankMap));
+    own.add(buildBoards(std, this.plankMap));
     const lay = this.plankMap.clone();
     lay.wrapS = lay.wrapT = THREE.RepeatWrapping;
     lay.repeat.set(2, 1 / 6);
@@ -287,7 +345,7 @@ export class ShipFx {
     const aftMesh = new THREE.Mesh(new THREE.ShapeGeometry(aft, 10).rotateX(-Math.PI / 2), boards);
     aftMesh.position.set(0, 0.08, hl);
     noseMesh.receiveShadow = aftMesh.receiveShadow = true;
-    this.all.add(noseMesh, aftMesh);
+    own.add(noseMesh, aftMesh);
 
     // The leeway: the planks from which he reaches everything out over that rail, a little paler along each side.
     const band = SHIP.railLeeway + 1;
@@ -302,23 +360,58 @@ export class ShipFx {
     const curve = (f: (t: number) => [number, number], n: number) => Array.from({ length: n + 1 }, (_, i) => f(i / n));
     const quad = (a: number, c: number, e: number, t: number) => (1 - t) * (1 - t) * a + 2 * (1 - t) * t * c + t * t * e;
     const cube = (a: number, c1: number, c2: number, e: number, t: number) => (1 - t) ** 3 * a + 3 * (1 - t) * (1 - t) * t * c1 + 3 * (1 - t) * t * t * c2 + t ** 3 * e;
-    this.all.add(buildRail(std, [[-hw, -hl], [-hw, hl]]), buildRail(std, [[hw, -hl], [hw, hl]]));
+    own.add(buildRail(std, [[-hw, -hl], [-hw, hl]]), buildRail(std, [[hw, -hl], [hw, hl]]));
     for (const sx of [-1, 1]) {
-      this.all.add(buildRail(std, curve((t) => [quad(sx * hw, sx * (hw - 0.1), 0, t), quad(-hl, -hl - prow * 0.55, -hl - prow + 0.2, t)], 5)));
-      this.all.add(buildRail(std, curve((t) => [cube(sx * hw, sx * hw, sx * 2.6, 0, t), cube(hl, hl + round * 0.8, hl + round - 0.1, hl + round - 0.1, t)], 5)));
+      own.add(buildRail(std, curve((t) => [quad(sx * hw, sx * (hw - 0.1), 0, t), quad(-hl, -hl - prow * 0.55, -hl - prow + 0.2, t)], 5)));
+      own.add(buildRail(std, curve((t) => [cube(sx * hw, sx * hw, sx * 2.6, 0, t), cube(hl, hl + round * 0.8, hl + round - 0.1, hl + round - 0.1, t)], 5)));
     }
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 1.7, 10), std(SHIP_WOOD.rail, { roughness: 0.45 }));
     stem.position.set(0, 0.85, -hl - prow + 0.2);
     const stemCap = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), brassOf(std));
     stemCap.position.set(0, 1.75, -hl - prow + 0.2);
-    this.all.add(stem, stemCap);
+    own.add(stem, stemCap);
+    this.slots.push({ name: "ship-hull", put: (m) => ((own.visible = false), this.all.add(m)) });
+    // Its sail, on the foredeck past where he can walk. It thins while the patch is close under the prow, and takes the lamp's colour at a bank.
+    this.slots.push({
+      name: "ship-sail",
+      put: (m) => {
+        m.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const mat = (mesh.material = (mesh.material as THREE.MeshStandardMaterial).clone());
+          if (mat.name !== "sail") return;
+          mat.transparent = true;
+          mat.side = THREE.DoubleSide;
+          this.sail.push(mat);
+          mesh.castShadow = false;
+          mesh.renderOrder = 3;
+        });
+        this.all.add(m);
+      },
+    });
 
     // What lies on the deck: hatch, cleats, ropes coiled flat, the lashed tiller, and the new rope that does not belong.
-    this.all.add(buildFittings(std, this.plankMap));
+    const fit = buildFittings(std, this.plankMap);
+    this.all.add(fit.group);
+    this.slots.push({ name: "ship-rope-coil", put: (m) => ((fit.rope.visible = false), m.position.set(-4.4, 0.08, 11.6), this.all.add(m)) });
+    this.slots.push({
+      name: "ship-tiller",
+      put: (m) => {
+        fit.tiller.visible = false;
+        // As made its post is at -x: turned so the post is aft and the bar points to the bow, and short enough to end behind him.
+        m.rotation.y = Math.PI / 2;
+        m.scale.setScalar(0.7);
+        m.position.set(SHIP.figure[0], 0.08, SHIP.figure[1] + 1.25);
+        this.all.add(m);
+      },
+    });
 
     // The ship's lamp amidships, where a wisp is banked: a plain lamp in a brass cage, whose bars lie across the deck in its light, with a warm line round the edge of its plinth.
     this.lampBox = std("#ffd9a0", { emissive: K.lamp, emissiveIntensity: 1.6 });
-    this.all.add(buildLamp(std, this.lampBox, 3.1));
+    const lamp = buildLamp(std, this.lampBox, 3.1);
+    this.all.add(lamp.group);
+    // The made lamp, on the block-out's post, with the middle of its glass where the flame is.
+    this.slots.push({ name: "ship-lamp", put: (m) => ((lamp.cage.visible = false), m.scale.setScalar(1.3), m.position.set(0, 3.1 - 1.3, 0), this.all.add(m)) });
     const bars = buildBars(K.lamp);
     this.barsU = bars.u;
     this.all.add(bars.mesh);
@@ -347,6 +440,29 @@ export class ShipFx {
       isle.visible = false;
       this.isles.push(isle);
       this.all.add(isle);
+      this.slots.push({
+        name: spec.model,
+        put: (m) => {
+          isle.clear();
+          // Its own paint shows a little at night, so that it is land and not a dark shape on the cloud; and it lays no shadow on the cloud.
+          m.traverse((o) => {
+            const mesh = o as THREE.Mesh;
+            if (!mesh.isMesh) return;
+            mesh.castShadow = false;
+            const mat = (mesh.material = (mesh.material as THREE.MeshStandardMaterial).clone());
+            mat.color.setScalar(K.islandDim);
+            mat.emissiveIntensity = K.islandGlow;
+          });
+          isle.add(m);
+          for (const [x, z] of spec.doors.slice(0, spec.lamps)) {
+            const lit = this.glow("#ffd9a0", 1.6, 0.65), core = this.glow("#fff3d6", 0.45, 0.95);
+            lit.position.set(x, 0.7 + 1.0, z + 0.25);
+            core.position.copy(lit.position);
+            lit.renderOrder = core.renderOrder = 6;
+            isle.add(lit, core);
+          }
+        },
+      });
     }
     // Cloud banks, standing up out of the sea off beyond the lanes: the tall ones go by faster.
     for (let i = 0; i < K.banks; i++) {
@@ -360,6 +476,33 @@ export class ShipFx {
       this.banks.push({ s: sp, side: i % 2 ? 1 : -1, off: 7 + ((i * 17) % 10) * 2.4, y });
       this.all.add(sp);
     }
+    // The made cloud: its grain over the sea, and a tall billow or a long low streak for each bank, standing on the sea.
+    const tl = new THREE.TextureLoader();
+    tl.load("models/ship/cloud-sea-tile-lengthwise.webp", (t) => {
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      this.maps.push(t);
+      this.u.uTile.value = t;
+      this.u.uTileOn.value = K.tileShow;
+    });
+    for (const [k, file] of ["cloud-bank-alpha", "cloud-bank-b-alpha"].entries()) {
+      tl.load(`models/ship/${file}.webp`, (t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        this.maps.push(t);
+        if (k === 0) for (const b of this.billows) ((b.s.material.map = t), (b.s.material.needsUpdate = true));
+        this.banks.forEach((b, i) => {
+          if (k !== 1) return;
+          const mat = b.s.material, size = 20 + ((i * 53) % 10) * 1.1;
+          mat.map = t;
+          mat.depthTest = true;
+          mat.needsUpdate = true;
+          b.s.center.set(0.5, 0.22);
+          b.s.scale.set(size, size, 1);
+          b.s.position.y = SHIP_LOOK.seaY + 0.1;
+          b.y = 0.8;
+          b.off = 16 + ((i * 17) % 10) * 2.2;
+        });
+      });
+    }
     // Hesta's boats, once, early: three small lamps in a line far off to starboard, going another way.
     for (let i = 0; i < 3; i++) {
       const lamp = this.glow("#ffd9a0", K.boats.size, 0);
@@ -368,6 +511,47 @@ export class ShipFx {
       this.boats.push(lamp);
       this.all.add(lamp);
     }
+
+    // A cloud bank, which sweeps down one side: a deep pale slab with soft ends lying over the lanes, and billows standing on it.
+    const slab = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+      new THREE.ShaderMaterial({
+        uniforms: this.bankU,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `
+precision highp float;
+varying vec2 vUv;
+uniform vec3 uCol;
+uniform float uShow, uOff;
+uniform vec2 uSize;
+uniform sampler2D uTile;
+void main() {
+  // Lumps of the made cloud in it, going by with it; soft at both ends and along its outer side, firmer along the hull.
+  float lump = texture2D(uTile, vec2(vUv.x * uSize.x / 22.0, vUv.y * uSize.y / 30.0 + uOff)).r;
+  float ends = smoothstep(0.0, 0.2, vUv.y) * (1.0 - smoothstep(0.8, 1.0, vUv.y));
+  float sides = smoothstep(0.0, 0.06, vUv.x) * (1.0 - smoothstep(0.82, 1.0, vUv.x));
+  // Its ends and its outer side break up into lumps.
+  float a = clamp(smoothstep(0.0, 0.5, ends * sides * (0.55 + 0.9 * lump)) , 0.0, 1.0);
+  gl_FragColor = vec4(uCol * (0.8 + 0.5 * lump), a * uShow);
+}`,
+      }),
+    );
+    slab.renderOrder = 8;
+    this.bankAll.add(slab);
+    for (let i = 0; i < K.bank.billows; i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.puffMap, transparent: true, opacity: 0, depthWrite: false }));
+      sp.center.set(0.5, 0.12);
+      sp.renderOrder = 9;
+      // Small ones along the hull's side of it, so that none stands over the deck; the tall ones farther out.
+      const col = i % 4, rows = K.bank.billows / 4;
+      this.billows.push({ s: sp, u: [0.2, 0.42, 0.64, 0.86][col]! + (((i * 37) % 10) - 5) * 0.012, v: (Math.floor(i / 4) + 0.5 + (((i * 53) % 10) - 5) * 0.06) / rows, k: col === 0 ? 0.5 : 1 });
+      this.bankAll.add(sp);
+    }
+    this.bankAll.visible = false;
+    this.all.add(this.bankAll);
 
     // The wind: thin pale streaks going over the deck from the bow to the stern.
     const streakMat = new THREE.MeshBasicMaterial({ color: "#c9d6f0", transparent: true, opacity: 0.1, depthWrite: false });
@@ -491,9 +675,21 @@ export class ShipFx {
     const dt = Math.min(0.1, Math.max(0, time - this.last));
     this.last = time;
     this.u.uTime.value = time;
+    // Made pieces that have come in since the last frame take their places.
+    if (this.slots.length) {
+      this.slots = this.slots.filter((slot) => {
+        const m = this.model(slot.name);
+        if (m) slot.put(m.clone(true));
+        return !m;
+      });
+    }
     // The sea goes by faster the nearer he is to the patch.
     const nearness = Math.max(0, Math.min(1, (P.gone - this.lead) / (P.gone - P.nearest)));
-    const stream = K.stream * (K.gainSpeed[0] + (K.gainSpeed[1] - K.gainSpeed[0]) * nearness);
+    // With speed the difficulty, the sea goes by as fast as the lamp burns.
+    const speedy = r.fire !== undefined;
+    this.fire += ((r.fire ?? this.fire) - this.fire) * K.fireEase;
+    const fire = this.fire;
+    const stream = K.stream * (speedy ? K.fireSpeed[0] + (K.fireSpeed[1] - K.fireSpeed[0]) * fire : K.gainSpeed[0] + (K.gainSpeed[1] - K.gainSpeed[0]) * nearness);
     this.u.uScroll.value += stream * dt;
 
     // The second clock: the sea goes from night to grey.
@@ -520,10 +716,12 @@ export class ShipFx {
     // The islands: each comes from ahead, passes outside the lanes, and goes astern. Its heart lights the
     // cloud under it; while the patch is level with it that pool is dark, and it comes back when the patch has passed.
     const clock = r.tick + (r.gutter === undefined && r.over === undefined ? f.t : 0), show = K.poolShow[0] + (K.poolShow[1] - K.poolShow[0]) * r.light;
+    this.lands.length = 0;
     K.islands.forEach((spec, i) => {
-      const isle = this.isles[i]!, z = (clock - spec.at * r.ticks) * 0.6 * K.islandSpeed, x = spec.side * (r.far + K.islandOff + spec.r);
+      const isle = this.isles[i]!, z = (clock - spec.at * r.ticks) * 0.6 * K.islandSpeed, x = spec.side * (r.far + spec.out);
       isle.visible = Math.abs(z) < 90;
       isle.position.set(x, 0, z);
+      if (isle.visible) this.lands.push({ x, z, r: spec.r });
       const R = spec.r * K.pool, dz = Math.abs(patchZ - z);
       const lit = K.poolDark + (1 - K.poolDark) * Math.max(0, Math.min(1, (dz - R * 0.45) / (R * 0.5)));
       this.u.uPool.value[i]!.set(x, z, R, isle.visible ? show * lit : 0);
@@ -557,22 +755,32 @@ export class ShipFx {
     // First light, at the top edge, as home comes in.
     this.u.uDawn.value = K.dawnShow * r.home;
 
+    // The sail thins while the patch is close under the prow, so that the one meter is never behind it.
+    if (this.sail.length) {
+      const ahead = bow - PROW - (patchZ + P.size / 2), S = K.sail;
+      const k = Math.max(0, Math.min(1, (ahead - S.to) / (S.from - S.to)));
+      for (const m of this.sail) m.opacity += (S.thin + (1 - S.thin) * k * k * (3 - 2 * k) - m.opacity) * 0.08;
+    }
+
     // The lamp: it swells as one goes in, and gutters out when the patch is lost.
     const gut = r.gutter;
     const want = gut === undefined ? 1 : Math.max(0, 1 - (gut + f.t) / (P.gutterTicks * 0.45));
     this.lit += (want - this.lit) * (want < this.lit ? 0.25 : 0.06);
     const flick = gut === undefined ? 0.96 + 0.04 * Math.sin(time * 2.3) : 0.55 + 0.45 * Math.sin(time * 31) * Math.sin(time * 17);
     const pulse = Math.max(0, 1 - (time - this.pulse) / 0.6);
-    // It burns lower the farther the patch draws away.
+    // Its fire is the ship's speed: it is as big and as bright as it burns. (With speed off, it burns lower the farther the patch draws away.)
     const far = Math.max(0, Math.min(1, (this.lead - P.nearest) / (P.gone - P.nearest)));
-    const lit = Math.max(0, this.lit * flick) * (1 - (1 - K.lampFar) * far * far);
-    this.lampGlow.scale.setScalar(K.lampSize * (0.5 + 0.5 * lit) + pulse * K.lampPulse);
+    const lit = Math.max(0, this.lit * flick) * (speedy ? K.fireLit[0] + (K.fireLit[1] - K.fireLit[0]) * fire : 1 - (1 - K.lampFar) * far * far);
+    const big = speedy ? (K.fireSize[0] + (K.fireSize[1] - K.fireSize[0]) * fire) * Math.max(0.2, this.lit) : 0.5 + 0.5 * lit;
+    this.lampGlow.scale.setScalar(K.lampSize * big + pulse * K.lampPulse);
+    this.lampCore.scale.setScalar(K.lampSize * 0.3 * (speedy ? 0.6 + 0.7 * fire : 1));
     this.lampGlow.material.opacity = 0.6 * lit;
     this.lampCore.material.opacity = 0.95 * lit;
     this.lampBox.emissiveIntensity = 1.6 * lit + pulse;
     this.lampLight.intensity = 70 * lit + 40 * pulse;
     this.u.uLamp.value = lit;
     this.barsU.uLit.value = lit;
+    for (const m of this.sail) (m.emissive.set(K.lamp).lerp(WHITE, 1 - pulse), (m.emissiveIntensity = 0.15 + K.sail.warm * pulse));
 
     // Into the cloud, and out of it again at the bow.
     const veilWant = gut === undefined ? 0 : Math.min(1, Math.max(0, (gut + f.t - 1) / (P.gutterTicks - 2)));
@@ -582,14 +790,24 @@ export class ShipFx {
     (this.veil.material as THREE.MeshBasicMaterial).opacity = this.veilK * 0.97;
 
     // Wisps out in the cloud ride half sunk in it and dim; one his staff has, or one over the deck, is clear of it and bright.
+    const bigs = new Set(r.big ?? []), hid = new Set(r.hid ?? []);
     for (const [id, rig] of f.wisps) {
       const w = f.at.get(id);
       if (!w) continue;
-      const want = !w.held && !onDeck(w.x, w.y) ? 1 : 0;
+      // A big one is worth three small ones, and looks it. One a bank is over cannot be seen.
+      rig.root.scale.setScalar(K.kinds[bigs.has(id) ? 1 : 0]);
+      this.sized.add(rig.root);
+      if (!w.away) rig.root.visible = !hid.has(id);
+      // One that is crossing an island's land rides clear over it.
+      const land = this.lands.some((o) => Math.hypot(w.x - o.x, w.y - o.z) < o.r * 0.95) ? 1 : 0;
+      let up = this.lifted.get(id) ?? land;
+      up += Math.sign(land - up) * Math.min(Math.abs(land - up), dt / 0.8);
+      this.lifted.set(id, up);
+      const want = !w.held && !onDeck(w.x, w.y) && !land ? 1 : 0;
       let k = this.sunk.get(id) ?? want;
       k += Math.sign(want - k) * Math.min(Math.abs(want - k), dt / K.liftSec);
       this.sunk.set(id, k);
-      rig.root.position.y -= K.sunk * k;
+      rig.root.position.y += K.overLand * up * up * (3 - 2 * up) - K.sunk * k;
       rig.halo.material.opacity *= 1 - (1 - K.sunkLight) * k;
       rig.light.intensity *= 1 - k;
       let puff = this.puffs.get(id);
@@ -605,30 +823,55 @@ export class ShipFx {
       puff.material.color.copy(this.sea).lerp(WHITE, 0.3);
       puff.material.opacity = K.puff * k;
     }
-    for (const [id, puff] of this.puffs) if (!f.wisps.has(id)) (puff.removeFromParent(), puff.material.dispose(), this.puffs.delete(id));
+    for (const [id, puff] of this.puffs) if (!f.wisps.has(id)) (puff.removeFromParent(), puff.material.dispose(), this.puffs.delete(id), this.lifted.delete(id), this.sunk.delete(id));
     // One the wind has taken: a dim light going away astern in the cloud, quickly, and out.
     for (const o of r.lost ?? []) {
       const key = `${o.tick}:${o.x}`;
       if (this.goneSeen.has(key)) continue;
       this.goneSeen.add(key);
       const s = this.glow("#ffd9a0", 1.5, 0.5);
-      s.renderOrder = 5;
+      s.renderOrder = o.y === undefined ? 5 : 10;
       this.all.add(s);
-      this.goners.push({ s, x: o.x, at: time });
+      this.goners.push({ s, x: o.x, y: o.y, at: time });
     }
     if (!r.lost?.length && this.goneSeen.size > 64) this.goneSeen.clear();
     this.goners = this.goners.filter((o) => {
       const k = (time - o.at) / K.goneSec;
       if (k >= 1) return o.s.removeFromParent(), o.s.material.dispose(), false;
-      o.s.position.set(o.x, K.seaY + 0.35 - k * 0.5, SHIP_DECK.hl + SHIP.astern + 1 + k * (6 + K.stream * K.goneSec));
+      // Off the stern it goes away in the cloud; torn off his line by a bank, it is whipped up and astern out of the bank's top.
+      if (o.y === undefined) o.s.position.set(o.x, K.seaY + 0.35 - k * 0.5, SHIP_DECK.hl + SHIP.astern + 1 + k * (6 + K.stream * K.goneSec));
+      else o.s.position.set(o.x + Math.sign(o.x) * k * 3, K.bank.y + 0.6 + k * 2.5, o.y + k * 9);
       o.s.scale.setScalar(1.5 * (1 - 0.6 * k));
       o.s.material.opacity = 0.5 * (1 - k) ** 1.5;
       return true;
     });
 
+    // The cloud bank down one side: it comes from ahead faster than the sea, and what it lies over is not to be seen.
+    const bank = r.bank;
+    this.bankAll.visible = !!bank && r.gutter === undefined;
+    if (bank) {
+      const B = K.bank, W = r.far - SHIP_DECK.hw + B.past, front = bank.front - bank.speed * (1 - (r.over === undefined ? f.t : 1));
+      const slab = this.bankAll.children[0]!;
+      slab.scale.set(W, 1, bank.len);
+      // Its inner edge is a tile off the rail, so the deck is never under it.
+      this.bankAll.position.set(bank.side * (SHIP_DECK.hw + 1 + W / 2), B.y, front - bank.len / 2);
+      this.bankAll.scale.x = bank.side;
+      this.bankU.uCol.value.set(B.night).lerp(TMP.set(B.grey), r.light);
+      this.bankU.uShow.value = B.show;
+      this.bankU.uSize.value.set(W, bank.len);
+      this.bankU.uOff.value = bank.side * 0.37;
+      for (const [i, b] of this.billows.entries()) {
+        const size = (B.size[0] + ((i * 29) % 10) * 0.1 * (B.size[1] - B.size[0])) * b.k;
+        b.s.position.set((b.u - 0.5) * W, 0, (b.v - 0.5) * bank.len * 0.8);
+        b.s.scale.set(size, size, 1);
+        b.s.material.color.copy(this.bankU.uCol.value).lerp(WHITE, 0.22);
+        b.s.material.opacity = 0.92;
+      }
+    }
+
     // The wind.
     for (const s of this.streaks) {
-      s.m.position.z += K.streakSpeed * s.v * dt;
+      s.m.position.z += K.streakSpeed * s.v * dt * (speedy ? 0.45 + 1.3 * fire : 1);
       if (s.m.position.z > 16) s.m.position.z -= 34;
     }
 
@@ -638,9 +881,10 @@ export class ShipFx {
       const h = Math.min(1, r.home - (1 - f.t) / Math.ceil((SHIP.endSec * 1000) / 600));
       this.home.position.set(K.mouthEast, 0, bow - PROW - K.homeGap - (1 - h) * K.approach);
     }
-    // Home's two hearts light the cloud under its two halves.
+    // Home's two hearts light the cloud under its two tips and out ahead of them: the first of home that he sees.
     for (const [i, sx] of [-1, 1].entries()) {
-      this.u.uPool.value[4 + i]!.set(this.home.position.x + sx * 26, this.home.position.z - 13, K.homePool[0], r.home > 0 ? K.homePool[1] : 0);
+      const H = K.homePool;
+      this.u.uPool.value[4 + i]!.set(this.home.position.x + sx * H.x, this.home.position.z + H.ahead, H.r, H.show * Math.min(1, r.home * 6));
       this.u.uPoolCol.value[4 + i]!.set(K.homeHearts[i]!);
     }
 
@@ -665,6 +909,8 @@ export class ShipFx {
     this.puffMap.dispose();
     this.plankMap.dispose();
     this.layMap?.dispose();
+    for (const t of this.maps) t.dispose();
+    for (const o of this.sized) (o.scale.setScalar(1), (o.visible = true));
     this.all.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.geometry) mesh.geometry.dispose();

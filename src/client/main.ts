@@ -900,7 +900,8 @@ function rescueRoom() {
 /**
  * Run 10, the ship home. The wisps are spread over the whole width of the cloud in view, so on a
  * screen held upright, which shows less to the sides, the lanes stop sooner (SHIP.offNarrow).
- * Switches: ?far=10 sets the farthest lane (tiles off the rail, 4 to 14); ?reach=10 or 12 sets how
+ * Switches: ?speed=0, ?banks=0 and ?hauls=0 each turn one part of the game off (SHIP's header says
+ * what each is); ?len=200 is the long run (120 ticks is the run's own); ?far=10 sets the farthest lane (tiles off the rail, 4 to 30; 20 is the run's own); ?reach=10 or 12 sets how
  * far his pull reaches from the middle of the deck (8 is the run's own); ?nodraw leaves a hauled
  * wisp lying at the rail for him to pull again; ?wind=0.75 or 1.25 (anything from 0.5 to 1.5)
  * makes the wind that much of what it is; ?nostills leaves the three views over the bow out.
@@ -912,8 +913,14 @@ function shipRoom() {
   const reach = Number(q.get("reach"));
   if ([8, 10, 12].includes(reach)) r.reach = reach;
   const far = Number(q.get("far"));
-  r.far = far >= 4 && far <= SHIP.off[1] ? Math.round(far) : innerHeight > innerWidth ? SHIP.offNarrow : SHIP.off[1];
+  r.far = far >= 4 && far <= SHIP.offMax ? Math.round(far) : innerHeight > innerWidth ? SHIP.offNarrow : SHIP.off[1];
   if (q.has("nodraw")) r.draws = false;
+  // The three parts of the game, each to be felt by turning it off, and the run's length.
+  if (q.get("speed") === "0") r.speedOn = false;
+  if (q.get("banks") === "0") r.banksOn = false;
+  if (q.get("hauls") === "0") r.haulsOn = false;
+  const len = Number(q.get("len"));
+  if (len >= 60 && len <= SHIP.ticksLong) r.len = Math.round(len);
   if (q.has("nostills")) r.stillsOn = false;
   else stills.preload("r10-");
   shipCut(false);

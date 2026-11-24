@@ -195,7 +195,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "offering-stone", "offering-boat", "offering-mooring", "kes-house", "wind-vane", "bent-tree", "referee-stand", "sieve-well-pit", "sieve-cutters-hut-a", "sieve-cutters-hut-b", "sieve-block-stacks", "sieve-stone-cart", "sieve-hoist", "sieve-tally-table"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "offering-stone", "offering-boat", "offering-mooring", "kes-house", "wind-vane", "bent-tree", "referee-stand", "sieve-well-pit", "sieve-cutters-hut-a", "sieve-cutters-hut-b", "sieve-block-stacks", "sieve-stone-cart", "sieve-hoist", "sieve-tally-table", "ship-hull", "ship-sail", "ship-lamp", "ship-rope-coil", "ship-tiller", "isle-kite-fell", "isle-orchard", "isle-mill", "isle-steps"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -2988,13 +2988,13 @@ export class World {
       return;
     }
     if (!this.shipFx) {
-      this.shipFx = new ShipFx(glowSprite);
+      this.shipFx = new ShipFx(glowSprite, (n) => models[n]);
       this.scene.add(this.shipFx.all);
       this.distant.visible = false;
     }
     this.brazierLight.intensity = 0;
     const c = st.shrine.board.center, mine = st.snap.players.find((p) => p.id === st.me);
-    const at = new Map(st.snap.wisps.map((w) => [w.id, { x: w.x - c.x, y: w.y - c.y, held: mine?.beam === w.id }]));
+    const at = new Map(st.snap.wisps.map((w) => [w.id, { x: w.x - c.x, y: w.y - c.y, held: mine?.beam === w.id, away: !!w.away }]));
     this.shipFx.step({ r, t: st.t, time, players: this.players, wisps: this.wisps, at });
     // The second clock, which nobody has to read: night to first light.
     const L = SHIP_LOOK, k = r.light, mix = (a: number, b: number) => a + (b - a) * k;
@@ -4262,6 +4262,31 @@ export function drawOverlay(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     g.fill();
     g.fillStyle = GUILD_COLORS[pl.guild]!;
     g.fillText(label, p.x, p.y);
+  }
+  // Run 10: a cloud bank whose front is still above the top of the screen. A pale swell at the top edge on its side, growing as it nears, so that it is seen coming on a small screen too.
+  const bank = st.ship?.bank;
+  if (bank && st.ship!.gutter === undefined) {
+    const c = st.shrine.board.center, front = bank.front - bank.speed * (1 - Math.min(1, st.t));
+    const p = cam.toScreen(c.x + bank.side * (SHIP_DECK.hw + 7) + 0.5, c.y + front + 0.5, 2);
+    if (p.y < 70) {
+      const near = Math.max(0.3, Math.min(1, 1 - (-SHIP_DECK.hl - front) / 44)), x = Math.max(60, Math.min(cam.w - 60, p.x)), y = 58, r = 46 + 34 * near;
+      const glow = g.createRadialGradient(x, y - 20, 4, x, y - 20, r);
+      glow.addColorStop(0, `rgba(214,222,240,${0.75 * near})`);
+      glow.addColorStop(1, "rgba(214,222,240,0)");
+      g.fillStyle = glow;
+      g.fillRect(x - r, y - 20 - r, r * 2, r * 2);
+      g.strokeStyle = `rgba(240,244,255,${0.5 + 0.5 * near})`;
+      g.lineWidth = 3;
+      g.lineCap = g.lineJoin = "round";
+      const bob = Math.sin(st.now / 160) * 3;
+      for (const dy of [0, 11]) {
+        g.beginPath();
+        g.moveTo(x - 10, y + dy + bob);
+        g.lineTo(x, y + 8 + dy + bob);
+        g.lineTo(x + 10, y + dy + bob);
+        g.stroke();
+      }
+    }
   }
 }
 

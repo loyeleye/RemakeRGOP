@@ -5,8 +5,22 @@
 // down from the clouds", "the wisps should spread across the whole map"): they come from ahead and
 // slide back past it on the wind. He runs to a rail and hauls one out of the cloud, and once it is
 // over the rail the ship's lamp amidships takes it: the lamp is the bank. The dark patch from the
-// low one is in the cloud sea ahead of the bow, going the same way: banking gains on it, a wisp
-// that passes the stern lets it draw away. The run lasts a fixed time and cannot be won early.
+// low one is in the cloud sea ahead of the bow, going the same way.
+// Ladi played the first build of that (24 Nov) and found it a chore: "There weren't really any
+// challenges. You could go to either side and pull as many wisps as you wanted." So the run is now
+// made of three things that each ask him to decide (the gameplay thread's rethink, same day), and
+// each can be turned off by itself to feel what it adds:
+//   speed (?speed=0): the lamp burns down all the time. How high it burns is how fast the ship
+//     goes, and that is how fast the wisps slide past: feed it and everything comes faster and the
+//     time to catch one shrinks; let it sink and catching is easy but the patch draws away.
+//   banks (?banks=0): a tall bank of cloud sweeps down one side of the ship at a time, seen coming
+//     from ahead. While it lies over a wisp that wisp is hidden and cannot be pulled, and a haul
+//     still in the air under it is torn loose and lost. So he reads ahead and crosses the deck.
+//   hauls (?hauls=0): a haul is a commitment. Small pale wisps near the hull are worth 1 and come
+//     aboard fast; big bright ones far out are worth 3 and take about three seconds, sliding
+//     astern all the while. One that reaches the stern before it is over the rail is lost, and if
+//     he walks the line drops.
+// The run lasts a fixed time (?len=200 for the long one) and cannot be won early.
 // Every number that sets the feel is in SHIP.
 // Tiles: x east, y south, the origin at the lamp (the board's centre). The bow is north.
 
@@ -15,8 +29,32 @@ export const SHIP = {
   shrine: "ship-deck",
   /** Ticks of the opening pause before it starts (his one word is said in it). */
   bellTicks: 3,
-  /** The run's length in ticks of play (0.6 s each). Nothing ends it sooner. */
-  ticks: 200,
+  /** The run's length in ticks of play (0.6 s each), and the long one that can be asked for (?len). Nothing ends it sooner. */
+  ticks: 120,
+  ticksLong: 200,
+  /**
+   * Speed is the difficulty. The lamp's fire (0 to 1) starts at `start`, burns down every tick by
+   * `burn[0]` and by `burn[1]` of what it is, and each wisp banked feeds it `feed` for each point
+   * it is worth. The wisps slide astern `wind[0]` tiles a tick with the fire out and `wind[1]` with
+   * it full, and one shows ahead for every `rows` tiles of cloud the ship goes through, so a hot
+   * lamp brings more of them, faster. The patch: with the fire at `even` he holds his distance
+   * (and it takes `near` more than that to hold it right under the prow); above it he gains
+   * `rate` tiles a tick for a whole point of fire, below it he falls behind as fast.
+   */
+  speed: { start: 0.7, burn: [0.008, 0.03] as readonly [number, number], feed: 0.08, wind: [0.5, 1.8] as readonly [number, number], rows: 3, even: 0.64, near: 0.2, rate: 0.5 },
+  /**
+   * Cloud banks. The first comes at tick `first`, and the next between `every[0]` and `every[1]`
+   * ticks after the one before, down the other side `swap` of the time. One is `len` tiles long,
+   * goes `speed` tiles a tick, and is first seen `warn` ticks before its front reaches the cloud
+   * the wisps are in. There is never more than one over that cloud at a time.
+   */
+  bank: { first: 10, every: [17, 22] as readonly [number, number], swap: 0.7, len: 24, speed: 4, warn: 8 },
+  /**
+   * Hauls. Small ones come down the `small` share of the lanes nearest each rail, big ones down
+   * the lanes from `bigFrom` of the way out; `bigShare` of all of them are big. Each kind is worth
+   * so many banks and takes so many ticks to come to the rail from its farthest lane.
+   */
+  kinds: { small: 0.35, bigFrom: 0.5, bigShare: 0.4, worth: [1, 3] as readonly [number, number], worthPlain: 2, ticks: [2, 5] as readonly [number, number] },
   /** Wisps there are (so at most this many in sight), and ticks between one showing ahead and the next: the first number at the start, the second from `rise.by` of the run on. */
   wisps: 22,
   every: [3, 2] as readonly [number, number],
@@ -27,13 +65,15 @@ export const SHIP = {
   /**
    * The columns they come down, out in the cloud: this many tiles off the rail at the nearest and
    * at the farthest, on both sides, so they are spread over the whole width of the sea in view.
-   * `offNarrow` is the farthest on a screen held upright, which shows less to the sides. None is
+   * `offNarrow` is the farthest on a screen held upright, which shows less to the sides, and
+   * `offMax` the farthest that can be asked for (?far, the edge of a wide screen). None is
    * ever on the deck by itself. `nearShare` of them come down the two lanes nearest each rail, the
    * only ones he can take from the middle of the deck; the rest are spread evenly over the others.
    * `scatter` is how many tiles ahead or behind its place one may show, so they never come in rows.
    */
-  off: [2, 14] as readonly [number, number],
+  off: [2, 20] as readonly [number, number],
   offNarrow: 7,
+  offMax: 30,
   nearShare: 0.2,
   scatter: 3,
   /** Where one first shows: this many tiles ahead of the bow. And how far astern of the deck one is gone. */
@@ -50,8 +90,9 @@ export const SHIP = {
    */
   reach: 8,
   railLeeway: 1,
-  /** How many tiles a tick a wisp comes while he is hauling it (1 everywhere else), so that one from the farthest lane is at the rail in about two seconds. */
+  /** How many tiles a tick a wisp comes while he is hauling it (1 everywhere else), and the most ticks a haul from the farthest lane may take: where the lanes go farther out, it comes faster. */
   haul: 4,
+  haulTicks: 5,
   /**
    * The lamp's draw, which is what makes a haul worth the run: a wisp that is over the rail, or
    * within `margin` tiles outside it, is the lamp's. His staff comes off it, it goes to the lamp at
@@ -59,14 +100,6 @@ export const SHIP = {
    * out of the wind, and he has to pull it again from across the lamp (?nodraw to try).
    */
   draw: { on: true, margin: 1, speed: 3 },
-  /**
-   * One lull, the run's scare, which nobody scripts: from `at` of the run, for `ticks` ticks, they
-   * come `thin` times as seldom and the patch draws away `drift` times as fast, so it goes well
-   * ahead however he plays. Then for `rich` ticks they come every `richEvery` ticks, `richNear`
-   * of them down the two lanes nearest each rail, where a haul is short, and the patch draws away
-   * only `richDrift` times as fast, so that it can be won back.
-   */
-  lull: { at: 0.6, ticks: 14, thin: 3, drift: 3, rich: 20, richEvery: 1, richNear: 0.7, richDrift: 0.3 },
   /** Ticks before one that went in, or went off the stern, can come over the bow again. */
   pause: 2,
   /**
@@ -90,7 +123,7 @@ export const SHIP = {
   /** The end: home comes in over the top of the screen in the last this many seconds, and he goes over the rail in the last `railTicks` ticks. */
   endSec: 10,
   railTicks: 3,
-  /** Measurements only: how the stand-in for the player plays. */
+  /** Measurements only: how the stand-in for the player plays (the keen one dithers a tick before a choice this often: 0.67 is two ticks a choice, about a careful first-timer). */
   stand: { pushy: 0, sloppiness: 0.08 },
   /** Where Rook starts and where the hooded figure stands, in tiles from the lamp. */
   rook: [0, 4] as const,
@@ -102,12 +135,12 @@ export const SHIP = {
 
 /** The deck: half its width and half its length in tiles (11 by 25), and the board it sits in. */
 export const SHIP_DECK = { hw: 5, hl: 12 };
-const HALF_W = SHIP_DECK.hw + SHIP.off[1] + 2, HALF_H = 30;
+const HALF_W = SHIP_DECK.hw + SHIP.offMax + 2, HALF_H = 30;
 export const SHIP_SIZE = { w: HALF_W * 2 + 1, h: HALF_H * 2 + 1 };
 /** What the camera frames: the deck, the sea either side, and the sea ahead where the patch is. */
 export const SHIP_FRAME = { x0: -13, y0: -30, x1: 13, y1: 15 };
 /** The cloud sea a wisp can be in: this far either side of the lamp, and from ahead of the bow to astern. */
-export const SHIP_SEA = { hw: SHIP_DECK.hw + SHIP.off[1] + 1, y0: -(SHIP_DECK.hl + SHIP.ahead + SHIP.scatter + 1), y1: SHIP_DECK.hl + SHIP.astern + 1 };
+export const SHIP_SEA = { hw: SHIP_DECK.hw + SHIP.offMax + 1, y0: -(SHIP_DECK.hl + SHIP.ahead + SHIP.scatter + 1), y1: SHIP_DECK.hl + SHIP.astern + 1 };
 /** The columns the wisps come down (tiles from the lamp), out to `far` tiles off the rail, nearest first on each side. */
 export const shipLanes = (far: number = SHIP.off[1]): number[] => [-1, 1].flatMap((side) => Array.from({ length: Math.max(1, far - SHIP.off[0] + 1) }, (_, i) => side * (SHIP_DECK.hw + SHIP.off[0] + i)));
 /**
@@ -121,6 +154,18 @@ export function shipReach(px: number, py: number, wx: number, wy: number, reach:
   if (dx <= reach) return true;
   const side = Math.sign(px);
   return Math.abs(px) >= SHIP_DECK.hw - SHIP.railLeeway && Math.abs(px) <= SHIP_DECK.hw && side * wx > SHIP_DECK.hw;
+}
+/** A cloud bank: the side it is on (-1 port, 1 starboard) and the row its front has reached (tiles from the lamp, south is more). */
+export interface ShipBank {
+  side: number;
+  front: number;
+}
+/** Whether a bank lies over this place out in the cloud. */
+export const bankCovers = (b: ShipBank | null | undefined, x: number, y: number) => !!b && Math.sign(x) === b.side && Math.abs(x) > SHIP_DECK.hw && y <= b.front && y >= b.front - SHIP.bank.len;
+/** The lanes each kind comes down, out to `far`: the small ones nearest the rails, the big ones far out. */
+export function shipKindLanes(far: number = SHIP.off[1]) {
+  const off = (x: number) => Math.abs(x) - SHIP_DECK.hw - SHIP.off[0], n = Math.max(1, far - SHIP.off[0] + 1), lanes = shipLanes(far);
+  return { small: lanes.filter((x) => off(x) < Math.ceil(n * SHIP.kinds.small)), big: lanes.filter((x) => off(x) >= Math.floor(n * SHIP.kinds.bigFrom)) };
 }
 /** Whether the lamp has a wisp here: over the rail, or as near outside it as its draw goes. */
 export const inDraw = (x: number, y: number) => Math.abs(x) <= SHIP_DECK.hw + SHIP.draw.margin && Math.abs(y) <= SHIP_DECK.hl + SHIP.draw.margin;

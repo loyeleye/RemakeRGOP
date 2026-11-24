@@ -168,6 +168,7 @@ export function buildFittings(std: Std, map: THREE.Texture) {
   g.add(a, b);
 
   // The new rope: a big pale coil, part of it gone, an end run off toward the rail, and its two blocks.
+  const rope = new THREE.Group(), tiller = new THREE.Group();
   const pale = coil(newRope, 1.05, 2, 0.085);
   pale.position.set(-hw + 2.0, 0.08, hl - 1.5);
   const end = bar(v(-hw + 1.2, 0.17, hl - 2.3), v(-hw + 0.5, 0.17, hl - 4.1), 0.08, newRope);
@@ -176,7 +177,7 @@ export function buildFittings(std: Std, map: THREE.Texture) {
   b1.rotation.y = 0.35;
   b2.position.set(-hw + 3.6, 0.08, hl - 0.9);
   b2.rotation.y = -1.1;
-  g.add(pale, end, b1, b2);
+  rope.add(pale, end, b1, b2);
 
   // The tiller, behind the man at the stern: lashed to the rail with one neat knot, and nobody's hand on it.
   const head = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 1.0, 10), dark);
@@ -187,10 +188,11 @@ export function buildFittings(std: Std, map: THREE.Texture) {
   const lash = bar(v(0, 1.06, hl - 0.55), v(1.7, 0.98, hl + 0.35), 0.035, oldRope);
   const knot = new THREE.Mesh(new THREE.SphereGeometry(0.085, 8, 6), oldRope);
   knot.position.set(0, 1.07, hl - 0.55);
-  g.add(head, arm, tip, lash, knot);
+  tiller.add(head, arm, tip, lash, knot);
+  g.add(rope, tiller);
 
   g.traverse((o) => (o as THREE.Mesh).isMesh && (((o as THREE.Mesh).castShadow = true), ((o as THREE.Mesh).receiveShadow = true)));
-  return g;
+  return { group: g, rope, tiller };
 }
 
 /**
@@ -247,28 +249,30 @@ export function buildLamp(std: Std, glass: THREE.Material, y: number) {
   post.position.y = 0.85 + (y - 1.25) / 2;
   const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.16, 0.14, 12), brass);
   collar.position.y = y - 0.46;
+  const cage = new THREE.Group();
   const flame = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.72, 12), glass);
   flame.position.y = y;
-  g.add(post, collar, flame);
+  g.add(post, cage);
+  cage.add(collar, flame);
   const n = 8;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + Math.PI / n;
     const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.86, 6), brass);
     rod.position.set(Math.cos(a) * 0.36, y, Math.sin(a) * 0.36);
-    g.add(rod);
+    cage.add(rod);
   }
   for (const dy of [-0.4, 0.4]) {
     const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.035, 6, 20).rotateX(Math.PI / 2), brass);
     hoop.position.y = y + dy;
-    g.add(hoop);
+    cage.add(hoop);
   }
   const hood = new THREE.Mesh(new THREE.ConeGeometry(0.44, 0.3, 12), brass);
   hood.position.y = y + 0.58;
   const loop = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.028, 6, 12), brass);
   loop.position.y = y + 0.8;
-  g.add(hood, loop);
+  cage.add(hood, loop);
   g.traverse((o) => (o as THREE.Mesh).isMesh && o !== flame && ((o as THREE.Mesh).castShadow = true));
-  return g;
+  return { group: g, cage };
 }
 
 /** The light the caged lamp throws on the planks: warm, falling off, and barred by the cage's eight rods. `uLit` is how brightly it burns. */
