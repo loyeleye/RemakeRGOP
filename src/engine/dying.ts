@@ -56,7 +56,8 @@ export const DYING = {
    */
   bottom: { ticks: 17, fall: 3, level: 2, radius: 3, blindAt: 3, fireOff: 6, crowdOff: 8, greatOff: 10, bellOff: 14, orange: 15 },
   /** Three held pictures, the cutscene thread's, for this many ticks in all; plain cards with these names until they exist. */
-  stills: { ticks: 10, names: ["Faces, lit from above", "The comet over the horseshoe", "Hesta on one knee in the glass"] as const },
+  /** The landing's three held pictures: their names (shown on a plain card until one is drawn) and their files in public/stills/. */
+  stills: { ticks: 10, names: ["Faces, lit from above", "The comet over the horseshoe", "Hesta on one knee in the glass"] as const, files: ["r6-land-1", "r6-land-2", "r6-land-3"] as const },
   /**
    * Ladi, 24 Nov: the comet lands on the map. The first picture fades in and out (`faces` ticks),
    * then the map, with the comet falling onto the terrace for `comet` ticks, then Hesta's picture
@@ -75,8 +76,8 @@ export const DYING = {
     lumiCalls: false,
     /** A crowd sound. (Ladi: shown by movement for now; the game has no such sound.) */
     crowdSound: false,
-    /** The village standing at the island's edge. (Ladi, 24 Nov: off, they make no sense on the map doing nothing; ?crowd=1 brings them back.) */
-    crowdShown: false,
+    /** The village watching from Hesta's terrace, above the north steps. (Ladi, 24 Nov: never on the field; ?nocrowd takes them away.) */
+    crowdShown: true,
     /** The comet is seen landing on the map, between two pictures. (Ladi: yes; off plays the three pictures alone.) */
     cometOnMap: true,
   },
@@ -138,27 +139,36 @@ export const DYING = {
     { who: "Marit", a: 0.94, c: "#c0e8c0", s: 0.8 },
   ] as readonly { who: string; a: number; c: string; s: number; cast?: string; carries?: string }[],
   /**
-   * Where they stand. Never on the field while there is play (Ladi, 24 Nov: "Why is everyone on the
-   * field"): at the island's edge, `crowdEdge` tiles past the last floor tile, in run 6 standing in the
-   * cloud with their lamps showing through it, and in run 7 watching. Only at the bottom of run 6,
-   * when nobody can play, do they come in close round the fire, `crowdNear` out; and after the last
-   * bank of run 7 they gather round her.
+   * Where they stand (Ladi, 24 Nov: "I definitely do not want the crowd on the field... they are by
+   * Hesta's house looking down at the Kindling field"). Never on the field: all through both runs
+   * they are up on her terrace, past the north edge of the ground, by the lower half of her house,
+   * at the head of the steps (drawn, not walkable). Distances in tiles north of the brazier:
+   * the steps climb from `stepsFrom` to the terrace's edge at `front`, `top` tiles up; the terrace
+   * runs `half` to either side and `depth` back; her house's middle is `house` past the edge. The
+   * village stand in two rows, `rows` back from the edge, at the `slots` (tiles east of the steps'
+   * middle, and which row), in the order of `crowd`. At the very end only Lumi comes down, to Rook.
    */
-  crowdEdge: 1.2,
-  crowdNear: 3.1,
+  terrace: {
+    stepsFrom: 17.7, front: 20.2, top: 2, half: 11.5, depth: 12, stepsHalf: 1.5, steps: 10, house: 6.9,
+    rows: [0.8, 1.9] as const,
+    /** The island view makes room for it: the eye this many tiles further north, and this much of the usual size. */
+    viewNorth: 2.2, viewZoom: 0.93,
+    slots: [[-2.3, 0], [-3.5, 0], [-5.0, 0], [-4.2, 1], [-6.6, 0], [-5.9, 1], [-8.3, 0], [2.4, 0], [3.8, 0], [5.3, 0], [4.5, 1], [6.9, 0], [8.4, 0]] as readonly (readonly [number, number])[],
+  },
 } as const;
 
-/** Where one of the crowd stands (tile coordinates, fractions allowed) in each part of runs 6 and 7 (the gathering after the last bank has its own places). Off the field: past the last floor tile on their side, in two rows; at the bottom, close round the fire. */
-export function crowdSpot(board: Board, i: number, part: string): { x: number; y: number } {
-  const m = DYING.crowd[i]!, a = m.a * Math.PI * 2, c = board.center;
-  const at = (r: number) => ({ x: c.x + 0.5 + Math.cos(a) * r, y: c.y + 0.5 + Math.sin(a) * r });
-  if (part === "bottom" || part === "stills") return at(DYING.crowdNear + (i % 2) * 1.1);
-  let edge = 0;
-  for (let r = 0; r < Math.max(board.width, board.height); r += 0.25) {
-    const x = Math.round(c.x + Math.cos(a) * r), y = Math.round(c.y + Math.sin(a) * r);
-    if (board.inside({ x, y }) && board.tile({ x, y }) === Tile.Floor) edge = r;
-  }
-  return at(edge + DYING.crowdEdge + (i % 2) * 0.8);
+/** How high the ground is at a spot (tile coordinates): the terrace's top, the slope of its steps, or the field. */
+export function terraceHeight(board: Board, x: number, y: number): number {
+  const T = DYING.terrace, c = board.center, north = c.y + 0.5 - y;
+  if (north >= T.front) return T.top;
+  if (north > T.stepsFrom && Math.abs(x - c.x - 0.5) <= T.stepsHalf + 0.4) return (T.top * (north - T.stepsFrom)) / (T.front - T.stepsFrom);
+  return 0;
+}
+
+/** Where one of the crowd stands (tile coordinates, fractions allowed) all through runs 6 and 7: on Hesta's terrace, looking down at the field. */
+export function crowdSpot(board: Board, i: number): { x: number; y: number } {
+  const T = DYING.terrace, c = board.center, [dx, row] = T.slots[i % T.slots.length]!;
+  return { x: c.x + 0.5 + dx, y: c.y + 0.5 - T.front - T.rows[row]! };
 }
 
 /** The crater's glass tiles on a board: the circle the comet leaves, and every tile a wisp crosses sliding from it to the brazier's rim. */

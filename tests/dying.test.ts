@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Tile, pt } from "../src/engine/board.js";
-import { DYING, craterTiles } from "../src/engine/dying.js";
+import { DYING, craterTiles, crowdSpot, terraceHeight } from "../src/engine/dying.js";
 import { Game, lightRadius } from "../src/engine/game.js";
 import { shrineById } from "../src/engine/maps.js";
 import type { ServerMsg, StoryLine, StoryView } from "../src/engine/protocol.js";
@@ -430,5 +430,25 @@ describe("runs 6 and 7, the dying brazier", () => {
     const long = play("juggle", 9);
     expect(long.room.lasted).toBeGreaterThanOrEqual(DYING.seven.warmAfter);
     expect(long.lines.some((l) => l.text.startsWith("Still warm"))).toBe(true);
+  });
+});
+
+describe("the village in runs 6 and 7", () => {
+  it("stand on Hesta's terrace, past the north edge and above the field, never on it; shown unless switched off", () => {
+    const b = shrineById(DYING.shrine).board, T = DYING.terrace;
+    expect(DYING.terrace.slots.length).toBe(DYING.crowd.length);
+    expect(DYING.switches.crowdShown).toBe(true);
+    for (let i = 0; i < DYING.crowd.length; i++) {
+      const at = crowdSpot(b, i), tile = pt(Math.floor(at.x), Math.floor(at.y));
+      // Off every walkable tile, north of the last of them.
+      expect(!b.inside(tile) || b.tile(tile) === Tile.Edge).toBe(true);
+      expect(b.center.y + 0.5 - at.y).toBeGreaterThan(T.front);
+      expect(terraceHeight(b, at.x, at.y)).toBe(T.top);
+      // Clear of the head of the steps.
+      expect(Math.abs(at.x - b.center.x - 0.5)).toBeGreaterThan(T.stepsHalf);
+    }
+    // The steps start past the last floor tile and climb to the terrace; the field is flat.
+    for (let x = 0; x < b.width; x++) for (let y = 0; y < b.height; y++) if (b.tile(pt(x, y)) !== Tile.Edge) expect(terraceHeight(b, x + 0.5, y + 0.5)).toBe(0);
+    expect(terraceHeight(b, b.center.x + 0.5, b.center.y + 0.5 - (T.stepsFrom + T.front) / 2)).toBeCloseTo(T.top / 2);
   });
 });

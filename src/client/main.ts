@@ -889,7 +889,7 @@ function dyingRoom() {
   if (q.has("noback")) r.switches.lineGivesBack = false;
   if (q.has("nocloud")) r.switches.cloudOverRook = false;
   if (q.has("stillsonly")) r.switches.cometOnMap = false;
-  if (q.has("crowd")) r.switches.crowdShown = true;
+  if (q.has("nocrowd")) r.switches.crowdShown = false;
   dyingCometOn = r.switches.cometOnMap;
   return r;
 }
@@ -927,9 +927,15 @@ let dyingRung = "";
 
 /** Run 6: the eye once came in with the cloud; it now keeps the whole ground in view, with the village at its edge. Kept so a zoom left over is undone. */
 let dyingZoomed = false;
+let dyingFramed = false;
 function dyingZoom(d: NonNullable<StoryView["dying"]> | undefined, board: Board) {
-  if (!d) return void (dyingZoomed = false);
+  if (!d) return void (dyingZoomed = dyingFramed = false);
   const fit = cam.fitScale(board);
+  // Once, as the run opens at the island view: back a little, to take in the terrace past the north edge.
+  if (!dyingFramed) {
+    dyingFramed = true;
+    if (!cam.compact && Math.abs(cam.scale - fit) < 0.5) cam.scale = fit * DYING.terrace.viewZoom;
+  }
   const closing = d.part === "six" || d.part === "bottom" || d.part === "stills";
   if (!closing) {
     if (!dyingZoomed) return;
@@ -944,8 +950,14 @@ function dyingZoom(d: NonNullable<StoryView["dying"]> | undefined, board: Board)
 }
 
 /** The held pictures: the three of the landing, and the island clear of the cloud. Plain dark cards with the picture's name until the cutscene thread's pictures exist. */
+let dyingArtAsked = false;
 function dyingCard(d: NonNullable<StoryView["dying"]> | undefined) {
   const el = $("still");
+  // Fetched as the run opens, so a picture is there the moment it is called.
+  if (d && !dyingArtAsked) {
+    dyingArtAsked = true;
+    for (const f of DYING.stills.files) new Image().src = `stills/${f}.webp`;
+  }
   const n = !d ? -1 : d.still !== undefined ? d.still : d.part === "risen" ? 3 : -1;
   if (n === dyingStill) return;
   dyingStill = n;
@@ -953,6 +965,14 @@ function dyingCard(d: NonNullable<StoryView["dying"]> | undefined) {
   if (n < 0) return;
   const name = n === 3 ? DYING.risen.name : DYING.stills.names[n]!;
   el.innerHTML = `<div><small>picture to come</small><b>${esc(name)}</b></div>`;
+  // The drawn picture over the card, when there is one.
+  const file = n < 3 ? DYING.stills.files[n] : undefined;
+  if (file) {
+    const img = new Image();
+    img.alt = name;
+    img.onload = () => el.append(img);
+    img.src = `stills/${file}.webp`;
+  }
   el.classList.remove("in", "inout");
   el.style.animationDuration = "";
   void el.offsetWidth;
@@ -1617,7 +1637,8 @@ function frame(now: number) {
       cam.cy += (ty - cam.cy) * 0.2;
     } else {
       cam.cx = shrine.board.width / 2 + stills.shove.x;
-      cam.cy = shrine.board.height / 2 + 0.5 + stills.shove.y;
+      // Runs 6 and 7: a little north, so Hesta's terrace and the village on it are in the picture.
+      cam.cy = shrine.board.height / 2 + 0.5 + stills.shove.y - (room.story?.dying ? DYING.terrace.viewNorth : 0);
     }
   }
   cam.clamp(shrine.board);

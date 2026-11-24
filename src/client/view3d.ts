@@ -16,7 +16,7 @@ import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js
 import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeCurtain, makeIsland, makeWaterfall } from "./islands.js";
-import { DYING, crowdSpot } from "../engine/dying.js";
+import { DYING, crowdSpot, terraceHeight } from "../engine/dying.js";
 import { DRESS, dressVerge, quarryPit, sieveGrain, sieveMask, sievePaths, wellLoop } from "./sieve-dress.js";
 import { SIEVE } from "../engine/sieve.js";
 import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
@@ -2994,6 +2994,7 @@ export class World {
     all: THREE.Object3D[]; ground: THREE.Mesh; veil: THREE.Mesh; wall: THREE.Mesh;
     u: Record<"uLit" | "uDark" | "uCloud" | "uCloudA" | "uVeil" | "uTime", { value: number }> & { uTint: { value: THREE.Color } };
     crowd: { root: THREE.Group; lamp: THREE.Sprite; x: number; z: number; anim?: CastAnim; kid?: CastAnim; real: boolean }[];
+    terrace: THREE.Group; house: THREE.Group;
     dust: THREE.Sprite[]; burst: THREE.PointLight; ember: THREE.Sprite;
     part: string; partAt: number; struckAt: number; lit: number; flame: number; cloud: number; wallH: number; lurch: number; lurchAt: number; lurchUp: boolean; up: number; orangeAt: number; dusk: number; duskAt: number;
   } | null = null;
@@ -3044,6 +3045,97 @@ export class World {
         f.kid = kid.userData.anim as CastAnim | undefined;
       }
     });
+  }
+  /**
+   * Hesta's terrace (runs 6 and 7): past the north edge of the Kindling ground and above it, with
+   * the steps up to it (drawn only; nobody walks them but Lumi at the end) and her house, of which
+   * the island view shows the lower half. The village watch from here. Centred on the brazier.
+   */
+  private makeTerrace(): { terrace: THREE.Group; house: THREE.Group } {
+    const T = DYING.terrace, th = this.theme;
+    const g = new THREE.Group();
+    const std = (c: string) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95 });
+    // Turf like the island's, greyed: it is night, and nobody is looking at the grass.
+    const rock = std(th.rock), turf = std("#" + new THREE.Color(th.grass).lerp(new THREE.Color("#3c3a48"), 0.5).getHexString()), stone = std("#8d867c");
+    // The terrace: a bank of rock with turf on top, straight along the edge they stand at and rounded behind, dropping to the field at its south face.
+    const sh = new THREE.Shape(), r = 2.2, w = T.half, dp = T.depth;
+    sh.moveTo(-w + r, 0);
+    sh.lineTo(w - r, 0);
+    sh.quadraticCurveTo(w, 0, w, r);
+    sh.lineTo(w, dp * 0.45);
+    sh.quadraticCurveTo(w, dp, w * 0.45, dp);
+    sh.lineTo(-w * 0.45, dp);
+    sh.quadraticCurveTo(-w, dp, -w, dp * 0.45);
+    sh.lineTo(-w, r);
+    sh.quadraticCurveTo(-w, 0, -w + r, 0);
+    const deep = T.top + 6;
+    const bank = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: deep, bevelEnabled: false, curveSegments: 10 }).rotateX(-Math.PI / 2), [turf, rock]);
+    bank.position.set(0, T.top - deep, -T.front);
+    // A stone kerb along the edge they stand at, broken at the head of the steps.
+    for (const side of [-1, 1]) {
+      const len = T.half - T.stepsHalf - 0.2;
+      const kerb = new THREE.Mesh(new THREE.BoxGeometry(len, 0.3, 0.35), stone);
+      kerb.position.set(side * (T.stepsHalf + 0.2 + len / 2), T.top + 0.12, -(T.front + 0.18));
+      g.add(kerb);
+    }
+    // The steps, from the field's edge up to the terrace, between two low side walls.
+    const run = (T.front - T.stepsFrom) / T.steps, rise = T.top / T.steps;
+    for (let i = 0; i < T.steps; i++) {
+      const h = rise * (i + 1);
+      const step = new THREE.Mesh(new THREE.BoxGeometry(T.stepsHalf * 2, h, run + 0.02), stone);
+      step.position.set(0, h / 2, -(T.stepsFrom + run * (i + 0.5)));
+      g.add(step);
+    }
+    for (const side of [-1, 1]) {
+      const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.4, T.top + 0.35, T.front - T.stepsFrom), rock);
+      cheek.position.set(side * (T.stepsHalf + 0.2), (T.top + 0.35) / 2 - 0.02, -(T.stepsFrom + (T.front - T.stepsFrom) / 2));
+      // Sloped with the steps: lower at the field end.
+      cheek.geometry.translate(0, 0, 0);
+      const pos = cheek.geometry.getAttribute("position") as THREE.BufferAttribute;
+      for (let k = 0; k < pos.count; k++) if (pos.getY(k) > 0 && pos.getZ(k) > 0) pos.setY(k, pos.getY(k) - T.top);
+      cheek.geometry.computeVertexNormals();
+      g.add(cheek);
+    }
+    // A flagged path from the head of the steps round her house (her door is on the far side).
+    const path = new THREE.Mesh(new THREE.BoxGeometry(T.stepsHalf * 2, 0.04, T.house - 3.5), stone);
+    path.position.set(0, T.top + 0.03, -(T.front + (T.house - 3.5) / 2));
+    g.add(bank, path);
+    // Her house: grey stone and a dark roof until the drawn one loads, its back to the field.
+    const house = new THREE.Group();
+    const block = makeHouse(7, 7, { wall: "#b8b2a6", roof: "#6a6474" });
+    house.add(block);
+    house.position.set(0, T.top, -(T.front + T.house));
+    house.rotation.y = Math.PI;
+    g.add(house);
+    g.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) m.castShadow = m.receiveShadow = true;
+    });
+    // Her windows and their lamps: warm light on the people and on her wall, so they read in the dark.
+    for (const sx of [-1, 1]) {
+      const glow = new THREE.PointLight("#ffc98a", 26, 16, 1.6);
+      glow.position.set(sx * 4.6, T.top + 2.6, -(T.front + 1.6));
+      g.add(glow);
+    }
+    return { terrace: g, house };
+  }
+  /** Whatever the island grew where the terrace and its steps now are (rim trees, posts) is put away, once for each time the island is built. */
+  private clearTerraceGround(terrace: THREE.Group) {
+    const first = this.shrineGroup.children[0], n = this.shrineGroup.children.length;
+    if (this.shrineGroup.userData.terraceFor === first && this.shrineGroup.userData.terraceN === n) return;
+    this.shrineGroup.userData.terraceFor = first;
+    this.shrineGroup.userData.terraceN = n;
+    const T = DYING.terrace, at = new THREE.Vector3();
+    const walk = (o: THREE.Object3D, depth: number) => {
+      for (const c of o.children) {
+        c.getWorldPosition(at);
+        const x = at.x - terrace.position.x, north = terrace.position.z - at.z;
+        const big = (c as THREE.Mesh).isMesh && ((c as THREE.Mesh).geometry.boundingSphere?.radius ?? 0) > 12;
+        if (!big && north > T.stepsFrom - 0.6 && Math.abs(x) < (north > T.front - 1.2 ? T.half + 1 : T.stepsHalf + 1.6)) c.visible = false;
+        else if (depth < 1 && c.children.length && !(c as THREE.Mesh).isMesh) walk(c, depth + 1);
+      }
+    };
+    walk(this.shrineGroup, 0);
   }
   private stepDying(st: DrawState, time: number) {
     const d = st.dying, flame = st.snap.flame;
@@ -3097,12 +3189,21 @@ export class World {
       // The crater's own warmth, so the glass shows where the fire's light doesn't reach yet.
       const ember = glowSprite("#ff6a1a", 1, 0);
       ember.renderOrder = 4;
-      const all = [ground, veil, wall, ...crowd.map((f) => f.root), ...dust, burst, ember];
+      const { terrace, house } = this.makeTerrace();
+      terrace.position.set(cx, 0, cz);
+      const all = [ground, veil, wall, terrace, ...crowd.map((f) => f.root), ...dust, burst, ember];
       this.scene.add(...all);
-      this.dyingFx = { all, ground, veil, wall, u, crowd, dust, burst, ember, part: d.part, partAt: time, struckAt: after ? time - 9 : -99, lit: st.snap.lit ?? 9, flame, cloud: d.cloud ?? CLOUD_WALL.at, wallH: after ? CLOUD_WALL.high : 0, lurch: d.lurch ?? 0, lurchAt: -9, lurchUp: false, up: 0, orangeAt: -1, dusk: 0, duskAt: -1 };
+      this.dyingFx = { all, ground, veil, wall, u, crowd, terrace, house, dust, burst, ember, part: d.part, partAt: time, struckAt: after ? time - 9 : -99, lit: st.snap.lit ?? 9, flame, cloud: d.cloud ?? CLOUD_WALL.at, wallH: after ? CLOUD_WALL.high : 0, lurch: d.lurch ?? 0, lurchAt: -9, lurchUp: false, up: 0, orangeAt: -1, dusk: 0, duskAt: -1 };
     }
     const fx = this.dyingFx;
     this.dressCrowd();
+    // Her house: the drawn one in place of the block-out once it has loaded.
+    if (!fx.house.userData.filled && models["hesta-house"]) {
+      fx.house.clear();
+      fx.house.add(models["hesta-house"]!.clone());
+      fx.house.userData.filled = true;
+    }
+    this.clearTerraceGround(fx.terrace);
     if (fx.part !== d.part) {
       if (d.part === "seven") fx.struckAt = time;
       fx.part = d.part;
@@ -3185,27 +3286,30 @@ export class World {
     this.stepComet(d, sx, sz, time, fx.burst);
     // The strike on the map: the ground jolts.
     if (d.part === "seven" && fx.struckAt === time && this.cometFx) (fx.lurchAt = time), (fx.lurchUp = false);
-    // The village, never on the field while there is play: at the island's edge in the cloud through run 6, in round the fire at its bottom, back at the edge as the meter in run 7, and round her at the end, with Lumi going to her father.
+    // The village, never on the field (Ladi): up on Hesta's terrace by her house all through, looking down; the meter in run 7; at the end only Lumi comes down the steps, to her father.
     const rook = st.snap.players.find((p) => p.id === st.me);
     const n = DYING.crowd.length;
     fx.up += (share - fx.up) * 0.05;
     fx.crowd.forEach((f, i) => {
       const m = DYING.crowd[i]!;
-      let to: { x: number; y: number };
-      if (d.part === "after") {
-        const a = Math.PI * (1 + (i + 0.5) / n), r = d.strike.r + 1.3 + (i % 2) * 0.9;
-        to = m.who === "Lumi" && rook ? { x: rook.x + 1.4, y: rook.y + 0.6 } : { x: d.strike.x + 0.5 + Math.cos(a) * r, y: d.strike.y + 0.5 + Math.sin(a) * r };
-      } else to = crowdSpot(b, i, d.part);
-      const tx = this.worldX(b, 0) + to.x, tz = this.worldZ(b, 0) + to.y;
+      let to = crowdSpot(b, i);
+      const ox = this.worldX(b, 0), oz = this.worldZ(b, 0);
+      if (d.part === "after" && m.who === "Lumi" && rook) {
+        // Along the terrace to the head of the steps, down them, and out to him.
+        const T = DYING.terrace, mid = b.center.x + 0.5, north = Number.isNaN(f.z) ? 99 : b.center.y + 0.5 - (f.z - oz);
+        const onSteps = Math.abs(f.x - ox - mid) < T.stepsHalf - 0.3;
+        to = north > T.front - 0.2 && !onSteps ? { x: mid, y: b.center.y + 0.5 - T.front - 0.4 } : north > T.stepsFrom ? { x: mid, y: b.center.y + 0.5 - T.stepsFrom + 0.3 } : { x: rook.x + 1.4, y: rook.y + 0.6 };
+      }
+      const tx = ox + to.x, tz = oz + to.y;
       if (Number.isNaN(f.x)) (f.x = tx), (f.z = tz);
       const dx = tx - f.x, dz = tz - f.z, far = Math.hypot(dx, dz);
       // They walk, they do not slide: a steady pace, quicker when the cloud jumps.
-      const pace = Math.min(far, d.part === "after" ? 0.05 : 0.02 + far * 0.03);
+      const pace = Math.min(far, d.part === "after" ? 0.085 : 0.02 + far * 0.03);
       if (far > 0.001) (f.x += (dx / far) * pace), (f.z += (dz / far) * pace);
       // Raised lamps and jumping spread through the crowd with each lift, a few at a time.
       const order = (i * 5) % n, cheer = Math.max(0, Math.min(1, fx.up * n - order));
       const hop = cheer * Math.abs(Math.sin(time * (5.5 + (i % 3)) + i * 1.3)) * 0.32;
-      f.root.position.set(f.x, hop, f.z);
+      f.root.position.set(f.x, terraceHeight(b, f.x - ox, f.z - oz) + hop, f.z);
       f.root.visible = !!d.crowd;
       f.lamp.position.y = 1.0 + cheer * (1.15 + 0.12 * Math.sin(time * 7 + i));
       f.lamp.material.opacity = Math.min(1, (m.who === "Lumi" ? 1 : 0.75 + 0.1 * Math.sin(time * 0.9 + i * 1.7)) + cheer * 0.2);
