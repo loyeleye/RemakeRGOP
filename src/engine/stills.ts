@@ -27,6 +27,8 @@ export interface StillCard {
   faces: string;
   /** Held this much longer than the others (ms). */
   extraMs?: number;
+  /** The first of a sequence: stays up until the next replaces it, so the panel never blinks off between them, but no longer than this (ms, fade to fade). */
+  untilNextMs?: number;
 }
 
 /** How a line calls a still. */
@@ -46,7 +48,7 @@ export const STILLS: Record<string, StillCard> = {
   "r8-2": { who: "Tilda in front, Rook beside her, looking down at the far well", faces: "She is tired, eyes half lidded. He frowns at the well, brows pulled together." },
   "r8-3": { who: "Tilda, a hand held flat at a wisp's height", faces: "Matter-of-fact, almost bored." },
   "r8-4": { who: "The event: his wisp at the end of a thin, shaking beam, over a black pit", faces: "No face." },
-  "r8-5": { who: "Tilda near, Rook behind her braced on his staff", faces: "She is lost: eyes wide, brows up, mouth open. He looks back at her, eyes wide, mouth just open." },
+  "r8-5": { who: "Tilda near, Rook behind her braced on his staff", faces: "She is lost: eyes wide, brows up, mouth open. He looks back at her, eyes wide, mouth just open.", untilNextMs: 6000 },
   "r8-6": { who: "The same two, turned", faces: "She looks at him, waiting, mouth shut tight. He looks down at his staff, brows pulled hard together." },
   "r8-7": { who: "Rook alone, head a little tilted", faces: "Listening: eyes up and aside, brows raised, mouth a little open.", extraMs: 1000 },
   "r8-8": { who: "The cutters in a row, hats in hand, backs to the wells", faces: "No faces." },
@@ -59,5 +61,5 @@ export const STILLS: Record<string, StillCard> = {
 /** How long a still is up, fade to fade (ms), given how long its line takes to say (0 for none). */
 export function stillMs(id: string, lineMs: number) {
   const hold = Math.max(STILL.holdMs, lineMs > 0 ? lineMs + STILL.afterLineMs : 0) + (STILLS[id]?.extraMs ?? 0);
-  return STILL.inMs + hold + STILL.outMs;
+  return Math.max(STILL.inMs + hold + STILL.outMs, STILLS[id]?.untilNextMs ?? 0);
 }

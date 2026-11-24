@@ -476,6 +476,9 @@ describe("Run 8: the reaction stills", () => {
     expect(shown).toContain("r8-7");
     expect(shown).not.toContain("r8-4");
     expect(shown.indexOf("r8-5")).toBeLessThan(shown.indexOf("r8-6"));
+    // Six comes while five is still up, so they cross-fade in place.
+    const at = (id: string) => lines.find((x) => x.l.still?.id === id)!.at;
+    expect(at("r8-6") - at("r8-5")).toBeLessThan(Math.ceil(6000 / 600));
     expect(shown.indexOf("r8-6")).toBeLessThan(shown.indexOf("r8-7"));
     // The line is the caption: each still's line is the one the story gives it.
     const text = (id: string) => lines.find((x) => x.l.still?.id === id)!.l;
@@ -519,5 +522,7 @@ describe("Run 8: the reaction stills", () => {
     expect(stillMs("r8-1", 0)).toBe(STILL.inMs + STILL.holdMs + STILL.outMs);
     expect(stillMs("r8-1", 4000)).toBe(STILL.inMs + 5000 + STILL.outMs);
     expect(stillMs("r8-7", 0)).toBe(STILL.inMs + STILL.holdMs + 1000 + STILL.outMs);
+    // Five stays up until six replaces it, at most six seconds.
+    expect(stillMs("r8-5", 1500)).toBe(6000);
   });
 });
