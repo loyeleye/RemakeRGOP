@@ -775,12 +775,13 @@ let dyingPart = "";
 let dyingLurch = 0;
 let dyingStill = -1;
 
-/** Run 8 with the first pull (a test), its second take; ?pull=1 in the address plays the first take (v111), ?nopull=1 none (v108). */
+/** Run 8 with the first pull (a test), its third take, the tug; ?pull=2 in the address plays the second take (v112), ?pull=1 the first (v111), ?nopull=1 none (v108). */
 function sieveRoom() {
   const r = new SieveRoom();
   const q = new URLSearchParams(location.search);
   if (q.has("nopull")) r.pullMode = "off";
   else if (q.get("pull") === "1") r.pullMode = "quiet";
+  else if (q.get("pull") === "2") r.pullMode = "loud";
   return r;
 }
 
@@ -796,8 +797,20 @@ function stepPull(pull: NonNullable<StoryView["sieve"]>["pull"], board: Board) {
       setTimeout(() => sound.hush((pull!.left * tickMs) / 1000 - 0.15), 150);
       sound.windOff(0.1);
     }
-    if (pullSeen === "hold" && room?.story?.sieve) sound.wind(1.5);
+    // The tug: a draw that rises for the whole of it and cuts off dead, then nothing.
+    if (ph === "tug") sound.pullDraw((pull!.left * tickMs) / 1000), sound.windOff(0.6);
+    if (ph === "after" && pullSeen === "tug") sound.hush((pull!.left * tickMs) / 1000);
+    if ((pullSeen === "hold" || pullSeen === "after") && room?.story?.sieve) sound.wind(1.5);
     pullSeen = ph;
+  }
+  // The tug keeps the eye on him and only eases out a little, and back.
+  const tug = ph === "tug" || ph === "after";
+  if (tug || pullView?.k === -1) {
+    if (!pullView) pullView = { scale: cam.scale, follow: cam.follow, k: -1, at: performance.now() };
+    const V = pullView;
+    cam.scale += ((tug ? V.scale * 0.82 : V.scale) - cam.scale) * 0.03;
+    if (!tug && Math.abs(cam.scale - V.scale) < 0.2) (cam.scale = V.scale), (pullView = null);
+    return;
   }
   const open = ph === "hold";
   if (!pullView && !open) return;

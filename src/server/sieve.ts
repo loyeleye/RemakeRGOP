@@ -49,12 +49,13 @@ export class SieveRoom {
   /** The first pull: waiting, winding up (ticks left), holding (ticks left), or done. Wisps touched in the wind-up are spared. Once a game, restarts included. */
   private pull: Pull = { phase: "wait", left: 0, spared: new Set(), moved: [], torn: null, focus: null };
   /** The first pull: "loud" (the second take, the default), "quiet" (the first take, v111; ?pull=1 in the page) or "off" (v108; ?nopull=1). */
-  pullMode: "loud" | "quiet" | "off" = SIEVE.pull.on ? "loud" : "off";
+  /** The first pull: "tug" (the third take, the default), "loud" (the second, v112; ?pull=2), "quiet" (the first, v111; ?pull=1), "off" (v108; ?nopull=1). */
+  pullMode: "tug" | "loud" | "quiet" | "off" = SIEVE.pull.on ? "tug" : "off";
   get pullOn() {
     return this.pullMode !== "off";
   }
   set pullOn(on: boolean) {
-    this.pullMode = on ? (this.pullMode === "off" ? "loud" : this.pullMode) : "off";
+    this.pullMode = on ? (this.pullMode === "off" ? "tug" : this.pullMode) : "off";
   }
   /** For the measurements: the tick the pull fired, whether it was staged on a near bank, and how many wisps it moved and sent over a well. */
   pulledAt = -1;
@@ -107,6 +108,7 @@ export class SieveRoom {
         return;
       case "act": {
         if (this.phase !== "playing" || this.lookLeft > 0 || this.pull.phase === "hold") return;
+        // In the tug he cannot take up another: his staff stays on the one being dragged, or comes away.
         this.game.command(YOU, { action: cleanAction(msg.action, this.game), toggleRun: !!msg.toggleRun, toggleMode: !!msg.toggleMode });
         return;
       }
@@ -266,7 +268,9 @@ export class SieveRoom {
       return;
     }
     if (this.stand && this.stand !== "idle") this.steer();
+    const pre = this.pull.phase === "tug" ? g.wisps.map((w) => ({ ...w.pos })) : null;
     g.step();
+    if (pre) this.stepTug(pre);
     this.ticks = g.tick;
     this.stepPull();
     for (const f of g.falls) {
@@ -315,6 +319,26 @@ export class SieveRoom {
   /** The first pull: staged on his near bank (or half way through the supply), wound up, then the snap. */
   private stepPull() {
     const g = this.game, P = SIEVE.pull, p = this.pull;
+    if (p.phase === "after") {
+      if (--p.left <= 0) (p.phase = "done"), (p.tugged = null);
+      return;
+    }
+    if (p.phase === "wait" && this.pullMode === "tug") {
+      if (!this.said.has("calm") || this.talking() || this.doomed !== null) return;
+      const rook = this.player(YOU), T = SIEVE.tug;
+      const on = rook.beam !== null ? g.wisps[rook.beam]! : null;
+      // Near a well where it was as the tick began (his pull may have carried it two tiles since).
+      const near = on && !g.away.has(on.id) && !g.board.inBankZone(on.prev) && !g.board.inBankZone(on.pos) && Math.min(this.lipDistance(on.prev), this.lipDistance(on.pos)) <= T.nearWell ? on : null;
+      if (near && this.lipDistance(near.prev) < this.lipDistance(near.pos) && g.board.tile(near.prev) === Tile.Floor) near.pos = near.prev;
+      if (!near && this.arrived < Math.ceil(SIEVE.supply * T.lateShare)) return;
+      this.pullStaged = !!near;
+      p.phase = "tug";
+      p.left = T.ticks;
+      p.tugged = near?.id ?? null;
+      p.moved = [];
+      this.pulledAt = g.tick;
+      return;
+    }
     if (p.phase === "wait") {
       // Not before she has told him they don't wander, and he has had time to read it.
       if (!this.said.has("calm") || this.talking() || this.doomed !== null) return;
@@ -380,6 +404,89 @@ export class SieveRoom {
     // His staff comes away empty. (The beam stays drawn, broken, while everything holds.)
     if (p.torn !== null) rook.action = { kind: "idle" };
     this.pullMoved = p.moved.length;
+  }
+
+  /**
+   * The tug, after each tick of play: his wisp is held where it was and dragged back toward its
+   * well a tile every other tick while he keeps his staff on it; slides to the lip if he lets go;
+   * every other wisp creeps to its lip. At the end the wells let go: if he held on, it springs back
+   * toward him. She speaks during it and after, in the silence, and steps back from the nearest well.
+   */
+  private stepTug(pre: Pt[]) {
+    const g = this.game, p = this.pull, T = SIEVE.tug, rook = this.player(YOU);
+    const n = T.ticks - p.left;
+    const creep = n % T.every === T.every - 1;
+    const taken = new Set(g.wisps.filter((w) => !g.away.has(w.id)).map((w) => `${w.pos.x},${w.pos.y}`));
+    const held = p.tugged !== null && rook.beam === p.tugged;
+    for (const w of g.wisps) {
+      if (g.away.has(w.id) || w.id === this.doomed) continue;
+      const mine = w.id === p.tugged;
+      if (mine && held) {
+        // It stops coming to him: back where it was before his pull, then a tile toward the well.
+        taken.delete(`${w.pos.x},${w.pos.y}`);
+        w.pos = pre[w.id]!;
+        w.target = null;
+        if (creep) this.towardLip(w, taken, 1);
+        else taken.add(`${w.pos.x},${w.pos.y}`);
+        w.prev = pre[w.id]!;
+        continue;
+      }
+      // Anything else his staff is on still answers to him; the rest go to the lip.
+      if (rook.beam === w.id) continue;
+      if (mine || creep) {
+        const before = { ...w.pos };
+        this.towardLip(w, taken, 1);
+        if (before.x !== w.pos.x || before.y !== w.pos.y) p.moved.push({ id: w.id, x: before.x, y: before.y, well: this.nearestWell(w.pos) });
+      }
+    }
+    p.held = held;
+    if (n + 1 === T.saidAt) this.say(KEEPER, "They don't do that.", { player: KEEPER_ID }, "key");
+    if (--p.left > 0) return;
+    // The wells let go, all at once.
+    if (p.tugged !== null && rook.beam === p.tugged) {
+      const w = g.wisps[p.tugged]!, d = Math.hypot(rook.pos.x - w.pos.x, rook.pos.y - w.pos.y) || 1;
+      const to = g.nearestFree(pt(Math.round(w.pos.x + ((rook.pos.x - w.pos.x) / d) * T.spring), Math.round(w.pos.y + ((rook.pos.y - w.pos.y) / d) * T.spring)), 0);
+      if (g.board.passable(to, Mover.Wisp)) (w.prev = w.pos), (w.pos = to);
+      this.pullStaged = true;
+    }
+    this.pullMoved = new Set(p.moved.map((m) => m.id)).size;
+    p.phase = "after";
+    p.left = 3;
+    this.queue = this.queue.filter((q) => q.key);
+    this.say(KEEPER, "They've never done that.", { player: KEEPER_ID }, "key");
+    // She steps back from the nearest well, of her own accord.
+    const tilda = this.player(KEEPER_ID), k = SV_WELLS[this.nearestWell(tilda.pos)]!, c = g.board.center;
+    const dx = tilda.pos.x - (c.x + k.x), dy = tilda.pos.y - (c.y + k.y), dl = Math.hypot(dx, dy) || 1;
+    const back = g.nearestFree(pt(Math.round(tilda.pos.x + (dx / dl) * 2), Math.round(tilda.pos.y + (dy / dl) * 2)), 0);
+    tilda.prev = tilda.pos;
+    tilda.pos = back;
+  }
+
+  /** Moves a wisp up to `steps` tiles toward its nearest well, stopping on the last chalk tile before it. */
+  private towardLip(w: Wisp, taken: Set<string>, steps: number) {
+    const b = this.game.board, k = SV_WELLS[this.nearestWell(w.pos)]!;
+    const wx = Math.round(b.center.x + k.x), wy = Math.round(b.center.y + k.y);
+    taken.delete(`${w.pos.x},${w.pos.y}`);
+    const free = (to: Pt) => b.inside(to) && b.tile(to) === Tile.Floor && b.passable(to, Mover.Wisp) && !taken.has(`${to.x},${to.y}`);
+    const far = (q: Pt) => Math.hypot(b.center.x + k.x - q.x, b.center.y + k.y - q.y);
+    for (let n = 0; n < steps; n++) {
+      const sx = Math.sign(wx - w.pos.x), sy = Math.sign(wy - w.pos.y);
+      // Straight at it, or else the nearer of the two sidelong steps that still closes on it; at the lip nothing does.
+      const to = [pt(w.pos.x + sx, w.pos.y + sy), pt(w.pos.x + sx, w.pos.y), pt(w.pos.x, w.pos.y + sy)].find((q) => (q.x !== w.pos.x || q.y !== w.pos.y) && far(q) < far(w.pos) - 0.01 && free(q));
+      if (!to) break;
+      w.prev = w.pos;
+      w.pos = to;
+      w.target = null;
+      w.skate = null;
+      w.rimTicks = 0;
+    }
+    taken.add(`${w.pos.x},${w.pos.y}`);
+  }
+
+  /** How far a tile is from the nearest well's lip. */
+  private lipDistance(at: Pt) {
+    const c = this.game.board.center;
+    return Math.min(...SV_WELLS.map((k) => Math.hypot(c.x + k.x - at.x, c.y + k.y - at.y) - k.r));
   }
 
   private nearestWell(at: Pt) {
@@ -510,7 +617,7 @@ export class SieveRoom {
   }
 
   storyView(): StoryView {
-    return { run: SIEVE.run, movement: 0, title: "", ring: null, mark: null, kes: 0, rival: null, note: "", end: this.end, sieve: { keeper: KEEPER_ID, drain: Math.max(0, Math.min(1, (this.arrived - SIEVE.onBoard) / (SIEVE.supply - SIEVE.onBoard))), ...(this.look ? { look: { x: this.look.x, y: this.look.y } } : {}), ...(this.warned.size ? { warn: [...new Set([...this.warned.values()].map((q) => q.well))] } : {}), ...(this.pull.phase === "wind" || this.pull.phase === "hold" ? { pull: { phase: this.pull.phase, left: this.pull.left, moved: this.pull.moved, ...(this.pull.torn !== null ? { torn: this.pull.torn } : {}), ...(this.pull.focus ? { focus: this.pull.focus } : {}), loud: this.pullMode === "loud" } } : {}) } };
+    return { run: SIEVE.run, movement: 0, title: "", ring: null, mark: null, kes: 0, rival: null, note: "", end: this.end, sieve: { keeper: KEEPER_ID, drain: Math.max(0, Math.min(1, (this.arrived - SIEVE.onBoard) / (SIEVE.supply - SIEVE.onBoard))), ...(this.look ? { look: { x: this.look.x, y: this.look.y } } : {}), ...(this.warned.size ? { warn: [...new Set([...this.warned.values()].map((q) => q.well))] } : {}), ...(this.pull.phase === "wind" || this.pull.phase === "hold" || this.pull.phase === "tug" || this.pull.phase === "after" ? { pull: { phase: this.pull.phase, left: this.pull.left, moved: this.pull.moved, ...(this.pull.torn !== null ? { torn: this.pull.torn } : {}), ...(this.pull.focus ? { focus: this.pull.focus } : {}), ...(this.pull.tugged !== null ? { tugged: this.pull.tugged, held: !!this.pull.held } : {}), loud: this.pullMode !== "quiet" } } : {}) } };
   }
 
   view(): RoomView {
@@ -551,7 +658,7 @@ const STAND = {
   juggle: { pushy: 0, sloppiness: 0.08, taps: true },
 } as const;
 
-type Pull = { phase: "wait" | "wind" | "hold" | "done"; left: number; spared: Set<number>; moved: { id: number; x: number; y: number; well: number }[]; torn: number | null; focus: Pt | null };
+type Pull = { phase: "wait" | "wind" | "hold" | "tug" | "after" | "done"; left: number; spared: Set<number>; moved: { id: number; x: number; y: number; well: number }[]; torn: number | null; focus: Pt | null; tugged?: number | null; held?: boolean };
 type Pending = { line: StoryLine; trigger: number; key: boolean };
 
 function moveWisp(w: Wisp, at: Pt) {

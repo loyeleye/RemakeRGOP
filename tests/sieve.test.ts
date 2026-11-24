@@ -103,11 +103,12 @@ describe("the falling law", () => {
   });
 });
 
-function play(stand: Stand, seed: number, max = 1500, pull = true) {
+function play(stand: Stand, seed: number, max = 1500, pull: boolean | SieveRoom["pullMode"] = true) {
   let s = seed;
   const msgs: ServerMsg[] = [];
   const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), stand);
-  room.pullOn = pull;
+  if (typeof pull === "string") room.pullMode = pull;
+  else room.pullOn = pull;
   room.connect((m) => msgs.push(m)).message(JSON.stringify({ t: "hello", name: "Rook" }));
   let n = 0;
   while (room.state.phase !== "results" && n < max) room.onTick(), n++;
@@ -274,12 +275,12 @@ describe("Run 8: a harder job, on the Sieve", () => {
   it("the pull leaves ten within reach: a juggler and most holders still pass", () => {
     let pass = 0;
     for (const seed of [3, 44, 501, 77, 12]) {
-      const { room } = play("hold", seed);
+      const { room } = play("hold", seed, 1500, "quiet");
       expect(room.pulledAt).toBeGreaterThanOrEqual(0);
       if (room.state.phase === "results") pass++;
     }
     expect(pass).toBeGreaterThanOrEqual(4);
-    const j = play("juggle", 8);
+    const j = play("juggle", 8, 1500, "quiet");
     expect(j.room.state.phase).toBe("results");
     expect(j.room.restarts).toBe(0);
   });
@@ -288,7 +289,7 @@ describe("Run 8: a harder job, on the Sieve", () => {
     let s = 21;
     const msgs: ServerMsg[] = [];
     const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "juggle");
-    expect(room.pullMode).toBe("loud");
+    room.pullMode = "loud";
     room.connect((m) => msgs.push(m)).message(JSON.stringify({ t: "hello", name: "Rook" }));
     while ((room.state.pull.phase !== "wind" && room.state.phase === "playing") || room.state.phase === "countdown") room.onTick();
     const g = room.state.game, c = g.board.center, rook = g.players[0]!;
@@ -326,8 +327,104 @@ describe("Run 8: a harder job, on the Sieve", () => {
 
   it("the second take leaves ten within reach", () => {
     let pass = 0;
-    for (const seed of [3, 44, 501, 77, 12]) if (play("hold", seed).room.state.phase === "results") pass++;
+    for (const seed of [3, 44, 501, 77, 12]) if (play("hold", seed, 1500, "loud").room.state.phase === "results") pass++;
     expect(pass).toBeGreaterThanOrEqual(3);
-    expect(play("juggle", 8).room.state.phase).toBe("results");
+    expect(play("juggle", 8, 1500, "loud").room.state.phase).toBe("results");
+  });
+
+  /** The tug, set up by hand: once she has said they don't wander, his staff goes on a wisp three tiles from a well's lip. */
+  function tugRoom(holdOn = true) {
+    let s = 21;
+    const msgs: ServerMsg[] = [];
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "hold");
+    expect(room.pullMode).toBe("tug");
+    const conn = room.connect((m) => msgs.push(m));
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const said = () => msgs.flatMap((m) => (m.t === "say" ? m.lines.map((l) => l.text) : []));
+    const talking = () => (room as unknown as { talking(): boolean }).talking();
+    while (!room.state.said.has("calm") || room.state.phase !== "playing" || talking()) room.onTick();
+    (room as unknown as { stand: Stand }).stand = "idle";
+    const g = room.state.game, c = g.board.center, rook = g.players[0]!, well = SV_WELLS[0]!;
+    const wc = pt(c.x + well.x, c.y + well.y);
+    // A spot three tiles out from the lip, on the side toward the brazier, and Rook six beyond it.
+    const dx = c.x - wc.x, dy = c.y - wc.y, dl = Math.hypot(dx, dy);
+    const spot = g.nearestFree(pt(Math.round(wc.x + (dx / dl) * (well.r + 3)), Math.round(wc.y + (dy / dl) * (well.r + 3))), 0);
+    const w = g.wisps.find((q) => !g.away.has(q.id) && q.id !== room.state.doomed)!;
+    w.pos = w.prev = spot;
+    w.target = null;
+    g.height.set(w.id, 100);
+    rook.pos = rook.prev = g.nearestFree(pt(Math.round(spot.x + (dx / dl) * 6), Math.round(spot.y + (dy / dl) * 6)), 0);
+    const lip = (at: { x: number; y: number }) => Math.min(...SV_WELLS.map((k) => Math.hypot(c.x + k.x - at.x, c.y + k.y - at.y) - k.r));
+    const staff = () => conn.message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: w.id } }));
+    for (let t = 0; t < 30 && room.state.pull.phase === "wait"; t++) {
+      if (holdOn || t < 3) staff();
+      room.onTick();
+    }
+    return { room, g, w, rook, said, lip, staff, conn };
+  }
+
+  it("the tug: with his staff on one near a well, the well drags it back a tile every other tick while he holds, and at the end it springs back toward him; nothing falls in", () => {
+    const { room, g, w, rook, said, lip, staff } = tugRoom(true);
+    expect(room.state.pull.phase).toBe("tug");
+    expect(room.state.pull.tugged).toBe(w.id);
+    expect(lip(w.pos)).toBeLessThanOrEqual(SIEVE.tug.nearWell);
+    expect(room.storyView().sieve!.pull!.phase).toBe("tug");
+    const ids = new Set(g.wisps.map((q) => q.id));
+    const lips: number[] = [lip(w.pos)];
+    let before = { ...w.pos };
+    // No freeze: the clock runs.
+    const tick = g.tick;
+    while (room.state.pull.phase === "tug") {
+      before = { ...w.pos };
+      staff();
+      room.onTick();
+      for (const f of g.falls) expect(ids.has(f.wisp) && f.well).toBe(false);
+      if (room.state.pull.phase === "tug") lips.push(lip(w.pos)), expect(room.state.pull.held).toBe(true);
+    }
+    expect(g.tick).toBe(tick + SIEVE.tug.ticks);
+    // Dragged back, never toward him, and it never reached the well.
+    for (let i = 1; i < lips.length; i++) expect(lips[i]!).toBeLessThanOrEqual(lips[i - 1]! + 1e-9);
+    expect(lips[lips.length - 1]!).toBeLessThan(lips[0]!);
+    expect(g.board.tile(w.pos)).toBe(Tile.Floor);
+    // The wells let go: it springs toward him.
+    const d = (a: { x: number; y: number }) => Math.hypot(a.x - rook.pos.x, a.y - rook.pos.y);
+    expect(d(w.pos)).toBeLessThan(d(before));
+    expect(room.state.pull.phase).toBe("after");
+    // Then play goes on and there is no second pull.
+    for (let t = 0; t < 200 && room.state.phase === "playing"; t++) (room.onTick(), t > 4 && expect(room.state.pull.phase).toBe("done"));
+    expect(said()).toContain("They don't do that.");
+    expect(said()).toContain("They've never done that.");
+    expect(said().indexOf("They don't do that.")).toBeLessThan(said().indexOf("They've never done that."));
+  });
+
+  it("the tug: let go and it slides to the lip; every other loose wisp creeps to its lip; none goes in", () => {
+    const { room, g, w, lip, conn } = tugRoom(true);
+    expect(room.state.pull.phase).toBe("tug");
+    // He lets go.
+    conn.message(JSON.stringify({ t: "act", action: { kind: "idle" } }));
+    const others = g.wisps.filter((q) => !g.away.has(q.id) && q.id !== w.id && q.id !== room.state.doomed && !g.board.inBankZone(q.pos));
+    const start = new Map(others.map((q) => [q.id, lip(q.pos)]));
+    while (room.state.pull.phase === "tug") {
+      room.onTick();
+      for (const f of g.falls) expect(f.wisp === w.id || start.has(f.wisp) ? f.well : false).toBe(false);
+    }
+    expect(g.board.tile(w.pos)).toBe(Tile.Floor);
+    expect(lip(w.pos)).toBeLessThan(1.6);
+    expect(room.state.pull.held).toBe(false);
+    let crept = 0;
+    for (const q of others) if (!g.away.has(q.id) && lip(q.pos) < start.get(q.id)! - 0.3) crept++;
+    expect(crept).toBeGreaterThan(0);
+    for (const q of others) if (!g.away.has(q.id)) expect(g.board.tile(q.pos) === Tile.Floor || start.get(q.id)! < 0).toBe(true);
+  });
+
+  it("the tug leaves ten within reach", () => {
+    let pass = 0;
+    for (const seed of [3, 44, 501, 77, 12]) {
+      const { room } = play("hold", seed, 1500, "tug");
+      expect(room.pulledAt).toBeGreaterThanOrEqual(0);
+      if (room.state.phase === "results") pass++;
+    }
+    expect(pass).toBeGreaterThanOrEqual(3);
+    expect(play("juggle", 8, 1500, "tug").room.state.phase).toBe("results");
   });
 });

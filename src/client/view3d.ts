@@ -2663,6 +2663,20 @@ export class World {
     }
     if (!pull) this.pullFx = null;
     this.stepSnap(st, time);
+    this.stepTugFx(st, time);
+    // The tug: cold rings closing inward over every well, again and again, for the whole of it; gone in the silence after.
+    if (this.pullFx && (this.pullFx.phase === "tug" || this.pullFx.phase === "after")) {
+      const tug = this.pullFx.phase === "tug", since = time - this.pullFx.at;
+      this.wellRings.forEach((r, i) => {
+        const m = r.material as THREE.MeshBasicMaterial;
+        m.color.set(PULL_COLD);
+        r.visible = true;
+        const c = (time * 1.4 + i * 0.13) % 1;
+        m.opacity = tug ? (0.4 + 0.45 * c) * Math.min(1, since / 0.3) : Math.max(0, 0.6 * (1 - since / 0.5));
+        r.scale.setScalar(tug ? 2.1 - 1.5 * c * c : 0.6);
+      });
+      return this.lightSieve(sv, time);
+    }
     if (this.pullFx) {
       const wind = this.pullFx.phase === "wind", k = Math.min(1, (time - this.pullFx.at) / 1.8);
       this.wellRings.forEach((r) => {
@@ -2686,6 +2700,67 @@ export class World {
     this.lightSieve(sv, time);
   }
   private pullFx: { at: number; phase: string } | null = null;
+  /**
+   * The tug's dust: streaks of chalk dust skimming the ground into every well, faster as they near
+   * it, for the whole of the tug; they settle in the silence after. Sized to read at island view.
+   */
+  private tugDust: { mesh: THREE.InstancedMesh; p: { x: number; z: number; w: number; v: number }[]; floor: THREE.Vector2[]; wells: THREE.Vector3[]; endAt: number } | null = null;
+  private stepTugFx(st: DrawState, time: number) {
+    const ph = st.sieve?.pull?.phase;
+    const on = ph === "tug";
+    if (!on && !this.tugDust) return;
+    const b = st.shrine.board;
+    if (!this.tugDust) {
+      const N = this.low ? 260 : 620;
+      const geo = new THREE.PlaneGeometry(0.16, 1).rotateX(-Math.PI / 2);
+      const mat = new THREE.MeshBasicMaterial({ color: "#eef4fb", transparent: true, opacity: 0, depthWrite: false });
+      const mesh = new THREE.InstancedMesh(geo, mat, N);
+      mesh.renderOrder = 3;
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+      const floor: THREE.Vector2[] = [];
+      for (let y = 0; y < b.height; y++) for (let x = 0; x < b.width; x++) if (b.tile({ x, y }) === Tile.Floor) floor.push(new THREE.Vector2(this.worldX(b, x), this.worldZ(b, y)));
+      const wells = this.wellRings.map((r) => r.getWorldPosition(new THREE.Vector3()));
+      const p = Array.from({ length: N }, () => ({ x: 0, z: 0, w: 0, v: 0 }));
+      this.tugDust = { mesh, p, floor, wells, endAt: -1 };
+      for (const d of p) this.seedDust(d);
+    }
+    const D = this.tugDust;
+    if (!on && D.endAt < 0) D.endAt = time;
+    const fade = D.endAt < 0 ? 1 : 1 - (time - D.endAt) / 0.7;
+    if (fade <= 0) {
+      this.scene.remove(D.mesh);
+      D.mesh.dispose();
+      this.tugDust = null;
+      return;
+    }
+    const dt = Math.min(0.05, time - (D.mesh.userData.t ?? time));
+    D.mesh.userData.t = time;
+    (D.mesh.material as THREE.MeshBasicMaterial).opacity = 0.85 * fade;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), sc = new THREE.Vector3();
+    D.p.forEach((d, i) => {
+      const w = D.wells[d.w]!;
+      const dx = w.x - d.x, dz = w.z - d.z, dist = Math.hypot(dx, dz) || 1;
+      // Faster near the mouth; slows to nothing once the tug is over.
+      const speed = (d.v + 9 / (dist + 0.6)) * (D.endAt < 0 ? 1 : fade * 0.3);
+      d.x += (dx / dist) * speed * dt;
+      d.z += (dz / dist) * speed * dt;
+      if (dist < 0.9 && D.endAt < 0) this.seedDust(d);
+      q.setFromAxisAngle(up, Math.atan2(dx, dz));
+      sc.set(1, 1, 0.35 + Math.min(1.4, speed * 0.16));
+      m.compose(new THREE.Vector3(d.x, 0.06 + (i % 5) * 0.01, d.z), q, sc);
+      D.mesh.setMatrixAt(i, m);
+    });
+    D.mesh.instanceMatrix.needsUpdate = true;
+  }
+  private seedDust(d: { x: number; z: number; w: number; v: number }) {
+    const D = this.tugDust!;
+    const f = D.floor[Math.floor(Math.random() * D.floor.length)] ?? new THREE.Vector2();
+    d.x = f.x + Math.random() - 0.5;
+    d.z = f.y + Math.random() - 0.5;
+    d.w = D.wells.reduce((best, q, j) => (Math.hypot(q.x - d.x, q.z - d.z) < Math.hypot(D.wells[best]!.x - d.x, D.wells[best]!.z - d.z) ? j : best), 0);
+    d.v = 0.8 + Math.random() * 1.6;
+  }
   /** The second take's snap: when it came, a pale streak from each wisp's old spot, and a taut thread from each wisp down its well while everything holds. */
   private snapFx: { at: number; streaks: { m: THREE.Mesh; from: THREE.Vector3; id: number }[]; threads: { line: THREE.Mesh; id: number; well: THREE.Vector3 }[]; endAt: number } | null = null;
   private startSnap(st: DrawState, pull: NonNullable<NonNullable<DrawState["sieve"]>["pull"]>, time: number) {
@@ -3658,6 +3733,12 @@ export class World {
         u.uTime!.value = time;
         u.uColor!.value.set(p.slipped || broken ? "#777777" : p.mode === "pull" ? flame : "#ff5a5a");
         if (broken) beam.visible = Math.sin(time * 47) > -0.2;
+        // The tug: his beam on the wisp being dragged away stretches thin and shakes.
+        const pl = st.sieve?.pull;
+        if (pl?.phase === "tug" && pl.tugged === p.beam && p.id === st.me && !broken) {
+          beam.scale.y = 0.45 + 0.12 * Math.sin(time * 31);
+          beam.position.addScaledVector(up, Math.sin(time * 53) * 0.07 + Math.sin(time * 23) * 0.04);
+        }
         u.uDash!.value = p.mode === "push" ? 1 : 0;
       } else beam.visible = false;
     }

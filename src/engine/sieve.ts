@@ -55,6 +55,15 @@ export const SIEVE = {
    * The first take ("quiet", v111) spares what he touched and moves one tile.
    */
   pull: { on: true as boolean, windTicks: 3, holdTicks: 3, nearBank: 2, hisWithin: 12, reach: 3 },
+  /**
+   * The third take, the tug (the default): the first time after her calm bubbles that his staff is
+   * on a wisp within `nearWell` tiles of a well's lip, the wells draw for `ticks` with no freeze.
+   * His wisp stops coming and is dragged back a tile every `every` ticks while he holds; held to the
+   * end, the well lets go and it springs `spring` tiles toward him; let go, it slides to the lip.
+   * Every other wisp creeps to its well's lip the same way. Nothing falls in. If he never gives it
+   * the moment, it comes anyway (with nothing on his staff) once `lateShare` of the supply has come.
+   */
+  tug: { ticks: 5, every: 2, nearWell: 4, spring: 2, lateShare: 0.66, saidAt: 2 },
   rook: [0, 4] as const,
   keeper: [5, 12] as const,
 } as const;

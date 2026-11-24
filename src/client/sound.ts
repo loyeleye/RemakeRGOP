@@ -637,6 +637,45 @@ export function pullWind(sec: number) {
   src.start();
 }
 
+/**
+ * Run 8's tug, placeholder: a low inward draw of air under a deep tone, both rising for `sec`
+ * seconds, then cut off dead (no tail), into silence.
+ */
+export function pullDraw(sec: number) {
+  const s = out();
+  if (!s) return;
+  const { c, o } = s;
+  const t = c.currentTime;
+  const len = Math.ceil(c.sampleRate * sec);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const f = c.createBiquadFilter();
+  f.type = "bandpass";
+  f.Q.value = 4;
+  f.frequency.setValueAtTime(90, t);
+  f.frequency.exponentialRampToValueAtTime(520, t + sec);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.5, t + sec);
+  src.connect(f).connect(g).connect(o);
+  const tone = c.createOscillator();
+  tone.type = "sine";
+  tone.frequency.setValueAtTime(42, t);
+  tone.frequency.exponentialRampToValueAtTime(96, t + sec);
+  const tg = c.createGain();
+  tg.gain.setValueAtTime(0.0001, t);
+  tg.gain.exponentialRampToValueAtTime(0.3, t + sec);
+  tone.connect(tg).connect(o);
+  src.start(t);
+  tone.start(t);
+  // Dead stop: no release.
+  src.stop(t + sec);
+  tone.stop(t + sec);
+}
+
 /** The snap: one dull knock. */
 export function pullSnap() {
   if (!out()) return;
