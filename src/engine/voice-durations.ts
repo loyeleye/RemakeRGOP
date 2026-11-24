@@ -170,4 +170,9 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Lumi|No shoving. I said.": 1.42,
   "Lumi|I'm not a prize. I'm the referee.": 1.9,
   "Lumi|Everyone saw.": 0.86,
+  "Kes|Did you see that?": 0.65,
+  "Kes|Whatever you say, Captain.": 1.1,
+  "Kes|Nice.": 0.6,
+  "Kes|No, no. Come back.": 1.32,
+  "Kes|Don't get used to it.": 0.86,
 };

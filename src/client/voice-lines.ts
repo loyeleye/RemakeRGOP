@@ -174,4 +174,9 @@ export const VOICE_LINES: Record<string, string> = {
   "Lumi|No shoving. I said.": "voice/lumi-no-shoving.mp3",
   "Lumi|I'm not a prize. I'm the referee.": "voice/lumi-not-a-prize.mp3",
   "Lumi|Everyone saw.": "voice/lumi-everyone-saw.mp3",
+  "Kes|Did you see that?": "voice/kes-did-you-see.mp3",
+  "Kes|Whatever you say, Captain.": "voice/kes-whatever-captain.mp3",
+  "Kes|Nice.": "voice/kes-nice.mp3",
+  "Kes|No, no. Come back.": "voice/kes-come-back.mp3",
+  "Kes|Don't get used to it.": "voice/kes-dont-get-used.mp3",
 };

@@ -32,7 +32,7 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Kes", /^(You took my pupil|She was going to be my pupil|Two nothing's no fun|Last one takes it)/, "challenging"],
   ["Kes", /^(Rosie would have|Constantly\.)/, "wistful"],
   ["Kes", /^You worked for that\./, "gracious"],
-  ["Kes", /^(Whatever you say|Good\.|There he is\.|I pulled\.|Did you see that\?|They like company|You hold on too long|I know\. It's annoying\.|Same time next week)/, "smug"],
+  ["Kes", /^(Whatever you say|Good\.|There he is\.|I pulled\.|Did you see that\?|They like company|You hold on too long|I know\. It's annoying\.|Same time next week|Nice\.|Don't get used to it)/, "smug"],
   ["Rook", /^(That's it\.|Just like that\.)/, "proud"],
   ["Rook", /^How did you do that\?/, "baffled"],
   ["Rook", /^(Yes, ma'am\.|See\?|Now you're the boss|Let's call it)/, "warm"],
