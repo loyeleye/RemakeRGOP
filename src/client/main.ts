@@ -16,6 +16,8 @@ import { DyingRoom } from "../server/dying.js";
 import { SieveRoom } from "../server/sieve.js";
 import { RescueRoom } from "../server/rescue.js";
 import { RESCUE } from "../engine/rescue.js";
+import { ShipRoom } from "../server/shiphome.js";
+import { SHIP, SHIP_DECK } from "../engine/shiphome.js";
 import { DYING } from "../engine/dying.js";
 import { PondRoom, answersTap } from "../server/pond.js";
 import { JobRoom } from "../server/job.js";
@@ -133,7 +135,7 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | null = null;
 
 /** The walkable map, at the speed on trial: ?walkspeed=1.5, 2 or 2.5 shortens the map's beat; with &only=rook only his stride is longer. */
 function pondRoom(walk: number) {
@@ -147,11 +149,11 @@ function pondRoom(walk: number) {
 }
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | "pond" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "pond" ? pondRoom(walk) : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
@@ -431,6 +433,7 @@ function leave() {
   placeFade?.remove();
   placeFade = null;
   skyBase = null;
+  shipCut(false);
   stopStorySound();
   try {
     history.replaceState(null, "", location.pathname);
@@ -463,6 +466,7 @@ function noteProgress() {
     else if (st.run === "The dying brazier") reach({ next: 8 });
     else if (st.run === "A harder job") reach({ next: 9 });
     else if (st.run === RESCUE.run) reach({ next: 10 });
+    else if (st.run === SHIP.run) reach({ next: 11 });
     else if (storyRoom instanceof GrannyRoom || st.run === "Granny's game") reach({ next: 4 });
   }
   renderProgress();
@@ -619,6 +623,12 @@ function render() {
   if (phase === "results" && lessonToPond()) {
     $("results").hidden = true;
     $("play").hidden = false;
+    return renderHud();
+  }
+  // Run 10 has no result: it cuts to black and goes back to the menu.
+  if (phase === "results" && room.story?.end?.cut) {
+    $("results").hidden = true;
+    shipDone();
     return renderHud();
   }
   if (phase === "lobby") renderLobby();
@@ -793,7 +803,7 @@ function storyPhaseSound(was: string | undefined) {
   const phase = room!.phase;
   // The dying brazier has no bell and no music: only the fire. The Sieve has only the wind.
   if (room!.story?.dying) return;
-  if (room!.story?.sieve || room!.story?.rescue) {
+  if (room!.story?.sieve || room!.story?.rescue || room!.story?.ship) {
     if (phase === "countdown" && was !== "countdown") sound.wind(3);
     if (phase === "results" && was !== "results") sound.pullHum(null);
     return;
@@ -821,6 +831,7 @@ function storyTickSound(s: GameSnapshot) {
   if (st.dying) dyingSound(st.dying, s);
   else if (st.sieve) void 0;
   else if (st.rescue) rescueSound(st.rescue);
+  else if (st.ship) shipSound(st.ship);
   else if (room!.phase === "playing" && musicFor !== st.movement) {
     musicFor = st.movement;
     sound.playMusic(st.movement); // starts on a tick, so the beat lines up with the 600 ms steps
@@ -884,6 +895,57 @@ function rescueRoom() {
   else stills.preload("r9-");
   patchHeard = 0;
   return r;
+}
+
+/** Run 10, the ship home: ?wind=1, 2 or 3 sets how many ticks the wind takes to move a loose wisp a tile; ?nostills leaves the three views over the bow out. */
+function shipRoom() {
+  const r = new ShipRoom();
+  const q = new URLSearchParams(location.search), wind = Number(q.get("wind"));
+  if ([1, 2, 3].includes(wind)) r.windEvery = wind;
+  if (q.has("nostills")) r.stillsOn = false;
+  else stills.preload("r10-");
+  shipCut(false);
+  return r;
+}
+
+/** Run 10's sounds: the wind and the lamp, and from half way one slow stroke of the bell from home, a little nearer each time. */
+function shipSound(r: NonNullable<StoryView["ship"]>) {
+  if (r.bell && r.over === undefined && (r.tick - Math.ceil(r.ticks * SHIP.bell.from)) % SHIP.bell.every === 0) sound.greatBell(0.22 + 0.2 * r.home);
+  // He goes over the rail: the picture cuts before he lands.
+  if (r.over !== undefined) shipCut(true);
+}
+
+/** Run 10's end: no result screen. A quick cut to black as he goes over the rail, held a moment, and then the menu. */
+let shipFade: HTMLElement | null = null;
+let shipLeft: ReturnType<typeof setTimeout> | null = null;
+function shipCut(on: boolean) {
+  if (!on) {
+    if (shipLeft) clearTimeout(shipLeft);
+    shipLeft = null;
+    shipFade?.remove();
+    shipFade = null;
+    return;
+  }
+  if (shipFade) return;
+  const f = (shipFade = document.createElement("div"));
+  f.className = "fade-black quick";
+  document.body.appendChild(f);
+  // Black as he clears the rail, which is the last of the run's ticks.
+  setTimeout(() => f.classList.add("on"), Math.max(0, SHIP.railTicks * tickMs - 650));
+}
+/** The run is over: hold the black, then back to the menu. (The Offering, which it cuts to, is not in the build yet.) */
+function shipDone() {
+  if (shipLeft) return;
+  shipCut(true);
+  shipFade?.classList.add("on");
+  shipLeft = setTimeout(() => {
+    shipLeft = null;
+    const f = shipFade;
+    shipFade = null;
+    leave();
+    setTimeout(() => f?.classList.remove("on"), 200);
+    setTimeout(() => f?.remove(), 1100);
+  }, 1600);
 }
 
 /** Run 9's sounds: the wind, and one low sound as the lamps on the patch's course begin to gutter. */
@@ -1094,7 +1156,7 @@ function renderHud() {
       return renderPad(s);
     }
     // The dying brazier: nothing to count and no clock.
-    if (story.dying || story.sieve || story.rescue) {
+    if (story.dying || story.sieve || story.rescue || story.ship) {
       $("score-0").hidden = true;
       $("ticks").textContent = "";
       return renderPad(s);
@@ -1256,11 +1318,18 @@ function setFocusMode(on: boolean) {
   renderFocusBtn();
   toast(on ? "Focus mode on" : "Focus mode off");
 }
+const FOCUS_ICON = `<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="4.6 3.6" stroke-linecap="round"/><circle class="dot" cx="16" cy="16" r="5"/></svg><span>Focus</span>`;
 function renderFocusBtn() {
   const b = $("next");
   b.classList.toggle("focus", focusBtn);
   b.classList.toggle("off", focusBtn && !focusMode);
-  b.textContent = focusBtn ? "Focus" : "Next";
+  // The focus button's icon is the ring focus mode draws round each wisp, with a wisp in it: lit when it is on, hollow when off.
+  const face = focusBtn ? "focus" : "next";
+  if (b.dataset.face !== face) {
+    b.dataset.face = face;
+    if (focusBtn) b.innerHTML = FOCUS_ICON;
+    else b.textContent = "Next";
+  }
   b.setAttribute("aria-label", focusBtn ? `Focus mode ${focusMode ? "on" : "off"}. Hold for Next` : "Next wisp. Hold for focus mode");
 }
 /** A big tap target's radius in CSS pixels: never under the focus target, and never smaller than a normal click. */
@@ -1538,6 +1607,7 @@ $("story5").onclick = () => connectStory(playerName(), 5);
 $("story6").onclick = () => connectStory(playerName(), 6);
 $("story8").onclick = () => connectStory(playerName(), 8);
 $("story9").onclick = () => connectStory(playerName(), 9);
+$("story10").onclick = () => connectStory(playerName(), 10);
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Saved progress: continue from where this browser got to, jump to any walk, or start over.
 function renderProgress() {
@@ -1550,8 +1620,8 @@ $("story-continue").onclick = () => {
   const p = loadProgress();
   const nextWalk = WALKS.find((w) => w.after === p.next - 1 && w.n > p.walk);
   if (nextWalk) return connectStory(playerName(), "pond", nextWalk.n);
-  if (p.next >= 1 && p.next <= 9) return connectStory(playerName(), (p.next === 7 ? 6 : p.next) as 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9);
-  // Runs 9 on aren't built: the latest walk reached.
+  if (p.next >= 1 && p.next <= 10) return connectStory(playerName(), (p.next === 7 ? 6 : p.next) as 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10);
+  // What comes after run 10 isn't built: the latest walk reached.
   connectStory(playerName(), "pond", Math.max(1, p.walk));
 };
 $<HTMLSelectElement>("walk-pick").replaceChildren(
@@ -1735,7 +1805,15 @@ function frame(now: number) {
       // Run 9: once the last lamp is full the eye goes to the boat in the slip, and stays on it.
       const boat = room.story?.rescue?.ending !== undefined ? shrine.board.center : null;
       const tx = (boat ? boat.x : mine.px + (mine.x - mine.px) * t) + 0.5 + stills.shove.x;
-      const ty = (boat ? boat.y - 1 : mine.py + (mine.y - mine.py) * t) + 0.5 + stills.shove.y;
+      let ty = (boat ? boat.y - 1 : mine.py + (mine.y - mine.py) * t) + 0.5 + stills.shove.y;
+      // Run 10: the eye sits a little ahead of him, and at the end goes forward as far as it can with him still in the picture, so home is seen.
+      const ship = room.story?.ship;
+      if (ship) {
+        const ahead = ty - SHIP.phoneAhead;
+        const k = Math.min(1, Math.max(0, ship.home * 2.5)), e = k * k * (3 - 2 * k);
+        const bowEye = shrine.board.center.y - SHIP_DECK.hl - 8, half = cam.h / cam.scale / 2;
+        ty = ahead + (Math.min(ahead, Math.max(bowEye, ty - (half - 3))) - ahead) * e;
+      }
       cam.cx += (tx - cam.cx) * 0.2;
       cam.cy += (ty - cam.cy) * 0.2;
     } else {
@@ -1772,7 +1850,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, walk: room?.story?.pond?.walk };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, ship: room?.story?.ship, walk: room?.story?.pond?.walk };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.
@@ -1797,10 +1875,13 @@ function frame(now: number) {
   if (room.story) drawStory(g, t, now);
   releaseBarks(now);
   // On a phone the still's band lies over the minimap: it fades out while one is up.
-  miniAlpha += ((stills.up ? 0 : 1) - miniAlpha) * 0.15;
+  // And in run 10's last seconds, when home comes in where it lies.
+  miniAlpha += ((stills.up || (room.story?.ship?.home ?? 0) > 0 ? 0 : 1) - miniAlpha) * 0.15;
   if (cam.compact && !ending && miniAlpha > 0.02) {
-    const w = Math.min(120, cam.w * 0.3);
-    minimapRect = { x: cam.w - w - 10, y: 64, w, h: w };
+    // As wide as this, and a board taller than it is wide gets up to half as tall again.
+    const side = Math.min(120, cam.w * 0.3), mb = shrine.board, mk = Math.min(side / mb.width, (side * 1.5) / mb.height);
+    const w = mk * mb.width;
+    minimapRect = { x: cam.w - w - 10, y: 64, w, h: mk * mb.height };
     g.save();
     g.globalAlpha = miniAlpha;
     drawMinimap(g, cam, st, minimapRect);
@@ -2145,7 +2226,7 @@ function hintsFrame(now: number) {
     }
   }
   // The runs against a clock: left on Walk, he is told once.
-  const timed = storyRoom instanceof RaceRoom || storyRoom instanceof DyingRoom || storyRoom instanceof RescueRoom;
+  const timed = storyRoom instanceof RaceRoom || storyRoom instanceof DyingRoom || storyRoom instanceof RescueRoom || storyRoom instanceof ShipRoom;
   if (timed && p.run === false) {
     if (!runHints.walkSince) runHints.walkSince = now;
     else if (!runHints.reminded && now - runHints.walkSince >= CONTROLS.hints.walkAfterMs && showHint("walking", touch ? "Walking. Tap to run." : "Walking. Press R to run.", runBtn)) runHints.reminded = true;

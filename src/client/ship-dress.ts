@@ -1,0 +1,445 @@
+// Run 10, the ship home: what the deck has that no other board does. The cloud sea going by under
+// the ship and turning from night to grey, the dark patch in it ahead of the bow, the hull, the
+// rails, the ship's lamp amidships, the hooded figure at the stern, the wind over the deck, and at
+// the end home coming in over the top of the screen. All block-outs: nothing here is drawn art
+// yet. World units are tiles, the origin at the lamp; the bow is north (-z).
+
+import * as THREE from "three";
+import type { StoryView } from "../engine/protocol.js";
+import { SHIP, SHIP_DECK, onDeck } from "../engine/shiphome.js";
+import { figure } from "./rescue-dress.js";
+
+type Ship = NonNullable<StoryView["ship"]>;
+type Glow = (color: string, size: number, opacity?: number) => THREE.Sprite;
+type Std = (color: string, extra?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial;
+
+/** How it looks, in one place. (What sets the feel of play is SHIP, in engine/shiphome.ts.) */
+export const SHIP_LOOK = {
+  /** The cloud sea: its height against the deck, how fast it goes by (tiles a second), and how much of its grain shows at night and at first light. */
+  seaY: -1.1,
+  stream: 2.5,
+  grain: [0.1, 0.55] as const,
+  /** The patch: its dark, how uneven its edge is, and the faint cold line round it that lets it be seen at night. */
+  dark: "#000001",
+  ragged: 0.08,
+  rim: "#5a6f9c",
+  rimShow: 0.5,
+  /** The light on the deck at night and at first light: the sky's colour and strength, the sun's, and the exposure. */
+  hemi: [["#4a62a8", 0.42], ["#b9c0d0", 0.95]] as const,
+  sun: [["#8ea6e8", 0.5], ["#d6dbe8", 0.9]] as const,
+  exposure: [1.25, 0.98] as const,
+  /** The ship's lamp: its colour, its glow's size, and how much it swells at a bank. */
+  lamp: "#ffb24a",
+  lampSize: 7,
+  lampPulse: 2.2,
+  /** Wind streaks over the deck: how many, and how fast (tiles a second). */
+  streaks: 26,
+  streakSpeed: 9,
+  /** Home at the end: how far it comes in over the last seconds (tiles), how far ahead of the prow its tips stop, how far east of the ship the falls' mouth lies, the landing's length, and the crowd on the tips. */
+  approach: 20,
+  homeGap: 0.5,
+  mouthEast: 9,
+  pier: 6,
+  crowd: 56,
+  /** Seconds the cloud takes to lift again after a restart. */
+  clearSec: 1.2,
+} as const;
+
+const WHITE = new THREE.Color("#ffffff");
+
+const VS = `
+varying vec2 vW;
+void main() {
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vW = w.xz;
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`;
+const FS = `
+precision highp float;
+varying vec2 vW;
+uniform float uTime, uScroll, uGrain, uRag, uRimShow, uLamp;
+uniform vec3 uPatch, uSea, uDark, uRim, uWarm;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float fbm(vec2 p) {
+  float a = 0.5, s = 0.0;
+  for (int i = 0; i < 4; i++) { s += a * noise(p); p *= 2.03; a *= 0.5; }
+  return s;
+}
+void main() {
+  // The sea goes by toward the stern, in long banks drawn out the way the ship is going.
+  vec2 p = vec2(vW.x, vW.y - uScroll);
+  float n = fbm(p * vec2(0.16, 0.07));
+  float n2 = fbm(p * vec2(0.5, 0.22) + 7.3);
+  float tops = smoothstep(0.38, 0.72, n) * (0.55 + 0.9 * n2);
+  vec3 col = uSea * (0.7 + 0.5 * n) + (uSea + vec3(0.42, 0.47, 0.6)) * tops * uGrain;
+  // The lamp's light on the cloud beside the hull.
+  float d0 = length(vW * vec2(1.0, 0.55));
+  col += uWarm * uLamp * 0.16 * exp(-d0 * d0 / 90.0) * (0.6 + 0.8 * tops);
+  // The patch: a hole in the cloud with a hard, uneven edge, nothing in it, and a thin cold line round it.
+  vec2 d = vW - uPatch.xy;
+  float ang = atan(d.y, d.x);
+  float edge = uPatch.z * (1.0 + uRag * (sin(ang * 3.0 + 1.3) + 0.6 * sin(ang * 5.0 - uTime * 0.5) + 0.5 * sin(ang * 9.0 + uTime * 0.8))) + (n2 - 0.5) * 0.4;
+  float len = length(d);
+  float k = 1.0 - smoothstep(edge - 0.14, edge, len);
+  float rim = smoothstep(edge - 0.1, edge + 0.05, len) * (1.0 - smoothstep(edge + 0.05, edge + 0.9, len));
+  col = mix(col, uDark, k);
+  col += uRim * rim * uRimShow;
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+export interface ShipFrame {
+  r: Ship;
+  /** How far through the tick (0 to 1), and the time in seconds. */
+  t: number;
+  time: number;
+  players: Map<number, { root: THREE.Object3D; beam: THREE.Object3D }>;
+}
+
+export class ShipFx {
+  readonly all = new THREE.Group();
+  /** The sea's colour now, for the sky behind it. */
+  readonly sea = new THREE.Color(SHIP.sky.night);
+  private u = {
+    uTime: { value: 0 }, uScroll: { value: 0 }, uGrain: { value: SHIP_LOOK.grain[0] as number }, uRag: { value: SHIP_LOOK.ragged as number }, uRimShow: { value: SHIP_LOOK.rimShow as number }, uLamp: { value: 1 },
+    uPatch: { value: new THREE.Vector3(0, -30, SHIP.patch.size / 2) }, uSea: { value: new THREE.Color(SHIP.sky.night) }, uDark: { value: new THREE.Color(SHIP_LOOK.dark) }, uRim: { value: new THREE.Color(SHIP_LOOK.rim) }, uWarm: { value: new THREE.Color(SHIP_LOOK.lamp) },
+  };
+  private night = new THREE.Color(SHIP.sky.night);
+  private grey = new THREE.Color(SHIP.sky.grey);
+  private lead = SHIP.patch.start as number;
+  private lastLead = SHIP.patch.start as number;
+  private pulse = -9;
+  private lit = 1;
+  private lampGlow: THREE.Sprite;
+  private lampCore: THREE.Sprite;
+  private lampBox: THREE.MeshStandardMaterial;
+  private lampLight: THREE.PointLight;
+  private streaks: { m: THREE.Mesh; v: number }[] = [];
+  private veil: THREE.Mesh;
+  private veilK = 0;
+  private home = new THREE.Group();
+  private last = 0;
+
+  constructor(private glow: Glow) {
+    const std: Std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, ...extra });
+    const K = SHIP_LOOK, hw = SHIP_DECK.hw + 0.5, hl = SHIP_DECK.hl + 0.5;
+
+    // The cloud sea.
+    const plane = new THREE.PlaneGeometry(420, 420);
+    plane.rotateX(-Math.PI / 2);
+    const sea = new THREE.Mesh(plane, new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: FS, uniforms: this.u }));
+    sea.position.y = K.seaY;
+    this.all.add(sea);
+
+    // The hull: the deck's rectangle with a short prow ahead of it, sitting in the cloud.
+    const prow = 3.3;
+    const shape = new THREE.Shape();
+    // Drawn with the stern at +y: turned flat, +y is south and the depth goes down from just under the planks.
+    shape.moveTo(-hw - 0.15, hl + 0.15);
+    shape.lineTo(hw + 0.15, hl + 0.15);
+    shape.lineTo(hw + 0.15, -hl);
+    shape.lineTo(0, -hl - prow);
+    shape.lineTo(-hw - 0.15, -hl);
+    shape.closePath();
+    const hullGeo = new THREE.ExtrudeGeometry(shape, { depth: 2.6, bevelEnabled: false });
+    hullGeo.rotateX(Math.PI / 2);
+    const hull = new THREE.Mesh(hullGeo, std("#3b2a1f"));
+    hull.position.y = 0.04;
+    hull.receiveShadow = true;
+    this.all.add(hull);
+    // Planks, one to a tile, and the prow's own boards.
+    const wood = std("#8a6a48"), pale = std("#a9865c"), dark = std("#4e3a28");
+    const tiles: [number, number][] = [];
+    for (let y = -SHIP_DECK.hl; y <= SHIP_DECK.hl; y++) for (let x = -SHIP_DECK.hw; x <= SHIP_DECK.hw; x++) if (onDeck(x, y)) tiles.push([x, y]);
+    const deck = new THREE.InstancedMesh(new THREE.BoxGeometry(0.97, 0.1, 0.99), wood, tiles.length);
+    const m = new THREE.Matrix4();
+    tiles.forEach(([x, y], i) => deck.setMatrixAt(i, m.makeTranslation(x, 0.03 + ((x * 7 + y * 3 + 40) % 3) * 0.005, y)));
+    deck.receiveShadow = true;
+    this.all.add(deck);
+    const nose = new THREE.Shape();
+    nose.moveTo(-hw, 0);
+    nose.lineTo(hw, 0);
+    nose.lineTo(0, prow - 0.2);
+    nose.closePath();
+    const noseMesh = new THREE.Mesh(new THREE.ShapeGeometry(nose).rotateX(-Math.PI / 2), std("#7a5c3e"));
+    noseMesh.position.set(0, 0.08, -hl);
+    noseMesh.receiveShadow = true;
+    this.all.add(noseMesh);
+
+    // The rails: a low bulwark and a rail on posts, down both sides, across the stern, and along the prow.
+    const rail = (x0: number, z0: number, x1: number, z1: number) => {
+      const len = Math.hypot(x1 - x0, z1 - z0), ang = Math.atan2(x1 - x0, z1 - z0);
+      for (const [h, y, w, mat] of [[0.36, 0.26, 0.2, dark], [0.1, 0.95, 0.16, pale]] as const) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, len), mat);
+        b.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
+        b.rotation.y = ang;
+        b.castShadow = true;
+        this.all.add(b);
+      }
+      const n = Math.max(1, Math.round(len / 2.5));
+      for (let i = 0; i <= n; i++) {
+        const p = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.9, 0.14), pale);
+        p.position.set(x0 + ((x1 - x0) * i) / n, 0.5, z0 + ((z1 - z0) * i) / n);
+        this.all.add(p);
+      }
+    };
+    rail(-hw, -hl, -hw, hl);
+    rail(hw, -hl, hw, hl);
+    rail(-hw, hl, hw, hl);
+    rail(-hw, -hl, 0, -hl - prow + 0.2);
+    rail(hw, -hl, 0, -hl - prow + 0.2);
+
+    // The ship's lamp amidships, where a wisp is banked: a housing, a post and a lantern, with a warm line round its edge.
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.5, 2.5), dark);
+    housing.position.y = 0.3;
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.3, 1.5), std("#5d4631"));
+    cap.position.y = 0.7;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 2.0, 10), std("#2c2f38", { roughness: 0.7 }));
+    post.position.y = 1.8;
+    this.lampBox = std("#ffd9a0", { emissive: K.lamp, emissiveIntensity: 1.6 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.85, 0.7), this.lampBox);
+    box.position.y = 3.1;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.4, 4), std("#2c2f38", { roughness: 0.7 }));
+    roof.rotation.y = Math.PI / 4;
+    roof.position.y = 3.72;
+    for (const o of [housing, cap, post, box, roof]) (o.castShadow = true), this.all.add(o);
+    this.lampGlow = this.glow(K.lamp, K.lampSize, 0.6);
+    this.lampCore = this.glow("#fff0c8", K.lampSize * 0.3, 0.95);
+    this.lampGlow.position.set(0, 3.1, 0);
+    this.lampCore.position.set(0, 3.1, 0);
+    this.lampGlow.renderOrder = this.lampCore.renderOrder = 6;
+    this.lampLight = new THREE.PointLight("#ffb060", 70, 26, 1.5);
+    this.lampLight.position.set(0, 3.3, 0);
+    this.all.add(this.lampGlow, this.lampCore, this.lampLight);
+    const s = 2.5, y = 0.12;
+    const edge = [[-s, -s], [s, -s], [s, -s], [s, s], [s, s], [-s, s], [-s, s], [-s, -s]].map(([x, z]) => new THREE.Vector3(x!, y, z!));
+    const rim = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineBasicMaterial({ color: "#ffcf8a", transparent: true, opacity: 0.7 }));
+    this.all.add(rim);
+
+    // The stranger at the stern: tall, hooded, his back to us, hands empty at his sides. He never moves and holds nothing.
+    const cloak = std("#3a3f52", { roughness: 1 });
+    const who = new THREE.Group();
+    const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.62, 2.0, 14), cloak);
+    robe.position.y = 1.0;
+    const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), cloak);
+    shoulders.scale.set(1.25, 0.6, 0.85);
+    shoulders.position.y = 2.0;
+    const hood = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 10), cloak);
+    hood.scale.set(1, 1.15, 1.1);
+    hood.position.set(0, 2.42, 0.03);
+    const peak = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.36, 10), cloak);
+    peak.position.set(0, 2.78, 0.12);
+    peak.rotation.x = 0.5;
+    who.add(robe, shoulders, hood, peak);
+    for (const sx of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.85, 4, 8), cloak);
+      arm.position.set(sx * 0.62, 1.5, 0);
+      arm.rotation.z = sx * 0.16;
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), std("#b9a58e"));
+      hand.scale.set(1.2, 0.5, 1.5);
+      hand.position.set(sx * 0.72, 0.98, 0);
+      who.add(arm, hand);
+    }
+    who.traverse((o) => ((o as THREE.Mesh).castShadow = true));
+    who.position.set(SHIP.figure[0], 0.08, SHIP.figure[1]);
+    this.all.add(who);
+
+    // The wind: thin pale streaks going over the deck from the bow to the stern.
+    const streakMat = new THREE.MeshBasicMaterial({ color: "#c9d6f0", transparent: true, opacity: 0.1, depthWrite: false });
+    for (let i = 0; i < K.streaks; i++) {
+      const len = 1.2 + ((i * 37) % 10) * 0.16;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.05, len).rotateX(-Math.PI / 2), streakMat);
+      mesh.position.set(-8 + ((i * 53) % 160) / 10, 0.9 + ((i * 17) % 10) * 0.12, -18 + ((i * 29) % 34));
+      mesh.renderOrder = 4;
+      this.streaks.push({ m: mesh, v: 0.75 + ((i * 13) % 10) * 0.05 });
+      this.all.add(mesh);
+    }
+
+    // Home, which comes in over the top of the screen at the end.
+    this.buildHome(std);
+    this.home.visible = false;
+    this.all.add(this.home);
+
+    // The cloud the ship goes into when the patch is lost: over everything, and gone again at the bow.
+    this.veil = new THREE.Mesh(new THREE.PlaneGeometry(420, 420).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#232838", transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
+    this.veil.position.y = 6;
+    this.veil.renderOrder = 20;
+    this.veil.visible = false;
+    this.all.add(this.veil);
+  }
+
+  /**
+   * Home's north end as the ship comes at it, turned so its two tips point at him: the falls'
+   * mouth between them with one small light on the stone, both tips crowded with glows and every
+   * back to him, no window lit, and the landing run out along his side with nobody on it.
+   * Its own coordinates: x east from the mouth, z = 0 at the tips' ends, the land going north.
+   */
+  private buildHome(std: Std) {
+    const K = SHIP_LOOK, g = this.home;
+    const land = new THREE.Shape();
+    const pts: [number, number][] = [[-13, 0], [-17, 2], [-24, 6], [-34, 11], [-46, 18], [-60, 30], [-60, 90], [60, 90], [60, 30], [46, 18], [34, 11], [24, 6], [17, 2], [13, 0], [5, 0], [3.5, 1.5], [3.5, 30], [2.5, 33], [0, 34.5], [-2.5, 33], [-3.5, 30], [-3.5, 1.5], [-5, 0]];
+    pts.forEach(([x, v], i) => (i === 0 ? land.moveTo(x, v) : land.lineTo(x, v)));
+    land.closePath();
+    // Turned flat the other way: the shape's +y goes north, and its depth goes up to the ground.
+    const body = new THREE.Mesh(new THREE.ExtrudeGeometry(land, { depth: 7, bevelEnabled: false }).rotateX(-Math.PI / 2), std("#4c6048", { roughness: 1 }));
+    body.position.y = 0.35 - 7;
+    body.receiveShadow = true;
+    g.add(body);
+    // The lake in the channel, and its water going over the lip either side of the stone.
+    const lake = new THREE.Mesh(new THREE.PlaneGeometry(7, 34).rotateX(-Math.PI / 2), std("#27344c", { roughness: 0.35, metalness: 0.2 }));
+    lake.position.set(0, 0.12, -17);
+    g.add(lake);
+    const white = new THREE.MeshBasicMaterial({ color: "#aebbd6", transparent: true, opacity: 0.5, depthWrite: false });
+    for (const sx of [-1, 1]) {
+      const fall = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 7), white);
+      fall.position.set(sx * 2.2, -3.3, 0.05);
+      const foam = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6).rotateX(-Math.PI / 2), white);
+      foam.position.set(sx * 2.2, 0.14, -0.7);
+      g.add(fall, foam);
+    }
+    // The stone at the lip, and the one small warm light on it.
+    const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 1.0, 0.5, 14), std("#6d7180", { roughness: 1 }));
+    stone.position.set(0, 0.3, -0.9);
+    const lit = this.glow("#ffb24a", 2.6, 0.75), core = this.glow("#fff0c8", 0.8, 1);
+    lit.position.set(0, 0.95, -0.9);
+    core.position.set(0, 0.95, -0.9);
+    lit.renderOrder = core.renderOrder = 6;
+    g.add(stone, lit, core);
+    // Houses inland, every window dark.
+    const slate = std("#3d4250"), pane = std("#15171c");
+    for (const [i, [x, v]] of ([[-13, 9], [-22, 12], [-10, 16], [12, 9], [21, 12], [10, 17], [-30, 16], [31, 17]] as const).entries()) {
+      const h = new THREE.Group(), w = 2.6, tall = 1.9 + (i % 3) * 0.25;
+      const walls = new THREE.Mesh(new THREE.BoxGeometry(w, tall, w), std(["#8f8a80", "#86837b", "#968c7c"][i % 3]!));
+      walls.position.y = tall / 2;
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.82, 1.5, 4), slate);
+      roof.rotation.y = Math.PI / 4;
+      roof.position.y = tall + 0.75;
+      const win = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.06), pane);
+      win.position.set(0.5, tall * 0.58, w / 2 + 0.02);
+      h.add(walls, roof, win);
+      h.position.set(x, 0.35, -v);
+      g.add(h);
+    }
+    // Everyone, on the two tips, along the channel's edges and the ends, all turned to the water. Nobody near the landing.
+    const cloth = ["#4b5a6e", "#6a5746", "#5d6b52", "#70606e", "#4f4f5c", "#7a6a50", "#80705a", "#55606c"];
+    const tints = ["#ffcf8a", "#bfe0ff", "#ffd9c0", "#c9f0c0"];
+    for (let i = 0; i < K.crowd; i++) {
+      const side = i % 2 ? 1 : -1, k = Math.floor(i / 2);
+      // Rows back from the channel's edge, thinning away from it.
+      const row = k % 4, along = Math.floor(k / 4);
+      const x = side * (4.3 + row * 0.95 + ((i * 13) % 5) * 0.1), v = 1.2 + along * 1.25 + (row % 2) * 0.5 + ((i * 7) % 4) * 0.08;
+      const small = i % 5 === 0, h = small ? 0.8 : 1.2 + ((i * 37) % 5) * 0.05;
+      const p = new THREE.Group();
+      p.add(...figure(std, cloth[(i * 5) % cloth.length]!, h, small));
+      const glow = this.glow(tints[i % 4]!, 1.3, 0.5);
+      glow.position.set(-side * 0.25, h * 0.75, 0);
+      glow.renderOrder = 6;
+      p.add(glow);
+      p.position.set(x, 0.35, -v);
+      g.add(p);
+    }
+    // The landing: planks run out south along the ship's side from the west tip's shoulder, a post at the end with its lamp unlit, and nobody.
+    const px = -K.mouthEast - (SHIP_DECK.hw + 2.6), wood = std("#7d5c3c");
+    const n = K.pier + 6;
+    const planks = new THREE.InstancedMesh(new THREE.BoxGeometry(2.9, 0.12, 0.94), wood, n);
+    const m = new THREE.Matrix4();
+    for (let i = 0; i < n; i++) planks.setMatrixAt(i, m.makeTranslation(px, 0.36 + (i % 3) * 0.006, K.pier - 0.5 - i));
+    planks.receiveShadow = true;
+    g.add(planks);
+    for (const z of [K.pier - 0.6, 1]) {
+      for (const sx of [-1.3, 1.3]) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 6, 8), std("#4e3a28"));
+        leg.position.set(px + sx, -2.6, z);
+        g.add(leg);
+      }
+    }
+    const lampPost = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 1.9, 8), std("#2c2f38"));
+    lampPost.position.set(px - 1.1, 1.3, K.pier - 1);
+    const lampBox = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.4, 0.34), std("#2a2622"));
+    lampBox.position.set(px - 1.1, 2.4, K.pier - 1);
+    g.add(lampPost, lampBox);
+    g.traverse((o) => (o as THREE.Mesh).isMesh && ((o as THREE.Mesh).castShadow = true));
+  }
+
+  step(f: ShipFrame) {
+    const { r, time } = f, K = SHIP_LOOK, P = SHIP.patch;
+    const dt = Math.min(0.1, Math.max(0, time - this.last));
+    this.last = time;
+    this.u.uTime.value = time;
+    this.u.uScroll.value += K.stream * dt;
+
+    // The second clock: the sea goes from night to grey.
+    this.sea.copy(this.night).lerp(this.grey, r.light);
+    this.u.uSea.value.copy(this.sea);
+    this.u.uGrain.value = K.grain[0] + (K.grain[1] - K.grain[0]) * r.light;
+    this.u.uRimShow.value = K.rimShow * (1 - 0.7 * r.light);
+
+    // The one meter: the patch ahead of the bow. The picture follows the number a little behind.
+    if (r.lead < this.lastLead - 0.01) this.pulse = time;
+    this.lastLead = r.lead;
+    this.lead += (r.lead - this.lead) * P.ease;
+    const bow = -(SHIP_DECK.hl + 0.5);
+    this.u.uPatch.value.set(0, bow - this.lead - P.size / 2, P.size / 2);
+
+    // The lamp: it swells as one goes in, and gutters out when the patch is lost.
+    const gut = r.gutter;
+    const want = gut === undefined ? 1 : Math.max(0, 1 - (gut + f.t) / (P.gutterTicks * 0.45));
+    this.lit += (want - this.lit) * (want < this.lit ? 0.25 : 0.06);
+    const flick = gut === undefined ? 0.96 + 0.04 * Math.sin(time * 2.3) : 0.55 + 0.45 * Math.sin(time * 31) * Math.sin(time * 17);
+    const pulse = Math.max(0, 1 - (time - this.pulse) / 0.6);
+    const lit = Math.max(0, this.lit * flick);
+    this.lampGlow.scale.setScalar(K.lampSize * (0.5 + 0.5 * lit) + pulse * K.lampPulse);
+    this.lampGlow.material.opacity = 0.6 * lit;
+    this.lampCore.material.opacity = 0.95 * lit;
+    this.lampBox.emissiveIntensity = 1.6 * lit + pulse;
+    this.lampLight.intensity = 70 * lit + 40 * pulse;
+    this.u.uLamp.value = lit;
+
+    // Into the cloud, and out of it again at the bow.
+    const veilWant = gut === undefined ? 0 : Math.min(1, Math.max(0, (gut + f.t - 1) / (P.gutterTicks - 2)));
+    this.veilK = gut === undefined ? Math.max(0, this.veilK - dt / K.clearSec) : Math.max(this.veilK, veilWant);
+    this.veil.visible = this.veilK > 0.004;
+    (this.veil.material as THREE.MeshBasicMaterial).color.copy(this.sea).lerp(WHITE, 0.1).multiplyScalar(0.4);
+    (this.veil.material as THREE.MeshBasicMaterial).opacity = this.veilK * 0.97;
+
+    // The wind.
+    for (const s of this.streaks) {
+      s.m.position.z += K.streakSpeed * s.v * dt;
+      if (s.m.position.z > 16) s.m.position.z -= 34;
+    }
+
+    // Home: in over the top of the screen through the last seconds, at the ship's own speed. It does not slow.
+    this.home.visible = r.home > 0;
+    if (r.home > 0) {
+      const h = Math.min(1, r.home - (1 - f.t) / Math.ceil((SHIP.endSec * 1000) / 600));
+      this.home.position.set(K.mouthEast, 0, bow - 3.3 - K.homeGap - (1 - h) * K.approach);
+    }
+
+    if (r.over === undefined) this.from = null;
+  }
+
+  /** He goes over the rail before it touches: to the side the landing is on, up, and over. Called once his place for the frame is set. */
+  overRail(rook: { root: THREE.Object3D; beam: THREE.Object3D }, over: number, t: number) {
+    const k = Math.min(1, (over + t) / SHIP.railTicks), at = rook.root.position;
+    const run = Math.min(1, k / 0.55), hop = Math.max(0, (k - 0.55) / 0.45);
+    const edge = -(SHIP_DECK.hw + 0.1);
+    if (this.from === null) this.from = at.clone();
+    at.x = this.from.x + (edge - this.from.x) * run - hop * 1.9;
+    at.y = this.from.y + Math.sin(Math.min(1, hop * 1.15) * Math.PI) * 1.5 + hop * 0.4;
+    at.z = this.from.z - run * 1.2;
+    rook.beam.visible = false;
+  }
+  private from: THREE.Vector3 | null = null;
+
+  dispose() {
+    this.all.removeFromParent();
+    this.all.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+    });
+  }
+}

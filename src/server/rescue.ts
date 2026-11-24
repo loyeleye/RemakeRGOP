@@ -395,7 +395,7 @@ export class RescueRoom {
   private bringUnder(row: number) {
     const g = this.game, reach = Math.floor(RESCUE.patch.size / 2) - 1;
     const waiting = g.wisps.filter((w) => w.guild === 0 && g.away.has(w.id) && g.away.get(w.id)! < 1e8);
-    const loose = (w: Wisp) => w.guild === 0 && !g.away.has(w.id) && w.holder === null && Math.abs(w.pos.y - row) <= reach && !g.board.inBankZone(w.pos);
+    const loose = (w: Wisp) => w.guild === 0 && !g.away.has(w.id) && !w.touched && Math.abs(w.pos.y - row) <= reach && !g.board.inBankZone(w.pos);
     for (const w of waiting) {
       if (g.wisps.filter(loose).length >= RESCUE.patch.under) return;
       const at = this.onCourse(row);
@@ -416,7 +416,7 @@ export class RescueRoom {
         // `nearCourse` of the course with the most of his loose wisps on it (the middle strip's count
         // twice), and well away from her. If she is in the way it waits for her to move on.
         const reach = P.size / 2 - 1, by = this.course(), late = g.tick >= Math.max(P.firstBy, 0) + 25 || n >= P.firstBanks + 3;
-        const loose = g.wisps.filter((w) => w.guild === 0 && !g.away.has(w.id) && w.holder === null && !g.board.inBankZone(w.pos));
+        const loose = g.wisps.filter((w) => w.guild === 0 && !g.away.has(w.id) && !w.touched && !g.board.inBankZone(w.pos));
         const waiting = g.wisps.filter((w) => w.guild === 0 && g.away.has(w.id) && g.away.get(w.id)! < 1e8).length;
         let best = -1, row = by;
         for (let y = by - P.nearCourse; y <= by + P.nearCourse; y++) {
@@ -451,7 +451,8 @@ export class RescueRoom {
     if (p.warn > 0) return;
     // Loose wisps it covers: not seen while it is over them, and gone when it has passed.
     const rook = this.player(YOU);
-    const held = (w: Wisp) => rook.beam === w.id || w.holder === YOU || (!this.kesDark && g.string.includes(w.id)) || (!this.kesDark && w.holder === KES_ID);
+    // A staff on it this tick: the engine's `holder` stays set after the last touch, so it is not the test by itself.
+    const held = (w: Wisp) => rook.beam === w.id || (w.holder === YOU && w.touched) || (!this.kesDark && g.string.includes(w.id)) || (!this.kesDark && w.holder === KES_ID && w.touched);
     for (const w of g.wisps) {
       if (g.away.has(w.id) || g.board.inBankZone(w.pos)) continue;
       const over = this.covers(w.pos);

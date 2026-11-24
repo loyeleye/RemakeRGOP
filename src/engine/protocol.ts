@@ -93,7 +93,15 @@ export interface StoryView {
   /** The tile the partner was last called to, while he's on his way or standing there. */
   called?: { x: number; y: number } | null;
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
-  end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[] };
+  end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };
+  /**
+   * Run 10, the ship home: the tick of the run and its fixed length; how far ahead of the bow the
+   * patch is (tiles); the sea's light (0 night, 1 first light); how far home has come in over the
+   * top of the screen (0 to 1, the last seconds); whether the bell from home is tolling; ticks the
+   * lamp has guttered (the patch out of sight, before it starts again); and ticks since he went
+   * over the rail.
+   */
+  ship?: { tick: number; ticks: number; lead: number; light: number; home: number; bell: boolean; gutter?: number; over?: number };
   /**
    * Runs 6 and 7, the night the island goes down. `part`: run 6, its scripted bottom, the three
    * stills, run 7, the hold after the last bank, the picture of the island clear of the cloud, and

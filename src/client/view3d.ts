@@ -20,6 +20,8 @@ import { DYING, crowdSpot, terraceHeight } from "../engine/dying.js";
 import { DRESS, dressVerge, quarryPit, sieveGrain, sieveMask, sievePaths, wellLoop } from "./sieve-dress.js";
 import { SIEVE } from "../engine/sieve.js";
 import { RescueFx } from "./rescue-dress.js";
+import { SHIP_LOOK, ShipFx } from "./ship-dress.js";
+import { SHIP, SHIP_DECK } from "../engine/shiphome.js";
 import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
 export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff", "#6fe07a"];
@@ -55,6 +57,8 @@ export interface DrawState {
   dying?: NonNullable<import("../engine/protocol.js").StoryView["dying"]>;
   /** Run 9, the rescue (see StoryView.rescue). */
   rescue?: NonNullable<import("../engine/protocol.js").StoryView["rescue"]>;
+  /** Run 10, the ship home (see StoryView.ship). */
+  ship?: NonNullable<import("../engine/protocol.js").StoryView["ship"]>;
   /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
   walk?: number;
 }
@@ -842,6 +846,8 @@ function glowSprite(color: string, size: number, opacity = 1) {
   return s;
 }
 
+const TMP_COLOR = new THREE.Color();
+
 // ------------------------------------------------------------------ scene
 
 interface PlayerRig {
@@ -1052,7 +1058,7 @@ function setWindows(on: boolean) {
 }
 
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
-const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "streamer", "streamer-blue", "wind-vane", "bent-tree", "referee-stand", "cold-brazier", "low-lamp", "low-house"]);
+const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "streamer", "streamer-blue", "wind-vane", "bent-tree", "referee-stand", "cold-brazier", "low-lamp", "low-house", "ship-figure"]);
 /** Yard things drawn from their own model: tiles wide and deep, and the block-out's height. */
 const YARD_THINGS: Record<string, [number, number, number]> = {
   beehive: [1, 1, 1], "garden-plot": [3, 2, 0.3], "mat-rack": [2, 1, 1.9], baskets: [1, 1, 0.4], wheelbarrow: [1, 1, 0.7], "pane-crate": [1, 1, 0.7], "cargo-crates": [1, 1, 1.3],
@@ -1896,6 +1902,8 @@ export class World {
     floor.position.y = 0.01;
     floor.receiveShadow = true;
     g.add(floor);
+    // A ship's deck (run 10) is drawn by ship-dress.ts: no flagstones and no land under it.
+    if (shrine.deck) floor.visible = false;
     if (dressed) {
       const S = Math.max(W, H) + 2;
       const { paths, ruts } = sievePaths(shrine.wells!, coast);
@@ -1946,6 +1954,7 @@ export class World {
     });
     island.position.set(shrine.core?.x ?? 0, -0.03, shrine.core?.y ?? 0);
     g.add(island);
+    if (shrine.deck) island.visible = false;
     if (dressed) this.dressSieveIsland(island, this.low ? 128 : 220);
     // Each arm is a chain of overlapping plateaus that shrink toward the tip.
     if (shrine.isle?.arms?.length) {
@@ -2946,7 +2955,7 @@ export class World {
   private rescueFx: RescueFx | null = null;
   private stepRescue(st: DrawState, time: number) {
     const r = st.rescue;
-    if (!r || !st.shrine.landing) {
+    if (!r || !st.shrine.landing || st.shrine.deck) {
       if (this.rescueFx) {
         this.rescueFx.dispose();
         this.rescueFx = null;
@@ -2963,6 +2972,38 @@ export class World {
     this.brazierLight.intensity = 0;
     const b = st.shrine.board;
     this.rescueFx.step({ r, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, wisps: this.wisps, players: this.players });
+  }
+
+  /** Run 10, the ship home: the cloud sea, the patch ahead, the hull and its lamp, the hooded figure, home at the end (ship-dress.ts), and the light going from night to grey. */
+  private shipFx: ShipFx | null = null;
+  private stepShip(st: DrawState, time: number) {
+    const r = st.ship;
+    if (!r || !st.shrine.deck) {
+      if (this.shipFx) {
+        this.shipFx.dispose();
+        this.shipFx = null;
+        this.distant.visible = true;
+        this.applyTheme(themeFor(st.shrine.id));
+      }
+      return;
+    }
+    if (!this.shipFx) {
+      this.shipFx = new ShipFx(glowSprite);
+      this.scene.add(this.shipFx.all);
+      this.distant.visible = false;
+    }
+    this.brazierLight.intensity = 0;
+    this.shipFx.step({ r, t: st.t, time, players: this.players });
+    // The second clock, which nobody has to read: night to first light.
+    const L = SHIP_LOOK, k = r.light, mix = (a: number, b: number) => a + (b - a) * k;
+    this.hemi.color.set(L.hemi[0][0]).lerp(TMP_COLOR.set(L.hemi[1][0]), k);
+    this.hemi.intensity = mix(L.hemi[0][1], L.hemi[1][1]);
+    this.sun.color.set(L.sun[0][0]).lerp(TMP_COLOR.set(L.sun[1][0]), k);
+    this.sun.intensity = mix(L.sun[0][1], L.sun[1][1]);
+    this.renderer.toneMappingExposure = mix(L.exposure[0], L.exposure[1]);
+    (this.scene.background as THREE.Color).copy(this.shipFx.sea);
+    (this.scene.fog as THREE.FogExp2).color.copy(this.shipFx.sea);
+    this.skyU.uStars.value = 1 - k;
   }
 
   /** Run 8: wisps that have just fallen away, watched going: down into the chalk, or down a well getting smaller. */
@@ -3992,6 +4033,7 @@ export class World {
     this.stepFalls(st, time);
     this.stepSieve(st, time);
     this.stepRescue(st, time);
+    this.stepShip(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
     // Watchers: story figures standing off the plaza, turning slowly to keep you in view.
@@ -4094,6 +4136,8 @@ export class World {
         this.stepSnack(rig, anim.at("snack"));
       } else rig.root.position.set(wx, moving ? Math.abs(Math.sin(time * 9)) * 0.06 : Math.sin(time * 1.6 + p.id) * 0.03, wz);
       if (this.perch && p.x === this.perch.x && p.y === this.perch.y) rig.root.position.y += this.perch.h;
+      // Run 10's last ticks: he goes over the rail.
+      if (this.shipFx && st.ship?.over !== undefined) this.shipFx.overRail(rig, st.ship.over, st.t);
       if (rig.body) rig.body.rotation.y = rig.facing;
       this.stepStoneCast(rig, time);
       // Lantern sits up and to the side of the figure, where the staff head is.
@@ -4237,6 +4281,17 @@ export function drawMinimap(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
   for (const p of st.snap.players) {
     g.fillStyle = p.id === st.me ? "#fff" : GUILD_COLORS[p.guild]!;
     g.fillRect(rect.x + p.x * k, rect.y + p.y * k, Math.max(2, k), Math.max(2, k));
+  }
+  // Run 10: the patch ahead of the bow, which a phone held sideways cannot otherwise see.
+  if (st.ship) {
+    const r = SHIP.patch.size / 2, px = rect.x + (b.center.x + 0.5) * k, py = rect.y + (b.center.y - SHIP_DECK.hl - st.ship.lead - r + 0.5) * k;
+    g.fillStyle = "#000";
+    g.strokeStyle = "#8fa6d8";
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.arc(px, py, Math.max(3, r * k), 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
   }
   // Where the camera looks.
   g.strokeStyle = "rgba(255,255,255,0.8)";

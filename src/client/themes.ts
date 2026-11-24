@@ -150,6 +150,16 @@ export const THEMES: Record<string, Theme> = {
       particles: null, dressed: true, decorate() {},
     };
   },
+  // The ship home (run 10): a deck at night over the cloud sea. The light is run by the board (ship-dress.ts); this is where it starts.
+  get "ship-deck"() {
+    const base = THEMES["low-one"]!;
+    return {
+      ...base, name: "The ship home",
+      sky: { zenith: "#02030a", sky: "#03040a", haze: "#0a0e1c", below: "#03040a", stars: 1 },
+      fog: "#03040a", clouds: "#1a2238", hemi: ["#4a62a8", "#141824", 0.42] as [string, string, number], sun: ["#8ea6e8", 0.5] as [string, number], exposure: 1.25,
+      particles: null, dressed: true, decorate() {},
+    };
+  },
   // The fairy ring after Hesta's landing (run 7): the same look, with the crater's glass drawn by the board.
   get "kindling-crater"() {
     return THEMES["fairy-ring"]!;

@@ -63,6 +63,10 @@ export const STILLS: Record<string, StillCard> = {
   "r9-1": { who: "Kes looking straight up, a dark band of cloud round her boots", faces: "Eyes wide, brows pulled together, mouth a little open." },
   "r9-2": { who: "Kes and Rook side by side. Her glow is gone and she is looking at her empty hands", faces: "Kes: eyes wide, brows up in the middle, mouth open. Rook: brows down, eyes on her, mouth shut." },
   "r9-3": { who: "The grandmother at the rail, one hand on her husband's arm, looking past us at Rook", faces: "Her eyes soft, brows a little up, mouth closed, chin lifted toward home." },
+  // Run 10, the ship home: the view over the bow, three times. Rook's face in profile at the edge, lit by the ship's lamp. Plain cards.
+  "r10-0": { who: "Rook in profile at the edge, the ship's lamp on his face. Beyond the bow, home far off: two glows side by side under one dark shape", faces: "Eyes fixed ahead, brows down and together, jaw set, mouth shut." },
+  "r10-1": { who: "Rook in profile. Beyond the bow, the two tips of the horseshoe, both crowded with small glows. Not one lit window", faces: "Eyes wider, brows up in the middle, mouth a little open." },
+  "r10-2": { who: "Rook in profile. Beyond the bow, the mouth of the falls: one small warm light alone on the stone, water falling on both sides", faces: "Eyes wide, brows up, mouth open." },
 };
 
 /** How long a still is up, fade to fade (ms), given how long its line takes to say (0 for none). */

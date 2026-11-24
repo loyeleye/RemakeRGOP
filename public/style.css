@@ -95,7 +95,12 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 #run.walking { color: #c9d2e6; border-style: dashed; }
 /* Next as the Focus button: the dashed ring that focus mode puts round every wisp. */
 .touch #next.focus { font-size: 13px; font-weight: 700; color: #fff; background: #1b2030e6; border: 2px dashed #ffffffd0; box-shadow: 0 0 0 3px #ffd36a66, 0 4px 14px #0008; }
-.touch #next.focus.off { opacity: 0.6; border-color: #ffffff66; box-shadow: 0 4px 14px #0008; text-decoration: none; }
+.touch #next.focus.off { opacity: 0.75; border-color: #ffffff66; box-shadow: 0 4px 14px #0008; text-decoration: none; }
+.touch #next.focus { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; font-size: 10.5px; line-height: 1; padding: 0; border-style: solid; }
+#next.focus svg { width: 34px; height: 34px; color: #ffd36a; filter: drop-shadow(0 0 4px #ffd36a99); }
+#next.focus svg .dot { fill: #fff2c4; }
+#next.focus.off svg { color: #ffffffa0; filter: none; }
+#next.focus.off svg .dot { fill: none; stroke: currentColor; stroke-width: 1.8; }
 .touch #run2.walking { filter: grayscale(0.9) brightness(0.7); }
 .touch #mode { background-image: url(ui/push.webp); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; }
 .touch #mode.push { background-image: url(ui/pull.webp); color: #fff; }

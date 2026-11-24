@@ -11,6 +11,7 @@
 import { DYING, craterBoard, craterTiles } from "./dying.js";
 import { SV_WELLS, sieveRows, svCoast, svOutline } from "./sieve.js";
 import { LO_FRAME, LO_OVAL, RESCUE, loCoast, loFromSlip, loOutline, lowOneRows } from "./rescue.js";
+import { SHIP, SHIP_DECK, SHIP_FRAME, shipRows } from "./shiphome.js";
 import { KF_FAR, KF_OVAL, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
 import { HS_CENTRE, HS_FAR, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
 import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
@@ -345,7 +346,7 @@ export function ringWalls(ring: Ring): Pt[] {
 export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling"
   | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat" | "path-lamp" | "ladder"
   | "beehive" | "garden-plot" | "mat-rack" | "baskets" | "wheelbarrow" | "pane-crate" | "cargo-crates" | "streamer" | "streamer-blue" | "kes-house" | "wind-vane" | "bent-tree" | "referee-stand"
-  | "cold-brazier" | "low-lamp" | "low-house";
+  | "cold-brazier" | "low-lamp" | "low-house" | "ship-figure";
 export const PROP_CHARS: Record<string, PropKind> = {
   F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling",
   // The horseshoe island's houses, the Offering stone, and the one boat at its mooring.
@@ -359,6 +360,8 @@ export const PROP_CHARS: Record<string, PropKind> = {
   "5": "kes-house", "6": "wind-vane", "7": "bent-tree", "8": "referee-stand",
   // The low one (run 9): its own brazier, cold, its path lamps and its houses. All are drawn by the run (rescue-dress.ts).
   "9": "cold-brazier", "0": "low-lamp", "?": "low-house",
+  // The ship home (run 10): the hooded figure at the stern, drawn by the run (ship-dress.ts).
+  "$": "ship-figure",
   q: "beehive", p: "garden-plot", m: "mat-rack", s: "baskets", w: "wheelbarrow", n: "pane-crate", r: "cargo-crates",
 };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
@@ -418,6 +421,8 @@ export interface Shrine {
   smallWash?: string[];
   /** Story: the bank is a landing's slip, where a boat's lamp is filled (run 9). No brazier, dais or fire is drawn at the centre. */
   landing?: boolean;
+  /** Story: the board is a ship's deck in the sky (run 10). No island is drawn under it; the run draws the hull. */
+  deck?: boolean;
   /** Story places: named islands of the sky that must be in view from here, in tiles from the centre; `drop` is how far below this one they hang. */
   far?: { x: number; y: number; r: number; drop: number }[];
 }
@@ -912,6 +917,7 @@ const TILE_OF: Record<string, Tile> = {
   "9": Tile.Rock,
   "0": Tile.Rock,
   "?": Tile.Rock,
+  "$": Tile.Rock,
   "~": Tile.Water,
   /** Deep water (the law of the water): a pool tile where a plain pull slips. */
   "≈": Tile.Water,
@@ -1382,6 +1388,7 @@ export const STORY_SHRINES: Shrine[] = [
   // Run 8, a harder job: the Sieve, pale chalk pierced by wells (see sieve.ts).
   sieve(),
   lowOne(),
+  shipDeck(),
 ];
 
 /** The Kindling ground with the crater in it: everything else as run 1's island. */
@@ -1402,6 +1409,20 @@ function sieve(): Shrine {
 }
 
 /** The low one (run 9): a plain oval cut by two long pools, with the landing at its south end. The board's centre is the landing's slip. */
+/** The stranger's ship (run 10): a deck 11 by 25, the lamp amidships, open sky all round. */
+function shipDeck(): Shrine {
+  const rows = shipRows();
+  const def: ShrineDef = { id: SHIP.shrine, name: "The ship home", blurb: "The deck of a small ship in the sky, at night.", full: true, scale: 1, rings: [], spawnBand: [3, 12], rows };
+  const sh = finish(def, rows, 2, null);
+  const c = sh.board.center;
+  sh.board.frame = { x: c.x + SHIP_FRAME.x0, y: c.y + SHIP_FRAME.y0, w: SHIP_FRAME.x1 - SHIP_FRAME.x0 + 1, h: SHIP_FRAME.y1 - SHIP_FRAME.y0 + 1 };
+  sh.board.phoneSpan = SHIP.phoneSpan;
+  // The rules' coast is the deck's edge (the rails).
+  const coast = (x: number, y: number) => Math.max(Math.abs(x) - SHIP_DECK.hw, Math.abs(y) - SHIP_DECK.hl) - 0.5;
+  const outline = (a: number) => Math.min((SHIP_DECK.hw + 0.5) / Math.abs(Math.cos(a) || 1e-6), (SHIP_DECK.hl + 0.5) / Math.abs(Math.sin(a) || 1e-6));
+  return { ...sh, coast, outline, arms: true, lobes: [], landing: true, deck: true };
+}
+
 function lowOne(): Shrine {
   const rows = lowOneRows();
   const def: ShrineDef = { id: RESCUE.shrine, name: "The low one", blurb: "A neighbouring island, ankle-deep in cloud. Everyone is leaving.", full: true, scale: 1, rings: [], spawnBand: [14, 34], rows };

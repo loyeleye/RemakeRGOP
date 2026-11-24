@@ -510,7 +510,7 @@ export class RescueFx {
 const WING = { x0: 5, x1: 12, y0: -5, y1: -1 };
 
 /** A block-out person: a body and a head, `h` tall. */
-function figure(std: (color: string, extra?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial, cloth: string, h: number, small: boolean) {
+export function figure(std: (color: string, extra?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial, cloth: string, h: number, small: boolean) {
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(small ? 0.2 : 0.27, Math.max(0.1, h - 0.5), 4, 10), std(cloth));
   body.position.y = h / 2 + 0.1;
   body.castShadow = true;
