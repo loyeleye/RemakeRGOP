@@ -1035,7 +1035,7 @@ function makeSteps(): THREE.Group {
 
 /** A story character's model, at their height, lit flat-ish: the model's own colours glow a little. */
 /** What a cast member is doing, for their animation. */
-export type CastMove = "idle" | "walk" | "run" | "pull" | "push";
+export type CastMove = "idle" | "walk" | "run" | "pull" | "push" | "snack";
 
 /** One mixer per character: crossfades between its looping clips; push plays once, then back to idle. */
 class CastAnim {
@@ -1074,6 +1074,9 @@ class CastAnim {
     this.casting = true;
     this.cur = "cast" as CastMove;
     return true;
+  }
+  has(move: string) {
+    return this.actions.has(move);
   }
   /** Ask for a move; a push already playing finishes first. */
   set(move: CastMove) {
@@ -2667,7 +2670,10 @@ export class World {
       const anim = rig.body?.userData.anim as CastAnim | undefined;
       if (anim) {
         // Animated cast: the clips do the moving, so no bob.
-        anim.set(p.beam !== null ? (p.mode === "push" ? "push" : "pull") : moving ? (p.run ? "run" : "walk") : "idle");
+        // Hesta, two or more ahead and with nothing to do, eats a honey drop from her bag (story thread).
+        const lead = (st.snap.scores[p.guild] ?? 0) - Math.max(...st.snap.scores.filter((_, i) => i !== p.guild), 0);
+        const snack = rig.cast === "hesta" && lead >= 2 && anim.has("snack");
+        anim.set(p.beam !== null ? (p.mode === "push" ? "push" : "pull") : moving ? (p.run ? "run" : "walk") : snack ? "snack" : "idle");
         anim.update(time);
         rig.root.position.set(wx, 0, wz);
       } else rig.root.position.set(wx, moving ? Math.abs(Math.sin(time * 9)) * 0.06 : Math.sin(time * 1.6 + p.id) * 0.03, wz);
