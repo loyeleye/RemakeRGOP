@@ -117,7 +117,7 @@ export const HS_ROOK = { x: -16, y: -42, w: 9, h: 9 };
 const DOOR_TURN = { e: Math.PI / 2, w: -Math.PI / 2, n: Math.PI, s: 0 };
 
 /** The island as map rows, and the turns its models need. */
-export function horseshoeRows(): { rows: string[]; turns: Record<string, number> } {
+export function horseshoeRows(): { rows: string[]; turns: Record<string, number>; smallWash: string[] } {
   const { w: W, h: H } = HS_SIZE;
   const X = (sx: number) => sx - HS_CENTRE.x + HALF_W, Y = (sy: number) => sy - HS_CENTRE.y + HALF_H;
   const g: string[][] = Array.from({ length: H }, (_, by) =>
@@ -146,6 +146,8 @@ export function horseshoeRows(): { rows: string[]; turns: Record<string, number>
   };
   const turns: Record<string, number> = {};
   const turnAt = (x: number, y: number, a: number) => (turns[`${X(x)},${Y(y)}`] = a);
+  /** Wash lines (by their west post, "x,y") hung with small pale cloths. */
+  const small: string[] = [];
 
   // The path right round the U, tip to tip, a few tiles back from the lake (the cove doesn't count).
   const lakeD = new Map<string, number>();
@@ -315,17 +317,20 @@ export function horseshoeRows(): { rows: string[]; turns: Record<string, number>
     if (turn !== undefined) turnAt(x, y, turn);
   };
   // Nell's (Jarek, Hania): Hania's hives in a fenced bee garden, Jarek's lamp oil by his ladder, wash, wood.
-  for (let x = 14; x <= 23; x++) yard(x, -35, "F");
-  for (const x of [15, 17, 19, 21]) yard(x, -32, "q", 1, 1, toS);
+  // (The hives stand well north of the two-storey roof, which would hide them from the camera.)
+  for (let x = 14; x <= 23; x++) yard(x, -38, "F");
+  for (const x of [15, 17, 19, 21]) yard(x, -35, "q", 1, 1, toS);
   yard(15, -18, "U");
   yard(21, -23, "P");
   yard(18, -16, "Y");
   yard(22, -16, "Y");
   // Sefa's (Manu, Sina, Mele): Sina's mats and baskets, Manu's plots with a fence, barrow and rain barrel, wash.
   for (let x = 18; x <= 25; x++) yard(x, 4, "F");
-  yard(14, -12, "m", 2, 1);
+  yard(21, -6, "m", 2, 1);
   yard(12, -11, "s");
   yard(17, -14, "Y");
+  // Mele's baby things on this line: smaller, paler cloths.
+  small.push(`${X(17)},${Y(-14)}`);
   yard(21, -14, "Y");
   for (const x of [14, 18, 22]) yard(x, 1, "p", 3, 2);
   yard(25, -1, "w", 1, 1, toW);
@@ -355,5 +360,5 @@ export function horseshoeRows(): { rows: string[]; turns: Record<string, number>
   // Where the walk starts: Rook and Lumi by the pond brazier.
   set(-17, -3, "1", ".,");
   set(-16, -3, "2", ".,");
-  return { rows: g.map((r) => r.join("")), turns };
+  return { rows: g.map((r) => r.join("")), turns, smallWash: small };
 }

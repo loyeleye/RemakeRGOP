@@ -1391,16 +1391,21 @@ export class World {
         const other = props.find((q) => q.kind === "post" && q.y === p.y && q.x > p.x);
         if (!other) continue;
         const len = other.x - p.x;
-        const cloths = ["#e8d7b0", "#9fc4e8", "#e8a0a0", "#f4f0e6"];
+        // A baby's things (Mele's, on Sefa's line): half size, cream, pale pink and pale blue.
+        const small = shrine.smallWash?.includes(`${p.x},${p.y}`) ?? false;
+        const cloths = small ? ["#f6efdc", "#f3d3d8", "#d3e4f3"] : ["#e8d7b0", "#9fc4e8", "#e8a0a0", "#f4f0e6"];
+        const cw = small ? 0.3 : 0.55, ch = small ? 0.36 : 0.7;
         for (const side of [-1, 1]) {
           const line = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, len, 4), new THREE.MeshStandardMaterial({ color: "#eee6d6" }));
           line.rotation.z = Math.PI / 2;
           line.position.set(wx + len / 2, LINE_H, wz + side * 0.66);
           g.add(line);
-          for (let k = 1; k < len; k++) {
-            if ((k + (side > 0 ? 1 : 0)) % 2) continue;
-            const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.7), new THREE.MeshStandardMaterial({ color: cloths[(k + side + 4) % cloths.length], side: THREE.DoubleSide, roughness: 1 }));
-            cloth.position.set(wx + k, LINE_H - 0.37, wz + side * 0.66);
+          // Small things hang closer together.
+          for (let k = small ? 0.5 : 1; k < len; k += small ? 0.5 : 1) {
+            if (!small && (k + (side > 0 ? 1 : 0)) % 2) continue;
+            if (small && (Math.round(k * 2) + (side > 0 ? 1 : 0)) % 3 === 0) continue;
+            const cloth = new THREE.Mesh(new THREE.PlaneGeometry(cw, ch), new THREE.MeshStandardMaterial({ color: cloths[((small ? Math.round(k * 2) : k) + side + 4) % cloths.length], side: THREE.DoubleSide, roughness: 1 }));
+            cloth.position.set(wx + k, LINE_H - ch / 2 - 0.02, wz + side * 0.66);
             cloth.castShadow = true;
             g.add(cloth);
           }

@@ -395,6 +395,8 @@ export interface Shrine {
   core?: { x: number; y: number; outline: (a: number) => number };
   /** Story places: model turns (radians) by prop kind, or by tile as "x,y", over the usual. */
   turns?: Record<string, number>;
+  /** Story places: wash lines (by their west post, "x,y") hung with small pale cloths (a baby's things). */
+  smallWash?: string[];
   /** Story places: named islands of the sky that must be in view from here, in tiles from the centre; `drop` is how far below this one they hang. */
   far?: { x: number; y: number; r: number; drop: number }[];
 }
@@ -1344,7 +1346,7 @@ export const STORY_SHRINES: Shrine[] = [
 
 /** The home island to walk on: drawn from the maps thread's shapes, not an IsleShape. */
 function homeIsland(): Shrine {
-  const { rows, turns } = horseshoeRows();
+  const { rows, turns, smallWash } = horseshoeRows();
   const def: ShrineDef = { id: "home-island", name: "Home island", blurb: "Lumi's island, to walk about on: the houses round the lake, the falls, the Kindling ground.", full: true, scale: 1, rings: [], spawnBand: [15, 21], rows };
   const sh = finish(def, rows, 2, null);
   const at = (dx: number, dy: number) => hsCoast(dx + HS_CENTRE.x, dy + HS_CENTRE.y);
@@ -1361,7 +1363,7 @@ function homeIsland(): Shrine {
     while (r < 200 && hsOval(Math.cos(a) * r + mid.x, Math.sin(a) * r + mid.y) < 0) r += 0.25;
     return r;
   };
-  return { ...sh, coast: at, outline, arms: true, far: HS_FAR.map((f) => ({ ...f, x: f.x - HS_CENTRE.x, y: f.y - HS_CENTRE.y })), core: { x: mid.x - HS_CENTRE.x, y: mid.y - HS_CENTRE.y, outline: fromMid }, lobes: HS_LOBES.map((l) => ({ x: l.x - HS_CENTRE.x, y: l.y - HS_CENTRE.y, r: l.r })), turns };
+  return { ...sh, coast: at, outline, arms: true, far: HS_FAR.map((f) => ({ ...f, x: f.x - HS_CENTRE.x, y: f.y - HS_CENTRE.y })), core: { x: mid.x - HS_CENTRE.x, y: mid.y - HS_CENTRE.y, outline: fromMid }, lobes: HS_LOBES.map((l) => ({ x: l.x - HS_CENTRE.x, y: l.y - HS_CENTRE.y, r: l.r })), turns, smallWash };
 }
 
 export function shrineById(id: string): Shrine {
