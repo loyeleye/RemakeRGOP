@@ -17,8 +17,11 @@ export const DYING = {
     flame: 55,
     feed: 6,
     /** The drain per tick at the start, and how much it grows every tick. */
-    drain: 0.62,
+    drain: 0.72,
     drainGrow: 0.004,
+    /** The early hope: for this many ticks the drain is only `calmDrain`, so a player who keeps moving holds the fire level. Then it steps up. */
+    calmTicks: 28,
+    calmDrain: 0.2,
     /** Run 6 ends in embers when the flame reaches this, but never before `minTicks`, and at `maxTicks` whatever the flame. */
     embersAt: 10,
     minTicks: 80,

@@ -146,7 +146,7 @@ export class DyingRoom {
     const g = this.game, S = DYING.six;
     const t = g.tick + 1;
     // The drain grows every tick, until it outruns anything a player can bank. A weak run is held just above embers until the run has had its length.
-    g.flameDrain = S.drain + S.drainGrow * t;
+    g.flameDrain = t <= S.calmTicks ? S.calmDrain : S.drain + S.drainGrow * t;
     g.flameFloor = t < S.minTicks ? S.embersAt + 0.5 : 0;
     if (this.stand) this.steer();
     g.step();
