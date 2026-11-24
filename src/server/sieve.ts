@@ -39,6 +39,8 @@ export class SieveRoom {
   private arrived = 0;
   /** The tick a staff was last on each wisp. */
   private touchedAt = new Map<number, number>();
+  /** Wisps that arrived over a well this time round. */
+  private overWell = new Set<number>();
   /** For the measurements: wisps lost (the first not counted), how many of those over a well, restarts, and the ticks the last try took. */
   lost = 0;
   lostWell = 0;
@@ -155,9 +157,23 @@ export class SieveRoom {
   private arrive(w: Wisp) {
     const g = this.game, S = SIEVE, b = g.board, c = b.center;
     if (this.arrived >= S.supply) return void g.away.set(w.id, 1e9);
+    this.overWell.delete(w.id);
     const sh = shrineById(S.shrine);
     const taken = new Set(g.wisps.filter((o) => o !== w && !g.away.has(o.id)).map((o) => `${o.pos.x},${o.pos.y}`));
-    for (let n = 0; n < 80; n++) {
+    // Some come in hanging over a well, so he has to choose which to draw off first.
+    const well = S.overWell.includes(this.arrived);
+    for (let n = 0; well && n < 80; n++) {
+      // One of the wells furthest from where he is standing.
+      const rook = this.player(YOU).pos;
+      const k = [...SV_WELLS].sort((p, q) => Math.hypot(c.x + q.x - rook.x, c.y + q.y - rook.y) - Math.hypot(c.x + p.x - rook.x, c.y + p.y - rook.y))[Math.floor(this.rng.next() * S.wellFarthest)]!;
+      const a = this.rng.next() * Math.PI * 2, r = this.rng.next() * Math.max(0, k.r - 0.8);
+      const p = pt(Math.round(c.x + k.x + Math.cos(a) * r), Math.round(c.y + k.y + Math.sin(a) * r));
+      if (b.tile(p) !== Tile.Well || taken.has(`${p.x},${p.y}`) || g.wisps.some((o) => o !== w && !g.away.has(o.id) && b.tile(o.pos) === Tile.Well && Math.hypot(o.pos.x - p.x, o.pos.y - p.y) < 4)) continue;
+      moveWisp(w, p);
+      n = 1e9;
+      this.overWell.add(w.id);
+    }
+    for (let n = 0; n < 80 && !this.overWell.has(w.id); n++) {
       const a = this.rng.next() * Math.PI * 2, edge = sh.outline!(a);
       const r = edge * (S.band[0] + this.rng.next() * (S.band[1] - S.band[0]));
       const p = pt(Math.round(c.x + Math.cos(a) * r), Math.round(c.y + Math.sin(a) * r));
@@ -165,7 +181,7 @@ export class SieveRoom {
       moveWisp(w, p);
       break;
     }
-    g.height.set(w.id, S.arriveHigh + ((S.arriveLow - S.arriveHigh) * this.arrived) / Math.max(1, S.supply - 1));
+    g.height.set(w.id, Math.max(S.wellFloor, S.arriveHigh + ((S.arriveLow - S.arriveHigh) * this.arrived) / Math.max(1, S.supply - 1) - (this.overWell.has(w.id) ? S.wellLower : 0)));
     this.arrived++;
   }
 

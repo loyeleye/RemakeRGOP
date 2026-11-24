@@ -398,7 +398,7 @@ void main() {
 }`;
 
 /** The falling law's look (run 8): how high a wisp at full height floats, where the low sun throws its shadow, and how long a fall takes to watch. */
-const FALL = { low: 0.32, high: 1.95, sun: [1.15, 0.55] as const, groundSec: 0.9, wellSec: 1.9, wellDrop: 9 };
+const FALL = { /** Wisps and their shadows are drawn this much bigger under the law, so height reads with the whole island in view. */ big: 1.5, low: 0.32, high: 1.95, sun: [1.15, 0.55] as const, groundSec: 0.9, wellSec: 1.9, wellDrop: 9 };
 
 /** How big the village's glows at the rim are drawn, against their sizes in DYING.rim. */
 const RIM_GLOW = 2.4;
@@ -3156,7 +3156,7 @@ export class World {
           (rig.core.material as THREE.MeshBasicMaterial).color.set("#f08a10");
           rig.halo.material.blending = THREE.NormalBlending;
           rig.halo.material.color.set("#ffb53a");
-          rig.halo.scale.setScalar(1.15);
+          rig.halo.scale.setScalar(1.15 * FALL.big);
         }
         // High: small, faint, thrown well away by the low sun. Low: dark, sharp, right under it. Over a well: none.
         const sx = rig.root.position.x + FALL.sun[0] * h * 1.5, sz = rig.root.position.z + FALL.sun[1] * h * 1.5;
@@ -3166,9 +3166,9 @@ export class World {
         soft.visible = hard.visible = show;
         soft.position.set(sx, 0.045, sz);
         hard.position.set(sx, 0.05, sz);
-        soft.scale.setScalar(2.3 - 0.9 * h);
+        soft.scale.setScalar((2.3 - 0.9 * h) * FALL.big);
         (soft.material as THREE.MeshBasicMaterial).opacity = 0.85 - 0.5 * h;
-        hard.scale.setScalar(0.95 - 0.4 * h);
+        hard.scale.setScalar((0.95 - 0.4 * h) * FALL.big);
         (hard.material as THREE.MeshBasicMaterial).opacity = 0.14 + 0.5 * Math.pow(1 - h, 1.4);
       } else if (rig.shade) rig.shade[0].visible = rig.shade[1].visible = false;
       // Stopped at the bank: it lurches at the water and bumps back onto land.
@@ -3209,7 +3209,7 @@ export class World {
       const dim = (1 - stone * (2 / 3)) * (1 - 0.82 * gone) * (gone > 0.7 ? 0.85 + 0.15 * Math.sin(time * 23 + w.id) : 1);
       // Lower is a little smaller and dimmer; and on the chalk its own light is kept down so its shadow shows.
       const low = h === undefined ? 1 : 0.5 + 0.5 * h;
-      rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1) * (h === undefined ? 1 : 0.95 + 0.35 * h));
+      rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1) * (h === undefined ? 1 : (0.8 + 0.3 * h) * FALL.big));
       rig.halo.material.opacity = 0.85 * s * dim * dim * low;
       rig.light.intensity = (h === undefined ? 6 : 1.2) * s * dim * low;
       rig.trail.visible = stone < 0.5;

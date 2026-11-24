@@ -151,6 +151,29 @@ describe("Run 8: a harder job, on the Sieve", () => {
     }
   });
 
+  it("six of the sixteen arrive hanging over a well, never two running and never the first", () => {
+    expect(SIEVE.overWell.length).toBe(6);
+    expect(SIEVE.overWell[0]).toBeGreaterThan(0);
+    SIEVE.overWell.forEach((n, i) => i && expect(n - SIEVE.overWell[i - 1]!).toBeGreaterThan(1));
+    let s = 77, seen = 0;
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "juggle");
+    room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const was = new Map<number, boolean>();
+    for (let n = 0; n < 1500 && room.state.phase !== "results"; n++) {
+      const before = room.state.arrived;
+      room.onTick();
+      const g = room.state.game;
+      // A wisp newly on the board over a well (the scripted first one aside).
+      for (const w of g.wisps) {
+        const on = !g.away.has(w.id) && g.board.tile(w.pos) === Tile.Well && w.id !== room.state.doomed;
+        if (on && !was.get(w.id) && room.state.arrived > before) seen++;
+        was.set(w.id, !g.away.has(w.id));
+      }
+    }
+    expect(seen).toBeGreaterThanOrEqual(2);
+    expect(room.lost).toBeLessThanOrEqual(1);
+  });
+
   it("holding one at a time loses several", () => {
     let lost = 0, restarts = 0;
     for (const seed of [3, 44, 501, 77]) {
