@@ -129,7 +129,7 @@ export function alarmCards(ready: (leftMs: number) => void, then: (skipped: bool
       const w = D.island.size[0] * D.island.scale, h = D.island.size[1] * D.island.scale, left = (W - w) / 2;
       const bright = layer("alarm/shot4/island-bright");
       for (const img of [layer("alarm/shot4/island-dim"), bright]) (img.style.width = `${w}px`), (img.style.height = `${h}px`), isle.append(img);
-      // The waterfall, behind the island and going down with it: one strip repeated to below the screen, its water running.
+      // The waterfall, down the island's near face and going down with it: one strip repeated to below the screen, its water running.
       const fall = document.createElement("div");
       fall.className = "fall";
       const strip = layer("alarm/shot4/waterfall-strip");
@@ -139,7 +139,7 @@ export function alarmCards(ready: (leftMs: number) => void, then: (skipped: bool
       fall.style.top = `${D.fall.at[1] * D.island.scale}px`;
       fall.style.width = `${D.fall.wide * D.island.scale}px`;
       fall.style.height = `${H}px`;
-      isle.prepend(fall);
+      isle.append(fall);
       isle.style.left = `${left}px`;
       isle.style.top = `${D.island.top}px`;
       const clouds = D.clouds.map((c) => {
@@ -155,9 +155,9 @@ export function alarmCards(ready: (leftMs: number) => void, then: (skipped: bool
         const r = Math.max(0, Math.min(1, (t - D.dropAt) / (A.shots.find((x) => x.id === "descent")!.ms / 1000 - D.dropAt)));
         return D.drop * r * r * (3 - 2 * r);
       };
-      // Each rock: when it lets go, where on the underside (which narrows to a point in the middle), and how it turns.
+      // Each rock: when it lets go, where on the underside (left or right of the falls; it narrows to a point in the middle), and how it turns.
       const rocks = Array.from({ length: D.rocks }, (_, i) => {
-        const dx = (rnd() * 2 - 1) * D.under.half;
+        const dx = (rnd() < 0.5 ? -1 : 1) * (D.under.clear + rnd() * (D.under.half - D.under.clear));
         const el = layer(`alarm/shot4/debris-${(i % 4) + 1}`);
         el.style.opacity = "0";
         return { el, at: D.dropAt + (span * (i + rnd() * 0.8)) / D.rocks, x: W / 2 + dx, dy: D.under.tip - Math.abs(dx) * D.under.slope, vx: dx * 0.25 + (rnd() * 2 - 1) * 20, spin: (rnd() * 2 - 1) * 540, size: 0.8 + rnd() * 0.9 };

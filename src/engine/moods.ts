@@ -9,6 +9,7 @@ export const MOODS: Record<string, readonly string[]> = {
   Nell: ["neutral", "curious", "delighted", "determined", "sheepish", "worried"],
   Kes: ["neutral", "smug", "challenging", "wistful", "gracious"],
   Sefa: ["neutral", "awed", "eager", "grin", "impatient", "indignant", "sheepish"],
+  Tilda: ["neutral", "tired", "lost", "asking", "watching"],
 };
 
 const RULES: [who: string, match: RegExp, mood: string][] = [
@@ -36,6 +37,14 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Rook", /^(That's it\.|Just like that\.)/, "proud"],
   ["Rook", /^How did you do that\?/, "baffled"],
   ["Rook", /^(Yes, ma'am\.|See\?|Now you're the boss|Let's call it)/, "warm"],
+  // Tilda (run 8, Ladi: "Tilda needs her face in her bark bubbles"). Which face goes with which line
+  // is the gameplay thread's mapping, not ruled by Ladi; it all lives in these five rows. The count
+  // lines ("Ten.") are watching; anything not named here is tired.
+  ["Tilda", /^(You're Rook\. I'm Tilda\.|A tired one drops\.|They don't wander\.)/, "neutral"],
+  ["Tilda", /^(There\. That's what I sent for you about\.|Don't look\. We don't\.|The book says |(\d+|[A-Z][a-z]+(-[a-z]+)?)\.$)/, "watching"],
+  ["Tilda", /^They('ve never done| don't do) that\./, "lost"],
+  ["Tilda", /^(I can't do that\. I can only hold one\.|Is it me\?|Then what is it\?)/, "asking"],
+  ["Tilda", /./, "tired"],
 ];
 
 /**

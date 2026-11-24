@@ -18,6 +18,27 @@ describe("portrait moods", () => {
     expect(faceOf("Lumi", "Dad. North one.")).toBe("lumi-calling");
   });
 
+  it("gives Tilda a face for every line of hers in run 8", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { SIEVE } = await import("../src/engine/sieve.js");
+    expect(moodOf("Tilda", "You're Rook. I'm Tilda. I keep this now.")).toBe("neutral");
+    expect(moodOf("Tilda", "Don't look. We don't.")).toBe("watching");
+    expect(moodOf("Tilda", "Ten.")).toBe("watching");
+    expect(moodOf("Tilda", "Twenty-one.")).toBe("watching");
+    expect(moodOf("Tilda", "The book says sixteen. Every year, back to the first page.")).toBe("watching");
+    expect(moodOf("Tilda", "They don't do that.")).toBe("lost");
+    expect(moodOf("Tilda", "They've never done that.")).toBe("lost");
+    expect(moodOf("Tilda", "They don't do that. They've never done that.")).toBe("lost");
+    expect(moodOf("Tilda", "Is it me?")).toBe("asking");
+    expect(moodOf("Tilda", SIEVE.again)).toBe("tired");
+    expect(moodOf("Tilda", "Mum kept this thirty years. Nothing ever went down a well.")).toBe("tired");
+    // Every line the run gives her has a face.
+    const src = readFileSync("src/server/sieve.ts", "utf8");
+    const hers = [...src.matchAll(/KEEPER, (?:text: )?"([^"]+)"/g)].map((m) => m[1]!);
+    expect(hers.length).toBeGreaterThan(8);
+    for (const t of hers) expect(faceOf("Tilda", t), t).toMatch(/^tilda-/);
+  });
+
   it("has a portrait file for every mood", () => {
     for (const [who, moods] of Object.entries(MOODS))
       for (const m of moods) expect(existsSync(`public/faces/${who.toLowerCase()}-${m}.webp`), `${who}-${m}`).toBe(true);

@@ -107,19 +107,20 @@ export const DYING = {
      * are there so the starry sky is barely seen (Ladi, 24 Nov).
      */
     descent: {
-      heartMs: 1800, dropAt: 1.6, drop: 300, shake: 4, rocks: 16, rocksUntil: 5.2, gravity: 620,
+      heartMs: 1800, dropAt: 1.6, drop: 330, shake: 4, rocks: 16, rocksUntil: 5.2, gravity: 620,
       heart: [[0, 0], [0.1, 0.9], [0.18, 0.15], [0.32, 1], [0.4, 0.1], [0.52, 0.8], [0.6, 0.3], [0.74, 1], [0.82, 0.45], [0.92, 1], [1, 1]] as readonly (readonly [number, number])[],
-      island: { size: [934, 632] as const, scale: 0.8, top: 18 },
-      under: { tip: 470, slope: 0.75, half: 190 },
-      /** The waterfall: a strip that repeats down from this spot on the island's picture (before `scale`), `wide` across and `tall` to a repeat, to the bottom of the screen and into the cloud, its water running down at `speed` pixels a second. It goes down with the island. */
-      fall: { at: [80, 352] as const, wide: 58, tall: 240, speed: 330 },
+      island: { size: [730, 744] as const, scale: 0.8, top: 6 },
+      /** Where rock lets go, on the island's picture after `scale`: the underside's edge runs up from `tip` by `slope` either side of the middle. Rock comes from `clear` to `half` out, either side, never the middle, where the falls are. */
+      under: { tip: 672, slope: 1.46, half: 255, clear: 85 },
+      /** The waterfall, on the island's near face and in front of it: a strip that repeats down from this spot on the island's picture (before `scale`), `wide` across and `tall` to a repeat, to the bottom of the screen and into the cloud, its water running down at `speed` pixels a second. It goes down with the island. */
+      fall: { at: [322, 440] as const, wide: 114, tall: 240, speed: 330 },
       cloudSize: [1536, 640] as const,
       clouds: [
         { file: "cloud-far", scale: 1.2, y: -40, x: -500, speed: 6, behind: true },
         { file: "cloud-top", scale: 1.2, y: -470, x: -200, speed: -9, behind: true },
-        { file: "cloud-back", scale: 1.2, y: 250, x: -340, speed: -10, behind: true },
-        { file: "cloud-mid", scale: 1.2, y: 330, x: -620, speed: 22, behind: false },
-        { file: "cloud-front", scale: 1.4, y: 470, x: -420, speed: -45, behind: false },
+        { file: "cloud-back", scale: 1.2, y: 290, x: -340, speed: -10, behind: true },
+        { file: "cloud-mid", scale: 1.2, y: 400, x: -620, speed: 22, behind: false },
+        { file: "cloud-front", scale: 1.4, y: 545, x: -420, speed: -45, behind: false },
       ] as readonly { file: string; scale: number; y: number; x: number; speed: number; behind: boolean }[],
     },
   },

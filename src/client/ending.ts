@@ -117,6 +117,12 @@ export function setEndingCut(id: string) {
   }
 }
 
+/** The underside's two hearts (Ladi's painting): the small one under the Kindling ground catches a
+ *  beat ahead of the big one at the tip (the story thread). Seconds after the underside comes in.
+ *  focus: where across the painting the view is centred, from the small heart to the tip, for
+ *  screens narrower than the picture; it starts moving across at `across`. */
+const TWO_HEARTS = { small: [0.6, 2], big: 2, focus: [0.3, 0.64], across: 1.5 };
+
 const SEEN = "lanternfall.kindlingEnd";
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
 const ramp = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
@@ -177,7 +183,8 @@ export class KindlingEnding {
     add("faces1", card("kindling-faces-1", "faces"));
     add("faces2", card("kindling-faces-2", "faces"));
     add("underside", card("kindling-underside", "underside", `<div class="tip"></div>`));
-    add("heart", card("kindling-heart", "heart", `<div class="spark"></div>`));
+    add("heartSmall", card("kindling-heart-small", "heart"));
+    add("heartBig", card("kindling-heart-big", "heart", `<div class="spark"></div>`));
     add("back", Object.assign(document.createElement("div"), { className: "black" }));
     add("hearts", card("kindling-hearts", "hearts"));
     // Fairy Ring's heart among them, as bright as the score (the same layer lights it in the eye).
@@ -313,8 +320,19 @@ export class KindlingEnding {
     const under = ramp(t, U.in, U.in + U.inFor) * (1 - ramp(t, H.in, H.in + H.inFor));
     op("underside", under);
     const slide = ease(ramp(t, U.in, U.to));
-    for (const k of ["underside", "heart"]) e[k]!.style.transform = `translateY(${-slide * 37.5}%)`;
-    op("heart", under * this.heart * ramp(t, U.in + 1, U.to - 0.5));
+    // Down the painting, and across it where the screen is narrower than the picture: from the
+    // small heart under the Kindling ground to the big one at the tip. (Top to bottom as well, so
+    // a screen wider than the picture is tall still ends on the tip.)
+    const T = TWO_HEARTS, box = e.underside!.getBoundingClientRect();
+    const size = Math.max(box.width, box.height), spare = size - box.width;
+    const focus = T.focus[0]! + (T.focus[1]! - T.focus[0]!) * ease(ramp(t, U.in + T.across, U.to));
+    const px = spare > 1 ? clamp((focus * size - box.width / 2) / spare) * 100 : 50;
+    for (const k of ["underside", "heartSmall", "heartBig"]) {
+      e[k]!.style.transform = `translateY(${-slide * 37.5}%)`;
+      e[k]!.style.backgroundPosition = `${px.toFixed(2)}% ${(slide * 100).toFixed(2)}%`;
+    }
+    op("heartSmall", under * this.heart * ramp(t, U.in + T.small[0]!, U.in + T.small[1]!));
+    op("heartBig", under * this.heart * ramp(t, U.in + T.big, U.to - 0.5));
     // From below: the hearts overhead shrink to points as the view sinks away.
     const hIn = ramp(t, H.in, H.in + H.inFor);
     op("back", hIn);
