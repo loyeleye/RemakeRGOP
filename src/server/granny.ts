@@ -21,6 +21,8 @@ const LUMI_ID = PLAYER_IS_ROOK ? 2 : 1;
 const YOU = 1;
 const KID_IDS = [3, 4] as const;
 const HESTA_ID = 5;
+/** How long her stone cast takes: 1.2 seconds, two ticks. */
+const CAST_TICKS = 2;
 const ROOK = "Rook", LUMI = "Lumi", HESTA = "Hesta";
 const [NELL, SEFA] = GRANNY.children;
 const WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
@@ -324,6 +326,11 @@ export class GrannyRoom {
     const matchPoint = kids >= GRANNY.target - 1;
     const cmd = (c: Command) => g.command(HESTA_ID, c);
     const fix = (mode: "pull" | "push") => me.mode !== mode || undefined;
+    // Her stone cast (Ladi): she lets go of her pull for the 1.2 seconds it takes, then goes back to it.
+    if (this.holdWisp !== null && g.tick < this.holdTick + CAST_TICKS) {
+      if (me.action.kind !== "idle") cmd({ action: { kind: "idle" } });
+      return;
+    }
 
     // 1. Late push: only once their wisp is about to bank, and only as give and take allows.
     // Her scripted beats wait for any key exchange to finish, so none is cut off.

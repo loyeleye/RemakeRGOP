@@ -726,6 +726,8 @@ interface PlayerRig {
   guild: Guild;
   /** The story character this player is, if they have a model of their own. */
   cast: string | null;
+  /** A stone cast in progress: when it began, its glow on her, and its ring running out over the ground. */
+  stoneCast?: { at: number; glow: THREE.Sprite; ring: THREE.Mesh };
 }
 
 interface WispRig {
@@ -748,6 +750,8 @@ interface WispRig {
 
 /** Seconds the earth line takes to reach a wisp before the stone starts closing over it. */
 const EARTH_LINE = 0.35;
+/** Hesta's stone cast: the fist snaps shut 0.3 s into the 1.2 s clip; the glow holds from there to its end; the ring runs out at `speed` tiles a second to `reach`. */
+const STONE_CAST = { snap: 0.3, hold: 0.9, speed: 22, reach: 70 };
 /** Seconds after the hold by which the earth line has faded out. */
 const EARTH_FADE = 4.5;
 
@@ -1049,10 +1053,31 @@ class CastAnim {
       }
       this.actions.set(c.name, a);
     }
-    this.mixer.addEventListener("finished", () => this.cur === "push" && this.set("idle"));
+    this.mixer.addEventListener("finished", () => {
+      if (this.casting) {
+        // Back to whatever she was doing: the next set() crossfades out of the cast.
+        this.casting = false;
+        this.cur = "cast" as CastMove;
+      } else if (this.cur === "push") this.set("idle");
+    });
+  }
+  private casting = false;
+  /** A one-shot "cast" clip (Hesta's stone cast), over whatever is playing; false if the model has none. */
+  cast() {
+    const next = this.actions.get("cast");
+    if (!next || this.casting) return !!next;
+    const prev = this.cur ? this.actions.get(this.cur) : undefined;
+    next.setLoop(THREE.LoopOnce, 1);
+    next.clampWhenFinished = true;
+    next.reset().play();
+    if (prev && prev !== next) next.crossFadeFrom(prev, 0.12, false);
+    this.casting = true;
+    this.cur = "cast" as CastMove;
+    return true;
   }
   /** Ask for a move; a push already playing finishes first. */
   set(move: CastMove) {
+    if (this.casting) return;
     if (move === this.cur || (this.cur === "push" && move === "idle")) return;
     const next = this.actions.get(move) ?? this.actions.get("idle");
     if (!next) return;
@@ -1472,11 +1497,8 @@ export class World {
       deck.position.set(-cx, 0, -cz);
       const holder = new THREE.Group();
       holder.add(deck);
-      const slot = this.placeSlot("landing", holder, cx, cz, 0, -1);
-      // The model is about 3 tiles square: stretched along a longer landing so it covers every plank
-      // (the block-out planks inside are squeezed back so they still fit their tiles).
-      const long = (Math.max(...xs) - Math.min(...xs) + 1) / 3;
-      if (long > 1.1) (slot.scale.x = long), (holder.scale.x = 1 / long);
+      // The maps thread's 5x3 landing, long axis east to west, turned so its lamp stands at the water end.
+      this.placeSlot("landing", holder, cx, cz, Math.PI, -1);
     }
     // The bigger places, one block each (placeholders until the maps thread draws them).
     const boxes = new Map<string, { x0: number; y0: number; x1: number; y1: number }>();
@@ -2126,6 +2148,59 @@ export class World {
   private placeSlots: { group: THREE.Group; model: string }[] = [];
   /** Lit windows for this walk's light (dusk and night). */
   private windowsOn = false;
+  /**
+   * Hesta's stone cast (Ladi): she raises a hand and snaps it shut. At the snap a green-brown glow
+   * pulses on her and holds to the end of the move, and a thin ring runs out from her over the
+   * ground until it's out of view. One cast for all the wisps she stones together.
+   */
+  private stoneCast(playerId: number, time: number) {
+    const rig = this.players.get(playerId);
+    if (!rig || (rig.stoneCast && time - rig.stoneCast.at < 3)) return;
+    (rig.body?.userData.anim as CastAnim | undefined)?.cast();
+    if (rig.stoneCast) {
+      rig.root.remove(rig.stoneCast.glow);
+      this.scene.remove(rig.stoneCast.ring);
+    }
+    const glow = glowSprite("#5f7a1e", 5.2, 0);
+    glow.position.y = 1.1;
+    rig.root.add(glow);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.985, 1, 128),
+      new THREE.MeshBasicMaterial({ color: "#b4c45a", transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.09;
+    ring.renderOrder = 3;
+    this.scene.add(ring);
+    rig.stoneCast = { at: time, glow, ring };
+  }
+  private stepStoneCast(rig: PlayerRig, time: number) {
+    const c = rig.stoneCast;
+    if (!c) return;
+    const t = time - c.at - STONE_CAST.snap;
+    // The glow: up fast at the snap, held, then away as her hand comes down.
+    const up = Math.min(1, Math.max(0, t / 0.08)), down = Math.min(1, Math.max(0, (t - STONE_CAST.hold) / 0.35));
+    c.glow.material.opacity = up * (1 - down);
+    c.glow.scale.setScalar(5.2 * (0.75 + 0.25 * up + 0.08 * Math.sin(time * 14)));
+    // The ring: from her feet outward at a steady run, thinning as it goes, gone past the edge of any view.
+    const r = Math.max(0, t) * STONE_CAST.speed;
+    c.ring.visible = t > 0 && r < STONE_CAST.reach;
+    c.ring.position.x = rig.root.position.x;
+    c.ring.position.z = rig.root.position.z;
+    // Kept about a sixth of a tile wide however far out it is.
+    const inner = Math.max(0, 1 - 0.16 / Math.max(r, 0.2));
+    if (c.ring.visible) {
+      c.ring.geometry.dispose();
+      c.ring.geometry = new THREE.RingGeometry(inner, 1, 128);
+      c.ring.scale.setScalar(Math.max(r, 0.01));
+      (c.ring.material as THREE.MeshBasicMaterial).opacity = 0.9 * Math.min(1, 1.25 - r / STONE_CAST.reach);
+    }
+    if (t > STONE_CAST.reach / STONE_CAST.speed + 0.5) {
+      rig.root.remove(c.glow);
+      this.scene.remove(c.ring);
+      delete rig.stoneCast;
+    }
+  }
   /** The lake path's lamps: each its own lantern, so one can gutter or go dark while the rest burn. */
   private pathLamps: { slot: THREE.Group; glow: THREE.Sprite; core: THREE.Sprite; mats: THREE.MeshStandardMaterial[]; state: "off" | "lit" | "gutter" | "dead"; seed: number }[] = [];
   private lampWalk = 1;
@@ -2433,6 +2508,7 @@ export class World {
       // bobbing. Pulled on while held, the stone shudders without moving.
       let stone = 0;
       if (w.rooted) {
+        if (rig.rootedAt === undefined) this.stoneCast(w.rooted, time);
         rig.rootedAt ??= time;
         // A line of earth runs from her lantern to it first; the stone starts where it lands.
         const since = time - rig.rootedAt;
@@ -2588,6 +2664,7 @@ export class World {
         rig.root.position.set(wx, 0, wz);
       } else rig.root.position.set(wx, moving ? Math.abs(Math.sin(time * 9)) * 0.06 : Math.sin(time * 1.6 + p.id) * 0.03, wz);
       if (rig.body) rig.body.rotation.y = rig.facing;
+      this.stepStoneCast(rig, time);
       // Lantern sits up and to the side of the figure, where the staff head is.
       const side = new THREE.Vector3(-0.38, 1.74, 0.07).applyAxisAngle(new THREE.Vector3(0, 1, 0), rig.facing);
       rig.lantern.position.copy(side);
