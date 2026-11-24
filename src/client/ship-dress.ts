@@ -95,8 +95,8 @@ export const SHIP_LOOK = {
   bankShow: 0.3,
   bankLift: 0.14,
   /** The made cloud's grain over the sea: how many tiles one tile of it covers across and along, and how strongly it shows at first light. */
-  tile: [30, 60] as const,
-  tileShow: 0.9,
+  tile: [20, 20] as const,
+  tileShow: 0.8,
   /** The sail: how much of it is left when the patch is right under the prow, how far ahead of the prow the patch's near edge is when it starts to thin and when it is thinnest, and how much of the lamp's colour it takes at a bank. */
   sail: { thin: 0.35, from: 11, to: 6, warm: 0.5 },
   /** The first seconds: a pale ring closing in the cloud astern, where the low one was. Seconds it lasts, its width at first and at last (tiles), and how strongly it shows. */
@@ -137,7 +137,7 @@ export const SHIP_LOOK = {
    * colour at night and at first light, how much of it shows, and the billows standing on it (how
    * many, and how big).
    */
-  bank: { y: 2.0, past: 8, night: "#6f7a99", grey: "#d3d8e4", show: 0.96, billows: 24, size: [9, 13] as const },
+  bank: { y: 2.0, past: 8, night: "#6f7a99", grey: "#d3d8e4", show: 0.9, billows: 35, size: [9, 13] as const },
 } as const;
 
 const WHITE = new THREE.Color("#ffffff"), TMP = new THREE.Color();
@@ -178,13 +178,13 @@ float fbm(vec2 p) {
   for (int i = 0; i < 4; i++) { s += a * noise(p); p *= 2.03; a *= 0.5; }
   return s;
 }
-// The cloud's height: long ridges and furrows drawn out the way the ship is going.
-float high(vec2 p) { return 0.62 * noise(p * vec2(0.19, 0.045)) + 0.26 * noise(p * vec2(0.43, 0.11) + 3.1) + 0.12 * noise(p * vec2(0.9, 0.3) + 9.7); }
+// The cloud's height: swells and hollows that pass under the ship, a little wider than they are long.
+float high(vec2 p) { return 0.62 * noise(p * vec2(0.1, 0.085)) + 0.26 * noise(p * vec2(0.24, 0.2) + 3.1) + 0.12 * noise(p * vec2(0.55, 0.5) + 9.7); }
 void main() {
   // The sea goes by toward the stern.
   vec2 p = vec2(vW.x, vW.y - uScroll);
   float h = high(p);
-  float n2 = fbm(p * vec2(0.5, 0.22) + 7.3);
+  float n2 = fbm(p * vec2(0.4, 0.34) + 7.3);
   // Lit from one side: the near flank of each ridge is a little paler, and the furrow beyond it a little deeper.
   float slope = (h - high(p + vec2(1.1, 0.0))) * 5.0;
   float tops = smoothstep(0.42, 0.7, h) * (0.55 + 0.9 * n2);
@@ -194,7 +194,7 @@ void main() {
   col *= 1.0 - 0.22 * uRidge * furrow * clamp(uGrain * 2.0, 0.0, 1.0);
   // The made cloud, drawn out the way the ship is going, over the ridges.
   float tile = texture2D(uTile, p / uTileSize).r;
-  col *= mix(1.0, 0.2 + 0.8 * tile, uTileOn * clamp(uGrain * 2.4, 0.0, 1.0));
+  col *= mix(1.0, 0.42 + 0.6 * tile, uTileOn * clamp(uGrain * 2.4, 0.0, 1.0));
   float body = 0.55 + 0.9 * tops + 0.5 * h;
   // The islands' hearts light the cloud under them, each in its own colour. Home's two take the cloud's colour over.
   for (int i = 0; i < 6; i++) {
@@ -484,13 +484,13 @@ export class ShipFx {
     }
     // The made cloud: its grain over the sea, and a tall billow or a long low streak for each bank, standing on the sea.
     const tl = new THREE.TextureLoader();
-    tl.load("models/ship/cloud-sea-tile-lengthwise.webp", (t) => {
+    tl.load("models/ship/cloud-sea-tile.webp", (t) => {
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
       this.maps.push(t);
       this.u.uTile.value = t;
       this.u.uTileOn.value = K.tileShow;
     });
-    for (const [k, file] of ["cloud-bank-alpha", "cloud-bank-b-alpha"].entries()) {
+    for (const [k, file] of ["cloud-bank-alpha", "cloud-bank-b-alpha-2"].entries()) {
       tl.load(`models/ship/${file}.webp`, (t) => {
         t.colorSpace = THREE.SRGBColorSpace;
         this.maps.push(t);
@@ -537,10 +537,10 @@ uniform sampler2D uTile;
 void main() {
   // Lumps of the made cloud in it, going by with it; soft at both ends and along its outer side, firmer along the hull.
   float lump = texture2D(uTile, vec2(vUv.x * uSize.x / 22.0, vUv.y * uSize.y / 30.0 + uOff)).r;
-  float ends = smoothstep(0.0, 0.2, vUv.y) * (1.0 - smoothstep(0.8, 1.0, vUv.y));
-  float sides = smoothstep(0.0, 0.06, vUv.x) * (1.0 - smoothstep(0.82, 1.0, vUv.x));
-  // Its ends and its outer side break up into lumps.
-  float a = clamp(smoothstep(0.0, 0.5, ends * sides * (0.55 + 0.9 * lump)) , 0.0, 1.0);
+  float ends = smoothstep(0.0, 0.3, vUv.y) * (1.0 - smoothstep(0.7, 1.0, vUv.y));
+  float sides = smoothstep(0.0, 0.2, vUv.x) * (1.0 - smoothstep(0.7, 1.0, vUv.x));
+  // No straight side to it: it thins away all round, in lumps, and the billows standing on it break its outline.
+  float a = clamp(smoothstep(0.08, 0.75, ends * sides * (0.5 + 1.1 * lump)), 0.0, 1.0);
   gl_FragColor = vec4(uCol * (0.8 + 0.5 * lump), a * uShow);
 }`,
       }),
@@ -552,8 +552,10 @@ void main() {
       sp.center.set(0.5, 0.12);
       sp.renderOrder = 9;
       // Small ones along the hull's side of it, so that none stands over the deck; the tall ones farther out.
-      const col = i % 4, rows = K.bank.billows / 4;
-      this.billows.push({ s: sp, u: [0.2, 0.42, 0.64, 0.86][col]! + (((i * 37) % 10) - 5) * 0.012, v: (Math.floor(i / 4) + 0.5 + (((i * 53) % 10) - 5) * 0.06) / rows, k: col === 0 ? 0.5 : 1 });
+      const col = i % 5, rows = K.bank.billows / 5, row = Math.floor(i / 5);
+      // Smaller at its two ends and along both sides, so its outline is cloud and not a panel.
+      const edge = (col === 0 ? 0.42 : col === 1 ? 0.75 : 1) * (row === 0 || row === rows - 1 ? 0.7 : 1);
+      this.billows.push({ s: sp, u: [0.1, 0.28, 0.5, 0.72, 0.94][col]! + (((i * 37) % 10) - 5) * 0.012, v: (row + 0.5 + (((i * 53) % 10) - 5) * 0.06) / rows, k: edge });
       this.bankAll.add(sp);
     }
     this.bankAll.visible = false;
@@ -892,7 +894,7 @@ void main() {
       this.bankU.uOff.value = bank.side * 0.37;
       for (const [i, b] of this.billows.entries()) {
         const size = (B.size[0] + ((i * 29) % 10) * 0.1 * (B.size[1] - B.size[0])) * b.k;
-        b.s.position.set((b.u - 0.5) * W, 0, (b.v - 0.5) * bank.len * 0.8);
+        b.s.position.set((b.u - 0.5) * W, 0, (b.v - 0.5) * bank.len * 0.96);
         b.s.scale.set(size, size, 1);
         b.s.material.color.copy(this.bankU.uCol.value).lerp(WHITE, 0.22);
         b.s.material.opacity = 0.92;
