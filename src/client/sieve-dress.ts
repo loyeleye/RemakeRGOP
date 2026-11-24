@@ -22,7 +22,8 @@ export const DRESS = {
   pathEdge: "rgba(110, 88, 60, 0.14)",
   /** The pits: steps down, each this deep; the shaft below them to this depth. */
   steps: [0.5, 0.6, 0.7] as const,
-  shaftDepth: 10,
+  /** How far down the shaft goes before the cloud. (The island has no hanging spires here: one showed through a shaft.) */
+  shaftDepth: 8,
   grass: "#9c9b6c",
   /** Where things stand, by angle (radians, 0 east, +pi/2 south toward the eye). Huts and work on the far side. */
   huts: [-1.95, -1.32, -2.62],

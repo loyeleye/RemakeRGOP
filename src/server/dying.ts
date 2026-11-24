@@ -57,7 +57,7 @@ export class DyingRoom {
   private lastCall = -99;
   private lostAt: { tick: number; pos: Pt }[] = [];
   /** What Ladi ruled, each on a switch (DYING.switches); tests and the page can turn them. */
-  switches: { cloudOverRook: boolean; lineGivesBack: boolean; lumiCalls: boolean; crowdSound: boolean; cometOnMap: boolean } = { ...DYING.switches };
+  switches: { cloudOverRook: boolean; lineGivesBack: boolean; lumiCalls: boolean; crowdSound: boolean; cometOnMap: boolean; crowdShown: boolean } = { ...DYING.switches };
   /** How many wisps her line gave back at the landing: for the measurements. */
   gaveBack = 0;
   get lost6() {
@@ -562,6 +562,7 @@ export class DyingRoom {
         ...(this.blind() || this.part === "stills" ? { blind: true } : {}),
         ...((low && n >= B.orange) || this.part === "stills" ? { orange: true } : {}),
         ...(this.picture() ?? {}),
+        ...(this.switches.crowdShown ? { crowd: true } : {}),
         ...(this.faltered ? { faltered: true } : {}),
         ...(after ? { hesta: HESTA_ID } : {}),
       },

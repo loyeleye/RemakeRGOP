@@ -841,6 +841,7 @@ function dyingRoom() {
   if (q.has("noback")) r.switches.lineGivesBack = false;
   if (q.has("nocloud")) r.switches.cloudOverRook = false;
   if (q.has("stillsonly")) r.switches.cometOnMap = false;
+  if (q.has("crowd")) r.switches.crowdShown = true;
   dyingCometOn = r.switches.cometOnMap;
   return r;
 }

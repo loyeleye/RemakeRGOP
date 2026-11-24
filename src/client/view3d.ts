@@ -381,8 +381,9 @@ void main() {
   vec2 p = (vUv - 0.5) * 2.0;
   float r = length(p);
   float n = wnoise(p * 2.2 + vec2(uTime * 0.03, uTime * 0.012)) * 0.6 + wnoise(p * 5.0 - vec2(uTime * 0.02, 0.0)) * 0.4;
-  vec3 col = mix(vec3(0.52, 0.60, 0.70), vec3(0.80, 0.85, 0.90), n);
-  col *= 1.0 - 0.55 * smoothstep(0.55, 1.0, r);
+  // Far down and in shadow: mostly dark, the cloud only glimpsed moving.
+  vec3 col = mix(vec3(0.09, 0.10, 0.13), vec3(0.40, 0.45, 0.52), n * n);
+  col *= 1.0 - 0.7 * smoothstep(0.35, 1.0, r);
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -875,6 +876,9 @@ interface WispRig {
   shade?: [THREE.Mesh, THREE.Mesh];
   /** Run 8: the wisp's glow on pale chalk, a soft warm stain round it (an added glow would vanish on white). */
   aura?: THREE.Sprite;
+  /** Run 8's tug: how far its flame leans toward the nearest well (0 to 1), and where core and halo sit unleant. */
+  lean?: number;
+  base?: [THREE.Vector3, THREE.Vector3];
 }
 
 /** Seconds the earth line takes to reach a wisp before the stone starts closing over it. */
@@ -1915,7 +1919,7 @@ export class World {
       // falls pour off the rim rather than onto a verge.
       radius: (a) => (shrine.core ? shrine.core.outline(a) + 0.2 : dressed ? coast(a) + DRESS.verge : shrine.lobes ? coast(a) + 0.2 : (coast(a) + 2.1) / 0.95),
       ...(dressed ? { holes: shrine.wells!.map((w, i) => wellLoop(w, i)) } : {}),
-      ledge: shrine.lobes ? 0 : 2.4, ...(shrine.core ? { lip: 0.012 } : {}), spires: this.low ? 3 : 6, grass: th.grass, soil: th.soil, rock: th.rock,
+      ledge: shrine.lobes ? 0 : 2.4, ...(shrine.core ? { lip: 0.012 } : {}), spires: dressed ? 0 : this.low ? 3 : 6, grass: th.grass, soil: th.soil, rock: th.rock,
       segments: this.low ? 128 : 220,
     });
     island.position.set(shrine.core?.x ?? 0, -0.03, shrine.core?.y ?? 0);
@@ -2016,7 +2020,8 @@ export class World {
         const pit = quarryPit(w, i, new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: PIT_CLOUD_FS, uniforms: u, fog: false }), this.low);
         pit.position.set(w.x, 0.01, w.y);
         g.add(pit);
-        const ring = new THREE.Mesh(new THREE.RingGeometry(R * 0.35, R * 0.98, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffb53a", transparent: true, opacity: 0, depthWrite: false }));
+        // A thin outline at the lip, so the pit stays dark inside it (gameplay thread).
+        const ring = new THREE.Mesh(new THREE.RingGeometry(R * 0.93, R * 1.01, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffb53a", transparent: true, opacity: 0, depthWrite: false }));
         ring.position.set(w.x, 0.3, w.y);
         ring.visible = false;
         ring.renderOrder = 2;
@@ -2725,8 +2730,9 @@ export class World {
         m.color.set(PULL_COLD);
         r.visible = true;
         const c = (time * 1.4 + i * 0.13) % 1;
-        m.opacity = tug ? (0.4 + 0.45 * c) * Math.min(1, since / 0.3) : Math.max(0, 0.6 * (1 - since / 0.5));
-        r.scale.setScalar(tug ? 2.1 - 1.5 * c * c : 0.6);
+        // Closing in on the lip, again and again, brightest as it reaches it.
+        m.opacity = tug ? (0.35 + 0.65 * c) * Math.min(1, since / 0.3) : Math.max(0, 0.8 * (1 - since / 0.5));
+        r.scale.setScalar(tug ? 2.2 - 1.2 * c * c : 1);
       });
       return this.lightSieve(sv, time);
     }
@@ -2757,16 +2763,19 @@ export class World {
    * The tug's dust: streaks of chalk dust skimming the ground into every well, faster as they near
    * it, for the whole of the tug; they settle in the silence after. Sized to read at island view.
    */
-  private tugDust: { mesh: THREE.InstancedMesh; p: { x: number; z: number; w: number; v: number }[]; floor: THREE.Vector2[]; wells: THREE.Vector3[]; endAt: number } | null = null;
+  private tugDust: { mesh: THREE.InstancedMesh; p: { x: number; z: number; w: number; v: number }[]; floor: THREE.Vector2[]; wells: THREE.Vector3[]; mouth: number[]; endAt: number } | null = null;
   private stepTugFx(st: DrawState, time: number) {
     const ph = st.sieve?.pull?.phase;
     const on = ph === "tug";
     if (!on && !this.tugDust) return;
     const b = st.shrine.board;
     if (!this.tugDust) {
-      const N = this.low ? 260 : 620;
-      const geo = new THREE.PlaneGeometry(0.16, 1).rotateX(-Math.PI / 2);
-      const mat = new THREE.MeshBasicMaterial({ color: "#eef4fb", transparent: true, opacity: 0, depthWrite: false });
+      const N = this.low ? 120 : 240;
+      // A streak, wide at its head (toward the well) and thinning to nothing behind.
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute([-0.09, 0, 0.5, 0.09, 0, 0.5, 0, 0, -0.5], 3));
+      geo.setIndex([0, 2, 1]);
+      const mat = new THREE.MeshBasicMaterial({ color: "#eef4fb", transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
       const mesh = new THREE.InstancedMesh(geo, mat, N);
       mesh.renderOrder = 3;
       mesh.frustumCulled = false;
@@ -2775,7 +2784,7 @@ export class World {
       for (let y = 0; y < b.height; y++) for (let x = 0; x < b.width; x++) if (b.tile({ x, y }) === Tile.Floor) floor.push(new THREE.Vector2(this.worldX(b, x), this.worldZ(b, y)));
       const wells = this.wellRings.map((r) => r.getWorldPosition(new THREE.Vector3()));
       const p = Array.from({ length: N }, () => ({ x: 0, z: 0, w: 0, v: 0 }));
-      this.tugDust = { mesh, p, floor, wells, endAt: -1 };
+      this.tugDust = { mesh, p, floor, wells, mouth: (st.shrine.wells ?? []).map((q) => q.r + 0.55), endAt: -1 };
       for (const d of p) this.seedDust(d);
     }
     const D = this.tugDust;
@@ -2792,15 +2801,15 @@ export class World {
     (D.mesh.material as THREE.MeshBasicMaterial).opacity = 0.85 * fade;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), sc = new THREE.Vector3();
     D.p.forEach((d, i) => {
-      const w = D.wells[d.w]!;
-      const dx = w.x - d.x, dz = w.z - d.z, dist = Math.hypot(dx, dz) || 1;
-      // Faster near the mouth; slows to nothing once the tug is over.
-      const speed = (d.v + 9 / (dist + 0.6)) * (D.endAt < 0 ? 1 : fade * 0.3);
+      const w = D.wells[d.w]!, R = D.mouth[d.w] ?? 1;
+      const dx = w.x - d.x, dz = w.z - d.z, dist = Math.hypot(dx, dz) || 1, out = Math.max(0.05, dist - R);
+      // Every streak runs at its own well's mouth, quicker and longer the nearer it gets; slows to nothing once the tug is over.
+      const speed = (d.v + 7 / (out + 0.5)) * (D.endAt < 0 ? 1 : fade * 0.3);
       d.x += (dx / dist) * speed * dt;
       d.z += (dz / dist) * speed * dt;
-      if (dist < 0.9 && D.endAt < 0) this.seedDust(d);
+      if (out < 0.15 && D.endAt < 0) this.seedDust(d);
       q.setFromAxisAngle(up, Math.atan2(dx, dz));
-      sc.set(1, 1, 0.35 + Math.min(1.4, speed * 0.16));
+      sc.set(1.2, 1, Math.min(out + 0.3, 0.9 + Math.min(3.2, speed * 0.32)));
       m.compose(new THREE.Vector3(d.x, 0.06 + (i % 5) * 0.01, d.z), q, sc);
       D.mesh.setMatrixAt(i, m);
     });
@@ -2808,11 +2817,16 @@ export class World {
   }
   private seedDust(d: { x: number; z: number; w: number; v: number }) {
     const D = this.tugDust!;
-    const f = D.floor[Math.floor(Math.random() * D.floor.length)] ?? new THREE.Vector2();
-    d.x = f.x + Math.random() - 0.5;
-    d.z = f.y + Math.random() - 0.5;
-    d.w = D.wells.reduce((best, q, j) => (Math.hypot(q.x - d.x, q.z - d.z) < Math.hypot(D.wells[best]!.x - d.x, D.wells[best]!.z - d.z) ? j : best), 0);
-    d.v = 0.8 + Math.random() * 1.6;
+    // Out on the chalk round one of the wells, and drawn to that one.
+    for (let tries = 0; tries < 8; tries++) {
+      const j = Math.floor(Math.random() * D.wells.length), w = D.wells[j]!, R = D.mouth[j] ?? 1;
+      const a = Math.random() * Math.PI * 2, r = R + 1.2 + Math.random() * 6.5;
+      d.x = w.x + Math.cos(a) * r;
+      d.z = w.z + Math.sin(a) * r;
+      d.w = j;
+      if (D.floor.some((f) => Math.abs(f.x - d.x) < 0.5 && Math.abs(f.y - d.z) < 0.5)) break;
+    }
+    d.v = 0.6 + Math.random() * 1.2;
   }
   /** The second take's snap: when it came, a pale streak from each wisp's old spot, and a taut thread from each wisp down its well while everything holds. */
   private snapFx: { at: number; streaks: { m: THREE.Mesh; from: THREE.Vector3; id: number }[]; threads: { line: THREE.Mesh; id: number; well: THREE.Vector3 }[]; endAt: number } | null = null;
@@ -3160,6 +3174,7 @@ export class World {
       const order = (i * 5) % n, cheer = Math.max(0, Math.min(1, fx.up * n - order));
       const hop = cheer * Math.abs(Math.sin(time * (5.5 + (i % 3)) + i * 1.3)) * 0.32;
       f.root.position.set(f.x, hop, f.z);
+      f.root.visible = !!d.crowd;
       f.lamp.position.y = 1.0 + cheer * (1.15 + 0.12 * Math.sin(time * 7 + i));
       f.lamp.material.opacity = Math.min(1, (m.who === "Lumi" ? 1 : 0.75 + 0.1 * Math.sin(time * 0.9 + i * 1.7)) + cheer * 0.2);
       f.lamp.scale.setScalar(m.s * CROWD_LAMP * (1 + cheer * 0.35));
@@ -3726,6 +3741,19 @@ export class World {
         rig.aura.visible = h !== undefined && !w.away;
         rig.aura.material.opacity = Math.min(1, Math.max(0, 0.85 * s * dim * flick * (0.8 + 0.2 * h!)));
         rig.aura.scale.setScalar(5.0 * FALL.big * (0.94 + 0.06 * flick));
+      }
+      // Run 8's tug: every flame leans and streams toward its nearest well while it lasts.
+      const tugOn = st.sieve?.pull?.phase === "tug" && h !== undefined ? 1 : 0;
+      if (tugOn || rig.lean) {
+        if (!rig.base) rig.base = [rig.core.position.clone(), rig.halo.position.clone()];
+        rig.lean = (rig.lean ?? 0) + (tugOn - (rig.lean ?? 0)) * 0.12;
+        if (rig.lean < 0.01 && !tugOn) rig.lean = 0;
+        const wells = st.shrine.wells ?? [];
+        const rx = rig.root.position.x, rz = rig.root.position.z;
+        const near = wells.reduce((b, q) => (Math.hypot(q.x - rx, q.y - rz) - q.r < Math.hypot(b.x - rx, b.y - rz) - b.r ? q : b), wells[0] ?? { x: rx, y: rz, r: 0 });
+        const dx = near.x - rx, dz = near.y - rz, dl = Math.hypot(dx, dz) || 1, wob = 0.85 + 0.15 * Math.sin(time * 19 + w.id);
+        rig.core.position.copy(rig.base[0]).add(new THREE.Vector3((dx / dl) * 0.22, -0.05, (dz / dl) * 0.22).multiplyScalar(rig.lean * wob));
+        rig.halo.position.copy(rig.base[1]).add(new THREE.Vector3((dx / dl) * 0.55, -0.1, (dz / dl) * 0.55).multiplyScalar(rig.lean * wob));
       }
       rig.trail.visible = stone < 0.5;
       if (w.rim > 0) rimPulse = Math.max(rimPulse, 1);

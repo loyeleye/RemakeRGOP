@@ -113,6 +113,8 @@ export interface StoryView {
     still?: number;
     /** Ticks the picture on screen is held for, so it can fade in and out over them. */
     stillTicks?: number;
+    /** The village is drawn at the island's edge (a switch; off by default). */
+    crowd?: boolean;
     /** The comet falling on the map: ticks since it was first seen. */
     comet?: number;
     lift?: number;

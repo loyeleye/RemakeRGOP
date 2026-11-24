@@ -75,6 +75,8 @@ export const DYING = {
     lumiCalls: false,
     /** A crowd sound. (Ladi: shown by movement for now; the game has no such sound.) */
     crowdSound: false,
+    /** The village standing at the island's edge. (Ladi, 24 Nov: off, they make no sense on the map doing nothing; ?crowd=1 brings them back.) */
+    crowdShown: false,
     /** The comet is seen landing on the map, between two pictures. (Ladi: yes; off plays the three pictures alone.) */
     cometOnMap: true,
   },
