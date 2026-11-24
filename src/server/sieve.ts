@@ -337,7 +337,10 @@ export class SieveRoom {
       const quiet = rook.beam === null && rook.action.kind !== "staff" && g.wisps.every((w) => g.away.has(w.id) || w.id === this.doomed || (g.height.get(w.id) ?? 100) >= Q.grannyLow);
       if (since >= Q.grannyAfter && (quiet || since >= Q.grannyBy) && this.stillReady()) {
         this.said.add("granny");
-        this.say(ROOK, "Granny?", { player: YOU, ...this.still("r8-7") }, "key");
+        // A bubble over him, with his picture beside it and no caption (Ladi, 24 Nov). It always lands, so the picture does.
+        const cue = this.still("r8-7");
+        if (cue.still) cue.still.bubble = true;
+        this.say(ROOK, "Granny?", { player: YOU, ...cue }, "key");
       }
     }
     if (!this.said.has("knock") && this.said.has("there") && g.wisps.some((w) => w.touched)) {
@@ -351,7 +354,8 @@ export class SieveRoom {
     // So many lost that ten can't be reached: again, at once, and no blame.
     if (banked + live + (S.supply - this.arrived) < S.need) {
       this.restarts++;
-      this.lines.push({ who: HESTA, text: "Again, Rook." });
+      // Tilda says it, in a bubble: Hesta is not on the Sieve (Ladi, 24 Nov: "Tilda should say something"). The story thread's working line, until he picks.
+      this.lines.push({ who: KEEPER, text: SIEVE.again, player: KEEPER_ID });
       this.start(false);
     }
   }

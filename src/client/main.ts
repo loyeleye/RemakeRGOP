@@ -216,8 +216,9 @@ function stillLine(l: StoryLine) {
   const mine = snap?.players.find((p) => p.id === me);
   const held = mine?.beam != null ? snap?.wisps.find((w) => w.id === mine.beam) : null;
   const from = held ? cam.toScreen(held.x + 0.5, held.y + 0.5, 1) : c.at ? cam.toScreen(c.at.x + 0.5, c.at.y + 0.5, 0) : null;
-  stills.show({ cue: c, caption: l.text, who: l.who, ms }, from);
-  if (l.text && l.who) sound.speak(l.who, l.text);
+  // A line that stays a bubble: the picture comes alone, and the bubble says it.
+  stills.show({ cue: c, caption: c.bubble ? "" : l.text, who: l.who, ms }, from);
+  if (l.text && l.who && !c.bubble) sound.speak(l.who, l.text);
   return ms;
 }
 
@@ -232,7 +233,12 @@ function releaseBarks(now: number) {
 }
 
 function sayLine(l: StoryLine, released = false) {
-  if (l.still && !l.talk) return void stillLine(l);
+  if (l.still && !l.talk) {
+    stillLine(l);
+    if (!l.still.bubble || !l.text) return;
+    // Its bubble goes up with its picture, not after it.
+    released = true;
+  }
   if (!released && !l.talk && room?.phase === "playing" && l.who && (stills.up || heldBarks.length)) return void heldBarks.push(l);
   if (l.talk || room?.phase !== "playing" || !l.who) return talk(l);
   // A line about nothing in particular sits over its speaker's model when they're on the field.

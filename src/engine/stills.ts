@@ -38,6 +38,8 @@ export interface StillCue {
   seq?: boolean;
   /** In a sequence: the still it follows, which gets its shortest hold first if it has a line. */
   after?: string;
+  /** The line stays a bubble over its speaker, and the picture comes alone, with no caption (Ladi, 24 Nov: Rook's "Granny?"). */
+  bubble?: boolean;
   /** The tile the event is about (a well), which the panel must not cover. */
   at?: { x: number; y: number };
 }

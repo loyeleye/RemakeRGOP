@@ -10,6 +10,8 @@ export const SIEVE = {
   shrine: "sieve",
   /** Ticks of talk before the stop starts. */
   bellTicks: 3,
+  /** What Tilda says when it starts again (the story thread's draft on Ladi's card, 24 Nov; the others were "Once more. I'll count." and "Still low. Again."). */
+  again: "Again, please.",
   /** Height lost a tick untouched; gained on the tick a staff first reaches a wisp; gained each tick it stays. */
   fall: 1.6,
   liftTap: 35,
