@@ -821,6 +821,12 @@ export class Game {
       }
       return;
     }
+    // Past saving: no staff moves it. It goes down where it hangs.
+    if (w.id === this.pastSaving) {
+      w.target = null;
+      w.skate = null;
+      return;
+    }
     // Strung behind a moving head: it follows the wisp in front (stepString), whatever it was doing.
     if (this.stringLive && this.string.indexOf(w.id) > 0) {
       w.target = null;

@@ -288,6 +288,8 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #stills { position: fixed; top: 60px; width: 30vw; aspect-ratio: 4 / 3; z-index: 30; pointer-events: none; }
 #stills.right { right: 14px; }
 #stills.left { left: 14px; }
+/* A phone on its side: short, so the picture is kept clear of the thumb buttons. */
+@media (max-height: 480px) { #stills.left, #stills.right { width: min(30vw, 52vh); } }
 #stills.top { left: 10px; right: 10px; width: auto; aspect-ratio: auto; height: 24vh; top: 56px; }
 #stills .still { position: absolute; inset: 0; opacity: 0; transform: rotate(var(--tilt, 0deg)) scale(0.985); transition: opacity var(--in, 400ms) ease-out, transform var(--in, 400ms) ease-out; background: #efe4cc; border-radius: 3px 6px 4px 5px / 5px 3px 6px 4px; box-shadow: 0 6px 22px rgba(10, 6, 18, 0.45), 0 0 0 1px rgba(60, 40, 20, 0.18) inset; overflow: hidden; }
 #stills .still.in { opacity: 1; transform: rotate(var(--tilt, 0deg)); }

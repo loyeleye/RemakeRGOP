@@ -289,6 +289,21 @@ describe("Run 8: a harder job, on the Sieve", () => {
     expect(j.room.restarts).toBe(0);
   });
 
+  it("the first wisp goes down where it hangs, whatever staff is on it", () => {
+    let s = 21;
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647));
+    room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    while (room.state.phase === "countdown") room.onTick();
+    const g = room.state.game, first = g.wisps[room.state.doomed!]!, at = { ...first.pos };
+    g.players[0]!.action = { kind: "staff", wisp: first.id };
+    let fell: { x: number; y: number; well: boolean } | null = null;
+    for (let n = 0; n < 40 && !fell; n++) {
+      room.onTick();
+      fell = g.falls.find((f) => f.wisp === first.id) ?? null;
+    }
+    expect(fell).toMatchObject({ x: at.x, y: at.y, well: true });
+  });
+
   it("the second take spares nothing: every wisp goes up to three tiles toward its nearest well and stops at the lip, and the one on his staff is torn off it", () => {
     let s = 21;
     const msgs: ServerMsg[] = [];
@@ -299,10 +314,11 @@ describe("Run 8: a harder job, on the Sieve", () => {
     const g = room.state.game, c = g.board.center, rook = g.players[0]!;
     // He has his staff on one as the wind-up ends.
     while (room.state.pull.left > 1) room.onTick();
-    const mine = g.wisps.find((w) => !g.away.has(w.id) && w.id !== room.state.doomed)!;
+    // One on the chalk, not one hanging over a well (that one has nowhere to go).
+    const mine = g.wisps.find((w) => !g.away.has(w.id) && w.id !== room.state.doomed && g.board.tile(w.pos) === Tile.Floor)!;
     rook.pos = rook.prev = g.nearestFree(pt(mine.pos.x + 2, mine.pos.y), 0);
     rook.action = { kind: "staff", wisp: mine.id };
-    const live = g.wisps.filter((w) => !g.away.has(w.id)).length;
+    const live = g.wisps.filter((w) => !g.away.has(w.id) && g.board.tile(w.pos) === Tile.Floor).length;
     room.onTick();
     expect(room.state.pull.phase).toBe("hold");
     const moved = room.state.pull.moved;

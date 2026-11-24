@@ -52,6 +52,14 @@ export class StillsPanel {
     this.root.id = "stills";
     this.root.setAttribute("aria-live", "polite");
     document.body.append(this.root);
+    // The phone is turned while one is up: it takes the shape for the new way round, not the old one's.
+    addEventListener("resize", () => {
+      if (!this.card) return;
+      const portrait = innerHeight > innerWidth;
+      if (portrait === (this.side === "top")) return;
+      this.side = portrait ? "top" : "right";
+      this.root.className = this.side;
+    });
   }
 
   /** Fetches a run's pictures before they are called (every still whose name starts with `prefix`). */

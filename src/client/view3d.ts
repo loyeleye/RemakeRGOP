@@ -2933,11 +2933,18 @@ export class World {
 
   /** Run 8: wisps that have just fallen away, watched going: down into the chalk, or down a well getting smaller. */
   private fallFx: { key: string; s: THREE.Sprite; x: number; z: number; well: boolean; at: number }[] = [];
+  /** Falls already shown, so one is watched going once however long the room holds on that tick. */
+  private fallSeen = new Set<string>();
+  private fallTick = -1;
   private stepFalls(st: DrawState, time: number) {
     const b = st.shrine.board;
+    // The clock has gone back: a new round, and its falls are new.
+    if (st.snap.tick < this.fallTick) this.fallSeen.clear();
+    this.fallTick = st.snap.tick;
     for (const f of st.snap.falls ?? []) {
       const key = `${f.tick}:${f.wisp}`;
-      if (this.fallFx.some((q) => q.key === key)) continue;
+      if (this.fallSeen.has(key)) continue;
+      this.fallSeen.add(key);
       const s = glowSprite("#ffb53a", 1.2, 0.5);
       s.material.blending = THREE.NormalBlending;
       s.material.color.set("#f29a1c");
