@@ -120,7 +120,7 @@ export class Camera {
   }
 
   phoneZoom() {
-    this.scale = Math.min(this.w, this.h) / 12;
+    this.scale = Math.min(this.w, this.h) / (this.board?.phoneSpan ?? 12);
   }
 
   update() {
@@ -1052,7 +1052,7 @@ function setWindows(on: boolean) {
 }
 
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
-const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "streamer", "streamer-blue", "wind-vane", "bent-tree", "referee-stand", "cold-brazier", "low-lamp"]);
+const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "streamer", "streamer-blue", "wind-vane", "bent-tree", "referee-stand", "cold-brazier", "low-lamp", "low-house"]);
 /** Yard things drawn from their own model: tiles wide and deep, and the block-out's height. */
 const YARD_THINGS: Record<string, [number, number, number]> = {
   beehive: [1, 1, 1], "garden-plot": [3, 2, 0.3], "mat-rack": [2, 1, 1.9], baskets: [1, 1, 0.4], wheelbarrow: [1, 1, 0.7], "pane-crate": [1, 1, 0.7], "cargo-crates": [1, 1, 1.3],
@@ -1989,11 +1989,12 @@ export class World {
     const tiers: [number, number, number][] = [[0.9, 0.24, -4.5], [2.6, 0.2, -6.5], [4.3, 0.17, -3.6]];
     const fallU = { value: 0 };
     this.timeUniforms.push(fallU);
-    const falls = th.particles !== "embers";
+    const falls = th.particles !== "embers" && !shrine.landing;
     const tierList: { x: number; y: number; z: number; r: number; group: THREE.Group }[] = [];
     // Each island turns its tiers a different way so no two look alike.
     const spin = [...shrine.id].reduce((h, ch) => h + ch.charCodeAt(0), 0) * 0.37;
-    tiers.forEach(([a0, size, ty], i) => {
+    // (The low one has none: it lies in cloud, and a lower step would show through it like a flap.)
+    (shrine.landing ? [] : tiers).forEach(([a0, size, ty], i) => {
       // A story place keeps its tiers clear of the landing and the falls: off the west, north-east and east rims.
       const a = shrine.lobes ? (shrine.tierAngles ?? [3.5, 5.5, 0.2])[i]! : a0 + spin;
       const e = edge(a);
@@ -2961,7 +2962,7 @@ export class World {
     // No fire burns at the slip.
     this.brazierLight.intensity = 0;
     const b = st.shrine.board;
-    this.rescueFx.step({ r, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, wisps: this.wisps.values(), players: this.players });
+    this.rescueFx.step({ r, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, wisps: this.wisps, players: this.players });
   }
 
   /** Run 8: wisps that have just fallen away, watched going: down into the chalk, or down a well getting smaller. */

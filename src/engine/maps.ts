@@ -345,7 +345,7 @@ export function ringWalls(ring: Ring): Pt[] {
 export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling"
   | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat" | "path-lamp" | "ladder"
   | "beehive" | "garden-plot" | "mat-rack" | "baskets" | "wheelbarrow" | "pane-crate" | "cargo-crates" | "streamer" | "streamer-blue" | "kes-house" | "wind-vane" | "bent-tree" | "referee-stand"
-  | "cold-brazier" | "low-lamp";
+  | "cold-brazier" | "low-lamp" | "low-house";
 export const PROP_CHARS: Record<string, PropKind> = {
   F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling",
   // The horseshoe island's houses, the Offering stone, and the one boat at its mooring.
@@ -357,8 +357,8 @@ export const PROP_CHARS: Record<string, PropKind> = {
   u: "streamer", y: "streamer-blue",
   // And its own models: Kes's house, the wind vanes, the bent trees, and Lumi's referee stand (open ground: she stands on it).
   "5": "kes-house", "6": "wind-vane", "7": "bent-tree", "8": "referee-stand",
-  // The low one (run 9): its own brazier, cold, and its path lamps. Both are drawn by the run (rescue-dress.ts).
-  "9": "cold-brazier", "0": "low-lamp",
+  // The low one (run 9): its own brazier, cold, its path lamps and its houses. All are drawn by the run (rescue-dress.ts).
+  "9": "cold-brazier", "0": "low-lamp", "?": "low-house",
   q: "beehive", p: "garden-plot", m: "mat-rack", s: "baskets", w: "wheelbarrow", n: "pane-crate", r: "cargo-crates",
 };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
@@ -911,6 +911,7 @@ const TILE_OF: Record<string, Tile> = {
   // The low one's cold brazier and lamps: nobody walks through them, but sight and reach carry past.
   "9": Tile.Rock,
   "0": Tile.Rock,
+  "?": Tile.Rock,
   "~": Tile.Water,
   /** Deep water (the law of the water): a pool tile where a plain pull slips. */
   "≈": Tile.Water,
@@ -1407,6 +1408,8 @@ function lowOne(): Shrine {
   const sh = finish(def, rows, 2, null);
   const c = sh.board.center;
   sh.board.frame = { x: c.x + LO_FRAME.x0, y: c.y + LO_FRAME.y0, w: LO_FRAME.x1 - LO_FRAME.x0 + 1, h: LO_FRAME.y1 - LO_FRAME.y0 + 1 };
+  // On a phone the view takes in half the island's depth, so the line of lamps going cold is seen.
+  sh.board.phoneSpan = RESCUE.phoneSpan;
   return { ...sh, coast: loCoast, outline: loFromSlip, arms: true, lobes: [], core: { x: LO_OVAL.x, y: LO_OVAL.y, outline: loOutline }, landing: true };
 }
 

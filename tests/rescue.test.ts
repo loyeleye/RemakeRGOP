@@ -27,13 +27,13 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(sh.landing).toBe(true);
     for (const p of LO_POOLS) for (let y = p.y0; y <= p.y1; y++) for (let x = p.x0; x <= p.x1; x++) expect(b.tile(pt(c.x + x, c.y + y))).toBe(Tile.Water);
     // Open ground on each strip, and across both necks.
-    for (const x of [-10, 0, 10]) expect(b.tile(pt(c.x + x, c.y - 20 + (x === 0 ? 4 : 0)))).toBe(Tile.Floor);
-    for (const y of [-38, -7]) for (const x of [-5, 5]) expect(b.tile(pt(c.x + x, c.y + y))).toBe(Tile.Floor);
+    for (const x of [-12, 0, 12]) expect(b.tile(pt(c.x + x, c.y - 15 + (x === 0 ? 3 : 0)))).toBe(Tile.Floor);
+    for (const y of [-27, -7]) for (const x of [-7, 7]) expect(b.tile(pt(c.x + x, c.y + y))).toBe(Tile.Floor);
     expect(b.tile(c)).toBe(Tile.Brazier);
     // Nothing of the island lies south of the slip, and a walker can get from Rook's start to its side.
     for (let y = c.y + 3; y < b.height; y++) for (let x = 0; x < b.width; x++) expect(b.tile(pt(x, y))).toBe(Tile.Edge);
-    const path = b.walkPath(sh.starts[0]![0]!, pt(c.x - 2, c.y));
-    expect(path[path.length - 1]).toEqual(pt(c.x - 2, c.y));
+    const path = b.walkPath(sh.starts[0]![0]!, pt(c.x - 3, c.y));
+    expect(path[path.length - 1]).toEqual(pt(c.x - 3, c.y));
   });
 
   it("a careful hand fills three boats before the cloud is at the landing, and the patch crosses twice on the way", () => {
@@ -57,7 +57,8 @@ describe("Run 9: the rescue, on the low one", () => {
       expect(crossings).toBe(2);
       if (room.restarts === 0) won++;
       const said = lines().map((l) => l.text);
-      expect(said[0]).toBe("Little ones on the first boat. We'll keep.");
+      expect(said[0]).toBe("The low one. The next island over, and the cloud is taking it.");
+      expect(said[1]).toBe("Little ones on the first boat. We'll keep.");
       expect(said).toContain("First boat's away!");
       expect(said).toContain("Rook. What is that.");
       expect(said).toContain("It's coming back. Get them off the neck!");
@@ -95,12 +96,12 @@ describe("Run 9: the rescue, on the low one", () => {
     toPlay();
     const g = room.state.game, c = g.board.center, rook = g.players[0]!;
     const [held, loose, later] = g.wisps.filter((w) => w.guild === 0);
-    const row = c.y - 22;
+    const row = c.y - 16;
     const place = (w: (typeof g.wisps)[number], x: number, y: number) => ((w.pos = w.prev = pt(c.x + x, y)), (w.target = null), (w.holder = null));
     // All three in the band it will cross (rows row - 1 to row + 5), Rook just below his own.
     place(held!, 0, row + 3);
-    place(loose!, -10, row + 2);
-    place(later!, 10, row + 3);
+    place(loose!, -12, row + 2);
+    place(later!, 12, row + 3);
     rook.pos = rook.prev = pt(c.x, row + 5);
     conn.message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: held!.id } }));
     room.onTick();
@@ -166,10 +167,10 @@ describe("Run 9: the rescue, on the low one", () => {
     toPlay();
     const g = room.state.game, c = g.board.center, rook = g.players[0]!;
     const w = g.wisps.find((q) => q.guild === 0)!;
-    const y = c.y - 20;
-    w.pos = w.prev = pt(c.x - 9, y);
+    const y = c.y - 15;
+    w.pos = w.prev = pt(c.x - 11, y);
     rook.pos = rook.prev = pt(c.x - 1, y);
-    expect(loStrip(-9)).toBe(0);
+    expect(loStrip(-11)).toBe(0);
     conn.message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: w.id } }));
     for (let n = 0; n < 12; n++) room.onTick();
     // Still on the west strip, at the water's edge or walking round: never on the water, never across it by the straight line.
@@ -184,8 +185,8 @@ describe("Run 9: the rescue, on the low one", () => {
     toPlay();
     const g = room.state.game, c = g.board.center;
     const w = g.wisps.find((q) => q.guild === 0)!;
-    const row = c.y - 22;
-    w.pos = w.prev = pt(c.x - 10, row);
+    const row = c.y - 14;
+    w.pos = w.prev = pt(c.x - 12, row);
     inside(room).launch(1, row);
     let carried = 0;
     const x0 = w.pos.x;

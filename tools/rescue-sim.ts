@@ -13,7 +13,7 @@ for (let k = 1; k <= seeds; k++) {
   for (let n = 0; n < 3000 && room.state.phase !== "results"; n++) {
     room.onTick();
     const st = room.state;
-    if (!!st.patch !== had) (had = !!st.patch), marks.push(`${had ? "in" : "out"}@${st.game.tick}`);
+    if (!!st.patch !== had) (had = !!st.patch), marks.push(`${had ? "in" : "out"}@${st.game.tick}(${room.lostToPatch})`);
     if (st.kesDark) crossed++;
   }
   const st = room.state;

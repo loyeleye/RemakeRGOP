@@ -11,7 +11,7 @@ import { botCommand, planSpot } from "../engine/bot.js";
 import { Game, Grip, Rng, TICK_MS, type Action, type Command, type Guild, type Wisp } from "../engine/game.js";
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
-import { LO_FRAME, LO_POOLS, RESCUE, loLand, loPlanks, loStrip } from "../engine/rescue.js";
+import { LO_FRAME, LO_OVAL, LO_POOLS, RESCUE, loLand, loPlanks, loStrip } from "../engine/rescue.js";
 import { STILL, stillMs, type StillCue } from "../engine/stills.js";
 import { lineTicks } from "./granny.js";
 import { realClock, type Clock } from "./room.js";
@@ -48,6 +48,8 @@ export class RescueRoom {
   private crossedAt = -1e9;
   /** Loose wisps it has covered: gone when it has passed. */
   private taken = new Set<number>();
+  /** Where each wisp it took went out, and when: a wick of smoke stands there a moment. */
+  private outs: { x: number; y: number; tick: number }[] = [];
   /** Kes under it (her glow dark), standing shaken until this tick after it, and held where she is while it comes the second time. */
   private kesDark = false;
   private kesShaken = -1;
@@ -174,6 +176,7 @@ export class RescueRoom {
     this.crossings = 0;
     this.crossedAt = -1e9;
     this.taken = new Set();
+    this.outs = [];
     this.kesDark = this.kesHold = false;
     this.kesShaken = -1;
     this.endingAt = this.liftAt = -1;
@@ -190,6 +193,8 @@ export class RescueRoom {
     this.phase = first ? "countdown" : "playing";
     if (first) {
       const before = this.lines.length;
+      // Where this is, before anyone speaks.
+      this.say("", "The low one. The next island over, and the cloud is taking it.", { talk: true });
       this.say(GRAN, "Little ones on the first boat. We'll keep.", { talk: true, ...this.still("r9-0") });
       this.say(KES, "Near side's yours. I'll string the far side over.", { talk: true });
       this.countdown = R.bellTicks + this.lines.slice(before).reduce((n, l) => n + lineTicks(l), 0);
@@ -209,9 +214,9 @@ export class RescueRoom {
       if (!spot) return void g.away.set(w.id, 1e9);
       return moveWisp(w, spot);
     }
-    // Before the first crossing his come up the middle strip, so there is something loose there for it to pass over.
-    const middle = this.crossings === 0 && this.banked() >= RESCUE.patch.firstBanks - 2;
-    const at = this.openSpot((x) => (middle ? loStrip(x) === 1 : loStrip(x) < 2), RESCUE.arriveNear, 2);
+    // Before the first crossing his come up on the middle strip where it will cross, so there is something loose there for it to pass over.
+    const armed = this.crossings === 0 && !this.patch && this.banked() >= RESCUE.patch.firstBanks - 2;
+    const at = (armed && this.onCourse(this.course())) || this.openSpot((x) => loStrip(x) < 2, RESCUE.arriveNear, 2);
     if (!at) return void g.away.set(w.id, g.tick + RESCUE.pause);
     moveWisp(w, at);
   }
@@ -359,10 +364,45 @@ export class RescueRoom {
 
   // ---------------------------------------------------------------- the dark patch
 
-  /** Whether the patch is over a tile (its middle within the patch's edge, less `inside`). */
+  /** Whether the patch is over a tile, or went over it in this tick's step (its middle within the patch's edge, plus `grow`). */
   private covers(at: Pt, grow = 0) {
     const p = this.patch;
-    return !!p && p.warn <= 0 && Math.hypot(at.x + 0.5 - p.x, at.y + 0.5 - p.y) <= p.r + grow;
+    if (!p || p.warn > 0) return false;
+    const x = at.x + 0.5, y = at.y + 0.5, len = Math.hypot(p.dx, p.dy) || 1;
+    // The nearest point to it on the stretch the patch's middle moved along this tick.
+    const k = Math.max(0, Math.min(1, ((x - (p.x - p.dx)) * p.dx + (y - (p.y - p.dy)) * p.dy) / (len * len)));
+    return Math.hypot(x - (p.x - p.dx * (1 - k)), y - (p.y - p.dy * (1 - k))) <= p.r + grow;
+  }
+
+  /** The row the first crossing is meant for: the island's middle, just south of its cold brazier. */
+  private course() {
+    return this.game.board.center.y + LO_OVAL.y + RESCUE.patch.courseSouth;
+  }
+
+  /** An open tile on the middle strip within the band a crossing on `row` covers, inside the cloud's edge. */
+  private onCourse(row: number): Pt | null {
+    const g = this.game, b = g.board, c = b.center, reach = Math.floor(RESCUE.patch.size / 2) - 1;
+    for (let n = 0; n < 80; n++) {
+      const at = pt(c.x + this.rng.int(11) - 5, row + this.rng.int(reach * 2 + 1) - reach);
+      if (b.tile(at) !== Tile.Floor || g.wisps.some((o) => !g.away.has(o.id) && cheb(o.pos, at) < 2) || g.players.some((q) => cheb(q.pos, at) < 2)) continue;
+      if (Math.hypot(at.x - c.x, at.y - c.y) > (g.cloudAt ?? 99) - RESCUE.arriveInside) continue;
+      return at;
+    }
+    return null;
+  }
+
+  /** His wisps that were waiting to come up do so now, on the band the patch will cross, until `under` of his are loose there. */
+  private bringUnder(row: number) {
+    const g = this.game, reach = Math.floor(RESCUE.patch.size / 2) - 1;
+    const waiting = g.wisps.filter((w) => w.guild === 0 && g.away.has(w.id) && g.away.get(w.id)! < 1e8);
+    const loose = (w: Wisp) => w.guild === 0 && !g.away.has(w.id) && w.holder === null && Math.abs(w.pos.y - row) <= reach && !g.board.inBankZone(w.pos);
+    for (const w of waiting) {
+      if (g.wisps.filter(loose).length >= RESCUE.patch.under) return;
+      const at = this.onCourse(row);
+      if (!at) return;
+      g.away.delete(w.id);
+      moveWisp(w, at);
+    }
   }
 
   private stepPatch() {
@@ -372,22 +412,27 @@ export class RescueRoom {
       if (g.tick < this.crossedAt + P.gap) return;
       const n = this.banked();
       if (this.crossings === 0 && (n >= P.firstBanks || g.tick >= P.firstBy)) {
-        // Across the island, west to east, on the row where the most of his loose wisps are, well away from her.
+        // Across the island's middle, west to east, where his last few have come up: the row within
+        // `nearCourse` of the course with the most of his loose wisps on it (the middle strip's count
+        // twice), and well away from her. If she is in the way it waits for her to move on.
+        const reach = P.size / 2 - 1, by = this.course(), late = g.tick >= Math.max(P.firstBy, 0) + 25 || n >= P.firstBanks + 3;
         const loose = g.wisps.filter((w) => w.guild === 0 && !g.away.has(w.id) && w.holder === null && !g.board.inBankZone(w.pos));
-        let best = -1, row = c.y - 22;
-        for (let y = c.y - 34; y <= c.y - 11; y++) {
+        const waiting = g.wisps.filter((w) => w.guild === 0 && g.away.has(w.id) && g.away.get(w.id)! < 1e8).length;
+        let best = -1, row = by;
+        for (let y = by - P.nearCourse; y <= by + P.nearCourse; y++) {
           if (Math.abs(kes.pos.y - y) < P.clearOfKes) continue;
-          const k = loose.filter((w) => Math.abs(w.pos.y - y) <= P.size / 2 - 1 && loStrip(w.pos.x - c.x) === 1).length * 2 + loose.filter((w) => Math.abs(w.pos.y - y) <= P.size / 2 - 1).length;
-          if (k > best || (k === best && Math.abs(y - (c.y - 22)) < Math.abs(row - (c.y - 22)))) (best = k), (row = y);
+          const k = loose.filter((w) => Math.abs(w.pos.y - y) <= reach && loStrip(w.pos.x - c.x) === 1).length * 2 + loose.filter((w) => Math.abs(w.pos.y - y) <= reach).length;
+          if (k > best || (k === best && Math.abs(y - by) < Math.abs(row - by))) (best = k), (row = y);
         }
-        // It waits a little for something loose to pass over, but not for long.
-        if (best < 3 && g.tick < Math.max(P.firstBy, 0) + 25 && n < P.firstBanks + 3) return;
+        // It waits a little for two of his to be on its course (or waiting to come up), but not for long.
+        if ((best < 0 || best + waiting * 2 < 3) && !late) return;
+        this.bringUnder(row);
         this.launch(1, row);
         this.say(KES, "Rook. What is that.", { player: KES_ID }, "key");
       } else if (this.crossings === 1 && (n >= P.secondBanks || g.tick >= P.secondBy)) {
         // Along the south neck, through where she is, while she has a string in hand. The longer it
         // has waited the less it asks: any string at all, and at the last her alone.
-        const strung = g.string.length, south = kes.pos.y - c.y >= -16;
+        const strung = g.string.length, south = kes.pos.y - c.y >= LO_POOLS[0].y1 - 5;
         const late = n >= P.secondBanks + 1 || g.tick >= P.secondBy + P.wait;
         const last = n >= RESCUE.boats * RESCUE.perBoat - 2 || g.tick >= P.secondBy + 2 * P.wait;
         if (!(strung >= 2 && (south || late)) && !(late && strung >= 1) && !last) return;
@@ -415,10 +460,15 @@ export class RescueRoom {
       if (!this.taken.has(w.id)) continue;
       if (this.patchMode === "drag" && over) {
         // The other behaviour: it carries them off with it, a tile a tick, and they are gone at the rim.
-        const to = pt(w.pos.x + Math.sign(Math.round(p.dx)), w.pos.y + Math.sign(Math.round(p.dy)));
-        if (g.board.passable(to, Mover.Wisp) && g.board.tile(to) !== Tile.Edge) {
-          w.prev = w.pos;
+        // (its pace, a tile at a time, for as far as the way is open).
+        const from = w.pos;
+        for (let k = Math.max(1, Math.round(Math.hypot(p.dx, p.dy))); k > 0; k--) {
+          const to = pt(w.pos.x + Math.sign(Math.round(p.dx)), w.pos.y + Math.sign(Math.round(p.dy)));
+          if (!g.board.passable(to, Mover.Wisp) || g.board.tile(to) === Tile.Edge) break;
           w.pos = to;
+        }
+        if (!samePt(from, w.pos)) {
+          w.prev = from;
           w.target = null;
           w.holder = null;
           continue;
@@ -454,7 +504,7 @@ export class RescueRoom {
       this.say(KES, "There's nothing up there.", { player: KES_ID, ...this.still("r9-1", pt(Math.round(p.x), Math.round(p.y))) }, "key");
     }
     // Off the land and away (the second time toward home): it is gone from the board.
-    if (p.x - p.r > c.x + LO_FRAME.x1 + 6) {
+    if (p.x - p.r > c.x + LO_FRAME.x1 + 2) {
       if (p.n === 1 && p.took > 0) this.say(KES, "Where did they go?", { player: KES_ID }, "key");
       this.patch = null;
       this.kesHold = false;
@@ -477,6 +527,7 @@ export class RescueRoom {
   private gone(w: Wisp) {
     const g = this.game;
     if (g.away.has(w.id)) return;
+    this.outs.push({ x: w.pos.x, y: w.pos.y, tick: g.tick });
     w.holder = null;
     w.target = null;
     w.skate = null;
@@ -500,6 +551,19 @@ export class RescueRoom {
     const tail = g.string.length ? g.wisps[g.string[g.string.length - 1]!]! : null;
     const loose = g.wisps.filter((w) => live(w) && !g.string.includes(w.id) && !this.covers(w.pos) && (!tail || (cheb(w.pos, tail.pos) <= RESCUE.storm.link - 1 && g.board.canSee(w.pos, tail.pos))));
     const head = g.string.length ? g.wisps[g.string[0]!] : undefined;
+    // The first time she sees it coming and gets off its course, north or south, whichever is nearer.
+    const p = this.patch;
+    if (p && p.n === 1 && p.x - p.r < me.pos.x + 1 && Math.abs(me.pos.y + 0.5 - p.y) <= p.r + 1.5) {
+      const side = me.pos.y + 0.5 >= p.y ? 1 : -1;
+      for (const sgn of [side, -side])
+        for (let dx = 0; dx <= 3; dx++)
+          for (const sx of [1, -1]) {
+            const to = pt(me.pos.x + sx * dx, Math.round(p.y - 0.5 + sgn * (p.r + 3)));
+            if (g.board.tile(to) !== Tile.Floor || loStrip(to.x - g.board.center.x) !== 2) continue;
+            if (me.action.kind === "walk" && samePt(me.action.to, to)) return;
+            return cmd({ action: { kind: "walk", to } });
+          }
+    }
     // While it comes the second time she stays where she is, her staff on her string.
     if (this.kesHold) {
       if (head && live(head) && g.inReach({ ...me, mode: "pull" }, head)) return cmd(me.action.kind === "staff" && me.action.wisp === head.id ? null : { action: { kind: "staff", wisp: head.id }, toggleMode: fix });
@@ -630,6 +694,8 @@ export class RescueRoom {
         cloud: this.game.cloudAt ?? RESCUE.cloud.start,
         ...(p ? { patch: { x: p.x, y: p.y, dx: p.dx, dy: p.dy, r: p.r, warn: Math.max(0, p.warn), n: p.n, ...(this.patchMode === "drag" ? { drag: true } : {}) } } : {}),
         ...(this.kesDark ? { dark: [KES_ID] } : {}),
+        ...(this.taken.size ? { taken: [...this.taken] } : {}),
+        ...(this.outs.some((o) => this.ticks - o.tick <= RESCUE.patch.smokeTicks) ? { outs: this.outs.filter((o) => this.ticks - o.tick <= RESCUE.patch.smokeTicks) } : {}),
         ...(this.endingAt >= 0 ? { ending: this.liftAt >= 0 ? this.ticks - this.liftAt : -1 } : {}),
         ...(this.liftAt >= 0 ? { aboard: [KES_ID] } : {}),
       },
