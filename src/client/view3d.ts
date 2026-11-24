@@ -754,7 +754,8 @@ interface WispRig {
 const EARTH_LINE = 0.35;
 /** The snack bubble against the snack clip's own time (cast thread's timing.json): in at 0.3 s, a bite at each of `bites` (then crumbs, then a sparkle), out over `out`; `size` in tiles. */
 /** The storm string: its violet, the light that runs along it, and how long a join flashes (seconds). */
-const STORM = { line: "#7b2ff2", light: "#c9a2ff", flash: 0.45 };
+/** every: seconds between sparks down the string (3 ticks); hop: seconds a spark takes over each link; crack: how long a wisp stays lit; jags: bends in a link; leash: past this far from her head wisp, the lantern's own link isn't drawn. */
+const STORM = { line: "#7b2ff2", light: "#c9a2ff", flash: 0.45, every: 1.8, hop: 0.15, crack: 0.32, jags: 6, leash: 14 };
 /** The moored skiff: bob in tiles (tie is the bow lantern in the model's own space), roll in radians, seconds a bob, rope links and slack, shade strength. */
 const MOORING = { bob: 0.06, roll: 0.026, period: 3.6, links: 10, slack: 0.3, shade: 0.4, tie: [1.1, 0.65, -0.05] as const };
 const SNACK = { frames: 7, in: 0.3, bites: [1.45, 1.85, 2.25, 2.65, 2.95, 3.1], outFrom: 3.3, outTo: 3.45, size: 3.4 };
@@ -1675,8 +1676,7 @@ export class World {
     this.streamers = [];
     this.perch = null;
     if (this.storm) {
-      for (const l of this.storm.links) this.scene.remove(l.core, l.halo);
-      this.scene.remove(this.storm.flash, ...this.storm.sparks);
+      this.scene.remove(...this.storm.all);
       this.storm = null;
     }
     this.statueSlot = this.flowers = null;
@@ -1753,7 +1753,7 @@ export class World {
       const { rx, ry } = shrine.raceOval;
       const oval = new THREE.Shape();
       oval.absellipse(0, 0, rx + 0.5, ry + 0.5, 0, Math.PI * 2);
-      const m = new THREE.Mesh(new THREE.ShapeGeometry(oval, 64), new THREE.MeshStandardMaterial({ map: tex(`textures/floor-${shrine.id}-race.webp`, 1 / 9), roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -0.5 }));
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(oval, 64), new THREE.MeshStandardMaterial({ map: tex(`textures/floor-${shrine.id}-race.webp`, 1 / 9), color: "#c9cfbb", roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -0.5 }));
       m.rotation.x = -Math.PI / 2;
       m.position.y = 0.014;
       m.receiveShadow = true;
@@ -2372,55 +2372,117 @@ export class World {
   }
   /** A slot for a place model at (x, z), turned `rot`, showing `blockout` until the model is in. */
   /**
-   * The storm string (run 5): a clear violet line from wisp to wisp along Kes's string, bright
-   * and running with light while she pulls, and a flash on a wisp as it joins. Made to read at a
-   * glance, like the earth line in Granny's game.
+   * The storm string (run 5): static, so it reads as Kes's storm light (Ladi). A jagged violet
+   * line runs from her lantern to the head wisp and on from wisp to wisp, and every few seconds a
+   * spark jumps down it from her lantern, each wisp cracking white-violet as it passes. It sparks
+   * whether or not she is pulling; a wisp that joins gets a bigger crack. Looks only, no rule.
    */
-  private storm: { links: { core: THREE.Mesh; halo: THREE.Mesh }[]; sparks: THREE.Sprite[]; flash: THREE.Sprite; had: number[]; flashAt: number } | null = null;
-  private stepStormString(ids: number[], live: boolean, at: Map<number, THREE.Vector3>, time: number) {
-    if (!ids.length && !this.storm) return;
+  private storm: { links: { segs: THREE.Mesh[]; halo: THREE.Mesh }[]; nodes: { flash: THREE.Sprite; spokes: THREE.Mesh[] }[]; flash: THREE.Sprite; had: number[]; flashAt: number; all: THREE.Object3D[] } | null = null;
+  private stepStormString(ids: number[], live: boolean, at: Map<number, THREE.Vector3>, time: number, lantern: THREE.Vector3 | null) {
+    if (!ids.length && !lantern && !this.storm) return;
     if (!this.storm) {
       const flash = glowSprite(STORM.light, 3.2, 0);
       this.scene.add(flash);
-      this.storm = { links: [], sparks: [], flash, had: [], flashAt: -9 };
+      this.storm = { links: [], nodes: [], flash, had: [], flashAt: -9, all: [flash] };
     }
     const s = this.storm;
     const up = new THREE.Vector3(0, 1, 0);
-    for (let i = 0; i < Math.max(s.links.length, ids.length - 1); i++) {
+    const rnd = (n: number) => {
+      const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+      return v - Math.floor(v);
+    };
+    const lay = (m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3, r: number) => {
+      const dir = b.clone().sub(a), len = dir.length();
+      m.visible = len > 0.02;
+      if (!m.visible) return;
+      m.position.copy(a).lerp(b, 0.5);
+      m.scale.set(r, len, r);
+      m.quaternion.setFromUnitVectors(up, dir.divideScalar(len));
+    };
+    // The chain: her lantern, then each strung wisp. A link too long to be hers (she is away across the ground) is left out.
+    const pts: (THREE.Vector3 | undefined)[] = [lantern ?? undefined, ...ids.map((id) => at.get(id))];
+    // The spark: sets off from the lantern every STORM.every seconds and takes STORM.hop to cross each link.
+    const since = time % STORM.every;
+    // The jags are redrawn several times a second, so the line crackles.
+    const frame = Math.floor(time / 0.09);
+    for (let i = 0; i < Math.max(s.nodes.length, pts.length); i++) {
+      let n = s.nodes[i];
+      const p = pts[i];
+      if (!n) {
+        const mat = new THREE.MeshBasicMaterial({ color: "#f1e6ff", transparent: true, depthWrite: false, fog: false, toneMapped: false });
+        const geo = new THREE.CylinderGeometry(1, 1, 1, 4, 1, true);
+        n = { flash: glowSprite("#e9dcff", 1.6, 0), spokes: Array.from({ length: 4 }, () => new THREE.Mesh(geo, mat.clone())) };
+        for (const sp of n.spokes) sp.renderOrder = 7;
+        this.scene.add(n.flash, ...n.spokes);
+        s.all.push(n.flash, ...n.spokes);
+        s.nodes[i] = n;
+      }
+      // How lit this node is: 1 as the spark arrives, gone a moment after. Nothing strung: only her lantern spits.
+      const k = (since - i * STORM.hop) / STORM.crack;
+      const lit = p && k >= 0 && k < 1 && (ids.length > 0 || i === 0) ? 1 - k : 0;
+      n.flash.visible = lit > 0;
+      if (p) n.flash.position.copy(p);
+      n.flash.material.opacity = lit;
+      n.flash.scale.setScalar((i === 0 ? 1.1 : 1.7) * (0.7 + 0.6 * (1 - lit)));
+      n.spokes.forEach((sp, j) => {
+        sp.visible = lit > 0 && !!p;
+        if (!sp.visible) return;
+        const seed = Math.floor(time / STORM.every) * 31 + i * 7 + j;
+        const a = rnd(seed) * Math.PI * 2, tilt = (rnd(seed + 0.5) - 0.3) * 1.2, len = (i === 0 ? 0.35 : 0.6) * (0.6 + rnd(seed + 0.9));
+        const d = new THREE.Vector3(Math.cos(a) * Math.cos(tilt), Math.sin(tilt), Math.sin(a) * Math.cos(tilt));
+        // A bent spoke would be better; a short straight one at a fresh angle each time reads as a spark at this size.
+        lay(sp, p!.clone().addScaledVector(d, 0.15), p!.clone().addScaledVector(d, 0.15 + len), 0.025);
+        (sp.material as THREE.MeshBasicMaterial).opacity = lit;
+      });
+    }
+    for (let i = 0; i < Math.max(s.links.length, pts.length - 1); i++) {
       let l = s.links[i];
-      const a = at.get(ids[i]!), b = at.get(ids[i + 1]!);
-      if (!a || !b || i >= ids.length - 1) {
-        if (l) l.core.visible = l.halo.visible = s.sparks[i]!.visible = false;
+      const a = pts[i], b = pts[i + 1];
+      const far = i === 0 && a && b && a.distanceTo(b) > STORM.leash;
+      if (!a || !b || far) {
+        if (l) (l.halo.visible = false), l.segs.forEach((m) => (m.visible = false));
         continue;
       }
       if (!l) {
-        const geo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
+        const geo = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
         // A solid violet core (pale ground washes out a line that is only light), in a soft glow.
         const core = new THREE.MeshBasicMaterial({ color: STORM.line, transparent: true, depthWrite: false, fog: false, toneMapped: false });
         const halo = new THREE.MeshBasicMaterial({ color: STORM.light, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
-        l = { core: new THREE.Mesh(geo, core), halo: new THREE.Mesh(geo, halo) };
-        l.core.renderOrder = 6;
-        const spark = glowSprite(STORM.light, 0.9, 0);
-        this.scene.add(l.core, l.halo, spark);
+        l = { segs: Array.from({ length: STORM.jags }, () => new THREE.Mesh(geo, core)), halo: new THREE.Mesh(geo, halo) };
+        // Each link has its own colour, so one can whiten as the spark crosses it.
+        const own = core.clone();
+        for (const m of l.segs) (m.material = own), (m.renderOrder = 6);
+        this.scene.add(l.halo, ...l.segs);
+        s.all.push(l.halo, ...l.segs);
         s.links[i] = l;
-        s.sparks[i] = spark;
       }
-      const dir = b.clone().sub(a), len = dir.length();
-      const flick = live ? 0.85 + 0.15 * Math.sin(time * 31 + i * 2.1) * Math.sin(time * 17 + i) : 1;
-      for (const [m, r, o] of [[l.core, live ? 0.1 : 0.06, live ? 1 : 0.7], [l.halo, live ? 0.3 : 0.16, live ? 0.45 : 0.18]] as const) {
-        m.visible = len > 0.05;
-        m.position.copy(a).lerp(b, 0.5);
-        m.scale.set(r * flick, len, r * flick);
-        if (len > 0.05) m.quaternion.setFromUnitVectors(up, dir.clone().divideScalar(len));
-        (m.material as THREE.MeshBasicMaterial).opacity = o * flick;
-      }
-      // While she pulls, a bead of light runs up each link toward the head.
-      const spark = s.sparks[i]!;
-      spark.visible = live;
-      spark.position.copy(b).lerp(a, (time * 1.6 + i * 0.37) % 1);
-      spark.material.opacity = 0.9;
+      // The spark is on this link between leaving node i and reaching node i + 1.
+      const k = (since - i * STORM.hop) / STORM.hop;
+      const hot = k >= 0 && k < 1.3 ? 1 - Math.max(0, k - 1) / 0.3 : 0;
+      // The lantern's link is fainter than the string itself: it shows whose it is, not a fourth wisp.
+      const base = i === 0 ? 0.45 : live ? 1 : 0.75;
+      const dir = b.clone().sub(a), len = dir.length() || 1;
+      const side = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
+      const amp = (0.1 + 0.16 * hot) * Math.min(1, len / 2);
+      const pt = (j: number) => {
+        const t = j / STORM.jags;
+        const p = a.clone().lerp(b, t);
+        if (j > 0 && j < STORM.jags) p.addScaledVector(side, (rnd(frame * 13 + i * 5 + j) - 0.5) * 2 * amp).setY(p.y + (rnd(frame * 17 + i * 3 + j) - 0.5) * amp);
+        return p;
+      };
+      const mat = l.segs[0]!.material as THREE.MeshBasicMaterial;
+      mat.color.set(STORM.line).lerp(new THREE.Color("#f1e6ff"), hot);
+      mat.opacity = Math.min(1, base + hot);
+      let prev = pt(0);
+      l.segs.forEach((m, j) => {
+        const next = pt(j + 1);
+        lay(m, prev, next, (i === 0 ? 0.035 : live ? 0.075 : 0.05) * (1 + hot * 0.6));
+        prev = next;
+      });
+      lay(l.halo, a, b, i === 0 ? 0.12 : live ? 0.3 : 0.18);
+      (l.halo.material as THREE.MeshBasicMaterial).opacity = (i === 0 ? 0.12 : live ? 0.4 : 0.2) + hot * 0.3;
     }
-    // A wisp joins: a quick violet flash on it.
+    // A wisp joins: a bigger crack on it.
     const joined = ids.find((id) => !s.had.includes(id));
     if (joined !== undefined && at.get(joined)) {
       s.flashAt = time;
@@ -2431,7 +2493,7 @@ export class World {
     s.flash.visible = k >= 0 && k < 1;
     if (s.flash.visible) {
       s.flash.material.opacity = (1 - k) * 0.95;
-      s.flash.scale.setScalar(1.6 + k * 2.6);
+      s.flash.scale.setScalar(2 + k * 3.4);
     }
   }
 
@@ -2821,7 +2883,9 @@ export class World {
       if (w.rim > 0) rimPulse = Math.max(rimPulse, 1);
       wispPos.set(w.id, rig.root.position.clone());
     }
-    this.stepStormString(st.snap.string ?? [], !!st.snap.stringLive, wispPos, time);
+    // Her lantern, where the sparks start: about hand height by her side.
+    const stormRig = st.snap.stormLight != null ? this.players.get(st.snap.stormLight) : undefined;
+    this.stepStormString(st.snap.string ?? [], !!st.snap.stringLive, wispPos, time, stormRig ? stormRig.root.position.clone().add(new THREE.Vector3(0.35, 1.15, 0)) : null);
     for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), rig.stones && this.scene.remove(rig.stones), rig.earth && this.scene.remove(rig.earth), this.wisps.delete(id));
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 

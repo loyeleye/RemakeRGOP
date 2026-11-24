@@ -128,10 +128,12 @@ h1 { margin: 0; text-align: center; font-size: 40px; letter-spacing: 0.02em; bac
 #dialog.tell p { font-style: italic; color: #e8e0ff; }
 b.hesta, .bark.hesta span b { color: #9fd8ff; }
 b.lumi, .bark.lumi span b { color: #ffd36a; }
+b.kes, .bark.kes span b { color: #c9a2ff; }
 .bark { position: fixed; z-index: 8; pointer-events: none; display: flex; align-items: center; gap: 6px; background: #120f1ce0; border: 1px solid #ffffff2a; border-radius: 999px; padding: 3px 12px 3px 3px; font-size: 15px; line-height: 1.2; width: max-content; max-width: min(70vw, 320px); transform: translate(-50%, -100%); transition: opacity 0.3s; animation: bark-in 0.2s ease-out; }
 .bark img { width: 30px; height: 30px; border-radius: 50%; flex: none; object-fit: cover; }
 .bark.lumi { border-color: #ffd36a88; }
 .bark.hesta { border-color: #9fd8ff88; }
+.bark.kes { border-color: #c9a2ff88; }
 .bark.fade { opacity: 0; }
 .bark.chip { top: 64px; right: 12px; left: auto; transform: none; }
 body.touch .bark.chip { top: 58px; left: 12px; right: auto; }

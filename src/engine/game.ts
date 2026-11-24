@@ -188,6 +188,8 @@ export interface GameSnapshot {
   /** The storm light's string of wisps, head first (story run 5), and whether it is being pulled. */
   string?: number[];
   stringLive?: boolean;
+  /** Who carries the storm light, so the view can run its sparks from their lantern. */
+  stormLight?: number;
   /** Pulls stopped at the bank this tick (the laws of water): who, which wisp, and the water tile it met. */
   stops?: { player: number; wisp: number; x: number; y: number }[];
 }
@@ -1219,6 +1221,7 @@ export class Game {
       })),
       banks: this.banks,
       ...(this.string.length ? { string: [...this.string], stringLive: this.stringLive } : {}),
+      ...(this.stormLight != null ? { stormLight: this.stormLight } : {}),
       stops: this.bankStops.length ? this.bankStops.map((b) => ({ player: b.player, wisp: b.wisp, x: b.water.x, y: b.water.y })) : undefined,
       moss: this.mossHp.size ? [...this.mossHp].flat() : undefined,
     };

@@ -7,6 +7,7 @@ export const MOODS: Record<string, readonly string[]> = {
   Lumi: ["neutral", "calling", "delighted", "grudging", "smug", "unimpressed", "delight-flash"],
   Rook: ["neutral", "warm", "proud", "baffled"],
   Nell: ["neutral", "curious", "delighted", "determined", "sheepish", "worried"],
+  Kes: ["neutral", "smug", "challenging", "wistful", "gracious"],
   Sefa: ["neutral", "awed", "eager", "grin", "impatient", "indignant", "sheepish"],
 };
 
@@ -27,6 +28,11 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Sefa", /^(We need four!|Are you playing\?)/, "impatient"],
   ["Sefa", /^(Are you a hundred\?|Is it the best of three)/, "grin"],
   ["Sefa", /more!$/, "eager"],
+  // Kes (run 5): neutral and smug are close at this size, so anything at all teasing is smug (cast thread).
+  ["Kes", /^(You took my pupil|She was going to be my pupil|Two nothing's no fun|Last one takes it)/, "challenging"],
+  ["Kes", /^(Rosie would have|Constantly\.)/, "wistful"],
+  ["Kes", /^You worked for that\./, "gracious"],
+  ["Kes", /^(Whatever you say|Good\.|There he is\.|I pulled\.|Did you see that\?|They like company|You hold on too long|I know\. It's annoying\.|Same time next week)/, "smug"],
   ["Rook", /^(That's it\.|Just like that\.)/, "proud"],
   ["Rook", /^How did you do that\?/, "baffled"],
   ["Rook", /^(Yes, ma'am\.|See\?|Now you're the boss|Let's call it)/, "warm"],
