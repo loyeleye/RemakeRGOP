@@ -514,7 +514,8 @@ export class GrannyRoom {
     // the first time she leads at all, and at twice that time whatever the score, so it's never lost.
     const ahead = this.hestaScore() - this.kidsScore();
     const runningNow = ahead >= 2 || (ahead >= 1 && g.tick >= GRANNY.runningAt) || g.tick >= GRANNY.runningAt * 2;
-    if (runningNow && g.tick > GRANNY.ageAt + 10 && !this.said.has("running") && !this.keyTalking()) {
+    // Never at match point or after the hold: that moment has its own exchange.
+    if (runningNow && g.tick > GRANNY.ageAt + 10 && this.kidsScore() < GRANNY.target - 1 && this.holdWisp === null && !this.said.has("running") && !this.keyTalking()) {
       this.said.add("running");
       this.say(SEFA, "She's not even running!", { player: KID_IDS[1] }, "key");
       this.say(HESTA, "Why would I run? You're all coming to me.", { player: HESTA_ID }, "key");
