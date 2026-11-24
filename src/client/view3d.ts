@@ -753,6 +753,8 @@ interface WispRig {
 /** Seconds the earth line takes to reach a wisp before the stone starts closing over it. */
 const EARTH_LINE = 0.35;
 /** The snack bubble against the snack clip's own time (cast thread's timing.json): in at 0.3 s, a bite at each of `bites` (then crumbs, then a sparkle), out over `out`; `size` in tiles. */
+/** The moored skiff: bob in tiles (tie is the bow lantern in the model's own space), roll in radians, seconds a bob, rope links and slack, shade strength. */
+const MOORING = { bob: 0.06, roll: 0.026, period: 3.6, links: 10, slack: 0.3, shade: 0.4, tie: [1.1, 0.65, -0.05] as const };
 const SNACK = { frames: 7, in: 0.3, bites: [1.45, 1.85, 2.25, 2.65, 2.95, 3.1], outFrom: 3.3, outTo: 3.45, size: 3.4 };
 /** Hesta's stone cast: the fist snaps shut 0.3 s into the 1.2 s clip; the glow holds from there to its end; the ring runs out at `speed` tiles a second to `reach`. */
 const STONE_CAST = { snap: 0.3, hold: 0.9, speed: 22, reach: 70 };
@@ -856,7 +858,7 @@ const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number; y?: n
   stall: { model: "stall" },
   kindling: { model: "kindling-brazier" },
   falls: { model: "falls" },
-  skiff: { model: "skiff", dx: -0.7 },
+  skiff: { model: "skiff", dx: -0.9, y: -0.35 },
 };
 
 /**
@@ -1513,6 +1515,7 @@ export class World {
       // Its lantern, on the post at the water end, burns with the path lamps (the last of them, for a walk's guttering or dead list).
       const glow = glowSprite("#ffb65a", 1.5, 0), core = glowSprite("#ffe2a0", 0.55, 0);
       glow.position.set(cx - 2.2, 1.95, cz - 1.25);
+      this.landingPost = new THREE.Vector3(cx - 2.0, 0.95, cz - 0.72);
       core.position.set(cx - 2.2, 2.25, cz - 1.25);
       g.add(glow, core);
       const lit = new THREE.Group();
@@ -1536,8 +1539,8 @@ export class World {
         light.position.set(at[0], 2.5, at[1]);
         g.add(light);
       }
-      if (kind === "skiff") {
-        // Its mooring post stays on the edge; the boat lies west of it.
+      if (kind === "skiff" && !this.landingPost) {
+        // Its mooring post stays on the edge; the boat lies west of it. (At a landing it ties to the lamp post.)
         const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.1, 8), new THREE.MeshStandardMaterial({ color: "#6b4a2e", roughness: 0.9 }));
         post.position.set(at[0] + 0.3, 0.55, at[1]);
         post.castShadow = true;
@@ -1550,7 +1553,8 @@ export class World {
       }
       const drawn = PLACE_OF[kind];
       if (drawn) {
-        this.placeSlot(drawn.model, obj, at[0] + (drawn.dx ?? 0), at[1], shrine.turns?.[kind] ?? drawn.rot ?? 0, drawn.y ?? 0);
+        const slot = this.placeSlot(drawn.model, obj, at[0] + (drawn.dx ?? 0), at[1], shrine.turns?.[kind] ?? drawn.rot ?? 0, drawn.y ?? 0);
+        if (kind === "skiff") this.moor(slot, this.landingPost ?? new THREE.Vector3(at[0] + 0.3, 0.9, at[1]));
         continue;
       }
       obj.position.set(at[0], 0, at[1]);
@@ -1628,6 +1632,8 @@ export class World {
     this.shrineGroup.clear();
     this.placeSlots = [];
     this.pathLamps = [];
+    this.moored = null;
+    this.landingPost = null;
     this.statueSlot = this.flowers = null;
     this.isPlace = !!themeFor(shrine.id).place;
     this.lightKey = "";
@@ -2309,6 +2315,63 @@ export class World {
     }
   }
   /** A slot for a place model at (x, z), turned `rot`, showing `blockout` until the model is in. */
+  /** The moored skiff: what it hangs from, its rope and the shade under it. */
+  private moored: { slot: THREE.Group; y: number; post: THREE.Vector3; bow: THREE.Vector3; rope: THREE.Mesh[]; shade: THREE.Mesh; flame?: [THREE.Sprite, THREE.Sprite] } | null = null;
+  private landingPost: THREE.Vector3 | null = null;
+  /**
+   * Moors a skiff (Ladi): a slack rope from its bow to a post, a faint soft shade below it, and
+   * a slow bob, so it reads as a boat riding the air and not one stuck in the sky. The bow is
+   * the lantern on its bowsprit, where the maps thread's sky skiff ties off.
+   */
+  private moor(slot: THREE.Group, post: THREE.Vector3) {
+    const mat = new THREE.MeshStandardMaterial({ color: "#8a6a3c", roughness: 1 });
+    const geo = new THREE.CylinderGeometry(0.04, 0.04, 1, 5);
+    const rope = Array.from({ length: MOORING.links }, () => {
+      const m = new THREE.Mesh(geo, mat);
+      this.shrineGroup.add(m);
+      return m;
+    });
+    const shade = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: GLOW, color: "#27303f", transparent: true, opacity: MOORING.shade, depthWrite: false, fog: false }),
+    );
+    shade.rotation.x = -Math.PI / 2;
+    shade.scale.set(3.6, 3.6, 1);
+    shade.position.set(slot.position.x, slot.position.y - 1.4, slot.position.z);
+    this.shrineGroup.add(shade);
+    this.moored = { slot, y: slot.position.y, post, bow: new THREE.Vector3(MOORING.tie[0], MOORING.tie[1], MOORING.tie[2]), rope, shade };
+    // Its bow lantern burns with the path lamps and rides the bob.
+    const glow = glowSprite("#ffb65a", 1.3, 0), core = glowSprite("#ffe2a0", 0.5, 0);
+    this.shrineGroup.add(glow, core);
+    this.moored.flame = [glow, core];
+    const lit = new THREE.Group();
+    lit.userData.filled = true;
+    this.pathLamps.push({ slot: lit, glow, core, mats: [], state: "off", seed: 6.5 });
+    this.stepMoored(0);
+  }
+  private stepMoored(time: number) {
+    const m = this.moored;
+    if (!m) return;
+    const ph = (time * Math.PI * 2) / MOORING.period;
+    m.slot.position.y = m.y + Math.sin(ph) * MOORING.bob;
+    m.slot.rotation.z = Math.sin(ph + 1.1) * MOORING.roll;
+    (m.shade.material as THREE.MeshBasicMaterial).opacity = MOORING.shade * (1 - 0.15 * Math.sin(ph));
+    // The rope hangs in a sagging curve from the post to the bow, and its boat end rides the bob.
+    this.shrineGroup.updateMatrixWorld(true);
+    const a = this.shrineGroup.worldToLocal(m.slot.localToWorld(m.bow.clone()));
+    m.flame?.[0].position.copy(a);
+    m.flame?.[1].position.copy(a).setY(a.y + 0.2);
+    const span = a.distanceTo(m.post), sag = Math.max(0.12, MOORING.slack * span);
+    const at = (k: number) => a.clone().lerp(m.post, k).setY(a.y + (m.post.y - a.y) * k - sag * 4 * k * (1 - k));
+    const up = new THREE.Vector3(0, 1, 0);
+    m.rope.forEach((link, i) => {
+      const p = at(i / m.rope.length), q = at((i + 1) / m.rope.length);
+      link.position.copy(p).lerp(q, 0.5);
+      link.scale.y = p.distanceTo(q);
+      link.quaternion.setFromUnitVectors(up, q.sub(p).normalize());
+    });
+  }
+
   private placeSlot(model: string, blockout: THREE.Object3D, x: number, z: number, rot = 0, y = 0) {
     const slot = new THREE.Group();
     slot.add(blockout);
@@ -2439,6 +2502,7 @@ export class World {
     const time = st.now / 1000;
     for (const u of this.timeUniforms) u.value = time;
     this.flickerLamps(time);
+    this.stepMoored(time);
     for (const f of this.floaters) f.obj.position.y = f.y + Math.sin(time * 0.25 * f.drift + f.phase) * 0.8;
     this.brazierLight.intensity = 18 + Math.sin(time * 9) * 3 + Math.sin(time * 23) * 2;
     const { vents, portcullis } = this.gimmicks;
