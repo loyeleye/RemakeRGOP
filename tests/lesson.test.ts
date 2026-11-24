@@ -225,10 +225,16 @@ describe("Lumi's lesson", () => {
     }
     expect(g.tick).toBe(from + T.rookStares);
     expect(r.room.state.phase).toBe("playing");
+    // He asks while he stands there; she answers once he has finished.
+    const texts = () => r.said().map((l) => l.text);
+    expect(texts().at(-1)).toBe("How did you do that?");
+    expect(texts()).not.toContain("I pulled.");
     // Then he carries on as before.
     let busy = false;
     for (let i = 0; i < 12 && !busy; i++) (r.room.onTick(), (busy = r.rook().action.kind !== "idle" || !samePt(r.rook().pos, stood)));
     expect(busy).toBe(true);
+    for (let i = 0; i < T.pulledAfter; i++) r.room.onTick();
+    expect(texts().filter((t) => t === "I pulled.").length).toBe(1);
     // A later game in the same round: her "!" comes again, his stare doesn't.
     r.act({ kind: "idle" });
     room.startRound(2, true);

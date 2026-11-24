@@ -39,6 +39,9 @@ export const LESSON = {
     rookStops: 2,
     /** The first time her tide pull works, Rook stops and stares: this many ticks without moving or pulling, starting on the tick of her "!" (Ladi, 24 Nov: "He can stop for a beat or 2"). Once a round; the clock runs and she can score. */
     rookStares: 3,
+    /** Ticks after her "!" to his "How did you do that?" (one, so her flash of delight shows first and he asks while he stands there), and to her "I pulled." (after his clip, 2.3 s, has finished: one voice at a time). */
+    howAfter: 1,
+    pulledAfter: 5,
     ticks: 150,
     /** Games she gets: each loss moves her goalposts (best of five ... best of fifteen); losing the last ends the run. */
     games: 7,
