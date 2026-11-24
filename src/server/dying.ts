@@ -121,6 +121,7 @@ export class DyingRoom {
     g.flame = S.flame;
     g.flameFeed = S.feed;
     g.dimTicks = S.dimTicks;
+    g.outPause = S.outPause;
     g.respawnPause = 1;
     this.side = this.rng.next() * Math.PI * 2;
     g.onReturn = (w) => {
@@ -476,7 +477,7 @@ export class DyingRoom {
 /** The stand-ins for the player: one that taps the wisps in turn, and a careful hand that holds one at a time. */
 const STAND = {
   hold: { pushy: 0, sloppiness: 0.08 },
-  juggle: { pushy: 0, sloppiness: 0.2, taps: true },
+  juggle: { pushy: 0, sloppiness: 0.08, taps: true },
 } as const;
 
 type Pending = { line: StoryLine; trigger: number; key: boolean };

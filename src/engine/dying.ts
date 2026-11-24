@@ -17,19 +17,21 @@ export const DYING = {
     flame: 55,
     feed: 6,
     /** The drain per tick at the start, and how much it grows every tick. */
-    drain: 0.35,
-    drainGrow: 0.01,
+    drain: 0.62,
+    drainGrow: 0.004,
     /** Run 6 ends in embers when the flame reaches this, but never before `minTicks`, and at `maxTicks` whatever the flame. */
     embersAt: 10,
     minTicks: 80,
     maxTicks: 150,
-    wisps: 3,
+    wisps: 8,
     /** Ticks outside the light before a wisp goes out. */
     dimTicks: 10,
+    /** Ticks before another wisp comes in the place of one that went out. Letting them go out is what costs. */
+    outPause: 25,
     /** Where a wisp arrives: this share of the lit radius, to this many tiles past it. */
-    arrive: [0.7, 2] as const,
-    /** They come from one side at a time: within this arc (radians), whose middle wanders by up to `arcDrift` with each arrival. */
-    arc: 0.9,
+    arrive: [1.1, 6] as const,
+    /** The arc (radians) they arrive within, whose middle wanders by up to `arcDrift` with each arrival. A full turn: from all round. */
+    arc: 6.3,
     arcDrift: 0.5,
     /** Hesta's calls, by tick (the first flare's is on the first bank). */
     leaveFarAt: 45,

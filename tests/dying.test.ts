@@ -246,8 +246,12 @@ describe("runs 6 and 7, the dying brazier", () => {
     expect([...g.rooted.values()].every((id) => id === hesta.id)).toBe(true);
     const at = { ...hesta.pos };
     // Left alone for a long while, nothing she holds goes out.
-    for (let i = 0; i < 60; i++) room.onTick();
-    expect(room.lostSeven).toBe(0);
+    const held = [...g.rooted.keys()];
+    for (let i = 0; i < 60; i++) {
+      room.onTick();
+      expect(g.outs.filter((o) => held.includes(o.wisp))).toEqual([]);
+    }
+    expect([...g.rooted.keys()]).toEqual(held);
     expect(hesta.pos).toEqual(at);
     const id = [...g.rooted.keys()][0]!, w = g.wisps[id]!;
     rook.pos = rook.prev = g.nearestFree(pt(Math.round((w.pos.x + g.board.center.x) / 2), Math.round((w.pos.y + g.board.center.y) / 2)), 0);
