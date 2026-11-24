@@ -65,6 +65,8 @@ export interface IslandOptions {
   grass?: string;
   soil?: string;
   rock?: string;
+  /** Holes cut through the grassy top, as loops of (x, z) points (the Sieve's wells). */
+  holes?: { x: number; z: number }[][];
   /** Skip the grassy top (the main plaza draws its own floor). */
   noTop?: boolean;
 }
@@ -243,6 +245,7 @@ export function makeIsland(o: IslandOptions): THREE.Group {
       if (s === 0) shape.moveTo(p.x * 0.95, -p.z * 0.95);
       else shape.lineTo(p.x * 0.95, -p.z * 0.95);
     }
+    for (const h of o.holes ?? []) shape.holes.push(new THREE.Path(h.map((q) => new THREE.Vector2(q.x, -q.z))));
     const top = new THREE.Mesh(new THREE.ShapeGeometry(shape, 1), new THREE.MeshStandardMaterial({ color: grass, map: grassTexture(), roughness: 1 }));
     top.rotation.x = -Math.PI / 2;
     top.receiveShadow = true;

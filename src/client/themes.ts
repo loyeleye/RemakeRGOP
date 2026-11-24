@@ -134,7 +134,7 @@ export const THEMES: Record<string, Theme> = {
   get sieve() {
     const base = THEMES["tidepool-steps"]!;
     return {
-      ...base, name: "The Sieve", floor: "sieve", grass: "#d9d6c6", soil: "#e4dfd0", rock: "#cfc9b8",
+      ...base, name: "The Sieve", floor: "sieve", grass: "#9c9b6c", soil: "#e4dfd0", rock: "#cfc9b8",
       sky: { ...base.sky, zenith: "#9fb4c4", sky: "#c9d6dc", haze: "#e6e8e2", below: "#dfe4e4" },
       fog: "#d8dedc", clouds: "#f4f4ee", hemi: ["#eef2f4", "#b8b4a4", 1.0] as [string, string, number], sun: ["#fff2dc", 2.2] as [string, number], exposure: 0.95,
       particles: null, dressed: true, decorate() {},

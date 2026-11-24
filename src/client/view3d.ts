@@ -17,6 +17,8 @@ import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeCurtain, makeIsland, makeWaterfall } from "./islands.js";
 import { DYING, crowdSpot } from "../engine/dying.js";
+import { DRESS, dressVerge, quarryPit, sieveGrain, sieveGround, sievePaths, wellLoop } from "./sieve-dress.js";
+import { SIEVE } from "../engine/sieve.js";
 import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
 export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff", "#6fe07a"];
@@ -363,6 +365,25 @@ void main() {
   vec3 col = mix(uTint * vec3(0.62, 0.70, 0.86), uTint, smoothstep(0.35, 0.8, n));
   float alpha = smoothstep(0.42, 0.68, n) * smoothstep(1.0, 0.4, r);
   gl_FragColor = vec4(col, alpha);
+}`;
+
+/** The cloud seen far down a quarry pit's shaft: drifting, pale, darker at the shaft's wall. */
+const PIT_CLOUD_FS = /* glsl */ `
+varying vec2 vUv;
+uniform float uTime;
+float whash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float wnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(whash(i), whash(i + vec2(1, 0)), u.x), mix(whash(i + vec2(0, 1)), whash(i + vec2(1, 1)), u.x), u.y);
+}
+void main() {
+  vec2 p = (vUv - 0.5) * 2.0;
+  float r = length(p);
+  float n = wnoise(p * 2.2 + vec2(uTime * 0.03, uTime * 0.012)) * 0.6 + wnoise(p * 5.0 - vec2(uTime * 0.02, 0.0)) * 0.4;
+  vec3 col = mix(vec3(0.52, 0.60, 0.70), vec3(0.80, 0.85, 0.90), n);
+  col *= 1.0 - 0.55 * smoothstep(0.55, 1.0, r);
+  gl_FragColor = vec4(col, 1.0);
 }`;
 
 const UV_VS = /* glsl */ `
@@ -1828,6 +1849,12 @@ export class World {
       });
     const ring = (a: number, out: number) => ({ x: Math.cos(a) * (coast(a) + out), z: Math.sin(a) * (coast(a) + out) });
 
+    // The Sieve is dressed as a worked quarry floor (sieve-dress.ts).
+    const dressed = shrine.id === SIEVE.shrine && !!shrine.wells?.length && !!shrine.coast;
+    const tableAt = (() => {
+      const a = Math.atan2(SIEVE.keeper[1], SIEVE.keeper[0]);
+      return { x: Math.cos(a) * (coast(a) + 1.5), z: Math.sin(a) * (coast(a) + 1.5) };
+    })();
     // The plaza: flagstones laid right up to the island's edge.
     const floorTex = tex(`textures/floor-${th.floor}.webp`, 1 / 6, `textures/floor-${shrine.id}.webp`);
     const floorShape = new THREE.Shape();
@@ -1844,6 +1871,8 @@ export class World {
         h.forEach((p, i) => (i === 0 ? path.moveTo(p.x, -p.y) : path.lineTo(p.x, -p.y)));
         floorShape.holes.push(path);
       }
+      // The Sieve: its wells are holes through the ground.
+      if (dressed) for (const [i, w] of (shrine.wells ?? []).entries()) floorShape.holes.push(new THREE.Path(wellLoop(w, i).map((q) => new THREE.Vector2(q.x, -q.z))));
     } else
       for (let i = 0; i <= 256; i++) {
         const p = ring((i / 256) * Math.PI * 2, 0.35);
@@ -1858,6 +1887,14 @@ export class World {
     floor.position.y = 0.01;
     floor.receiveShadow = true;
     g.add(floor);
+    if (dressed) {
+      const S = Math.max(W, H) + 2;
+      const { paths, ruts } = sievePaths(shrine.wells!, coast, tableAt);
+      floor.material = new THREE.MeshStandardMaterial({
+        map: sieveGround({ S, wells: shrine.wells!, coastAt: shrine.coast!, paths, ruts, low: this.low }),
+        bumpMap: sieveGrain(), bumpScale: 1.6, roughness: 0.93, color: "#ffffff",
+      });
+    }
     if (shrine.raceOval) {
       // The race ground: shorter, paler grass in an oval round the brazier, on a larger repeat.
       const { rx, ry } = shrine.raceOval;
@@ -1876,7 +1913,8 @@ export class World {
       rx: 1, rz: 1, depth: 24, squareness: 2, seed: W + H,
       // A place drawn from its own shape (the horseshoe) keeps its cliff tight to the edge, so the
       // falls pour off the rim rather than onto a verge.
-      radius: (a) => (shrine.core ? shrine.core.outline(a) + 0.2 : shrine.lobes ? coast(a) + 0.2 : (coast(a) + 2.1) / 0.95),
+      radius: (a) => (shrine.core ? shrine.core.outline(a) + 0.2 : dressed ? coast(a) + DRESS.verge : shrine.lobes ? coast(a) + 0.2 : (coast(a) + 2.1) / 0.95),
+      ...(dressed ? { holes: shrine.wells!.map((w, i) => wellLoop(w, i)) } : {}),
       ledge: shrine.lobes ? 0 : 2.4, ...(shrine.core ? { lip: 0.012 } : {}), spires: this.low ? 3 : 6, grass: th.grass, soil: th.soil, rock: th.rock,
       segments: this.low ? 128 : 220,
     });
@@ -1972,6 +2010,20 @@ export class World {
       const u = { uTime: { value: 0 } };
       this.timeUniforms.push(u.uTime);
       const R = w.r + 0.55;
+      if (dressed) {
+        // A quarry pit, stepped down to a shaft, the cloud far below.
+        const i = this.wellRings.length;
+        const pit = quarryPit(w, i, new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: PIT_CLOUD_FS, uniforms: u, fog: false }), this.low);
+        pit.position.set(w.x, 0.01, w.y);
+        g.add(pit);
+        const ring = new THREE.Mesh(new THREE.RingGeometry(R * 0.35, R * 0.98, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffb53a", transparent: true, opacity: 0, depthWrite: false }));
+        ring.position.set(w.x, 0.3, w.y);
+        ring.visible = false;
+        ring.renderOrder = 2;
+        g.add(ring);
+        this.wellRings.push(ring);
+        continue;
+      }
       const disc = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, R * 2).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: WELL_FS, uniforms: u, transparent: true, polygonOffset: true, polygonOffsetFactor: -1 }));
       disc.position.set(w.x, 0.03, w.y);
       g.add(disc);
@@ -1994,6 +2046,7 @@ export class World {
       }
     }
 
+    if (dressed) dressVerge(g, coast, tableAt, this.low);
     // A place to walk has no parapet and no monoliths: its paths, fence, wash line and bench instead.
     if (th.place || th.dressed) this.addPlace(shrine, b);
     else {
@@ -3581,8 +3634,8 @@ export class World {
       rig.light.intensity = 6 * s * dim * low;
       if (rig.aura) {
         rig.aura.visible = h !== undefined && !w.away;
-        rig.aura.material.opacity = Math.min(1, Math.max(0, 1.05 * s * dim * flick * (0.8 + 0.2 * h!)));
-        rig.aura.scale.setScalar(5.6 * FALL.big * (0.94 + 0.06 * flick));
+        rig.aura.material.opacity = Math.min(1, Math.max(0, 0.85 * s * dim * flick * (0.8 + 0.2 * h!)));
+        rig.aura.scale.setScalar(5.0 * FALL.big * (0.94 + 0.06 * flick));
       }
       rig.trail.visible = stone < 0.5;
       if (w.rim > 0) rimPulse = Math.max(rimPulse, 1);
