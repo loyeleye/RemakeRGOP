@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Tile, pt } from "../src/engine/board.js";
-import { DYING, craterTiles, crowdSpot, terraceHeight } from "../src/engine/dying.js";
+import { DYING, bankLine, craterTiles, crowdSpot, terraceHeight } from "../src/engine/dying.js";
 import { Game, lightRadius } from "../src/engine/game.js";
 import { shrineById } from "../src/engine/maps.js";
 import type { ServerMsg, StoryLine, StoryView } from "../src/engine/protocol.js";
@@ -416,6 +416,19 @@ describe("runs 6 and 7, the dying brazier", () => {
     expect(g.rooted.has(id)).toBe(false);
   });
 
+  it("she says what each bank did: the lurches, the village in sight, the wall, the stars; the rest are silent", () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9].map(bankLine)).toEqual(["first", "second", "seen", "wall", "stars", null, null, null, null]);
+    const { lines } = play("juggle", 8);
+    const said = lines.map((l) => l.text), B = DYING.seven.bank;
+    // The two that must land always do, in order, before the falter and the last bank's line.
+    const at = [B.first, B.stars, "That one's yours, Rook. At my age?", "There. That'll hold."].map((t) => said.indexOf(t));
+    expect(at.every((i) => i > 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    // Each of her bank lines is said at most once, and the cut line is gone.
+    for (const t of Object.values(B)) expect(said.filter((x) => x === t).length).toBeLessThanOrEqual(1);
+    expect(said).not.toContain("My hands, your legs.");
+    expect(said.join(" ")).not.toMatch(/sink/i);
+  });
   it("she falters once the fire is nearly full, holds nothing after, and the last wisps are his", () => {
     const { room, lines } = play("hold", 2024);
     expect(room.state.faltered).toBe(true);

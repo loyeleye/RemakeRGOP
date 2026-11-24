@@ -10,7 +10,7 @@
 
 import { Mover, Tile, pt, type Pt } from "../engine/board.js";
 import { botCommand } from "../engine/bot.js";
-import { DYING } from "../engine/dying.js";
+import { DYING, bankLine } from "../engine/dying.js";
 import { compass, neglected } from "../engine/kindling.js";
 import { Game, Grip, Rng, TICK_MS, lightRadius, type Action, type Guild, type Wisp } from "../engine/game.js";
 import { shrineById } from "../engine/maps.js";
@@ -395,7 +395,6 @@ export class DyingRoom {
     if (!this.faltered && !this.said.has("hold") && g.rooted.size && g.tick >= DYING.landing.line + 4) {
       this.said.add("hold");
       this.say(HESTA, "I'll hold them. You fetch.", { player: HESTA_ID }, "key");
-      this.say(HESTA, "My hands, your legs.", { player: HESTA_ID }, "key");
     }
     const before = g.scores[0]!;
     g.step();
@@ -421,6 +420,12 @@ export class DyingRoom {
       g.dark.clear();
       this.say(HESTA, "That one's yours, Rook. At my age?", { player: HESTA_ID }, "key");
     }
+    // Each bank lifts the island, and she says what that one did. The first and the stars must land; the rest may be lost under another line.
+    if (g.flame! < 100)
+      for (let n = before + 1; n <= g.scores[0]!; n++) {
+        const which = bankLine(n);
+        if (which) this.say(HESTA, S.bank[which], { player: HESTA_ID }, which === "first" || which === "stars" ? "key" : "quip");
+      }
     if (g.flame! >= 100 && g.scores[0]! > before) {
       this.part = "lifted";
       this.since = g.tick;

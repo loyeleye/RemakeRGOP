@@ -131,8 +131,21 @@ export const DYING = {
     /** Where wisps arrive, tiles from the brazier: mostly far out. */
     band: [10, 13] as const,
     dimTicks: 10,
-    /** Every bank lifts the island; after this many the wall of cloud at the rim is gone. */
+    /** Every bank lifts the island and drops the wall of cloud at the rim, which stands `wallHigh` at first; after this many it is gone. The stars count as out once they are at `starsAt` of their full light. */
     cloudGone: 6,
+    wallHigh: 3.4,
+    starsAt: 0.8,
+    /**
+     * What Hesta says on a bank, by what that bank visibly does (story/runs6-7-lines.md, 24 Nov;
+     * Ladi: "The lines for granny are good"). The other banks are silent; the last has its own line.
+     */
+    bank: {
+      first: "Feel that, Rook? Up she comes.",
+      second: "Again. My knees felt that one.",
+      seen: "They can see us now. Look busy.",
+      wall: "Down goes the wall. Don't stop.",
+      stars: "There's a star, Rook. Fetch me the rest.",
+    },
     /** The falter: at this flame her holds drop and she holds nothing more; from then a wisp takes this long to go out, and one that does comes back this near. */
     falterAt: 80,
     falterDim: 30,
@@ -182,6 +195,25 @@ export const DYING = {
     slots: [[-2.3, 0], [-3.5, 0], [-5.0, 0], [-4.2, 1], [-6.6, 0], [-5.9, 1], [-8.3, 0], [2.4, 0], [3.8, 0], [5.3, 0], [4.5, 1], [6.9, 0], [8.4, 0]] as readonly (readonly [number, number])[],
   },
 } as const;
+
+/** Which of her lines a bank in run 7 gets (the `n`th, from 1), by what it visibly does; null for a silent bank. */
+export function bankLine(n: number): keyof typeof DYING.seven.bank | null {
+  const S = DYING.seven;
+  const wall = (k: number) => S.wallHigh * Math.max(0, 1 - k / S.cloudGone);
+  const firstBank = (f: (k: number) => boolean) => {
+    for (let k = 1; k <= S.cloudGone; k++) if (f(k)) return k;
+    return S.cloudGone;
+  };
+  // The wall is below the village's feet on the terrace: their lamps and they are in plain sight.
+  const seen = firstBank((k) => wall(k) < DYING.terrace.top);
+  const stars = firstBank((k) => 1 - wall(k) / S.wallHigh >= S.starsAt);
+  if (n === stars) return "stars";
+  if (n === seen) return "seen";
+  if (n === 1) return "first";
+  if (n === 2 && n < seen) return "second";
+  if (n === seen + 1 && n < stars) return "wall";
+  return null;
+}
 
 /** How high the ground is at a spot (tile coordinates): the terrace's top, the slope of its steps, or the field. */
 export function terraceHeight(board: Board, x: number, y: number): number {

@@ -470,7 +470,7 @@ void main() {
 const CROWD_LAMP = 1.5;
 const LURCH = { sec: 0.6, dip: 1.1, rise: 0.7, shake: 0.22 };
 /** Run 7's wall of cloud at the rim: how far out it stands and how tall it starts. */
-const CLOUD_WALL = { at: 13.6, high: 3.4 };
+const CLOUD_WALL = { at: 13.6, high: DYING.seven.wallHigh };
 /** The cloud is drawn this far outside where it takes a wisp, since its edge is uneven; and how dull it is while the fire is still up (it is the brightest thing on the board by the end). */
 const CLOUD_DRAW = { out: 1, dull: 0.62 };
 
