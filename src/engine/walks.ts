@@ -54,7 +54,7 @@ export const WALKS: Walk[] = [
       { name: "Maudie", at: "door", lines: ["Hold still, your collar's all wrong."] },
       { name: "Orrin", at: "stall", stay: true, lines: ["More panes in. She says they're crooked."] },
       { name: "Hesta", at: "stall", stay: true, lines: ["They're crooked, Orrin."] },
-      { name: "Kes", at: "path", lines: ["Good luck today, Sparkbug."] },
+      { name: "Kes", at: "path", lines: ["Good luck today, Lumi."] },
       { name: "Mabry", at: "shrine", lines: ["Come in, both of you."] },
     ],
   },
