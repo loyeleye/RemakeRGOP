@@ -604,6 +604,51 @@ export function fireBed(flame: number | null) {
   }
 }
 
+let cloud: { g: GainNode; lp: BiquadFilterNode; p: StereoPannerNode; stop: () => void } | null = null;
+
+/**
+ * Run 10: a cloud bank coming down one side. A low rush with no beat in it, from the side it is on
+ * (`pan`, -1 left to 1 right), as loud as it is near (`level`, 0 to 1). `null` stops it.
+ */
+export function cloudRush(level: number | null, pan = 0) {
+  const s = out();
+  if (level === null || !s) {
+    cloud?.stop();
+    cloud = null;
+    return;
+  }
+  const { c, o } = s;
+  if (!cloud) {
+    const len = c.sampleRate * 3;
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    let b = 0;
+    for (let i = 0; i < len; i++) d[i] = b = (b + 0.03 * (Math.random() * 2 - 1)) / 1.03;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const lp = c.createBiquadFilter();
+    lp.type = "lowpass";
+    const g = c.createGain();
+    g.gain.value = 0.0001;
+    const p = c.createStereoPanner();
+    src.connect(lp).connect(g).connect(p).connect(o);
+    src.start();
+    cloud = { g, lp, p, stop: () => (g.gain.setTargetAtTime(0.0001, c.currentTime, 0.15), src.stop(c.currentTime + 1)) };
+  }
+  const k = Math.max(0, Math.min(1, level));
+  cloud.g.gain.setTargetAtTime(0.0001 + 7 * k * k, c.currentTime, 0.35);
+  cloud.lp.frequency.setTargetAtTime(140 + 520 * k, c.currentTime, 0.35);
+  cloud.p.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), c.currentTime, 0.2);
+}
+
+/** Run 10: what a wisp is worth as it goes into the lamp: one soft glass note for each point, rising. */
+export function feedChime(points: number) {
+  const s = out();
+  if (!s) return;
+  for (let i = 0; i < Math.min(3, points); i++) strike(note(4 + i * 2), 0.11, 0, GLASS, undefined, s.c.currentTime + 0.05 + i * 0.13);
+}
+
 /** Everything drops out for `sec` seconds, at once, then comes back. (Run 8's pull.) */
 export function hush(sec: number) {
   if (!ctx || !master || muted) return;

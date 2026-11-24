@@ -69,6 +69,8 @@ export class ShipRoom {
   far: number = SHIP.off[1];
   /** Measurements: how often the keen stand-in dithers for a tick before a choice. */
   sloppy: number = SHIP.stand.sloppiness;
+  /** Measurements: how much of that dithering is also not looking ahead for a bank. */
+  standBlind: number = SHIP.stand.blind;
   /** Whether the lamp takes a wisp that is over the rail (see SHIP.draw). */
   draws: boolean = SHIP.draw.on;
   /** The three parts of the game, each to be turned off by itself (?speed=0, ?banks=0, ?hauls=0), and the run's length in ticks (?len). */
@@ -88,6 +90,8 @@ export class ShipRoom {
   private big = new Set<number>();
   private line: number | null = null;
   private rate = 1;
+  /** What went into the lamp this tick, in points. */
+  private fed = 0;
   /** For tests and measurements. */
   torn = 0;
   fireSum = 0;
@@ -450,6 +454,7 @@ export class ShipRoom {
   private step() {
     const g = this.game, S = SHIP, P = S.patch;
     this.stroke = false;
+    this.fed = 0;
     // Out of sight: the lamp gutters, and it is the bow again. Nobody says anything.
     if (this.gutterAt >= 0) {
       g.tick++;
@@ -483,7 +488,7 @@ export class ShipRoom {
     this.wind();
     this.banks();
     // The one meter.
-    const worth = g.banks.reduce((n, o) => n + this.worth(o.wisp), 0);
+    const worth = (this.fed = g.banks.reduce((n, o) => n + this.worth(o.wisp), 0));
     this.banked += g.banks.length;
     const nearness = Math.max(0, Math.min(1, (P.gone - this.lead) / (P.gone - P.nearest)));
     // In the last stretch, with home in sight, it draws away no more.
@@ -551,6 +556,8 @@ export class ShipRoom {
     if (a.kind === "staff" && g.wisps[a.wisp] && live(g.wisps[a.wisp]!)) return;
     if (this.rng.next() < this.sloppy) return;
     const slide = this.slide(), band = SHIP_DECK.hw - S.railLeeway;
+    // The careless one sometimes does not look ahead for a bank, and has his haul torn off his line as a person would.
+    const blind = this.rng.next() < this.sloppy * this.standBlind;
     let best: number | null = null, value = 0;
     for (const w of g.wisps) {
       if (!live(w)) continue;
@@ -568,7 +575,7 @@ export class ShipRoom {
       if (then > SHIP_DECK.hl + S.astern - 1) continue;
       if (this.haulsOn && there && then - py > this.reach) continue;
       // A bank would be over it first.
-      if (this.bank && this.bank.side === side && this.bank.front < y && this.bank.front + B.speed * ticks >= y) continue;
+      if (!blind && this.bank && this.bank.side === side && this.bank.front < y && this.bank.front + B.speed * ticks >= y) continue;
       const v = (this.haulsOn ? this.worth(w.id) : 1) / ticks;
       if (v > value) (best = w.id), (value = v);
     }
@@ -664,6 +671,7 @@ export class ShipRoom {
         ...(this.big.size ? { big: [...this.big] } : {}),
         ...(hid.length ? { hid } : {}),
         ...(this.line !== null ? { line: this.line } : {}),
+        ...(this.fed ? { fed: this.fed } : {}),
         ...(this.gone.length ? { lost: this.gone } : {}),
         ...(this.gutterAt >= 0 ? { gutter: t - this.gutterAt } : {}),
         ...(this.over() ? { over: t - (this.len - S.railTicks) } : {}),

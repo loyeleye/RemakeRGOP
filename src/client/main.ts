@@ -930,6 +930,14 @@ function shipRoom() {
 /** Run 10's sounds: the wind and the lamp, and from half way one slow stroke of the bell from home, a little nearer each time. */
 function shipSound(r: NonNullable<StoryView["ship"]>) {
   if (r.bell) sound.greatBell(0.22 + 0.2 * r.home);
+  // A cloud bank: a low rush from its side, growing as its front comes down on the ship, and falling away as it goes astern.
+  const b = r.bank;
+  if (b && r.gutter === undefined) {
+    const coming = Math.max(0, Math.min(1, 1 - (-SHIP_DECK.hl - b.front) / 46)), going = Math.max(0, Math.min(1, (b.front - b.len - SHIP_DECK.hl) / -30 + 1));
+    sound.cloudRush(b.front < -SHIP_DECK.hl ? 0.12 + 0.6 * coming : Math.min(1, 0.72 + 0.28 * going) * going, b.side * 0.8);
+  } else sound.cloudRush(0);
+  // A big one going in is heard as three.
+  if ((r.fed ?? 0) > 1) sound.feedChime(r.fed!);
   // He goes over the rail: the picture cuts before he lands.
   if (r.over !== undefined) shipCut(true);
 }
@@ -938,6 +946,7 @@ function shipSound(r: NonNullable<StoryView["ship"]>) {
 let shipFade: HTMLElement | null = null;
 let shipLeft: ReturnType<typeof setTimeout> | null = null;
 function shipCut(on: boolean) {
+  sound.cloudRush(null);
   if (!on) {
     if (shipLeft) clearTimeout(shipLeft);
     shipLeft = null;

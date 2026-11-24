@@ -126,8 +126,12 @@ export const SHIP_LOOK = {
   fireSize: [0.4, 1.25] as const,
   fireLit: [0.3, 1] as const,
   fireEase: 0.06,
-  /** The two kinds of wisp: how big a small one and a big one are drawn (1 is the game's own). */
+  /** The two kinds of wisp: how big a small one and a big one are drawn (1 is the game's own), how much of its light a small one has, and the big one's beat: how many times a second it comes round, the gap between its three beats (as a share of that), and how much it swells on each. */
   kinds: [0.8, 1.6] as const,
+  smallLight: 0.75,
+  beat: { rate: 0.55, gap: 0.13, swell: 0.2 },
+  /** Sparks into the lamp as one goes in, one for each point it is worth: seconds between them, and seconds each takes. */
+  spark: { gap: 0.13, sec: 0.42 },
   /**
    * A cloud bank down one side: how high its top lies, how far past the farthest lane it runs, its
    * colour at night and at first light, how much of it shows, and the billows standing on it (how
@@ -267,6 +271,8 @@ export class ShipFx {
   private bankU = { uCol: { value: new THREE.Color("#ffffff") }, uShow: { value: 0 }, uTile: this.u.uTile, uSize: { value: new THREE.Vector2(1, 1) }, uOff: { value: 0 } };
   private billows: { s: THREE.Sprite; u: number; v: number; k: number }[] = [];
   private sized = new Set<THREE.Object3D>();
+  private sparks: { s: THREE.Sprite; at: number; a: number }[] = [];
+  private fedTick = -1;
   private goneSeen = new Set<string>();
   /** The cloud lying over each wisp that is out in it. */
   private puffs = new Map<number, THREE.Sprite>();
@@ -795,7 +801,11 @@ void main() {
       const w = f.at.get(id);
       if (!w) continue;
       // A big one is worth three small ones, and looks it. One a bank is over cannot be seen.
-      rig.root.scale.setScalar(K.kinds[bigs.has(id) ? 1 : 0]);
+      // It beats slowly in threes, so that it reads as three before he commits to it.
+      const isBig = bigs.has(id), ph = (time * K.beat.rate + id * 0.37) % 1;
+      const beat = isBig ? Math.max(...[0, 1, 2].map((i) => Math.exp(-((ph - 0.12 - i * K.beat.gap) ** 2) / 0.0016))) : 0;
+      rig.root.scale.setScalar(K.kinds[isBig ? 1 : 0] * (1 + K.beat.swell * beat));
+      rig.halo.material.opacity = Math.min(1, rig.halo.material.opacity * (isBig ? 1.15 + 0.5 * beat : K.smallLight));
       this.sized.add(rig.root);
       if (!w.away) rig.root.visible = !hid.has(id);
       // One that is crossing an island's land rides clear over it.
@@ -843,6 +853,26 @@ void main() {
       else o.s.position.set(o.x + Math.sign(o.x) * k * 3, K.bank.y + 0.6 + k * 2.5, o.y + k * 9);
       o.s.scale.setScalar(1.5 * (1 - 0.6 * k));
       o.s.material.opacity = 0.5 * (1 - k) ** 1.5;
+      return true;
+    });
+
+    // What a wisp was worth, as it goes in: a spark up into the flame for each point, one after another.
+    if (r.fed && r.tick !== this.fedTick) {
+      this.fedTick = r.tick;
+      for (let i = 0; i < r.fed; i++) {
+        const s = this.glow("#fff0c8", 0.7, 0);
+        s.renderOrder = 7;
+        this.all.add(s);
+        this.sparks.push({ s, at: time + i * K.spark.gap, a: i * 2.1 + r.tick });
+      }
+    }
+    this.sparks = this.sparks.filter((o) => {
+      const k = (time - o.at) / K.spark.sec;
+      if (k >= 1) return o.s.removeFromParent(), o.s.material.dispose(), false;
+      if (k < 0) return true;
+      const out = 1.5 * (1 - k) * (1 - k);
+      o.s.position.set(Math.cos(o.a + k * 3) * out, 0.9 + 2.2 * k, Math.sin(o.a + k * 3) * out);
+      o.s.material.opacity = 0.95 * Math.min(1, k * 5) * (1 - k * k * 0.5);
       return true;
     });
 

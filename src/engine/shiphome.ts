@@ -124,7 +124,7 @@ export const SHIP = {
   endSec: 10,
   railTicks: 3,
   /** Measurements only: how the stand-in for the player plays (the keen one dithers a tick before a choice this often: 0.67 is two ticks a choice, about a careful first-timer). */
-  stand: { pushy: 0, sloppiness: 0.08 },
+  stand: { pushy: 0, sloppiness: 0.08, blind: 0.5 },
   /** Where Rook starts and where the hooded figure stands, in tiles from the lamp. */
   rook: [0, 4] as const,
   figure: [0, 11] as const,
