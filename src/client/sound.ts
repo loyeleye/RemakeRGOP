@@ -562,6 +562,84 @@ export function windOff(sec = 1) {
   windStop = null;
 }
 
+// ------------------------------------------------------------------ the dying brazier (runs 6 and 7)
+
+let fire: { g: GainNode; lp: BiquadFilterNode; stop: () => void; next: number } | null = null;
+
+/**
+ * The brazier's own sound, as loud as the flame is high (0 to 100): a low rush with a few dry
+ * crackles over it. `null` stops it at once (the silence in the embers).
+ */
+export function fireBed(flame: number | null) {
+  const s = out();
+  if (flame === null || !s) {
+    fire?.stop();
+    fire = null;
+    return;
+  }
+  const { c, o } = s;
+  if (!fire) {
+    const len = c.sampleRate * 3;
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    let b = 0;
+    for (let i = 0; i < len; i++) d[i] = b = (b + 0.03 * (Math.random() * 2 - 1)) / 1.03;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const lp = c.createBiquadFilter();
+    lp.type = "lowpass";
+    const g = c.createGain();
+    g.gain.value = 0.0001;
+    src.connect(lp).connect(g).connect(o);
+    src.start();
+    fire = { g, lp, next: 0, stop: () => (g.gain.setTargetAtTime(0.0001, c.currentTime, 0.04), src.stop(c.currentTime + 0.4)) };
+  }
+  const k = Math.max(0, Math.min(1, flame / 100));
+  fire.g.gain.setTargetAtTime(0.5 + 5 * k, c.currentTime, 0.4);
+  fire.lp.frequency.setTargetAtTime(180 + 700 * k, c.currentTime, 0.4);
+  if (c.currentTime > fire.next) {
+    fire.next = c.currentTime + 0.25 + Math.random() * (1.6 - k);
+    noise(0.03 + 0.07 * k, "highpass", 1800 + Math.random() * 2400, 0.03, Math.random() * 0.6 - 0.3);
+  }
+}
+
+/** The comet: a rising rush for `sec` seconds, then nothing (the strike is its own sound). */
+export function cometFall(sec: number) {
+  const s = out();
+  if (!s) return;
+  const { c, o } = s;
+  const len = Math.ceil(c.sampleRate * sec);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const f = c.createBiquadFilter();
+  f.type = "bandpass";
+  f.Q.value = 1.4;
+  f.frequency.setValueAtTime(260, c.currentTime);
+  f.frequency.exponentialRampToValueAtTime(1500, c.currentTime + sec);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.5, c.currentTime + sec);
+  src.connect(f).connect(g).connect(o);
+  src.start();
+}
+
+/** The strike: a deep hit, a long rumble under it, and stones settling. */
+export function cometStrike() {
+  if (!out()) return;
+  thump(0.7);
+  strike(46, 0.5, 0, [
+    [1, 1, 1.6],
+    [1.5, 0.4, 0.9],
+  ]);
+  noise(0.5, "lowpass", 260, 1.8);
+  noise(0.2, "bandpass", 1200, 0.25);
+  for (let i = 0; i < 5; i++) setTimeout(() => noise(0.06, "bandpass", 400 + Math.random() * 500, 0.08, Math.random() * 1.2 - 0.6), 500 + i * 190 + Math.random() * 120);
+}
+
 let eyeStop: ((sec: number) => void) | null = null;
 
 /**

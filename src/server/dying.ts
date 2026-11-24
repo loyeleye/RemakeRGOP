@@ -206,7 +206,7 @@ export class DyingRoom {
     g.waterLawHere = true;
     g.flame = S.flame;
     g.flameFeed = S.feed;
-    g.dimTicks = S.dimTicks;
+    g.dimTicks = 0; // nothing dims until she has landed and can hold
     g.rootedLit = true;
     g.slideHome = true;
     g.respawnPause = 1;
@@ -275,7 +275,9 @@ export class DyingRoom {
     }
     const lit = lightRadius(g.flame!), c = g.board.center;
     const far = (w: Wisp) => Math.hypot(w.pos.x - c.x, w.pos.y - c.y) > lit;
-    if (!this.faltered && g.tick - this.lastHold >= S.holdEvery && g.rooted.size < S.holds) {
+    if (!this.faltered && g.tick === DYING.landing.line + 3) g.dimTicks = S.dimTicks;
+    // Not before she has said her piece on landing.
+    if (!this.faltered && g.tick >= DYING.landing.line + 3 && g.tick - this.lastHold >= S.holdEvery && g.rooted.size < S.holds) {
       // She holds the far ones, the nearest to going out first. She never fetches.
       const w = g.wisps
         .filter((o) => !g.away.has(o.id) && !g.rooted.has(o.id) && far(o) && g.tick - (this.touchedAt.get(o.id) ?? -99) > 3)

@@ -130,6 +130,10 @@ export const THEMES: Record<string, Theme> = {
     const base = THEMES["tidepool-steps"]!;
     return { ...base, name: "Kite Fell", floor: "kite-fell", grass: "#7fa850", dressed: true, decorate() {} };
   },
+  // The fairy ring after Hesta's landing (run 7): the same look, with the crater's glass drawn by the board.
+  get "kindling-crater"() {
+    return THEMES["fairy-ring"]!;
+  },
   // The home island as a place to walk: the lagoon's sky and falls, on grass.
   get "home-island"() {
     const base = THEMES["tidepool-steps"]!;

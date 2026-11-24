@@ -9,6 +9,8 @@ import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
 import { GrannyRoom } from "../server/granny.js";
 import { RaceRoom } from "../server/race.js";
+import { DyingRoom } from "../server/dying.js";
+import { DYING } from "../engine/dying.js";
 import { PondRoom } from "../server/pond.js";
 import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
@@ -124,14 +126,14 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | null = null;
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | "pond" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | "pond" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 6 ? new DyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
@@ -375,6 +377,8 @@ function noteProgress() {
     else if (st.end.lines[0]?.text === "So I'm coming tomorrow.") reach({ next: 3 });
     else if (st.run === "A job") reach({ next: 5 });
     else if (st.run === "The race") reach({ next: 6 });
+    // Runs 6 and 7 are one piece: both are done when it ends.
+    else if (st.run === "The dying brazier") reach({ next: 8 });
     else if (storyRoom instanceof GrannyRoom || st.run === "Granny's game") reach({ next: 4 });
   }
   renderProgress();
@@ -676,6 +680,8 @@ let pullFrom = 0;
 /** Lumi's bell at each movement's countdown (three rings at the end), with the music fading under it. */
 function storyPhaseSound(was: string | undefined) {
   const phase = room!.phase;
+  // The dying brazier has no bell and no music: only the fire.
+  if (room!.story?.dying) return;
   if (phase === "countdown" && was !== "countdown") {
     sound.stopMusic();
     musicFor = -1;
@@ -696,7 +702,8 @@ function storyPhaseSound(was: string | undefined) {
 /** Per-tick story sounds: banks, Kes's island, and Rook's staff (catch, hum, slip). */
 function storyTickSound(s: GameSnapshot) {
   const st = room!.story!;
-  if (room!.phase === "playing" && musicFor !== st.movement) {
+  if (st.dying) dyingSound(st.dying.part, s);
+  else if (room!.phase === "playing" && musicFor !== st.movement) {
     musicFor = st.movement;
     sound.playMusic(st.movement); // starts on a tick, so the beat lines up with the 600 ms steps
   }
@@ -731,8 +738,29 @@ function storyTickSound(s: GameSnapshot) {
   } else sound.pullHum(null);
 }
 
+let dyingPart = "";
+
+/** Runs 6 and 7: the fire is the only sound, as loud as it is high; nothing in the embers; then the comet. */
+function dyingSound(part: string, s: GameSnapshot) {
+  const flame = s.flame ?? 0;
+  if (part !== dyingPart) {
+    if (part === "landing") sound.cometFall(DYING.landing.streak * (tickMs / 1000));
+    if (part === "seven" && dyingPart === "landing") {
+      sound.cometStrike();
+      const f = $("flash");
+      f.classList.remove("go");
+      void f.offsetWidth;
+      f.classList.add("go");
+    }
+    dyingPart = part;
+  }
+  sound.fireBed(part === "landing" || (part === "embers" && flame <= DYING.embers.level + 1) ? null : flame);
+}
+
 function stopStorySound() {
   sound.pullHum(null);
+  sound.fireBed(null);
+  dyingPart = "";
   sound.stopMusic(0.3);
   musicFor = -1;
 }
@@ -757,6 +785,12 @@ function renderHud() {
     if (story.pond) {
       $("score-0").hidden = true;
       $("ticks").textContent = story.title;
+      return renderPad(s);
+    }
+    // The dying brazier: nothing to count and no clock.
+    if (story.dying) {
+      $("score-0").hidden = true;
+      $("ticks").textContent = "";
       return renderPad(s);
     }
     if (rv) $("score-1").textContent = `${cam.compact ? rv.short : rv.name} ${rv.score}`;
@@ -1167,6 +1201,7 @@ $("story2").onclick = () => connectStory(playerName(), 2);
 $("story3").onclick = () => connectStory(playerName(), 3);
 $("story4").onclick = () => connectStory(playerName(), 4);
 $("story5").onclick = () => connectStory(playerName(), 5);
+$("story6").onclick = () => connectStory(playerName(), 6);
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Saved progress: continue from where this browser got to, jump to any walk, or start over.
 function renderProgress() {
@@ -1179,8 +1214,8 @@ $("story-continue").onclick = () => {
   const p = loadProgress();
   const nextWalk = WALKS.find((w) => w.after === p.next - 1 && w.n > p.walk);
   if (nextWalk) return connectStory(playerName(), "pond", nextWalk.n);
-  if (p.next >= 1 && p.next <= 5) return connectStory(playerName(), p.next as 1 | 2 | 3 | 4 | 5);
-  // Runs 5 on aren't built: the latest walk reached.
+  if (p.next >= 1 && p.next <= 7) return connectStory(playerName(), Math.min(6, p.next) as 1 | 2 | 3 | 4 | 5 | 6);
+  // Runs 8 on aren't built: the latest walk reached.
   connectStory(playerName(), "pond", Math.max(1, p.walk));
 };
 $<HTMLSelectElement>("walk-pick").replaceChildren(
@@ -1383,7 +1418,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, walk: room?.story?.pond?.walk };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, walk: room?.story?.pond?.walk };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.

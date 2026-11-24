@@ -78,12 +78,12 @@ export const DYING = {
    * outside the playable ground and step back by up to `rimBack` more as the light shrinks.
    */
   rim: [
-    { who: "Lumi", a: 0.25, c: "#ffd36a", s: 1.7 },
-    { who: "Maudie", a: 0.275, c: "#f4a6c8", s: 0.9 },
-    { who: "Wick", a: 0.34, c: "#9fd8ff", s: 0.9 },
-    { who: "Moth", a: 0.4, c: "#c8b0ff", s: 0.9 },
-    { who: "Nell", a: 0.2, c: "#a8e6a0", s: 0.7 },
-    { who: "Sefa", a: 0.16, c: "#ffb07a", s: 0.7 },
+    { who: "Lumi", a: 0.4, c: "#ffd36a", s: 1.7 },
+    { who: "Maudie", a: 0.425, c: "#f4a6c8", s: 0.9 },
+    { who: "Wick", a: 0.33, c: "#9fd8ff", s: 0.9 },
+    { who: "Moth", a: 0.3, c: "#c8b0ff", s: 0.9 },
+    { who: "Nell", a: 0.17, c: "#a8e6a0", s: 0.7 },
+    { who: "Sefa", a: 0.12, c: "#ffb07a", s: 0.7 },
     { who: "Mabry", a: 0.47, c: "#ffe9b0", s: 0.8 },
     { who: "Orrin", a: 0.55, c: "#8fd0c8", s: 0.8 },
     { who: "Jarek", a: 0.62, c: "#ffc890", s: 0.8 },
@@ -95,8 +95,8 @@ export const DYING = {
     { who: "", a: 0.03, c: "#ffdcae", s: 0.7 },
     { who: "", a: 0.09, c: "#e0c0ff", s: 0.7 },
   ],
-  rimOut: 1.5,
-  rimBack: 3,
+  rimOut: 1,
+  rimBack: 1.5,
 } as const;
 
 /** The crater's glass tiles on a board: the circle the comet leaves, and every tile a wisp crosses sliding from it to the brazier's rim. */

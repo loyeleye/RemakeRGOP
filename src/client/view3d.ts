@@ -16,6 +16,7 @@ import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js
 import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeCurtain, makeIsland, makeWaterfall } from "./islands.js";
+import { DYING } from "../engine/dying.js";
 import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
 export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff", "#6fe07a"];
@@ -45,6 +46,8 @@ export interface DrawState {
   lantern?: { x: number; y: number };
   /** The walks: time of day on the island (see LIGHTS). */
   light?: string;
+  /** Runs 6 and 7, the dying brazier (see StoryView.dying). */
+  dying?: { part: string; strike: { x: number; y: number; r: number }; faltered?: boolean; hesta?: number };
   /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
   walk?: number;
 }
@@ -364,6 +367,20 @@ const UV_VS = /* glsl */ `
 varying vec2 vUv;
 void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 
+/** Night on the game board: dark everywhere the brazier's light doesn't reach, soft at the edge. */
+/** How big the village's glows at the rim are drawn, against their sizes in DYING.rim. */
+const RIM_GLOW = 2.4;
+
+const DARK_FS = /* glsl */ `
+varying vec2 vUv;
+uniform float uLit;
+uniform float uDark;
+void main() {
+  float r = length(vUv - 0.5) * 160.0;
+  float a = smoothstep(uLit - 1.2, uLit + 1.6, r) * uDark;
+  gl_FragColor = vec4(0.008, 0.012, 0.035, a);
+}`;
+
 const WATER_FS = /* glsl */ `
 varying vec2 vUv;
 uniform float uTime;
@@ -385,6 +402,17 @@ void main() {
   float body = smoothstep(0.46, 0.52, m);
   if (shore < 0.01) discard;
   vec3 col;
+  if (uIce > 1.5) {
+    // The comet's glass: dark, with an ember glow moving slowly under it.
+    float vein = noise(t * 1.4 + vec2(uTime * 0.05, -uTime * 0.04));
+    float glow = smoothstep(0.4, 0.8, vein) * (0.55 + 0.25 * sin(uTime * 0.9 + vein * 9.0));
+    col = mix(vec3(0.035, 0.03, 0.055), vec3(1.0, 0.42, 0.08), glow * 0.9);
+    float sheen = smoothstep(0.75, 0.95, noise(vec2(t.x * 0.5 + t.y * 0.8, t.y * 2.4)));
+    col += vec3(0.25, 0.3, 0.45) * sheen * 0.35;
+    col = mix(vec3(0.16, 0.1, 0.08), col, body);
+    gl_FragColor = vec4(col, mix(0.7, 0.97, body) * shore);
+    return;
+  }
   if (uIce > 0.5) {
     float streak = noise(vec2(t.x * 0.6 + t.y * 0.9, t.y * 3.0));
     vec3 deep = vec3(0.30, 0.66, 0.90);
@@ -748,6 +776,8 @@ interface WispRig {
   rootedAt?: number;
   /** The line of earth from the holder's lantern to it. */
   earth?: THREE.Mesh;
+  /** Run 7: when her helping line was last on it. */
+  heldLit?: number;
 }
 
 /** Seconds the earth line takes to reach a wisp before the stone starts closing over it. */
@@ -1167,6 +1197,9 @@ export class World {
   /** Pulls stopped at the bank (the laws of water), by wisp: when, by whom, and the water tile it met. */
   private stopFx = new Map<number, { at: number; player: number; x: number; y: number }>();
   private stopSnap: GameSnapshot | null = null;
+  /** The brazier's fire, kept so a flame level (runs 6 and 7) can shrink and grow it. */
+  private fireParts: { fire: THREE.Object3D; embers: THREE.Object3D; glow: THREE.Sprite; pillar: THREE.Mesh } | null = null;
+  private fireAt = new THREE.Vector3();
   private brazierLight = new THREE.PointLight("#ff9a4a", 60, 30, 1.6);
   private rim: THREE.LineSegments | null = null;
   private reach: THREE.LineLoop;
@@ -1282,6 +1315,7 @@ export class World {
     this.sun.color.set(th.sun[0]);
     this.sun.intensity = th.sun[1];
     this.renderer.toneMappingExposure = th.exposure;
+    this.dayLight = { hemi: th.hemi[2], sun: th.sun[1], exposure: th.exposure };
     this.buildDistantIslands(th);
   }
 
@@ -1948,7 +1982,7 @@ export class World {
         new THREE.ShaderMaterial({
           vertexShader: UV_VS,
           fragmentShader: WATER_FS,
-          uniforms: { uTime: waterU, uMask: { value: mask }, uSize: { value: new THREE.Vector2(W, H) }, uIce: { value: ice } },
+          uniforms: { uTime: waterU, uMask: { value: mask }, uSize: { value: new THREE.Vector2(W, H) }, uIce: { value: ice && shrine.glass ? 2 : ice } },
           transparent: true,
           depthWrite: false,
         }),
@@ -1975,6 +2009,7 @@ export class World {
     g.add(this.brazierSlot);
     this.refreshBrazier();
     const fire = particles(this.low ? 140 : 260, "#ffb347", "#ff3a10", 0.8, 2.4, 0.4, 0.75);
+    this.fireAt.set(cx, 0, cz);
     fire.position.set(cx, 2.3, cz);
     this.timeUniforms.push((fire.material as THREE.ShaderMaterial).uniforms.uTime as { value: number });
     g.add(fire);
@@ -2004,6 +2039,7 @@ export class World {
     );
     pillar.position.set(cx, 14.5, cz);
     g.add(pillar);
+    this.fireParts = { fire, embers, glow: fireGlow, pillar };
     this.brazierLight.position.set(cx, 4.2, cz);
 
     // The banking rim: a glowing square of runes 5x5 around the centre.
@@ -2497,6 +2533,156 @@ export class World {
     }
   }
 
+  /**
+   * Runs 6 and 7, the dying brazier: night on the board with the ground lit only as far as the
+   * flame reaches, the fire itself showing its level (no bar), the village as glows at the rim that
+   * step back as the light shrinks, and the comet: a streak, a flash that lights everything, dust.
+   */
+  private dyingFx: { all: THREE.Object3D[]; dark: THREE.Mesh; u: { uLit: { value: number }; uDark: { value: number } }; glows: THREE.Sprite[]; head: THREE.Sprite; trail: THREE.Sprite[]; dust: THREE.Sprite[]; burst: THREE.PointLight; ember: THREE.Sprite; part: string; partAt: number; struckAt: number; lit: number; flame: number } | null = null;
+  /** The theme's own light levels, which the dying brazier turns down and gives back. */
+  private dayLight = { hemi: 1, sun: 1, exposure: 1 };
+  /** The island's own glowing things (lanterns, blossom) and how bright each is by rights, so the dark can turn them down. */
+  private glowBase = new Map<THREE.MeshStandardMaterial, number>();
+  private glowFor: THREE.Object3D | null = null;
+  private dimGlows(share: number) {
+    const first = this.shrineGroup.children[0] ?? null;
+    if (this.glowFor !== first) {
+      this.glowFor = first;
+      const skip = new Set<THREE.Material>();
+      for (const o of this.fireParts ? [this.fireParts.fire, this.fireParts.embers, this.fireParts.pillar] : [])
+        o.traverse((m) => m instanceof THREE.Mesh && skip.add(m.material as THREE.Material));
+      this.shrineGroup.traverse((m) => {
+        const mat = m instanceof THREE.Mesh ? m.material : null;
+        if (mat instanceof THREE.MeshStandardMaterial && mat.emissiveIntensity > 0.05 && !skip.has(mat) && !this.glowBase.has(mat)) this.glowBase.set(mat, mat.emissiveIntensity);
+      });
+    }
+    for (const [mat, base] of this.glowBase) mat.emissiveIntensity = base * share;
+  }
+  private stepDying(st: DrawState, time: number) {
+    const d = st.dying, flame = st.snap.flame;
+    if (!d || flame === undefined) {
+      if (this.dyingFx) {
+        this.scene.remove(...this.dyingFx.all);
+        this.dyingFx = null;
+        this.hemi.intensity = this.dayLight.hemi;
+        this.sun.intensity = this.dayLight.sun;
+        this.renderer.toneMappingExposure = this.dayLight.exposure;
+        this.dimGlows(1);
+        if (this.fireParts) {
+          const f = this.fireParts;
+          f.fire.scale.setScalar(1);
+          f.embers.visible = f.pillar.visible = true;
+          f.glow.scale.setScalar(2.6);
+          f.glow.material.opacity = 0.3;
+        }
+      }
+      return;
+    }
+    const b = st.shrine.board;
+    const cx = this.worldX(b, b.center.x), cz = this.worldZ(b, b.center.y);
+    if (!this.dyingFx) {
+      const u = { uLit: { value: 9 }, uDark: { value: 0.8 } };
+      const plane = new THREE.PlaneGeometry(160, 160);
+      plane.rotateX(-Math.PI / 2);
+      const dark = new THREE.Mesh(plane, new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: DARK_FS, uniforms: u, transparent: true, depthWrite: false }));
+      dark.renderOrder = 3;
+      const glows = DYING.rim.map((r) => glowSprite(r.c, r.s * RIM_GLOW, 0.7));
+      for (const s of glows) s.material.fog = false;
+      const head = glowSprite("#fff0d0", 5, 0);
+      const trail = Array.from({ length: 12 }, () => glowSprite("#ff8a3a", 3, 0));
+      const dust = Array.from({ length: 16 }, () => glowSprite("#8a7a70", 3, 0));
+      for (const s of dust) (s.material.blending = THREE.NormalBlending), s.material.color.set("#6a5c54");
+      for (const s of [head, ...trail]) s.material.fog = false;
+      const burst = new THREE.PointLight("#ffd9a0", 0, 90, 1.2);
+      // The crater's own warmth, so the glass shows where the fire's light doesn't reach yet.
+      const ember = glowSprite("#ff6a1a", 1, 0);
+      const all = [dark, ...glows, head, ...trail, ...dust, burst, ember];
+      // Drawn after the dark, which would otherwise paint over them (sprites write no depth).
+      for (const o of all) if (o !== dark) o.renderOrder = 4;
+      this.scene.add(...all);
+      this.dyingFx = { all, dark, u, glows, head, trail, dust, burst, ember, part: d.part, partAt: time, struckAt: -99, lit: st.snap.lit ?? 9, flame };
+    }
+    const fx = this.dyingFx;
+    if (fx.part !== d.part) {
+      if (d.part === "seven") fx.struckAt = time;
+      fx.part = d.part;
+      fx.partAt = time;
+    }
+    // Ease toward the tick's values, so the light breathes rather than steps.
+    fx.lit += ((st.snap.lit ?? 0) - fx.lit) * 0.08;
+    fx.flame += (flame - fx.flame) * 0.08;
+    const k = fx.flame / 100;
+    const since = time - fx.struckAt;
+    // The flash lights the whole board and the ring of villagers for a moment, then the dark comes back.
+    const flash = since >= 0 && since < 2.6 ? 1 - since / 2.6 : 0;
+    const roar = d.part === "roar" ? Math.min(1, (time - fx.partAt) / 2) : 0;
+    fx.dark.position.set(cx, 0.07, cz);
+    fx.u.uLit.value = fx.lit + roar * 30;
+    const low = d.part === "embers" || d.part === "landing";
+    fx.u.uDark.value = (low ? 0.94 : 0.84) * (1 - flash * flash) * (1 - roar);
+    // Everything off the ground (trees, lamps, the far islands) goes down with the fire too.
+    const up = Math.min(1, Math.max(flash * flash, roar, k * 0.45));
+    this.hemi.intensity = this.dayLight.hemi * (0.2 + 0.8 * up);
+    this.sun.intensity = this.dayLight.sun * (0.1 + 0.9 * up);
+    this.renderer.toneMappingExposure = this.dayLight.exposure * (0.7 + 0.3 * up);
+    this.dimGlows(0.22 + 0.78 * up);
+    // The fire shows the flame: its height and its brightness. No bar, no number.
+    if (this.fireParts) {
+      const f = this.fireParts;
+      f.fire.scale.set(0.35 + 0.75 * k, 0.12 + 1.15 * k, 0.35 + 0.75 * k);
+      f.embers.visible = k > 0.05;
+      f.pillar.visible = k > 0.97;
+      f.glow.scale.setScalar(0.8 + 3.4 * k);
+      f.glow.material.opacity = 0.12 + 0.4 * k;
+    }
+    const flick = Math.sin(time * 9) * 0.1 + Math.sin(time * 23) * 0.07;
+    this.brazierLight.intensity = (2 + 40 * k) * (1 + flick) + (d.part === "roar" ? 30 * roar : 0);
+    this.brazierLight.distance = Math.max(5, fx.lit * 2.2 + 3);
+    // The village: glows only, just outside the ground, stepping back as the light shrinks.
+    const far = Math.max(b.width, b.height) / 2 - 0.5 + DYING.rimOut + (1 - Math.min(1, k + roar)) * DYING.rimBack;
+    DYING.rim.forEach((r, i) => {
+      const s = fx.glows[i]!, a = r.a * Math.PI * 2;
+      s.position.set(cx + Math.cos(a) * far, 1.1 + Math.sin(time * 1.3 + i * 2.1) * 0.06, cz + Math.sin(a) * far);
+      s.material.opacity = Math.min(1, (r.who === "Lumi" ? 0.95 : 0.5 + 0.12 * Math.sin(time * 0.9 + i * 1.7)) + flash * 0.5 + roar * 0.4);
+      s.scale.setScalar(r.s * RIM_GLOW * (1 + flash * 0.6 + roar * 0.4));
+    });
+    // The comet: a bright streak down from the north, where her terrace is.
+    const sx = this.worldX(b, d.strike.x), sz = this.worldZ(b, d.strike.y);
+    const fall = d.part === "landing" ? Math.min(1, (time - fx.partAt) / (DYING.landing.streak * 0.6)) : -1;
+    const at = (t: number) => new THREE.Vector3(sx + 4 * (1 - t), 0.6 + 7 * (1 - t), sz - 12 * (1 - t));
+    fx.head.visible = fall >= 0;
+    if (fall >= 0) {
+      fx.head.position.copy(at(fall));
+      fx.head.material.opacity = 1;
+      fx.head.scale.setScalar(4 + 3 * fall);
+    }
+    fx.trail.forEach((s, i) => {
+      const t = fall - (i + 1) * 0.035;
+      s.visible = fall >= 0 && t > 0;
+      if (!s.visible) return;
+      s.position.copy(at(t));
+      s.material.opacity = 0.8 * (1 - i / fx.trail.length);
+      s.scale.setScalar(3.2 * (1 - (i / fx.trail.length) * 0.6));
+    });
+    fx.burst.position.set(fall >= 0 ? fx.head.position.x : sx, fall >= 0 ? fx.head.position.y : 5, fall >= 0 ? fx.head.position.z : sz);
+    fx.burst.intensity = fall >= 0 ? 60 + 240 * fall : flash > 0 ? 900 * flash * flash : 0;
+    const after = d.part === "seven" || d.part === "roar";
+    fx.ember.visible = after;
+    fx.ember.position.set(sx, 0.5, sz);
+    fx.ember.scale.setScalar(d.strike.r * 3.2);
+    fx.ember.material.opacity = after ? (0.2 + 0.05 * Math.sin(time * 1.7)) * (1 - roar * 0.6) : 0;
+    // Dust, rolling out from the strike and thinning.
+    fx.dust.forEach((s, i) => {
+      const t = since / 3.4;
+      s.visible = t >= 0 && t < 1;
+      if (!s.visible) return;
+      const a = (i / fx.dust.length) * Math.PI * 2 + i * 0.7, r = (1.5 + (i % 4) * 0.9) + t * (3 + (i % 3) * 1.6);
+      s.position.set(sx + Math.cos(a) * r, 0.8 + t * (1 + (i % 5) * 0.5), sz + Math.sin(a) * r);
+      s.material.opacity = 0.55 * (1 - t) * Math.min(1, t * 8);
+      s.scale.setScalar(2.4 + t * 4.5);
+    });
+  }
+
   /** The moored skiff: what it hangs from, its rope and the shade under it. */
   private moored: { slot: THREE.Group; y: number; post: THREE.Vector3; bow: THREE.Vector3; rope: THREE.Mesh[]; shade: THREE.Mesh; flame?: [THREE.Sprite, THREE.Sprite] } | null = null;
   private landingPost: THREE.Vector3 | null = null;
@@ -2702,6 +2888,7 @@ export class World {
     this.stepStreamers(time);
     for (const f of this.floaters) f.obj.position.y = f.y + Math.sin(time * 0.25 * f.drift + f.phase) * 0.8;
     this.brazierLight.intensity = 18 + Math.sin(time * 9) * 3 + Math.sin(time * 23) * 2;
+    this.brazierLight.distance = 30;
     const { vents, portcullis } = this.gimmicks;
     if (vents) {
       // The plume flares on the eruption tick and fades over the next one; the core glows hotter as it nears.
@@ -2812,24 +2999,26 @@ export class World {
       const x = jump ? w.x : lerp(w.px, w.x);
       const y = jump ? w.y : lerp(w.py, w.y);
       // Held fast in the ground: no bob, sunk low in its ring of stones.
-      if (w.rooted && !rig.stones) {
+      // A helping hold (run 7) keeps the wisp a light: no stone, and her line stays on it.
+      const stoned = st.snap.rootLit ? undefined : w.rooted;
+      if (stoned && !rig.stones) {
         rig.stones = makeStones();
         this.scene.add(rig.stones);
       }
       if (rig.stones) {
-        rig.stones.visible = !!w.rooted && rig.rootedAt !== undefined && time - rig.rootedAt > EARTH_LINE;
+        rig.stones.visible = !!stoned && rig.rootedAt !== undefined && time - rig.rootedAt > EARTH_LINE;
         rig.stones.position.set(this.worldX(b, w.x), 0, this.worldZ(b, w.y));
       }
       // The wisp turns from a light into a stone: a crust closes over it in about a second,
       // its glow drops to a third and shows only through the cracks, and it sinks and stops
       // bobbing. Pulled on while held, the stone shudders without moving.
       let stone = 0;
-      if (w.rooted) {
-        if (rig.rootedAt === undefined) this.stoneCast(w.rooted, time);
+      if (stoned) {
+        if (rig.rootedAt === undefined) this.stoneCast(stoned, time);
         rig.rootedAt ??= time;
         // A line of earth runs from her lantern to it first; the stone starts where it lands.
         const since = time - rig.rootedAt;
-        const holder = this.players.get(w.rooted);
+        const holder = this.players.get(stoned);
         if (holder) {
           if (!rig.earth) {
             rig.earth = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: "#b07a3c", transparent: true }));
@@ -2861,8 +3050,8 @@ export class World {
         rig.rootedAt = undefined;
         if (rig.earth) rig.earth.visible = false;
       }
-      if (rig.crust) rig.crust.visible = !!w.rooted;
-      const bob = w.rooted ? -0.3 * stone + Math.sin(time * 2.2 + w.id * 1.7) * 0.12 * (1 - stone) : Math.sin(time * 2.2 + w.id * 1.7) * 0.12;
+      if (rig.crust) rig.crust.visible = !!stoned;
+      const bob = stoned ? -0.3 * stone + Math.sin(time * 2.2 + w.id * 1.7) * 0.12 * (1 - stone) : Math.sin(time * 2.2 + w.id * 1.7) * 0.12;
       const sink = w.rim > 0 ? Math.min(1, w.rim * 0.5 + st.t * 0.5) : 0;
       rig.root.position.set(this.worldX(b, x), 0.75 + bob + sink * 1.4, this.worldZ(b, y));
       // Stopped at the bank: it lurches at the water and bumps back onto land.
@@ -2874,8 +3063,33 @@ export class World {
         rig.root.position.x += (dx / n) * lurch;
         rig.root.position.z += (dz / n) * lurch;
       }
+      if (st.snap.rootLit && w.rooted) {
+        const holder = this.players.get(w.rooted);
+        if (holder) {
+          if (!rig.earth) {
+            rig.earth = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: "#b07a3c", transparent: true }));
+            this.scene.add(rig.earth);
+          }
+          // Both hands: the lines leave her from either side by turns.
+          const from = holder.root.position.clone().add(new THREE.Vector3(w.id % 2 ? 0.4 : -0.4, 1.1, 0));
+          const end = rig.root.position.clone().setY(0.55);
+          rig.earth.position.copy(from).lerp(end, 0.5);
+          rig.earth.scale.set(0.8, Math.max(0.001, from.distanceTo(end)), 0.8);
+          rig.earth.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), end.clone().sub(from).normalize());
+          (rig.earth.material as THREE.MeshBasicMaterial).opacity = 0.8 + 0.12 * Math.sin(time * 3 + w.id);
+          rig.earth.visible = true;
+          rig.heldLit = time;
+        }
+      } else if (st.snap.rootLit && rig.earth) {
+        // Let go (or the falter): the line gutters out over a moment.
+        const k = (time - (rig.heldLit ?? -9)) / 0.5;
+        rig.earth.visible = k < 1 && Math.sin(time * 70) > -0.2;
+        (rig.earth.material as THREE.MeshBasicMaterial).opacity = 0.7 * Math.max(0, 1 - k);
+      }
       const s = 1 - sink * 0.6;
-      const dim = 1 - stone * (2 / 3);
+      // Outside the light it dims like an ember away from the fire, with a gutter near the end.
+      const gone = w.dim ?? 0;
+      const dim = (1 - stone * (2 / 3)) * (1 - 0.82 * gone) * (gone > 0.7 ? 0.85 + 0.15 * Math.sin(time * 23 + w.id) : 1);
       rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1));
       rig.halo.material.opacity = 0.85 * s * dim * dim;
       rig.light.intensity = 6 * s * dim;
@@ -2887,6 +3101,7 @@ export class World {
     const stormRig = st.snap.stormLight != null ? this.players.get(st.snap.stormLight) : undefined;
     this.stepStormString(st.snap.string ?? [], !!st.snap.stringLive, wispPos, time, stormRig ? stormRig.root.position.clone().add(new THREE.Vector3(0.35, 1.15, 0)) : null);
     for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), rig.stones && this.scene.remove(rig.stones), rig.earth && this.scene.remove(rig.earth), this.wisps.delete(id));
+    this.stepDying(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
     // Watchers: story figures standing off the plaza, turning slowly to keep you in view.
