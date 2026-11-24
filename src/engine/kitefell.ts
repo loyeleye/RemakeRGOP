@@ -77,21 +77,20 @@ export function kiteFellRows(): { rows: string[]; turns: Record<string, number>;
   // The halfway line (chalk, walkable): pale flags until it has its own look.
   for (let y = -KF_OVAL.ry; y <= KF_OVAL.ry; y++) if (kfRace(0, y) && Math.abs(y) > 1) put(0, y, ":", "halfway line");
   // Lumi's referee stand, south, on the halfway line.
-  for (const [x, y] of [[-1, 17], [0, 17], [-1, 18], [0, 18]] as const) put(x, y, ":", "referee stand");
+  put(KF_REFEREE.x, KF_REFEREE.y, "8", "referee stand", ".:");
   // Start marks: Rook west, Kes east.
   for (const [x0, who] of [[-24, "1"], [23, "2"]] as const)
     for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) put(x0 + i, -1 + j, i === (who === "1" ? 1 : 0) && j === 1 ? who : ":", "start mark");
-  // Kes's house, one storey, door south, facing the race (a stand-in model until hers is drawn).
-  for (let j = 0; j < 6; j++) for (let i = 0; i < 6; i++) solid(-3 + i, -30 + j, "X", "Kes's house");
-  turns["wick-house"] = 0;
+  // Kes's house, one storey, door south, facing the race.
+  for (let j = 0; j < 6; j++) for (let i = 0; i < 6; i++) solid(-3 + i, -30 + j, "5", "Kes's house");
   solid(4, -24, "C", "chair");
   turns.chair = 0;
   solid(7, -27, "l", "lamp post");
   solid(10, -30, "Y", "wash post");
   solid(14, -30, "Y", "wash post");
   // Wind vanes on the rim, wind-bent trees, wind-cut rocks.
-  for (const d of [200, 330, 140, 40]) solid(...rim(d), "J", "wind vane");
-  for (const [d, f] of [[215, 0.7], [320, 0.75], [150, 0.7]] as const) solid(...rim(d, f), "T", "tree");
+  for (const d of [200, 330, 140, 40]) solid(...rim(d), "6", "wind vane");
+  for (const [d, f] of [[215, 0.7], [320, 0.75], [150, 0.7]] as const) solid(...rim(d, f), "7", "tree");
   for (const [x, y] of [[-33, 2], [4, 23], rim(250, 0.7)] as const) solid(x, y, "#", "rock");
   // Streamers: seven storm violet, and the one nearest Kes's house in Rosalind's blue.
   const st = [165, 235, 300, 15, 115, 65, 190, 345].map((d) => rim(d, 0.45));

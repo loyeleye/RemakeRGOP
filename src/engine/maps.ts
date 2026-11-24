@@ -8,7 +8,7 @@
 //   B  brazier      a  Dawn wisp spawn b  Dusk wisp spawn
 //   1  Dawn start   2  Dusk start
 
-import { KF_FAR, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
+import { KF_FAR, KF_OVAL, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
 import { HS_CENTRE, HS_FAR, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
 import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
 
@@ -341,7 +341,7 @@ export function ringWalls(ring: Ring): Pt[] {
 /** Story places: solid things drawn as themselves. Multi-tile ones are one block of their letter. */
 export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling"
   | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat" | "path-lamp" | "ladder"
-  | "beehive" | "garden-plot" | "mat-rack" | "baskets" | "wheelbarrow" | "pane-crate" | "cargo-crates" | "streamer" | "streamer-blue";
+  | "beehive" | "garden-plot" | "mat-rack" | "baskets" | "wheelbarrow" | "pane-crate" | "cargo-crates" | "streamer" | "streamer-blue" | "kes-house" | "wind-vane" | "bent-tree" | "referee-stand";
 export const PROP_CHARS: Record<string, PropKind> = {
   F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling",
   // The horseshoe island's houses, the Offering stone, and the one boat at its mooring.
@@ -351,6 +351,8 @@ export const PROP_CHARS: Record<string, PropKind> = {
   // The yards: hives, garden plots (3x2, walkable), a mat rack (2x1), baskets, a barrow, crates.
   // Kite Fell's streamers: storm violet, and one in Rosalind's blue.
   u: "streamer", y: "streamer-blue",
+  // And its own models: Kes's house, the wind vanes, the bent trees, and Lumi's referee stand (open ground: she stands on it).
+  "5": "kes-house", "6": "wind-vane", "7": "bent-tree", "8": "referee-stand",
   q: "beehive", p: "garden-plot", m: "mat-rack", s: "baskets", w: "wheelbarrow", n: "pane-crate", r: "cargo-crates",
 };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
@@ -396,6 +398,8 @@ export interface Shrine {
   lobes?: { x: number; y: number; r: number }[];
   /** Where the main plateau is hung from when that isn't the board's centre (the horseshoe's brazier is by its west rim): the middle of the land, in tiles from the centre, and the edge's distance from there at each angle. */
   core?: { x: number; y: number; outline: (a: number) => number };
+  /** Story places: an oval of other ground round the brazier (Kite Fell's race ground), half-sizes in tiles; drawn from textures/floor-<id>-race.webp. */
+  raceOval?: { rx: number; ry: number };
   /** Story places: where the lower terraces hang (radians, east is 0, south a quarter turn), to keep them clear of a landing or falls. */
   tierAngles?: number[];
   /** Story places: model turns (radians) by prop kind, or by tile as "x,y", over the usual. */
@@ -849,6 +853,9 @@ const TILE_OF: Record<string, Tile> = {
   q: Tile.Wall,
   u: Tile.Wall,
   y: Tile.Wall,
+  "5": Tile.Wall,
+  "6": Tile.Wall,
+  "7": Tile.Wall,
   m: Tile.Wall,
   s: Tile.Wall,
   w: Tile.Wall,
@@ -1361,7 +1368,7 @@ function kiteFell(): Shrine {
   const sh = finish(def, rows, 2, null);
   // The start marks are whole stones, under the starts too.
   const ground = [...(sh.ground ?? []), ...flags.map((f) => ({ kind: "terrace" as const, ...f }))];
-  return { ...sh, ground, coast: kfCoast, outline: kfOutline, arms: true, lobes: KF_LOBES, far: KF_FAR, turns, tierAngles: [3.3, 4.4, 1.9] };
+  return { ...sh, ground, coast: kfCoast, outline: kfOutline, arms: true, lobes: KF_LOBES, far: KF_FAR, turns, tierAngles: [3.3, 4.4, 1.9], raceOval: KF_OVAL };
 }
 
 /** The home island to walk on: drawn from the maps thread's shapes, not an IsleShape. */

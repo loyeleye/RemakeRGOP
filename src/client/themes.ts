@@ -128,7 +128,7 @@ export const THEMES: Record<string, Theme> = {
   // with its props like a place, but played on like a shrine.
   get "kite-fell"() {
     const base = THEMES["tidepool-steps"]!;
-    return { ...base, name: "Kite Fell", floor: "home-island", grass: "#93b860", dressed: true, decorate() {} };
+    return { ...base, name: "Kite Fell", floor: "kite-fell", grass: "#7fa850", dressed: true, decorate() {} };
   },
   // The home island as a place to walk: the lagoon's sky and falls, on grass.
   get "home-island"() {

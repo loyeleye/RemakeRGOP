@@ -179,7 +179,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "offering-stone", "offering-boat", "offering-mooring"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "offering-stone", "offering-boat", "offering-mooring", "kes-house", "wind-vane", "bent-tree", "referee-stand"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -848,6 +848,7 @@ const PLACE_OF: Record<string, { model: string; rot?: number; dx?: number; y?: n
   "mabry-house": { model: "mabry-house" },
   "orrin-house": { model: "orrin-house" },
   "wick-house": { model: "wick-house" },
+  "kes-house": { model: "kes-house" },
   // Nell's and Sefa's fronts (the serving hatch, the porch) are on +Z, like the doors of the rest.
   "nell-house": { model: "nell-house" },
   "sefa-house": { model: "sefa-house" },
@@ -912,7 +913,7 @@ function setWindows(on: boolean) {
 }
 
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
-const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates"]);
+const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "streamer", "streamer-blue", "wind-vane", "bent-tree", "referee-stand"]);
 /** Yard things drawn from their own model: tiles wide and deep, and the block-out's height. */
 const YARD_THINGS: Record<string, [number, number, number]> = {
   beehive: [1, 1, 1], "garden-plot": [3, 2, 0.3], "mat-rack": [2, 1, 1.9], baskets: [1, 1, 0.4], wheelbarrow: [1, 1, 0.7], "pane-crate": [1, 1, 0.7], "cargo-crates": [1, 1, 1.3],
@@ -1461,6 +1462,15 @@ export class World {
         cloth.castShadow = true;
         g.add(pole, cloth);
         this.streamers.push({ cloth, seed: p.x * 1.7 + p.y * 2.3 });
+      } else if (p.kind === "wind-vane") {
+        this.placeSlot("wind-vane", box(0.2, 3, 0.2, wood), wx, wz);
+      } else if (p.kind === "bent-tree") {
+        // Blown east: the trunk stands on its tile, the crown streams off to +X.
+        this.placeSlot("bent-tree", box(0.3, 3.4, 0.3, wood), wx + 0.8, wz);
+      } else if (p.kind === "referee-stand") {
+        // Lumi's box, cloth side north to the race; whoever stands on its tile stands on the top step.
+        this.placeSlot("referee-stand", box(1.4, 0.68, 1.1, wood), wx, wz);
+        this.perch = { x: p.x, y: p.y, h: 0.68 };
       } else if (p.kind === "lookout") {
         this.placeSlot("lookout-post", box(0.2, 1.9, 0.2, wood), wx, wz);
       } else if (p.kind === "rail") {
@@ -1663,6 +1673,7 @@ export class World {
     this.moored = null;
     this.landingPost = null;
     this.streamers = [];
+    this.perch = null;
     if (this.storm) {
       for (const l of this.storm.links) this.scene.remove(l.core, l.halo);
       this.scene.remove(this.storm.flash, ...this.storm.sparks);
@@ -1737,6 +1748,17 @@ export class World {
     floor.position.y = 0.01;
     floor.receiveShadow = true;
     g.add(floor);
+    if (shrine.raceOval) {
+      // The race ground: shorter, paler grass in an oval round the brazier, on a larger repeat.
+      const { rx, ry } = shrine.raceOval;
+      const oval = new THREE.Shape();
+      oval.absellipse(0, 0, rx + 0.5, ry + 0.5, 0, Math.PI * 2);
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(oval, 64), new THREE.MeshStandardMaterial({ map: tex(`textures/floor-${shrine.id}-race.webp`, 1 / 9), roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -0.5 }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = 0.014;
+      m.receiveShadow = true;
+      g.add(m);
+    }
     const wallTex = tex("sprites/wall.png", 3);
     // The island itself follows the coastline, with a grassy verge outside the parapet, then
     // the cliff, a grassy terrace and hanging spires.
@@ -2447,6 +2469,8 @@ export class World {
     this.pathLamps.push({ slot: lit, glow, core, mats: [], state: "off", seed: 6.5 });
     this.stepMoored(0);
   }
+  /** A tile whoever is on stands raised (the referee stand's top step). */
+  private perch: { x: number; y: number; h: number } | null = null;
   private streamers: { cloth: THREE.Mesh; seed: number }[] = [];
   /** Streamers ripple along their length, more toward the free end. */
   private stepStreamers(time: number) {
@@ -2899,6 +2923,7 @@ export class World {
         rig.root.position.set(wx, 0, wz);
         this.stepSnack(rig, anim.at("snack"));
       } else rig.root.position.set(wx, moving ? Math.abs(Math.sin(time * 9)) * 0.06 : Math.sin(time * 1.6 + p.id) * 0.03, wz);
+      if (this.perch && p.x === this.perch.x && p.y === this.perch.y) rig.root.position.y += this.perch.h;
       if (rig.body) rig.body.rotation.y = rig.facing;
       this.stepStoneCast(rig, time);
       // Lantern sits up and to the side of the figure, where the staff head is.
