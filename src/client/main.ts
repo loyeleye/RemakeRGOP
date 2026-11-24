@@ -10,6 +10,7 @@ import { LessonRoom } from "../server/lesson.js";
 import { GrannyRoom, lineTicks } from "../server/granny.js";
 import { stillMs } from "../engine/stills.js";
 import { StillsPanel } from "./stills.js";
+import { alarmCards } from "./alarm.js";
 import { RaceRoom } from "../server/race.js";
 import { DyingRoom } from "../server/dying.js";
 import { SieveRoom } from "../server/sieve.js";
@@ -146,6 +147,13 @@ function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | "pond" = 1,
     lanternCard(hello);
     // Hold the first lines until the picture has faded, so none plays under it.
     talkHold = performance.now() + (ENDING.lantern.hold + ENDING.lantern.fade) * 1000;
+  }
+  // Run 6 opens on the alarm: five held pictures, then the board.
+  else if (run === 6 && !new URLSearchParams(location.search).has("noalarm")) {
+    alarmCards({ groan: () => sound.lurchGroan(), bell: (v) => sound.greatBell(v) }, () => {
+      talkHold = performance.now() + DYING.alarm.fadeMs;
+      hello();
+    });
   }
   else hello();
 }
@@ -831,6 +839,7 @@ function sieveRoom() {
   // Reaction stills: picture 4 (the tug itself) is off unless asked for; all of them off with ?nostills.
   if (q.has("still4")) r.stillFour = true;
   if (q.has("nostills")) r.stillsOn = false;
+  else stills.preload("r8-");
   return r;
 }
 
@@ -950,14 +959,19 @@ function dyingZoom(d: NonNullable<StoryView["dying"]> | undefined, board: Board)
 }
 
 /** The held pictures: the three of the landing, and the island clear of the cloud. Plain dark cards with the picture's name until the cutscene thread's pictures exist. */
-let dyingArtAsked = false;
+/** The landing's drawn pictures, fetched and kept as the run opens, so each is there the moment it is called. */
+const dyingArt = new Map<string, HTMLImageElement>();
 function dyingCard(d: NonNullable<StoryView["dying"]> | undefined) {
   const el = $("still");
   // Fetched as the run opens, so a picture is there the moment it is called.
-  if (d && !dyingArtAsked) {
-    dyingArtAsked = true;
-    for (const f of DYING.stills.files) new Image().src = `stills/${f}.webp`;
-  }
+  if (d && !dyingArt.size)
+    for (const f of [...DYING.stills.files, DYING.risen.file]) {
+      const img = new Image();
+      img.alt = "";
+      img.src = `stills/${f}.webp`;
+      void img.decode?.().catch(() => {});
+      dyingArt.set(f, img);
+    }
   const n = !d ? -1 : d.still !== undefined ? d.still : d.part === "risen" ? 3 : -1;
   if (n === dyingStill) return;
   dyingStill = n;
@@ -966,18 +980,16 @@ function dyingCard(d: NonNullable<StoryView["dying"]> | undefined) {
   const name = n === 3 ? DYING.risen.name : DYING.stills.names[n]!;
   el.innerHTML = `<div><small>picture to come</small><b>${esc(name)}</b></div>`;
   // The drawn picture over the card, when there is one.
-  const file = n < 3 ? DYING.stills.files[n] : undefined;
-  if (file) {
-    const img = new Image();
-    img.alt = name;
-    img.onload = () => el.append(img);
-    img.src = `stills/${file}.webp`;
-  }
+  const file = n < 3 ? DYING.stills.files[n] : DYING.risen.file;
+  const img = file ? dyingArt.get(file) : undefined;
+  if (img?.complete && img.naturalWidth) el.append(img);
+  else if (img) img.onload = () => dyingStill === n && el.append(img);
   el.classList.remove("in", "inout");
   el.style.animationDuration = "";
   void el.offsetWidth;
   // A picture held for a set time fades in and out again, onto the map (Ladi, 24 Nov).
-  if (d!.stillTicks) (el.style.animationDuration = `${(d!.stillTicks * tickMs) / 1000}s`), el.classList.add("inout");
+  const up = d!.stillTicks ?? (n === 3 ? DYING.risen.ticks : 0);
+  if (up) (el.style.animationDuration = `${(up * tickMs) / 1000}s`), el.classList.add("inout");
   else el.classList.add("in");
   // The strike lands under her picture.
   if (n === 2) {

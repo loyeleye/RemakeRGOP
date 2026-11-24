@@ -722,13 +722,15 @@ const GREAT: [number, number, number][] = [
   [2.52, 0.25, 1.2],
   [3.01, 0.18, 0.9],
 ];
-export function greatBell() {
+export function greatBell(level = 1) {
   const s = out();
   if (!s) return;
-  strike(196, 0.42, 0.15, GREAT);
-  strike(197.6, 0.2, -0.15, GREAT.slice(0, 3));
-  thump(0.35);
-  noise(0.12, "bandpass", 2600, 0.06, 0.1);
+  strike(196, 0.42 * level, 0.15, GREAT);
+  strike(197.6, 0.2 * level, -0.15, GREAT.slice(0, 3));
+  // From far off (the alarm) it has no strike in it, only the ring.
+  if (level < 0.5) return;
+  thump(0.35 * level);
+  noise(0.12 * level, "bandpass", 2600, 0.06, 0.1);
 }
 
 /** The ground lurches: the island's timbers and rock groan, and something heavy shifts. Up (run 7) it is shorter and rises. */

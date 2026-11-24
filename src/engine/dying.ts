@@ -64,8 +64,20 @@ export const DYING = {
    * fades in over the strike and out again (`hesta` ticks) onto the board with her in the glass.
    */
   landingShow: { faces: 4, comet: 5, hesta: 4 },
-  /** The picture at the end of run 7, and how long it is held. */
-  risen: { ticks: 5, name: "The island clears the cloud" },
+  /** The picture at the end of run 7 (its file in public/stills/), and how long it is up, fading in and out. */
+  risen: { ticks: 7, name: "The island clears the cloud", file: "r7-end-1" },
+  /**
+   * The alarm, before run 6: five held pictures, full screen, each for `holdMs` and cross-fading over
+   * `fadeMs` into the next (forty seconds in all). The timbers groan at `groanMs`; the great bell
+   * starts at `bellFromMs`, far off (`bellFar` of its full sound), and has grown to `bellNear` by the
+   * end; nobody speaks until Lumi's line, `lineAfterMs` into the last picture. ?noalarm leaves it out.
+   */
+  alarm: {
+    files: ["r6-alarm-1", "r6-alarm-2", "r6-alarm-3", "r6-alarm-4", "r6-alarm-5"] as const,
+    names: ["The kitchen, dark", "From Rook's door: the falls", "Down the lake", "The island from the side", "Lumi at the door"] as const,
+    holdMs: 8000, fadeMs: 1600, groanMs: 1200, bellFromMs: 3600, bellEveryMs: 2400, bellFar: 0.25, bellNear: 0.8, lineAfterMs: 2200,
+    line: { who: "Lumi", text: "Dad. The falls." },
+  },
   /** What Ladi ruled on 24 Nov, each on a switch so the other way can be tried. */
   switches: {
     /** The cloud reaches Rook at the bottom: he can move, and can see no wisp. (Ladi: yes.) */

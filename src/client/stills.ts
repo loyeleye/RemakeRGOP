@@ -18,6 +18,20 @@ export interface StillShow {
 
 /** Pictures that turned out not to be drawn yet, so they aren't asked for again. */
 const missing = new Set<string>();
+/** Pictures fetched ahead of their moment, so a drawn one is there as its panel fades in. */
+const ready = new Map<string, HTMLImageElement>();
+
+function fetchStill(base: string, id: string) {
+  let img = ready.get(id);
+  if (img || missing.has(id)) return img;
+  img = new Image();
+  img.alt = "";
+  img.onerror = () => (missing.add(id), ready.delete(id));
+  img.src = `${base}${id}.webp`;
+  void img.decode?.().catch(() => {});
+  ready.set(id, img);
+  return img;
+}
 
 export class StillsPanel {
   private root: HTMLDivElement;
@@ -38,6 +52,11 @@ export class StillsPanel {
     this.root.id = "stills";
     this.root.setAttribute("aria-live", "polite");
     document.body.append(this.root);
+  }
+
+  /** Fetches a run's pictures before they are called (every still whose name starts with `prefix`). */
+  preload(prefix: string) {
+    for (const id of Object.keys(STILLS)) if (id.startsWith(prefix)) fetchStill(this.base, id);
   }
 
   get up() {
@@ -72,12 +91,15 @@ export class StillsPanel {
     ph.className = "ph";
     ph.innerHTML = `<small>${esc(s.cue.id)}</small><b>${esc(info?.who ?? s.cue.id)}</b><span>${esc(info?.faces ?? "")}</span>`;
     art.append(ph);
-    if (!missing.has(s.cue.id)) {
+    // A fresh copy of the fetched picture each time, so a cross-fade can show the same one twice.
+    const got = fetchStill(this.base, s.cue.id);
+    if (got) {
       const img = new Image();
       img.alt = "";
-      img.onload = () => ((ph.hidden = true), art.append(img));
-      img.onerror = () => missing.add(s.cue.id);
-      img.src = `${this.base}${s.cue.id}.webp`;
+      const put = () => ((ph.hidden = true), art.append(img));
+      img.src = got.src;
+      if (got.complete && got.naturalWidth) put();
+      else img.onload = put;
     }
     card.append(art);
     if (s.caption) {
