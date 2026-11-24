@@ -184,6 +184,60 @@ describe("Lumi's lesson", () => {
     expect(r.room.state.end!.lines.at(-1)!.text).toBe("So I'm coming tomorrow.");
   });
 
+  /** Stands Lumi by one of her pool wisps and has her hold it until the tide pull first works ("!"). */
+  function tidePull(r: ReturnType<typeof newRoom>) {
+    const g = r.room.state.game, b = g.board;
+    const before = r.said().filter((l) => l.text === "!").length;
+    const mine = g.wisps.filter((w) => w.guild === 0 && b.tile(w.pos) === Tile.Water);
+    for (const w of mine)
+      for (const [dx, dy] of [[0, -2], [0, 2], [-2, 0], [2, 0], [0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+        const at = pt(w.pos.x + dx, w.pos.y + dy);
+        if (!b.inside(at) || g.wisps.some((o) => samePt(o.pos, at)) || samePt(r.rook().pos, at)) continue;
+        const lumi = r.lumi();
+        lumi.pos = lumi.prev = at;
+        r.act({ kind: "staff", wisp: w.id });
+        for (let i = 0; i < 8; i++) {
+          r.room.onTick();
+          if (r.said().filter((l) => l.text === "!").length > before) return true;
+        }
+        r.act({ kind: "idle" });
+        r.room.onTick();
+      }
+    return false;
+  }
+
+  it("Rook stops and stares the first time her tide pull works, and only then", () => {
+    const r = newRoom(5);
+    const room = r.room as unknown as { startRound(n: number, again: boolean): void };
+    room.startRound(2, false);
+    r.play();
+    for (let i = 0; i < 6; i++) r.room.onTick();
+    expect(tidePull(r)).toBe(true);
+    const g = r.room.state.game, T = LESSON.firstToThree;
+    const from = g.tick, stood = { ...r.rook().pos };
+    expect(r.room.state.stareUntil).toBe(from + T.rookStares);
+    // A beat or two: he doesn't move or pull, and the clock keeps running under him.
+    for (let i = 0; i < T.rookStares; i++) {
+      r.room.onTick();
+      expect(r.rook().pos).toEqual(stood);
+      expect(r.rook().action.kind).toBe("idle");
+      expect(r.rook().beam).toBeNull();
+    }
+    expect(g.tick).toBe(from + T.rookStares);
+    expect(r.room.state.phase).toBe("playing");
+    // Then he carries on as before.
+    let busy = false;
+    for (let i = 0; i < 12 && !busy; i++) (r.room.onTick(), (busy = r.rook().action.kind !== "idle" || !samePt(r.rook().pos, stood)));
+    expect(busy).toBe(true);
+    // A later game in the same round: her "!" comes again, his stare doesn't.
+    r.act({ kind: "idle" });
+    room.startRound(2, true);
+    r.play();
+    for (let i = 0; i < 6; i++) r.room.onTick();
+    expect(tidePull(r)).toBe(true);
+    expect(r.room.state.stareUntil).toBe(-1);
+  });
+
   it("after best of fifteen, Rook calls it for the night", () => {
     const r = newRoom(5);
     const room = r.room as unknown as { startRound(n: number, again: boolean): void; games: number };

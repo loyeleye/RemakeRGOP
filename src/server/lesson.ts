@@ -57,6 +57,9 @@ export class LessonRoom {
   private seeSaid = false;
   // Round 3.
   private tideSeen = -1;
+  /** Rook's stare at her first tide pull: until which tick of this game, and whether he has had it this round (retries don't bring it back). */
+  private stareUntil = -1;
+  private stared = false;
 
   constructor(
     private clock: Clock = realClock,
@@ -143,6 +146,8 @@ export class LessonRoom {
     this.hinted = this.overSaid = this.joined = this.seeSaid = false;
     this.callTo = null;
     this.tideSeen = -1;
+    this.stareUntil = -1;
+    if (!again) this.stared = false;
     if (r === 0) place(rook, at({ x: -7, y: 6 }));
     if (r === 1) {
       const R = LESSON.together;
@@ -217,6 +222,11 @@ export class LessonRoom {
       else action = hers !== null ? { kind: "staff", wisp: hers } : { kind: "idle" };
     }
     if (this.round === 2) {
+      // Her tide pull has just worked for the first time: he stands and stares, hands down.
+      if (g.tick < this.stareUntil) {
+        if (rook.action.kind !== "idle") g.command(ROOK_ID, { action: { kind: "idle" } });
+        return;
+      }
       // He plays for real up to two, then eases off: he keeps moving and pulling (no standing
       // still to think, which looked like a stuck bot), just dawdling more often.
       const style = g.scores[1]! < LESSON.firstToThree.rookStops ? BOT_MEDIUM : ROOK_EASED;
@@ -311,11 +321,7 @@ export class LessonRoom {
     // The first time her tide pull moves something, Rook notices.
     const held = lumi.beam !== null ? g.wisps[lumi.beam] : undefined;
     const tide = held && held.touched && g.board.tile(held.pos) === Tile.Water && g.wisps.some((o) => o !== held && o.guild === 0 && g.board.tile(o.pos) === Tile.Water && !samePt(o.pos, o.prev) && !o.target);
-    if (tide && this.tideSeen < 0) {
-      this.tideSeen = g.tick;
-      // One flash of open delight, without words, then she reins it into "I pulled." (smug).
-      this.say(LUMI, "!", { player: LUMI_ID, mood: "delight-flash" });
-    }
+    if (tide && this.tideSeen < 0) this.tideFirstWorks(held!);
     if (this.tideSeen >= 0 && g.tick === this.tideSeen + 4) {
       this.say(ROOK, "How did you do that?");
       this.say(LUMI, "I pulled.", { player: LUMI_ID });
@@ -331,6 +337,25 @@ export class LessonRoom {
       this.say(LUMI, `${this.games > 3 ? "..." : ""}Best of ${n}.`, { talk: true });
       this.startRound(2, true);
     }
+  }
+
+  /**
+   * The tick her tide pull first moves something in a game (anything that starts with it, such as
+   * a picture, hooks in here). She flashes open delight, without words, then reins it into
+   * "I pulled." (smug). The first time in the round, Rook stops and stares for a beat or two: he
+   * doesn't move or pull, turned to the wisp she holds. Nothing else stops: the clock runs, she
+   * keeps full control and can score while he stands there.
+   */
+  private tideFirstWorks(held: { pos: Pt }) {
+    const g = this.game, rook = this.player(ROOK_ID);
+    this.tideSeen = g.tick;
+    this.say(LUMI, "!", { player: LUMI_ID, mood: "delight-flash" });
+    if (this.stared) return;
+    this.stared = true;
+    this.stareUntil = g.tick + LESSON.firstToThree.rookStares;
+    if (rook.action.kind !== "idle") g.command(ROOK_ID, { action: { kind: "idle" } });
+    const dx = Math.sign(held.pos.x - rook.pos.x), dy = Math.sign(held.pos.y - rook.pos.y);
+    if (dx || dy) rook.facing = pt(dx, dy);
   }
 
   /** A free pool tile far enough out that no plain pull from across the fire reaches it. */
@@ -455,7 +480,7 @@ export class LessonRoom {
 
   /** For tests. */
   get state() {
-    return { phase: this.phase, round: this.round, beat: this.beat, game: this.game, pulls: this.pulls, calls: this.calls, banked: this.banked, games: this.games, restarts: this.restarts, end: this.end, tideSeen: this.tideSeen };
+    return { phase: this.phase, round: this.round, beat: this.beat, game: this.game, pulls: this.pulls, calls: this.calls, banked: this.banked, games: this.games, restarts: this.restarts, end: this.end, tideSeen: this.tideSeen, stareUntil: this.stareUntil };
   }
 }
 
