@@ -79,7 +79,7 @@ export const DYING = {
       { id: "kitchen", name: "The kitchen, dark", ms: 3000, push: 0.03 },
       { id: "lumi", name: "Lumi at the door", ms: 3000, push: 0.03 },
       { id: "falls", name: "From Rook's door: the falls", ms: 3000, push: 0.08 },
-      { id: "brazier", name: "The Kindling ground, close", ms: 5000, push: 0.05, at: [497, 300] },
+      { id: "brazier", name: "The Kindling ground, close", ms: 5000, push: 0.05, at: [468, 380] },
       { id: "descent", name: "The island going down", ms: 6000, push: 0 },
     ] as readonly { id: "kitchen" | "falls" | "brazier" | "descent" | "lumi"; name: string; ms: number; push: number; at?: readonly [number, number] }[],
     fadeMs: 500, bellFromMs: 300, bellEveryMs: 2400, bellFar: 0.6, bellNear: 1, lineAfterMs: 300,
@@ -95,15 +95,16 @@ export const DYING = {
      */
     brazier: {
       fire: [[0, 3], [0.9, 3], [1.1, 2], [1.35, 3], [1.6, 2], [1.8, 3], [2.1, 2], [2.6, 2], [2.9, 1], [3.1, 2], [3.5, 1], [4.2, 0], [5, 0]] as readonly (readonly [number, number])[],
-      sparks: { at: [497, 226] as const, spread: 42, rise: 150, until: 3.5, count: 46 },
+      sparks: { at: [468, 330] as const, spread: 42, rise: 150, until: 3.5, count: 46 },
     },
     /**
      * The island going down. Its heart flickers for `heartMs` (how dim along the way) and is dead. From
      * `dropAt` seconds it drops `drop` pixels by the shot's end, shaking by `shake`, and lets go of
      * `rocks` rocks from its underside (a point `tip` pixels below its top in the middle, rising by
-     * `slope` to either side, `half` wide) until `rocksUntil`. The clouds, back to front (the island
-     * and its rocks are behind all but the first): each at `scale`, its top at `y`, starting at `x`
-     * and drifting `speed` pixels a second.
+     * `slope` to either side, `half` wide) until `rocksUntil`. The clouds, back to front: each at
+     * `scale`, its top at `y`, starting at `x` and drifting `speed` pixels a second; those marked
+     * `behind` are behind the island and its rocks. The far bank and the one hanging from the top
+     * are there so the starry sky is barely seen (Ladi, 24 Nov).
      */
     descent: {
       heartMs: 1800, dropAt: 1.6, drop: 300, shake: 4, rocks: 16, rocksUntil: 5.2, gravity: 620,
@@ -111,13 +112,15 @@ export const DYING = {
       island: { size: [934, 632] as const, scale: 0.8, top: 18 },
       under: { tip: 470, slope: 0.75, half: 190 },
       /** The waterfall: a strip that repeats down from this spot on the island's picture (before `scale`), `wide` across and `tall` to a repeat, to the bottom of the screen and into the cloud, its water running down at `speed` pixels a second. It goes down with the island. */
-      fall: { at: [77, 350] as const, wide: 58, tall: 240, speed: 330 },
+      fall: { at: [80, 352] as const, wide: 58, tall: 240, speed: 330 },
       cloudSize: [1536, 640] as const,
       clouds: [
-        { file: "cloud-back", scale: 1.2, y: 250, x: -340, speed: -10 },
-        { file: "cloud-mid", scale: 1.2, y: 330, x: -620, speed: 22 },
-        { file: "cloud-front", scale: 1.4, y: 470, x: -420, speed: -45 },
-      ] as const,
+        { file: "cloud-far", scale: 1.2, y: -40, x: -500, speed: 6, behind: true },
+        { file: "cloud-top", scale: 1.2, y: -590, x: -200, speed: -9, behind: true },
+        { file: "cloud-back", scale: 1.2, y: 250, x: -340, speed: -10, behind: true },
+        { file: "cloud-mid", scale: 1.2, y: 330, x: -620, speed: 22, behind: false },
+        { file: "cloud-front", scale: 1.4, y: 470, x: -420, speed: -45, behind: false },
+      ] as readonly { file: string; scale: number; y: number; x: number; speed: number; behind: boolean }[],
     },
   },
   /** What Ladi ruled on 24 Nov, each on a switch so the other way can be tried. */

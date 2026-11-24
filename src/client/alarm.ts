@@ -162,7 +162,7 @@ export function alarmCards(ready: (leftMs: number) => void, then: (skipped: bool
         el.style.opacity = "0";
         return { el, at: D.dropAt + (span * (i + rnd() * 0.8)) / D.rocks, x: W / 2 + dx, dy: D.under.tip - Math.abs(dx) * D.under.slope, vx: dx * 0.25 + (rnd() * 2 - 1) * 20, spin: (rnd() * 2 - 1) * 540, size: 0.8 + rnd() * 0.9 };
       });
-      cam.append(layer("alarm/shot4/sky"), clouds[0]!, isle, ...rocks.map((r) => r.el), ...clouds.slice(1));
+      cam.append(layer("alarm/shot4/sky"), ...clouds.filter((_, i) => D.clouds[i]!.behind), isle, ...rocks.map((r) => r.el), ...clouds.filter((_, i) => !D.clouds[i]!.behind));
       return {
         start(at, sec) {
           at(0, () => sound.alarmHiss(sec));
