@@ -339,13 +339,16 @@ export function ringWalls(ring: Ring): Pt[] {
 
 /** Story places: solid things drawn as themselves. Multi-tile ones are one block of their letter. */
 export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling"
-  | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat" | "path-lamp" | "ladder";
+  | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat" | "path-lamp" | "ladder"
+  | "beehive" | "garden-plot" | "mat-rack" | "baskets" | "wheelbarrow" | "pane-crate" | "cargo-crates";
 export const PROP_CHARS: Record<string, PropKind> = {
   F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling",
   // The horseshoe island's houses, the Offering stone, and the one boat at its mooring.
   M: "maudie-house", D: "moth-house", g: "mabry-house", I: "orrin-house", e: "nell-house", f: "sefa-house", X: "wick-house", h: "offering", i: "mooring", j: "boat", v: "falls",
   // The lake path's lamp posts, and the lamp trimmer's ladder against one.
   l: "path-lamp", k: "ladder",
+  // The yards: hives, garden plots (3x2, walkable), a mat rack (2x1), baskets, a barrow, crates.
+  q: "beehive", p: "garden-plot", m: "mat-rack", s: "baskets", w: "wheelbarrow", n: "pane-crate", r: "cargo-crates",
 };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
 export const GROUND_CHARS: Record<string, "path" | "planks" | "terrace"> = { ",": "path", ";": "planks", ":": "terrace" };
@@ -835,6 +838,13 @@ const TILE_OF: Record<string, Tile> = {
   H: Tile.Wall,
   l: Tile.Wall,
   k: Tile.Wall,
+  // Yard things are solid; a garden plot ("p") stays open ground.
+  q: Tile.Wall,
+  m: Tile.Wall,
+  s: Tile.Wall,
+  w: Tile.Wall,
+  n: Tile.Wall,
+  r: Tile.Wall,
   // Story places: a fence, a wash-line post, a bench (solid), and a worn path (open ground).
   F: Tile.Wall,
   Y: Tile.Wall,

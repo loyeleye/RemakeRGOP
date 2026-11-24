@@ -179,7 +179,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "offering-stone", "offering-boat", "offering-mooring"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "offering-stone", "offering-boat", "offering-mooring"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -910,7 +910,11 @@ function setWindows(on: boolean) {
 }
 
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
-const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder"]);
+const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates"]);
+/** Yard things drawn from their own model: tiles wide and deep, and the block-out's height. */
+const YARD_THINGS: Record<string, [number, number, number]> = {
+  beehive: [1, 1, 1], "garden-plot": [3, 2, 0.3], "mat-rack": [2, 1, 1.9], baskets: [1, 1, 0.4], wheelbarrow: [1, 1, 0.7], "pane-crate": [1, 1, 0.7], "cargo-crates": [1, 1, 1.3],
+};
 
 function makePlace(kind: string, w: number, d: number): THREE.Group {
   const g = new THREE.Group();
@@ -1446,6 +1450,11 @@ export class World {
         if (has(p.x - 1, p.y, "rail")) continue;
         const two = has(p.x + 1, p.y, "rail");
         this.placeSlot("landing-rail", box(two ? 2 : 1, 1, 0.12, wood), wx + (two ? 0.5 : 0), wz);
+      } else if (YARD_THINGS[p.kind]) {
+        // One model for its whole block of tiles, placed from the top-left one.
+        if (has(p.x - 1, p.y, p.kind) || has(p.x, p.y - 1, p.kind)) continue;
+        const [w, d, h] = YARD_THINGS[p.kind]!;
+        this.placeSlot(p.kind, box(w * 0.9, h, d * 0.8, wood), wx + (w - 1) / 2, wz + (d - 1) / 2, shrine.turns?.[`${p.x},${p.y}`] ?? 0);
       } else if (p.kind === "barrel") {
         const m = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.9, 12), wood);
         m.position.y = 0.45;

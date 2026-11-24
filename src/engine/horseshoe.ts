@@ -303,6 +303,55 @@ export function horseshoeRows(): { rows: string[]; turns: Record<string, number>
     turnAt(x, y, a);
   }
 
+  // The other houses' yards, dressed like Rook's (Ladi; the maps thread's plan, places/yards/README.md),
+  // with things that say who lives there. All on plain ground: a miss here means the board moved.
+  const toS = -Math.PI / 2, toW = Math.PI;
+  const yard = (x: number, y: number, ch: string, w = 1, h = 1, turn?: number) => {
+    for (let j = 0; j < h; j++)
+      for (let i = 0; i < w; i++) {
+        if (get(x + i, y + j) !== ".") throw new Error(`horseshoe: yard ${ch} at ${x + i},${y + j} is not plain ground`);
+        set(x + i, y + j, ch);
+      }
+    if (turn !== undefined) turnAt(x, y, turn);
+  };
+  // Nell's (Jarek, Hania): Hania's hives in a fenced bee garden, Jarek's lamp oil by his ladder, wash, wood.
+  for (let x = 14; x <= 23; x++) yard(x, -35, "F");
+  for (const x of [15, 17, 19, 21]) yard(x, -32, "q", 1, 1, toS);
+  yard(15, -18, "U");
+  yard(21, -23, "P");
+  yard(18, -16, "Y");
+  yard(22, -16, "Y");
+  // Sefa's (Manu, Sina, Mele): Sina's mats and baskets, Manu's plots with a fence, barrow and rain barrel, wash.
+  for (let x = 18; x <= 25; x++) yard(x, 4, "F");
+  yard(14, -12, "m", 2, 1);
+  yard(12, -11, "s");
+  yard(17, -14, "Y");
+  yard(21, -14, "Y");
+  for (const x of [14, 18, 22]) yard(x, 1, "p", 3, 2);
+  yard(25, -1, "w", 1, 1, toW);
+  yard(21, -1, "U");
+  // Wick's.
+  yard(27, 7, "r", 1, 1, toW);
+  yard(27, 10, "U");
+  yard(25, 12, "P");
+  // Orrin's: crates of panes by the stall.
+  yard(20, 32, "n");
+  yard(22, 26, "n");
+  yard(24, 26, "U");
+  yard(27, 25, "P");
+  yard(24, 22, "Y");
+  yard(28, 22, "Y");
+  // Maudie's: a kitchen garden and a wash line.
+  yard(-21, -26, "p", 3, 2);
+  yard(-21, -22, "Y");
+  yard(-17, -22, "Y");
+  yard(-15, -20, "U");
+  yard(-22, -13, "P");
+  // Moth's: landing cargo, outside the apron.
+  yard(-24, 6, "r", 1, 1, toS);
+  yard(-25, 4, "U");
+  yard(-25, 0, "P");
+
   // Where the walk starts: Rook and Lumi by the pond brazier.
   set(-17, -3, "1", ".,");
   set(-16, -3, "2", ".,");
