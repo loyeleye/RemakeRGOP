@@ -47,9 +47,15 @@ export class SieveRoom {
   private look: Pt | null = null;
   private warned = new Map<number, { at: Pt; well: number; height: number }>();
   /** The first pull: waiting, winding up (ticks left), holding (ticks left), or done. Wisps touched in the wind-up are spared. Once a game, restarts included. */
-  private pull: { phase: "wait" | "wind" | "hold" | "done"; left: number; spared: Set<number>; moved: number[] } = { phase: "wait", left: 0, spared: new Set(), moved: [] };
-  /** The first pull, on its switch (SIEVE.pull.on; the page turns it off with ?nopull=1). */
-  pullOn: boolean = SIEVE.pull.on;
+  private pull: Pull = { phase: "wait", left: 0, spared: new Set(), moved: [], torn: null, focus: null };
+  /** The first pull: "loud" (the second take, the default), "quiet" (the first take, v111; ?pull=1 in the page) or "off" (v108; ?nopull=1). */
+  pullMode: "loud" | "quiet" | "off" = SIEVE.pull.on ? "loud" : "off";
+  get pullOn() {
+    return this.pullMode !== "off";
+  }
+  set pullOn(on: boolean) {
+    this.pullMode = on ? (this.pullMode === "off" ? "loud" : this.pullMode) : "off";
+  }
   /** For the measurements: the tick the pull fired, whether it was staged on a near bank, and how many wisps it moved and sent over a well. */
   pulledAt = -1;
   pullStaged = false;
@@ -113,7 +119,7 @@ export class SieveRoom {
     this.said = new Set();
     this.lines = [];
     this.restarts = 0;
-    this.pull = { phase: this.pullOn ? "wait" : "done", left: 0, spared: new Set(), moved: [] };
+    this.pull = { phase: this.pullOn ? "wait" : "done", left: 0, spared: new Set(), moved: [], torn: null, focus: null };
     this.pulledAt = -1;
     this.pullStaged = false;
     this.pullMoved = this.pullOnWell = 0;
@@ -254,7 +260,9 @@ export class SieveRoom {
     }
     // The pull has happened: everything holds, in silence, while she says it.
     if (this.pull.phase === "hold") {
-      if (--this.pull.left <= 0) (this.pull.phase = "done"), (this.pull.moved = []);
+      // The jump has been seen once; from here it stands where it landed.
+      for (const w of g.wisps) w.prev = w.pos;
+      if (--this.pull.left <= 0) (this.pull.phase = "done"), (this.pull.moved = []), (this.pull.torn = null), (this.pull.focus = null);
       return;
     }
     if (this.stand && this.stand !== "idle") this.steer();
@@ -313,16 +321,18 @@ export class SieveRoom {
       const near = this.nearBank();
       if (near === null && this.arrived < Math.ceil(SIEVE.supply / 2)) return;
       this.pullStaged = near !== null;
+      p.focus = near !== null ? { ...g.wisps[near]!.pos } : null;
       p.phase = "wind";
       p.left = P.windTicks;
       p.spared = new Set();
       return;
     }
     if (p.phase !== "wind") return;
-    // Whatever his staff is on in the wind-up stays where it is.
-    for (const w of g.wisps) if (w.touched || g.players.some((q) => q.id === YOU && q.beam === w.id)) p.spared.add(w.id);
+    // The first take: whatever his staff is on in the wind-up stays where it is. The second spares nothing.
+    if (this.pullMode === "quiet") for (const w of g.wisps) if (w.touched || g.players.some((q) => q.id === YOU && q.beam === w.id)) p.spared.add(w.id);
     if (--p.left > 0) return;
-    this.snap();
+    if (this.pullMode === "quiet") this.snap();
+    else this.snapLoud();
     p.phase = "hold";
     p.left = P.holdTicks;
     this.pulledAt = g.tick;
@@ -330,6 +340,56 @@ export class SieveRoom {
     this.queue = [];
     this.busyUntil = 0;
     this.say(KEEPER, "They don't do that. They've never done that.", { player: KEEPER_ID }, "key");
+  }
+
+  /**
+   * The second take: every wisp on the board, his own under the staff too (torn off it, the beam
+   * broken), goes up to `reach` tiles toward its nearest well and stops at the lip. None falls in.
+   */
+  private snapLoud() {
+    const g = this.game, b = g.board, p = this.pull, rook = this.player(YOU);
+    const taken = new Set(g.wisps.filter((w) => !g.away.has(w.id)).map((w) => `${w.pos.x},${w.pos.y}`));
+    p.moved = [];
+    p.torn = null;
+    for (const w of g.wisps) {
+      if (g.away.has(w.id) || w.id === this.doomed) continue;
+      const well = this.nearestWell(w.pos), k = SV_WELLS[well]!;
+      const wx = Math.round(b.center.x + k.x), wy = Math.round(b.center.y + k.y);
+      const from = { ...w.pos };
+      let at = w.pos;
+      for (let n = 0; n < SIEVE.pull.reach; n++) {
+        const to = pt(at.x + Math.sign(wx - at.x), at.y + Math.sign(wy - at.y));
+        // At the lip it stops: the next tile is the well.
+        if ((to.x === at.x && to.y === at.y) || !b.inside(to) || b.tile(to) !== Tile.Floor || !b.passable(to, Mover.Wisp) || taken.has(`${to.x},${to.y}`)) break;
+        at = to;
+      }
+      if (rook.beam === w.id || (rook.action.kind === "staff" && rook.action.wisp === w.id)) p.torn = w.id;
+      if (at.x === from.x && at.y === from.y && p.torn !== w.id) continue;
+      taken.delete(`${from.x},${from.y}`);
+      taken.add(`${at.x},${at.y}`);
+      w.prev = from;
+      w.pos = at;
+      w.target = null;
+      w.skate = null;
+      w.holder = null;
+      w.grip = Grip.Free;
+      w.touched = false;
+      w.rimTicks = 0;
+      p.moved.push({ id: w.id, x: from.x, y: from.y, well });
+    }
+    // His staff comes away empty. (The beam stays drawn, broken, while everything holds.)
+    if (p.torn !== null) rook.action = { kind: "idle" };
+    this.pullMoved = p.moved.length;
+  }
+
+  private nearestWell(at: Pt) {
+    const c = this.game.board.center;
+    let best = 0;
+    SV_WELLS.forEach((k, i) => {
+      const q = SV_WELLS[best]!;
+      if (Math.hypot(c.x + k.x - at.x, c.y + k.y - at.y) - k.r < Math.hypot(c.x + q.x - at.x, c.y + q.y - at.y) - q.r) best = i;
+    });
+    return best;
   }
 
   /** One of his wisps, loose, a move from the bank: its id, or null. */
@@ -362,7 +422,7 @@ export class SieveRoom {
       w.target = null;
       w.skate = null;
       w.rimTicks = 0;
-      p.moved.push(w.id);
+      p.moved.push({ id: w.id, x: w.prev.x, y: w.prev.y, well: SV_WELLS.indexOf(k) });
       if (b.tile(to) === Tile.Well) this.pullOnWell++;
     }
     this.pullMoved = p.moved.length;
@@ -450,7 +510,7 @@ export class SieveRoom {
   }
 
   storyView(): StoryView {
-    return { run: SIEVE.run, movement: 0, title: "", ring: null, mark: null, kes: 0, rival: null, note: "", end: this.end, sieve: { keeper: KEEPER_ID, drain: Math.max(0, Math.min(1, (this.arrived - SIEVE.onBoard) / (SIEVE.supply - SIEVE.onBoard))), ...(this.look ? { look: { x: this.look.x, y: this.look.y } } : {}), ...(this.warned.size ? { warn: [...new Set([...this.warned.values()].map((q) => q.well))] } : {}), ...(this.pull.phase === "wind" || this.pull.phase === "hold" ? { pull: { phase: this.pull.phase, left: this.pull.left, moved: this.pull.moved } } : {}) } };
+    return { run: SIEVE.run, movement: 0, title: "", ring: null, mark: null, kes: 0, rival: null, note: "", end: this.end, sieve: { keeper: KEEPER_ID, drain: Math.max(0, Math.min(1, (this.arrived - SIEVE.onBoard) / (SIEVE.supply - SIEVE.onBoard))), ...(this.look ? { look: { x: this.look.x, y: this.look.y } } : {}), ...(this.warned.size ? { warn: [...new Set([...this.warned.values()].map((q) => q.well))] } : {}), ...(this.pull.phase === "wind" || this.pull.phase === "hold" ? { pull: { phase: this.pull.phase, left: this.pull.left, moved: this.pull.moved, ...(this.pull.torn !== null ? { torn: this.pull.torn } : {}), ...(this.pull.focus ? { focus: this.pull.focus } : {}), loud: this.pullMode === "loud" } } : {}) } };
   }
 
   view(): RoomView {
@@ -491,6 +551,7 @@ const STAND = {
   juggle: { pushy: 0, sloppiness: 0.08, taps: true },
 } as const;
 
+type Pull = { phase: "wait" | "wind" | "hold" | "done"; left: number; spared: Set<number>; moved: { id: number; x: number; y: number; well: number }[]; torn: number | null; focus: Pt | null };
 type Pending = { line: StoryLine; trigger: number; key: boolean };
 
 function moveWisp(w: Wisp, at: Pt) {

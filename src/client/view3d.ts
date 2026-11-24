@@ -48,7 +48,7 @@ export interface DrawState {
   light?: string;
   /** Runs 6 and 7, the dying brazier (see StoryView.dying). */
   /** Run 8, the Sieve (see StoryView.sieve). */
-  sieve?: { warn?: number[]; drain?: number; look?: { x: number; y: number }; pull?: { phase: "wind" | "hold"; left: number; moved: number[] } };
+  sieve?: { warn?: number[]; drain?: number; look?: { x: number; y: number }; pull?: NonNullable<NonNullable<import("../engine/protocol.js").StoryView["sieve"]>["pull"]> };
   dying?: NonNullable<import("../engine/protocol.js").StoryView["dying"]>;
   /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
   walk?: number;
@@ -400,6 +400,8 @@ void main() {
 
 /** The Sieve's light: the sun's and the sky's colour at the start, and each one's strength at the start and at the end; and the cold colours they drain to. */
 const SIEVE_LIGHT = { sun: ["#ffd9a0", 2.6, 1.5] as const, sky: ["#fff3e0", 0.95, 1.3] as const };
+/** Run 8's pull, second take: the cold colour of its rings and threads. */
+const PULL_COLD = "#9cc8f0";
 const SIEVE_COLD = { sun: new THREE.Color("#e6ecf2"), sky: new THREE.Color("#e9edf0") };
 
 /** The falling law's look (run 8): how high a wisp at full height floats, where the low sun throws its shadow, and how long a fall takes to watch. */
@@ -2653,35 +2655,103 @@ export class World {
     // The pull's wind-up: every well's ring closes inward, all at once, and holds small and bright.
     const pull = sv.pull;
     if (pull && !this.pullFx) this.pullFx = { at: time, phase: pull.phase };
-    if (pull && this.pullFx && this.pullFx.phase !== pull.phase) this.pullFx = { at: time, phase: pull.phase };
+    if (pull && this.pullFx && this.pullFx.phase !== pull.phase) {
+      this.pullFx = { at: time, phase: pull.phase };
+      if (pull.phase === "hold" && pull.loud) this.startSnap(st, pull, time);
+    }
     if (!pull) this.pullFx = null;
+    this.stepSnap(st, time);
     if (this.pullFx) {
       const wind = this.pullFx.phase === "wind", k = Math.min(1, (time - this.pullFx.at) / 1.8);
       this.wellRings.forEach((r) => {
         const m = r.material as THREE.MeshBasicMaterial;
+        // The second take: a cold colour, not the warm one of wisps and fire.
+        m.color.set(pull!.loud ? PULL_COLD : "#ffb53a");
         r.visible = true;
         m.opacity = wind ? 0.35 + 0.5 * k : 0.9 * (1 - Math.min(1, (time - this.pullFx!.at) / 1.6));
         r.scale.setScalar(wind ? 1.9 - 1.3 * k * k : 0.6);
       });
-      return this.lightSieve(sv);
+      return this.lightSieve(sv, time);
     }
     this.wellRings.forEach((r, i) => {
+      (r.material as THREE.MeshBasicMaterial).color.set("#ffb53a");
       const on = !!sv.warn?.includes(i);
       const m = r.material as THREE.MeshBasicMaterial;
       m.opacity += ((on ? 0.3 + 0.2 * Math.sin(time * 11 + i) : 0) - m.opacity) * 0.15;
       r.visible = m.opacity > 0.01;
       r.scale.setScalar(0.9 + 0.1 * Math.sin(time * 5 + i * 2));
     });
-    this.lightSieve(sv);
+    this.lightSieve(sv, time);
   }
   private pullFx: { at: number; phase: string } | null = null;
-  private lightSieve(sv: NonNullable<DrawState["sieve"]>) {
+  /** The second take's snap: when it came, a pale streak from each wisp's old spot, and a taut thread from each wisp down its well while everything holds. */
+  private snapFx: { at: number; streaks: { m: THREE.Mesh; from: THREE.Vector3; id: number }[]; threads: { line: THREE.Mesh; id: number; well: THREE.Vector3 }[]; endAt: number } | null = null;
+  private startSnap(st: DrawState, pull: NonNullable<NonNullable<DrawState["sieve"]>["pull"]>, time: number) {
+    this.clearSnap();
+    const b = st.shrine.board;
+    const wells = this.wellRings.map((r) => r.getWorldPosition(new THREE.Vector3()));
+    const streaks = pull.moved.map((m) => {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.34, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: "#f4f8ff", transparent: true, opacity: 0.85, depthWrite: false }));
+      mesh.renderOrder = 4;
+      this.scene.add(mesh);
+      return { m: mesh, from: new THREE.Vector3(this.worldX(b, m.x), 0.9, this.worldZ(b, m.y)), id: m.id };
+    });
+    const threads = st.snap.wisps
+      .filter((w) => !w.away)
+      .map((w) => {
+        const pos = new THREE.Vector3(this.worldX(b, w.x), 0, this.worldZ(b, w.y));
+        const i = wells.reduce((best, q, j) => (q.distanceTo(pos) < wells[best]!.distanceTo(pos) ? j : best), 0);
+        const line = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 6, 1, true), new THREE.MeshBasicMaterial({ color: "#d8ecff", transparent: true, opacity: 0, depthWrite: false, depthTest: false }));
+        line.renderOrder = 6;
+        this.scene.add(line);
+        return { line, id: w.id, well: wells[i]!.clone().setY(-2.2) };
+      });
+    this.snapFx = { at: time, streaks, threads, endAt: -1 };
+  }
+  private clearSnap() {
+    if (!this.snapFx) return;
+    for (const s of this.snapFx.streaks) this.scene.remove(s.m);
+    for (const t of this.snapFx.threads) this.scene.remove(t.line);
+    this.snapFx = null;
+  }
+  private stepSnap(st: DrawState, time: number) {
+    const fx = this.snapFx;
+    if (!fx) return;
+    const k = time - fx.at;
+    if (st.sieve?.pull?.phase !== "hold" && fx.endAt < 0) fx.endAt = time;
+    const fade = fx.endAt < 0 ? 1 : 1 - (time - fx.endAt) / 0.8;
+    if (fade <= 0 && k > 1.5) return this.clearSnap();
+    const place = (m: THREE.Mesh, a: THREE.Vector3, z: THREE.Vector3) => {
+      m.position.copy(a).lerp(z, 0.5);
+      m.scale.set(1, Math.max(0.001, a.distanceTo(z)), 1);
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), z.clone().sub(a).normalize());
+    };
+    // The streak: from where it was to where it is, thin at the old spot, fading over a second and a half.
+    for (const s of fx.streaks) {
+      const rig = this.wisps.get(s.id);
+      if (!rig) continue;
+      place(s.m, s.from, rig.root.position.clone().setY(Math.max(0.6, rig.root.position.y)));
+      (s.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.85 * (1 - k / 1.5));
+      s.m.visible = k < 1.5;
+    }
+    // The threads: taut, from every wisp down into its well, once it has landed.
+    for (const t of fx.threads) {
+      const rig = this.wisps.get(t.id);
+      if (!rig) continue;
+      place(t.line, rig.root.position, t.well);
+      (t.line.material as THREE.MeshBasicMaterial).opacity = Math.max(0, Math.min(1, (k - 0.45) / 0.3)) * 0.95 * Math.max(0, fade);
+    }
+  }
+  private lightSieve(sv: NonNullable<DrawState["sieve"]>, time = 0) {
     // Warm morning to a flat grey-white: the sun cools and weakens, the sky's own light makes up the brightness.
     const k = sv.drain ?? 0;
     this.sun.color.set(SIEVE_LIGHT.sun[0]).lerp(SIEVE_COLD.sun, k);
     this.hemi.color.set(SIEVE_LIGHT.sky[0]).lerp(SIEVE_COLD.sky, k);
-    this.sun.intensity = SIEVE_LIGHT.sun[1] + (SIEVE_LIGHT.sun[2] - SIEVE_LIGHT.sun[1]) * k;
-    this.hemi.intensity = SIEVE_LIGHT.sky[1] + (SIEVE_LIGHT.sky[2] - SIEVE_LIGHT.sky[1]) * k;
+    // At the snap the chalk dims for a moment.
+    const dip = this.snapFx ? Math.max(0, 1 - (time - this.snapFx.at) / 1.1) : 0;
+    const dim = 1 - 0.55 * Math.sin(Math.min(1, dip * 3) * Math.PI * 0.5) * dip;
+    this.sun.intensity = (SIEVE_LIGHT.sun[1] + (SIEVE_LIGHT.sun[2] - SIEVE_LIGHT.sun[1]) * k) * dim;
+    this.hemi.intensity = (SIEVE_LIGHT.sky[1] + (SIEVE_LIGHT.sky[2] - SIEVE_LIGHT.sky[1]) * k) * dim;
   }
 
   /** Run 8: wisps that have just fallen away, watched going: down into the chalk, or down a well getting smaller. */
@@ -3543,11 +3613,13 @@ export class World {
       let target = p.beam !== null ? wispPos.get(p.beam) : undefined;
       // Stopped at the bank: the beam breaks at the waterline, grey and flickering, short of the wisp.
       const broke = p.beam !== null ? this.stopFx.get(p.beam) : undefined;
-      const broken = !!broke && broke.player === p.id && !!target;
-      if (broken && target) {
-        const edge = new THREE.Vector3(this.worldX(b, broke!.x), target.y, this.worldZ(b, broke!.y));
+      // Torn off his staff by the pull: the same broken beam, short of the wisp, while everything holds.
+      const tornOff = st.sieve?.pull?.phase === "hold" && st.sieve.pull.torn === p.beam && p.id === st.me;
+      const broken = ((!!broke && broke.player === p.id) || tornOff) && !!target;
+      if (broken && target && broke) {
+        const edge = new THREE.Vector3(this.worldX(b, broke.x), target.y, this.worldZ(b, broke.y));
         target = edge.lerp(target, 0.5);
-      }
+      } else if (broken && target) target = rig.root.position.clone().add(side).lerp(target, 0.45);
       if (target) {
         const from = rig.root.position.clone().add(side);
         const mid = from.clone().add(target).multiplyScalar(0.5);

@@ -50,8 +50,11 @@ export const SIEVE = {
    * for when one of his wisps is within `nearBank` tiles of the bank and loose (touched within
    * `hisWithin` ticks, not under his staff); by the time half the supply has come, it fires anyway.
    * Once a game. `on` false plays the run as it was (v108).
+   * The second take (the default, "loud"): nothing is spared, the wisp under his staff is torn off
+   * it, and each goes up to `reach` tiles toward its well and stops at the lip, so none falls in.
+   * The first take ("quiet", v111) spares what he touched and moves one tile.
    */
-  pull: { on: true as boolean, windTicks: 3, holdTicks: 3, nearBank: 2, hisWithin: 12 },
+  pull: { on: true as boolean, windTicks: 3, holdTicks: 3, nearBank: 2, hisWithin: 12, reach: 3 },
   rook: [0, 4] as const,
   keeper: [5, 12] as const,
 } as const;

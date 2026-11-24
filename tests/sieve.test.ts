@@ -205,10 +205,11 @@ describe("Run 8: a harder job, on the Sieve", () => {
     expect(room.state.game.scores[0]).toBe(0);
   });
 
-  it("the first pull: after she says they don't wander, the rings close in, loose wisps jump a tile toward their nearest well, and everything holds while she says they never did", () => {
+  it("the first pull, first take: after she says they don't wander, the rings close in, loose wisps jump a tile toward their nearest well, and everything holds while she says they never did", () => {
     let s = 21;
     const msgs: ServerMsg[] = [];
     const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "hold");
+    room.pullMode = "quiet";
     room.connect((m) => msgs.push(m)).message(JSON.stringify({ t: "hello", name: "Rook" }));
     const said = () => msgs.flatMap((m) => (m.t === "say" ? m.lines.map((l) => l.text) : []));
     while (room.state.pull.phase !== "wind" && room.state.phase === "playing" || room.state.phase === "countdown") room.onTick();
@@ -225,7 +226,7 @@ describe("Run 8: a harder job, on the Sieve", () => {
     // Each one that moved went one tile, toward its nearest well.
     const moved = view().pull!.moved;
     expect(moved.length).toBeGreaterThan(0);
-    for (const id of moved) {
+    for (const { id } of moved) {
       const w = g.wisps[id]!;
       expect(Math.max(Math.abs(w.pos.x - w.prev.x), Math.abs(w.pos.y - w.prev.y))).toBe(1);
       const near = [...SV_WELLS].sort((a, b) => Math.hypot(c.x + a.x - w.prev.x, c.y + a.y - w.prev.y) - Math.hypot(c.x + b.x - w.prev.x, c.y + b.y - w.prev.y))[0]!;
@@ -246,9 +247,10 @@ describe("Run 8: a harder job, on the Sieve", () => {
     }
   });
 
-  it("the pull spares a wisp under his staff in the wind-up", () => {
+  it("the first take spares a wisp under his staff in the wind-up", () => {
     let s = 21;
     const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "hold");
+    room.pullMode = "quiet";
     const conn = room.connect(() => {});
     conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
     while (room.state.pull.phase !== "wind" && room.state.phase === "playing" || room.state.phase === "countdown") room.onTick();
@@ -258,7 +260,7 @@ describe("Run 8: a harder job, on the Sieve", () => {
     // Every loose one touched: none should move.
     for (const w of loose) room.state.pull.spared.add(w.id);
     while (room.state.pull.phase === "wind") room.onTick();
-    for (const w of loose) if (room.state.pull.spared.has(w.id)) expect(room.state.pull.moved).not.toContain(w.id);
+    for (const w of loose) if (room.state.pull.spared.has(w.id)) expect(room.state.pull.moved.map((m) => m.id)).not.toContain(w.id);
     expect(pos.size).toBeGreaterThan(0);
   });
 
@@ -280,5 +282,52 @@ describe("Run 8: a harder job, on the Sieve", () => {
     const j = play("juggle", 8);
     expect(j.room.state.phase).toBe("results");
     expect(j.room.restarts).toBe(0);
+  });
+
+  it("the second take spares nothing: every wisp goes up to three tiles toward its nearest well and stops at the lip, and the one on his staff is torn off it", () => {
+    let s = 21;
+    const msgs: ServerMsg[] = [];
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "juggle");
+    expect(room.pullMode).toBe("loud");
+    room.connect((m) => msgs.push(m)).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    while ((room.state.pull.phase !== "wind" && room.state.phase === "playing") || room.state.phase === "countdown") room.onTick();
+    const g = room.state.game, c = g.board.center, rook = g.players[0]!;
+    // He has his staff on one as the wind-up ends.
+    while (room.state.pull.left > 1) room.onTick();
+    const mine = g.wisps.find((w) => !g.away.has(w.id) && w.id !== room.state.doomed)!;
+    rook.pos = rook.prev = g.nearestFree(pt(mine.pos.x + 2, mine.pos.y), 0);
+    rook.action = { kind: "staff", wisp: mine.id };
+    const live = g.wisps.filter((w) => !g.away.has(w.id)).length;
+    room.onTick();
+    expect(room.state.pull.phase).toBe("hold");
+    const moved = room.state.pull.moved;
+    const ids = new Set(moved.map((m) => m.id));
+    // Nearly all of them moved (one boxed in by another may not), none onto a well, none further than three.
+    expect(moved.length).toBeGreaterThanOrEqual(live - 1);
+    for (const m of moved) {
+      const w = g.wisps[m.id]!;
+      expect(g.board.tile(w.pos)).toBe(Tile.Floor);
+      expect(Math.max(Math.abs(w.pos.x - m.x), Math.abs(w.pos.y - m.y))).toBeLessThanOrEqual(SIEVE.pull.reach);
+      const k = SV_WELLS[m.well]!;
+      if (w.pos.x !== m.x || w.pos.y !== m.y) expect(Math.hypot(c.x + k.x - w.pos.x, c.y + k.y - w.pos.y)).toBeLessThan(Math.hypot(c.x + k.x - m.x, c.y + k.y - m.y));
+    }
+    // The juggler had its staff on one (whichever it chose): torn off, and his staff is empty.
+    const torn = room.state.pull.torn!;
+    expect(torn).not.toBe(null);
+    expect(ids.has(torn)).toBe(true);
+    expect(rook.action.kind).toBe("idle");
+    expect(g.wisps[torn]!.holder).toBe(null);
+    // None it moved falls in, while it holds or in the tick after: none was left over a well.
+    for (let i = 0; i < SIEVE.pull.holdTicks + 1; i++) {
+      room.onTick();
+      for (const f of g.falls) if (ids.has(f.wisp)) expect(f.well).toBe(false);
+    }
+  });
+
+  it("the second take leaves ten within reach", () => {
+    let pass = 0;
+    for (const seed of [3, 44, 501, 77, 12]) if (play("hold", seed).room.state.phase === "results") pass++;
+    expect(pass).toBeGreaterThanOrEqual(3);
+    expect(play("juggle", 8).room.state.phase).toBe("results");
   });
 });

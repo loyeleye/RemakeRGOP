@@ -775,16 +775,18 @@ let dyingPart = "";
 let dyingLurch = 0;
 let dyingStill = -1;
 
-/** Run 8 with the first pull (a test); ?nopull=1 in the address plays it as v108 had it. */
+/** Run 8 with the first pull (a test), its second take; ?pull=1 in the address plays the first take (v111), ?nopull=1 none (v108). */
 function sieveRoom() {
   const r = new SieveRoom();
-  if (new URLSearchParams(location.search).has("nopull")) r.pullOn = false;
+  const q = new URLSearchParams(location.search);
+  if (q.has("nopull")) r.pullMode = "off";
+  else if (q.get("pull") === "1") r.pullMode = "quiet";
   return r;
 }
 
 /** Run 8's pull: the sound of the wind-up, the snap and the silence; the eye opens out to the whole island while it holds, and comes back. */
 let pullSeen = "";
-let pullView: { scale: number; follow: boolean; k: number } | null = null;
+let pullView: { scale: number; follow: boolean; k: number; at: number } | null = null;
 function stepPull(pull: NonNullable<StoryView["sieve"]>["pull"], board: Board) {
   const ph = pull?.phase ?? "";
   if (ph !== pullSeen) {
@@ -799,14 +801,22 @@ function stepPull(pull: NonNullable<StoryView["sieve"]>["pull"], board: Board) {
   }
   const open = ph === "hold";
   if (!pullView && !open) return;
-  if (!pullView) (pullView = { scale: cam.scale, follow: cam.follow, k: 0 }), (cam.follow = false);
+  if (!pullView) (pullView = { scale: cam.scale, follow: cam.follow, k: 0, at: performance.now() }), (cam.follow = false);
   const V = pullView;
+  // The second take: close on the staged wisp for the snap, then open out to the whole island.
+  const close = open && pull?.loud && pull.focus && performance.now() - V.at < 750 ? pull.focus : null;
+  if (close) {
+    cam.scale += (V.scale * 1.6 - cam.scale) * 0.25;
+    cam.cx += (close.x + 0.5 - cam.cx) * 0.25;
+    cam.cy += (close.y + 0.5 - cam.cy) * 0.25;
+    return;
+  }
   V.k += ((open ? 1 : 0) - V.k) * 0.12;
   const whole = cam.fitScale(board) * 0.92;
-  cam.scale = V.scale + (whole - V.scale) * V.k;
+  cam.scale += ((open ? whole : V.scale) - cam.scale) * 0.12;
   cam.cx += (board.width / 2 - cam.cx) * 0.12 * V.k;
   cam.cy += (board.height / 2 + 0.5 - cam.cy) * 0.12 * V.k;
-  if (!open && V.k < 0.02) (cam.scale = V.scale), (cam.follow = V.follow), (pullView = null);
+  if (!open && V.k < 0.02 && Math.abs(cam.scale - V.scale) < 0.3) (cam.scale = V.scale), (cam.follow = V.follow), (pullView = null);
 }
 
 /** Runs 6 and 7 with Ladi's switches: add ?calls=1 (Lumi calls), ?noback=1 (her line gives nothing back) or ?nocloud=1 (the cloud never reaches Rook) to the address to try the other way. */
