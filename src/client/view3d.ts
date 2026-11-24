@@ -852,6 +852,8 @@ interface WispRig {
   heldLit?: number;
   /** Run 8: its shadow on the chalk, soft and hard. */
   shade?: [THREE.Mesh, THREE.Mesh];
+  /** Run 8: the wisp's glow on pale chalk, a soft warm stain round it (an added glow would vanish on white). */
+  aura?: THREE.Sprite;
 }
 
 /** Seconds the earth line takes to reach a wisp before the stone starts closing over it. */
@@ -2701,7 +2703,7 @@ export class World {
       .map((w) => {
         const pos = new THREE.Vector3(this.worldX(b, w.x), 0, this.worldZ(b, w.y));
         const i = wells.reduce((best, q, j) => (q.distanceTo(pos) < wells[best]!.distanceTo(pos) ? j : best), 0);
-        const line = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 6, 1, true), new THREE.MeshBasicMaterial({ color: "#d8ecff", transparent: true, opacity: 0, depthWrite: false, depthTest: false }));
+        const line = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 6, 1, true), new THREE.MeshBasicMaterial({ color: "#26405e", transparent: true, opacity: 0, depthWrite: false, depthTest: false }));
         line.renderOrder = 6;
         this.scene.add(line);
         return { line, id: w.id, well: wells[i]!.clone().setY(-2.2) };
@@ -3433,6 +3435,12 @@ export class World {
           rig.halo.material.blending = THREE.NormalBlending;
           rig.halo.material.color.set("#ffb53a");
           rig.halo.scale.setScalar(1.15 * FALL.big);
+          const aura = glowSprite("#ff9a28", 5.6 * FALL.big, 0);
+          aura.material.blending = THREE.NormalBlending;
+          aura.material.color.set("#ff7a10");
+          aura.renderOrder = 2;
+          rig.root.add(aura);
+          rig.aura = aura;
         }
         // High: small, faint, thrown well away by the low sun. Low: dark, sharp, right under it. Over a well: none.
         const sx = rig.root.position.x + FALL.sun[0] * h * 1.5, sz = rig.root.position.z + FALL.sun[1] * h * 1.5;
@@ -3443,9 +3451,9 @@ export class World {
         soft.position.set(sx, 0.045, sz);
         hard.position.set(sx, 0.05, sz);
         soft.scale.setScalar((2.3 - 0.9 * h) * FALL.big);
-        (soft.material as THREE.MeshBasicMaterial).opacity = 0.85 - 0.5 * h;
+        (soft.material as THREE.MeshBasicMaterial).opacity = 0.92 - 0.45 * h;
         hard.scale.setScalar((0.95 - 0.4 * h) * FALL.big);
-        (hard.material as THREE.MeshBasicMaterial).opacity = 0.14 + 0.5 * Math.pow(1 - h, 1.4);
+        (hard.material as THREE.MeshBasicMaterial).opacity = 0.2 + 0.6 * Math.pow(1 - h, 1.4);
       } else if (rig.shade) rig.shade[0].visible = rig.shade[1].visible = false;
       // Stopped at the bank: it lurches at the water and bumps back onto land.
       const fx = this.stopFx.get(w.id);
@@ -3484,10 +3492,23 @@ export class World {
       const gone = w.dim ?? 0;
       const dim = (1 - stone * (2 / 3)) * (1 - 0.82 * gone) * (gone > 0.7 ? 0.85 + 0.15 * Math.sin(time * 23 + w.id) : 1);
       // Lower is a little smaller and dimmer; and on the chalk its own light is kept down so its shadow shows.
-      const low = h === undefined ? 1 : 0.5 + 0.5 * h;
-      rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1) * (h === undefined ? 1 : (0.8 + 0.3 * h) * FALL.big));
-      rig.halo.material.opacity = 0.85 * s * dim * dim * low;
-      rig.light.intensity = (h === undefined ? 6 : 1.2) * s * dim * low;
+      // Run 8 (Ladi: the glow back, flickering): full strength at height, and a flicker that is gentle up
+      // high and gets faster and more ragged as it sinks, so a tired one looks tired.
+      let flick = 1;
+      if (h !== undefined) {
+        const tired = 1 - h, sp = 5 + 17 * tired, ph = w.id * 2.3;
+        const n = Math.sin(time * sp + ph) * 0.5 + Math.sin(time * sp * 2.71 + ph * 1.7) * 0.3 + Math.sin(time * sp * 0.43 + ph * 0.6) * 0.2;
+        flick = 1 + (0.07 + 0.33 * tired * tired) * n - (tired > 0.75 && Math.sin(time * 31 + ph) > 0.6 ? 0.35 : 0);
+      }
+      const low = h === undefined ? 1 : flick;
+      rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1) * (h === undefined ? 1 : (0.8 + 0.3 * h) * FALL.big * (0.92 + 0.08 * flick)));
+      rig.halo.material.opacity = Math.min(1, 0.85 * s * dim * dim * low);
+      rig.light.intensity = 6 * s * dim * low;
+      if (rig.aura) {
+        rig.aura.visible = h !== undefined && !w.away;
+        rig.aura.material.opacity = Math.min(1, Math.max(0, 1.05 * s * dim * flick * (0.8 + 0.2 * h!)));
+        rig.aura.scale.setScalar(5.6 * FALL.big * (0.94 + 0.06 * flick));
+      }
       rig.trail.visible = stone < 0.5;
       if (w.rim > 0) rimPulse = Math.max(rimPulse, 1);
       const hide = !!st.dying?.blind;
