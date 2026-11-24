@@ -726,6 +726,8 @@ interface PlayerRig {
   guild: Guild;
   /** The story character this player is, if they have a model of their own. */
   cast: string | null;
+  /** Hesta's snack bubble: the honey drop, bitten away in time with her snack clip. */
+  snack?: THREE.Sprite;
   /** A stone cast in progress: when it began, its glow on her, and its ring running out over the ground. */
   stoneCast?: { at: number; glow: THREE.Sprite; ring: THREE.Mesh };
 }
@@ -750,6 +752,8 @@ interface WispRig {
 
 /** Seconds the earth line takes to reach a wisp before the stone starts closing over it. */
 const EARTH_LINE = 0.35;
+/** The snack bubble against the snack clip's own time (cast thread's timing.json): in at 0.3 s, a bite at each of `bites` (then crumbs, then a sparkle), out over `out`; `size` in tiles. */
+const SNACK = { frames: 7, in: 0.3, bites: [1.45, 1.85, 2.25, 2.65, 2.95, 3.1], outFrom: 3.3, outTo: 3.45, size: 3.4 };
 /** Hesta's stone cast: the fist snaps shut 0.3 s into the 1.2 s clip; the glow holds from there to its end; the ring runs out at `speed` tiles a second to `reach`. */
 const STONE_CAST = { snap: 0.3, hold: 0.9, speed: 22, reach: 70 };
 /** Seconds after the hold by which the earth line has faded out. */
@@ -1077,6 +1081,10 @@ class CastAnim {
   }
   has(move: string) {
     return this.actions.has(move);
+  }
+  /** How far into this clip she is, in seconds; null when it isn't the one playing. */
+  at(move: string) {
+    return this.cur === move && !this.casting ? (this.actions.get(move)?.time ?? null) : null;
   }
   /** Ask for a move; a push already playing finishes first. */
   set(move: CastMove) {
@@ -2160,6 +2168,43 @@ export class World {
   /** Lit windows for this walk's light (dusk and night). */
   private windowsOn = false;
   /**
+   * Hesta's snack bubble (Ladi; art and timing from the cast thread): a small bubble by her head
+   * with a honey drop in it, which loses a bite each time her hand reaches her mouth, leaves crumbs
+   * and a sparkle, and goes. `t` is the snack clip's own time, null when she isn't snacking, and
+   * then the bubble drops at once.
+   */
+  private stepSnack(rig: PlayerRig, t: number | null) {
+    if (t === null || t < SNACK.in || t >= SNACK.outTo) {
+      if (rig.snack) rig.snack.visible = false;
+      return;
+    }
+    if (!rig.snack) {
+      const map = new THREE.TextureLoader().load("sprites/snack-bubble.png");
+      map.colorSpace = THREE.SRGBColorSpace;
+      map.repeat.set(1 / SNACK.frames, 1);
+      rig.snack = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false, depthTest: false, fog: false, toneMapped: false }));
+      // Hung by its tail tip, up and to the right of her head, past the end of her name tag.
+      rig.snack.center.set(28 / 256, 1 - 226 / 256);
+      rig.snack.position.set(1.7, 2.0, 0);
+      rig.snack.renderOrder = 20;
+      rig.root.add(rig.snack);
+    }
+    const b = rig.snack, mat = b.material;
+    let frame = 0, since = t - SNACK.in;
+    SNACK.bites.forEach((at, i) => {
+      if (t >= at) (frame = i + 1), (since = t - at);
+    });
+    mat.map!.offset.x = frame / SNACK.frames;
+    // Pops in with a little overshoot, bumps on each bite, shrinks and fades at the end.
+    const pop = Math.min(1, (t - SNACK.in) / 0.18);
+    let k = pop < 1 ? 1.12 * Math.sin((pop * Math.PI) / 1.7) / Math.sin(Math.PI / 1.7) : 1;
+    if (frame >= 1 && frame <= 4 && since < 0.1) k *= 1.06;
+    const out = Math.min(1, Math.max(0, (t - SNACK.outFrom) / (SNACK.outTo - SNACK.outFrom)));
+    b.visible = true;
+    b.scale.setScalar(SNACK.size * k * (1 - 0.5 * out));
+    mat.opacity = 1 - out;
+  }
+  /**
    * Hesta's stone cast (Ladi): she raises a hand and snaps it shut. At the snap a green-brown glow
    * pulses on her and holds to the end of the move, and a thin ring runs out from her over the
    * ground until it's out of view. One cast for all the wisps she stones together.
@@ -2676,6 +2721,7 @@ export class World {
         anim.set(p.beam !== null ? (p.mode === "push" ? "push" : "pull") : moving ? (p.run ? "run" : "walk") : snack ? "snack" : "idle");
         anim.update(time);
         rig.root.position.set(wx, 0, wz);
+        this.stepSnack(rig, anim.at("snack"));
       } else rig.root.position.set(wx, moving ? Math.abs(Math.sin(time * 9)) * 0.06 : Math.sin(time * 1.6 + p.id) * 0.03, wz);
       if (rig.body) rig.body.rotation.y = rig.facing;
       this.stepStoneCast(rig, time);
