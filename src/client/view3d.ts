@@ -16,7 +16,7 @@ import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js
 import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeCurtain, makeIsland, makeWaterfall } from "./islands.js";
-import { DYING } from "../engine/dying.js";
+import { DYING, crowdRadius, crowdSpot } from "../engine/dying.js";
 import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
 export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff", "#6fe07a"];
@@ -49,7 +49,7 @@ export interface DrawState {
   /** Runs 6 and 7, the dying brazier (see StoryView.dying). */
   /** Run 8, the Sieve (see StoryView.sieve). */
   sieve?: { warn?: number[]; drain?: number; look?: { x: number; y: number } };
-  dying?: { part: string; strike: { x: number; y: number; r: number }; faltered?: boolean; hesta?: number };
+  dying?: NonNullable<import("../engine/protocol.js").StoryView["dying"]>;
   /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
   walk?: number;
 }
@@ -93,7 +93,7 @@ export class Camera {
     return !!this.board && this.scale > this.fitScale(this.board) * 1.05;
   }
 
-  private fitScale(board: Board) {
+  fitScale(board: Board) {
     return Math.min(this.w / (board.width + 6), this.h / ((board.height + 4) * 0.95));
   }
 
@@ -369,7 +369,6 @@ const UV_VS = /* glsl */ `
 varying vec2 vUv;
 void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 
-/** Night on the game board: dark everywhere the brazier's light doesn't reach, soft at the edge. */
 /** The Sieve's wells: pale cloud drifting far below, and the shaft's far wall in shade. */
 const WELL_FS = /* glsl */ `
 varying vec2 vUv;
@@ -406,18 +405,48 @@ const SIEVE_COLD = { sun: new THREE.Color("#e6ecf2"), sky: new THREE.Color("#e9e
 /** The falling law's look (run 8): how high a wisp at full height floats, where the low sun throws its shadow, and how long a fall takes to watch. */
 const FALL = { /** Wisps and their shadows are drawn this much bigger under the law, so height reads with the whole island in view. */ big: 1.5, low: 0.32, high: 1.95, sun: [1.15, 0.55] as const, groundSec: 0.9, wellSec: 2.6, wellDrop: 9 };
 
-/** How big the village's glows at the rim are drawn, against their sizes in DYING.rim. */
-const RIM_GLOW = 2.4;
-
-const DARK_FS = /* glsl */ `
+/**
+ * The night the island goes down, on the board: warm firelight in the middle (the brazier's own
+ * light), dark ground past `uLit`, and pale cold cloud past `uCloud`, its edge uneven and slowly
+ * turning over. The same shader draws the veil a little above the ground, which only has the cloud.
+ */
+const NIGHT_CLOUD_FS = /* glsl */ `
 varying vec2 vUv;
 uniform float uLit;
 uniform float uDark;
+uniform float uCloud;
+uniform float uCloudA;
+uniform float uVeil;
+uniform float uTime;
+uniform vec3 uTint;
+float chash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float cnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(chash(i), chash(i + vec2(1, 0)), u.x), mix(chash(i + vec2(0, 1)), chash(i + vec2(1, 1)), u.x), u.y);
+}
 void main() {
-  float r = length(vUv - 0.5) * 160.0;
-  float a = smoothstep(uLit - 1.2, uLit + 1.6, r) * uDark;
-  gl_FragColor = vec4(0.008, 0.012, 0.035, a);
+  vec2 p = (vUv - 0.5) * 160.0;
+  float r = length(p);
+  float n = cnoise(p * 0.33 + vec2(uTime * 0.05, uTime * 0.02)) * 0.7 + cnoise(p * 0.9 - vec2(uTime * 0.07, 0.0)) * 0.3;
+  float edge = uCloud + (n - 0.5) * 1.6;
+  float cloud = smoothstep(edge - 0.35, edge + 0.9, r);
+  float body = cnoise(p * 0.5 + vec2(uTime * 0.03, -uTime * 0.02));
+  vec3 pale = mix(vec3(0.50, 0.57, 0.70), vec3(0.80, 0.85, 0.93), body) * uTint;
+  // The edge itself is the brightest line of it, so it reads as something coming.
+  pale += vec3(0.10, 0.10, 0.10) * (1.0 - smoothstep(0.0, 1.6, abs(r - edge - 0.4))) * uTint;
+  float dark = smoothstep(uLit - 1.2, uLit + 1.6, r) * uDark * (1.0 - uVeil);
+  float a = mix(dark, mix(uCloudA, uCloudA * 0.62, uVeil), cloud);
+  gl_FragColor = vec4(mix(vec3(0.012, 0.016, 0.045), pale, cloud), a);
 }`;
+
+/** The crowd's lamps, against their sizes in DYING.crowd; and the ground's lurch: seconds, how far the eye dips (down) or rises (up), and how hard it shakes. */
+const CROWD_LAMP = 1.5;
+const LURCH = { sec: 0.6, dip: 1.1, rise: 0.7, shake: 0.22 };
+/** Run 7's wall of cloud at the rim: how far out it stands and how tall it starts. */
+const CLOUD_WALL = { at: 13.6, high: 3.4 };
+/** The cloud is drawn this far outside where it takes a wisp, since its edge is uneven; and how dull it is while the fire is still up (it is the brightest thing on the board by the end). */
+const CLOUD_DRAW = { out: 1, dull: 0.62 };
 
 const WATER_FS = /* glsl */ `
 varying vec2 vUv;
@@ -2604,12 +2633,6 @@ export class World {
     }
   }
 
-  /**
-   * Runs 6 and 7, the dying brazier: night on the board with the ground lit only as far as the
-   * flame reaches, the fire itself showing its level (no bar), the village as glows at the rim that
-   * step back as the light shrinks, and the comet: a streak, a flash that lights everything, dust.
-   */
-  private dyingFx: { all: THREE.Object3D[]; dark: THREE.Mesh; u: { uLit: { value: number }; uDark: { value: number } }; glows: THREE.Sprite[]; head: THREE.Sprite; trail: THREE.Sprite[]; dust: THREE.Sprite[]; burst: THREE.PointLight; ember: THREE.Sprite; part: string; partAt: number; struckAt: number; lit: number; flame: number } | null = null;
   /** Run 8: the shimmer over each well, and the morning's colour draining to grey-white as the supply comes. */
   private wellRings: THREE.Mesh[] = [];
   private sieveOn = false;
@@ -2694,6 +2717,69 @@ export class World {
     }
     for (const [mat, base] of this.glowBase) mat.emissiveIntensity = base * share;
   }
+  /**
+   * Runs 6 and 7, the night the island goes down. Three tones: firelight, dark ground, and pale
+   * cloud coming in from the rim in steps, each with a lurch of the ground. The village is small
+   * figures with lamps, who back in toward the fire ahead of the cloud. At the bottom the cloud is
+   * over everything and it is all lit orange from above. After the stills the cloud is thrown back
+   * to a wall at the rim, which drops with every bank as the island lifts, and the crowd are the
+   * meter: more of them raise their lamps and jump with each lift.
+   */
+  private dyingFx: {
+    all: THREE.Object3D[]; ground: THREE.Mesh; veil: THREE.Mesh; wall: THREE.Mesh;
+    u: Record<"uLit" | "uDark" | "uCloud" | "uCloudA" | "uVeil" | "uTime", { value: number }> & { uTint: { value: THREE.Color } };
+    crowd: { root: THREE.Group; lamp: THREE.Sprite; x: number; z: number; anim?: CastAnim; kid?: CastAnim; real: boolean }[];
+    dust: THREE.Sprite[]; burst: THREE.PointLight; ember: THREE.Sprite;
+    part: string; partAt: number; struckAt: number; lit: number; flame: number; cloud: number; wallH: number; lurch: number; lurchAt: number; lurchUp: boolean; up: number; orangeAt: number;
+  } | null = null;
+  /** Where one of the crowd is standing now (tile coordinates), for a bubble over them. */
+  crowdAt(who: string): { x: number; y: number } | null {
+    const fx = this.dyingFx, b = this.dyingBoard;
+    const i = DYING.crowd.findIndex((m) => m.who.toLowerCase() === who || m.carries === who);
+    if (!fx || !b || i < 0 || Number.isNaN(fx.crowd[i]!.x)) return null;
+    return { x: fx.crowd[i]!.x - this.worldX(b, 0), y: fx.crowd[i]!.z - this.worldZ(b, 0) };
+  }
+  private dyingBoard: Board | null = null;
+  private crowdBody(i: number): { body: THREE.Object3D; real: boolean } {
+    const m = DYING.crowd[i]!;
+    const cast = m.cast && models[m.cast] ? castBody(m.cast) : null;
+    if (cast) return { body: cast, real: true };
+    // No model of their own yet: the plain lamplighter figure, a little different in height from the next.
+    const plain = models[i % 2 ? "dawn" : "dusk"];
+    if (plain) {
+      const body = plain.clone();
+      body.scale.multiplyScalar(1.8 * (0.88 + (i % 3) * 0.06));
+      return { body, real: !m.cast };
+    }
+    const body = new THREE.Group();
+    const robe = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.2, 10), new THREE.MeshStandardMaterial({ color: "#4a4660", roughness: 0.8 }));
+    robe.position.y = 0.6;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshStandardMaterial({ color: "#8a6a52" }));
+    head.position.y = 1.25;
+    body.add(robe, head);
+    return { body, real: false };
+  }
+  private dressCrowd() {
+    const fx = this.dyingFx!;
+    fx.crowd.forEach((f, i) => {
+      if (f.real) return;
+      const { body, real } = this.crowdBody(i);
+      if (!real && f.root.children.length > 1) return;
+      for (const c of [...f.root.children]) if (c !== f.lamp) f.root.remove(c);
+      f.root.add(body);
+      f.real = real;
+      f.anim = body.userData.anim as CastAnim | undefined;
+      const carried = DYING.crowd[i]!.carries;
+      const kid = carried && models[carried] ? castBody(carried) : null;
+      if (kid) {
+        // On his shoulders.
+        kid.position.y = 1.45;
+        kid.scale.multiplyScalar(0.9);
+        f.root.add(kid);
+        f.kid = kid.userData.anim as CastAnim | undefined;
+      }
+    });
+  }
   private stepDying(st: DrawState, time: number) {
     const d = st.dying, flame = st.snap.flame;
     if (!d || flame === undefined) {
@@ -2703,6 +2789,7 @@ export class World {
         this.hemi.intensity = this.dayLight.hemi;
         this.sun.intensity = this.dayLight.sun;
         this.renderer.toneMappingExposure = this.dayLight.exposure;
+        this.skyU.uStars.value = this.theme.sky.stars;
         this.dimGlows(1);
         if (this.fireParts) {
           const f = this.fireParts;
@@ -2714,54 +2801,103 @@ export class World {
       }
       return;
     }
-    const b = st.shrine.board;
+    const b = (this.dyingBoard = st.shrine.board);
     const cx = this.worldX(b, b.center.x), cz = this.worldZ(b, b.center.y);
+    const after = d.part !== "six" && d.part !== "bottom" && d.part !== "stills";
     if (!this.dyingFx) {
-      const u = { uLit: { value: 9 }, uDark: { value: 0.8 } };
+      const u = { uLit: { value: 9 }, uDark: { value: 0.5 }, uCloud: { value: DYING.cloud.start as number }, uCloudA: { value: 0.94 }, uVeil: { value: 0 }, uTime: { value: 0 }, uTint: { value: new THREE.Color(1, 1, 1) } };
       const plane = new THREE.PlaneGeometry(160, 160);
       plane.rotateX(-Math.PI / 2);
-      const dark = new THREE.Mesh(plane, new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: DARK_FS, uniforms: u, transparent: true, depthWrite: false }));
-      dark.renderOrder = 3;
-      const glows = DYING.rim.map((r) => glowSprite(r.c, r.s * RIM_GLOW, 0.7));
-      for (const s of glows) s.material.fog = false;
-      const head = glowSprite("#fff0d0", 5, 0);
-      const trail = Array.from({ length: 12 }, () => glowSprite("#ff8a3a", 3, 0));
+      const ground = new THREE.Mesh(plane, new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: NIGHT_CLOUD_FS, uniforms: u, transparent: true, depthWrite: false }));
+      ground.renderOrder = 3;
+      // The veil: the same cloud, knee deep, so whatever stands in it is half gone.
+      const veil = new THREE.Mesh(plane, new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: NIGHT_CLOUD_FS, uniforms: { ...u, uVeil: { value: 1 } }, transparent: true, depthWrite: false }));
+      veil.renderOrder = 5;
+      // Run 7: the cloud's face at the rim, standing as a wall.
+      const wall = new THREE.Mesh(new THREE.CylinderGeometry(CLOUD_WALL.at, CLOUD_WALL.at + 0.8, 1, 72, 1, true), new THREE.MeshBasicMaterial({ color: "#aab4cc", transparent: true, opacity: 0.86, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+      wall.renderOrder = 5;
+      const crowd = DYING.crowd.map((m) => {
+        const root = new THREE.Group();
+        const lamp = glowSprite(m.c, m.s * CROWD_LAMP, 0.9);
+        lamp.material.fog = false;
+        lamp.position.set(0.38, 1.0, 0.1);
+        // Drawn over the cloud's veil: a lamp is what is seen of someone standing in it.
+        lamp.renderOrder = 6;
+        root.add(lamp);
+        return { root, lamp, x: NaN, z: NaN, real: false };
+      });
       const dust = Array.from({ length: 16 }, () => glowSprite("#8a7a70", 3, 0));
-      for (const s of dust) (s.material.blending = THREE.NormalBlending), s.material.color.set("#6a5c54");
-      for (const s of [head, ...trail]) s.material.fog = false;
-      const burst = new THREE.PointLight("#ffd9a0", 0, 90, 1.2);
+      for (const s of dust) (s.material.blending = THREE.NormalBlending), s.material.color.set("#6a5c54"), (s.renderOrder = 6);
+      const burst = new THREE.PointLight("#ff9a4a", 0, 120, 1.1);
       // The crater's own warmth, so the glass shows where the fire's light doesn't reach yet.
       const ember = glowSprite("#ff6a1a", 1, 0);
-      const all = [dark, ...glows, head, ...trail, ...dust, burst, ember];
-      // Drawn after the dark, which would otherwise paint over them (sprites write no depth).
-      for (const o of all) if (o !== dark) o.renderOrder = 4;
+      ember.renderOrder = 4;
+      const all = [ground, veil, wall, ...crowd.map((f) => f.root), ...dust, burst, ember];
       this.scene.add(...all);
-      this.dyingFx = { all, dark, u, glows, head, trail, dust, burst, ember, part: d.part, partAt: time, struckAt: -99, lit: st.snap.lit ?? 9, flame };
+      this.dyingFx = { all, ground, veil, wall, u, crowd, dust, burst, ember, part: d.part, partAt: time, struckAt: after ? time - 9 : -99, lit: st.snap.lit ?? 9, flame, cloud: d.cloud ?? CLOUD_WALL.at, wallH: after ? CLOUD_WALL.high : 0, lurch: d.lurch ?? 0, lurchAt: -9, lurchUp: false, up: 0, orangeAt: -1 };
     }
     const fx = this.dyingFx;
+    this.dressCrowd();
     if (fx.part !== d.part) {
       if (d.part === "seven") fx.struckAt = time;
       fx.part = d.part;
       fx.partAt = time;
     }
-    // Ease toward the tick's values, so the light breathes rather than steps.
+    if ((d.lurch ?? 0) !== fx.lurch) {
+      fx.lurchUp = after;
+      fx.lurch = d.lurch ?? 0;
+      fx.lurchAt = time;
+    }
+    // The ground lurches: the eye dips (or, in run 7, rises) and shakes for half a second.
+    const lk = (time - fx.lurchAt) / LURCH.sec;
+    if (lk >= 0 && lk < 1) {
+      const cam = this.cam.three, env = Math.sin(Math.PI * lk) * (1 - lk * 0.5);
+      cam.position.y += (fx.lurchUp ? LURCH.rise : -LURCH.dip) * env;
+      cam.position.x += Math.sin(time * 71) * LURCH.shake * (1 - lk);
+      cam.position.z += Math.sin(time * 53 + 1) * LURCH.shake * 0.6 * (1 - lk);
+      cam.rotation.z += Math.sin(time * 37) * 0.012 * (1 - lk) * (fx.lurchUp ? 0.5 : 1);
+      cam.updateMatrixWorld();
+    }
+    // The flame eases, so the fire breathes. The cloud does not: it comes in a step at a time, quickly.
     fx.lit += ((st.snap.lit ?? 0) - fx.lit) * 0.08;
     fx.flame += (flame - fx.flame) * 0.08;
     const k = fx.flame / 100;
     const since = time - fx.struckAt;
-    // The flash lights the whole board and the ring of villagers for a moment, then the dark comes back.
-    const flash = since >= 0 && since < 2.6 ? 1 - since / 2.6 : 0;
-    const roar = d.part === "roar" ? Math.min(1, (time - fx.partAt) / 2) : 0;
-    fx.dark.position.set(cx, 0.07, cz);
-    fx.u.uLit.value = fx.lit + roar * 30;
-    const low = d.part === "embers" || d.part === "landing";
-    fx.u.uDark.value = (low ? 0.94 : 0.84) * (1 - flash * flash) * (1 - roar);
-    // Everything off the ground (trees, lamps, the far islands) goes down with the fire too.
-    const up = Math.min(1, Math.max(flash * flash, roar, k * 0.45));
-    this.hemi.intensity = this.dayLight.hemi * (0.2 + 0.8 * up);
-    this.sun.intensity = this.dayLight.sun * (0.1 + 0.9 * up);
-    this.renderer.toneMappingExposure = this.dayLight.exposure * (0.7 + 0.3 * up);
-    this.dimGlows(0.22 + 0.78 * up);
+    const closed = d.part === "bottom" || d.part === "stills";
+    const lift = Math.min(1, (d.lift ?? 0) / DYING.seven.cloudGone);
+    const share = Math.min(1, (d.lift ?? 0) / Math.max(1, d.lifts ?? 9));
+    // After the stills the cloud is thrown outward off the ground in one ring, to a wall at the rim.
+    // At the bottom it closes over Rook too: only the embers and the lamps show through.
+    const cloudTo = after ? CLOUD_WALL.at : d.blind ? 1.5 : (d.cloud ?? DYING.cloud.start) + (closed ? 0 : CLOUD_DRAW.out);
+    fx.cloud += (cloudTo - fx.cloud) * (after ? 0.12 : 0.2);
+    // The wall drops a step with each lift, and is gone, with the cloud round the island, after the sixth.
+    fx.wallH += ((after ? CLOUD_WALL.high * (1 - lift) : 0) - fx.wallH) * 0.1;
+    if (!d.orange) fx.orangeAt = -1;
+    else if (fx.orangeAt < 0) fx.orangeAt = time;
+    const orange = d.orange ? Math.min(1, (time - fx.orangeAt) / 0.5) : 0;
+    fx.ground.position.set(cx, 0.07, cz);
+    fx.veil.position.set(cx, after ? Math.max(0.05, fx.wallH) : closed ? 1.25 : 0.85, cz);
+    fx.veil.visible = !after || fx.wallH > 0.08;
+    fx.u.uTime.value = time;
+    fx.u.uCloud.value = fx.cloud;
+    fx.u.uCloudA.value = after ? 0.94 * Math.min(1, fx.wallH / 0.6) : 0.94;
+    const pale = after ? 1 : CLOUD_DRAW.dull + (1 - CLOUD_DRAW.dull) * Math.min(1, Math.max(0, 1 - (fx.flame - 10) / (DYING.six.flame - 10)));
+    fx.u.uTint.value.setRGB(pale, pale, pale).lerp(new THREE.Color(1.25, 0.72, 0.36), orange);
+    // The firelight is the warm tone; the ground past it is dark, but lifted enough to read. The cloud hides things, not the dark.
+    fx.u.uLit.value = Math.min(fx.lit, fx.cloud - 2) + (after ? share * 20 : 0);
+    fx.u.uDark.value = 0.62 * (1 - share) * (1 - orange * 0.5);
+    fx.wall.visible = after && fx.wallH > 0.08;
+    fx.wall.position.set(cx, fx.wallH / 2, cz);
+    fx.wall.scale.set(1, Math.max(0.01, fx.wallH), 1);
+    (fx.wall.material as THREE.MeshBasicMaterial).opacity = 0.86 * Math.min(1, fx.wallH / 0.6);
+    // Everything off the ground: night, lifted so the board can be read, and its own light coming back as the island lifts.
+    const up = Math.max(0.42 + 0.2 * k, share, orange * 0.7);
+    this.hemi.intensity = this.dayLight.hemi * up;
+    this.sun.intensity = this.dayLight.sun * (0.3 + 0.7 * share);
+    this.renderer.toneMappingExposure = this.dayLight.exposure * (0.85 + 0.15 * share);
+    this.dimGlows(0.4 + 0.6 * share);
+    // Under the cloud there are no stars. They come out when the wall is gone.
+    this.skyU.uStars.value = this.theme.sky.stars * (after ? Math.max(0.15, 1 - fx.wallH / CLOUD_WALL.high) : 0.15);
     // The fire shows the flame: its height and its brightness. No bar, no number.
     if (this.fireParts) {
       const f = this.fireParts;
@@ -2772,49 +2908,54 @@ export class World {
       f.glow.material.opacity = 0.12 + 0.4 * k;
     }
     const flick = Math.sin(time * 9) * 0.1 + Math.sin(time * 23) * 0.07;
-    this.brazierLight.intensity = (2 + 40 * k) * (1 + flick) + (d.part === "roar" ? 30 * roar : 0);
-    this.brazierLight.distance = Math.max(5, fx.lit * 2.2 + 3);
-    // The village: glows only, just outside the ground, stepping back as the light shrinks.
-    const far = Math.max(b.width, b.height) / 2 - 0.5 + DYING.rimOut + (1 - Math.min(1, k + roar)) * DYING.rimBack;
-    DYING.rim.forEach((r, i) => {
-      const s = fx.glows[i]!, a = r.a * Math.PI * 2;
-      s.position.set(cx + Math.cos(a) * far, 1.1 + Math.sin(time * 1.3 + i * 2.1) * 0.06, cz + Math.sin(a) * far);
-      s.material.opacity = Math.min(1, (r.who === "Lumi" ? 0.95 : 0.5 + 0.12 * Math.sin(time * 0.9 + i * 1.7)) + flash * 0.5 + roar * 0.4);
-      s.scale.setScalar(r.s * RIM_GLOW * (1 + flash * 0.6 + roar * 0.4));
-    });
-    // The comet: a bright streak down from the north, where her terrace is.
+    this.brazierLight.intensity = (4 + 60 * k) * (1 + flick);
+    this.brazierLight.distance = Math.max(6, fx.lit * 2.4 + 3);
+    // Lit from above, every figure and the fog: something is coming down.
     const sx = this.worldX(b, d.strike.x), sz = this.worldZ(b, d.strike.y);
-    const fall = d.part === "landing" ? Math.min(1, (time - fx.partAt) / (DYING.landing.streak * 0.6)) : -1;
-    const at = (t: number) => new THREE.Vector3(sx + 4 * (1 - t), 0.6 + 7 * (1 - t), sz - 12 * (1 - t));
-    fx.head.visible = fall >= 0;
-    if (fall >= 0) {
-      fx.head.position.copy(at(fall));
-      fx.head.material.opacity = 1;
-      fx.head.scale.setScalar(4 + 3 * fall);
-    }
-    fx.trail.forEach((s, i) => {
-      const t = fall - (i + 1) * 0.035;
-      s.visible = fall >= 0 && t > 0;
-      if (!s.visible) return;
-      s.position.copy(at(t));
-      s.material.opacity = 0.8 * (1 - i / fx.trail.length);
-      s.scale.setScalar(3.2 * (1 - (i / fx.trail.length) * 0.6));
+    fx.burst.position.set(sx + 2, 16 - 6 * orange, sz - 6);
+    fx.burst.intensity = orange > 0 ? 500 * orange : since >= 0 && since < 1.6 ? 300 * (1 - since / 1.6) : 0;
+    // The village. In run 6 they stand just inside the cloud's edge and back in as it comes; after, they stand off and are the meter; at the end they close round her, and Lumi goes to her father.
+    const rook = st.snap.players.find((p) => p.id === st.me);
+    const n = DYING.crowd.length;
+    fx.up += (share - fx.up) * 0.05;
+    fx.crowd.forEach((f, i) => {
+      const m = DYING.crowd[i]!;
+      let to: { x: number; y: number };
+      if (d.part === "after") {
+        const a = Math.PI * (1 + (i + 0.5) / n), r = d.strike.r + 1.3 + (i % 2) * 0.9;
+        to = m.who === "Lumi" && rook ? { x: rook.x + 1.4, y: rook.y + 0.6 } : { x: d.strike.x + 0.5 + Math.cos(a) * r, y: d.strike.y + 0.5 + Math.sin(a) * r };
+      } else to = crowdSpot(b, i, after ? DYING.crowdSeven + (i % 3) * 0.7 : crowdRadius(d.cloud ?? DYING.cloud.start));
+      const tx = this.worldX(b, 0) + to.x, tz = this.worldZ(b, 0) + to.y;
+      if (Number.isNaN(f.x)) (f.x = tx), (f.z = tz);
+      const dx = tx - f.x, dz = tz - f.z, far = Math.hypot(dx, dz);
+      // They walk, they do not slide: a steady pace, quicker when the cloud jumps.
+      const pace = Math.min(far, d.part === "after" ? 0.05 : 0.02 + far * 0.03);
+      if (far > 0.001) (f.x += (dx / far) * pace), (f.z += (dz / far) * pace);
+      // Raised lamps and jumping spread through the crowd with each lift, a few at a time.
+      const order = (i * 5) % n, cheer = Math.max(0, Math.min(1, fx.up * n - order));
+      const hop = cheer * Math.abs(Math.sin(time * (5.5 + (i % 3)) + i * 1.3)) * 0.32;
+      f.root.position.set(f.x, hop, f.z);
+      f.lamp.position.y = 1.0 + cheer * (1.15 + 0.12 * Math.sin(time * 7 + i));
+      f.lamp.material.opacity = Math.min(1, (m.who === "Lumi" ? 1 : 0.75 + 0.1 * Math.sin(time * 0.9 + i * 1.7)) + cheer * 0.2);
+      f.lamp.scale.setScalar(m.s * CROWD_LAMP * (1 + cheer * 0.35));
+      // In run 6 they face the cloud, backs to the fire. After, they face her; walking in at the end, the way they are going.
+      const face = after ? (far > 0.3 && d.part === "after" ? Math.atan2(dx, dz) : Math.atan2(sx - f.x, sz - f.z)) : Math.atan2(f.x - cx, f.z - cz);
+      f.root.rotation.y = lerpAngle(f.root.rotation.y, face, 0.08);
+      if (f.anim) (f.anim.set(far > 0.15 ? "walk" : "idle"), f.anim.update(time));
+      if (f.kid) (f.kid.set("idle"), f.kid.update(time));
     });
-    fx.burst.position.set(fall >= 0 ? fx.head.position.x : sx, fall >= 0 ? fx.head.position.y : 5, fall >= 0 ? fx.head.position.z : sz);
-    fx.burst.intensity = fall >= 0 ? 60 + 240 * fall : flash > 0 ? 900 * flash * flash : 0;
-    const after = d.part === "seven" || d.part === "roar";
     fx.ember.visible = after;
     fx.ember.position.set(sx, 0.5, sz);
     fx.ember.scale.setScalar(d.strike.r * 3.2);
-    fx.ember.material.opacity = after ? (0.2 + 0.05 * Math.sin(time * 1.7)) * (1 - roar * 0.6) : 0;
-    // Dust, rolling out from the strike and thinning.
+    fx.ember.material.opacity = after ? (0.24 + 0.05 * Math.sin(time * 1.7)) * (1 - share * 0.6) : 0;
+    // The crater smokes: dust rolling out from the strike and thinning.
     fx.dust.forEach((s, i) => {
-      const t = since / 3.4;
+      const t = since / 4.2;
       s.visible = t >= 0 && t < 1;
       if (!s.visible) return;
       const a = (i / fx.dust.length) * Math.PI * 2 + i * 0.7, r = (1.5 + (i % 4) * 0.9) + t * (3 + (i % 3) * 1.6);
       s.position.set(sx + Math.cos(a) * r, 0.8 + t * (1 + (i % 5) * 0.5), sz + Math.sin(a) * r);
-      s.material.opacity = 0.55 * (1 - t) * Math.min(1, t * 8);
+      s.material.opacity = 0.55 * (1 - t) * Math.min(1, t * 8 + 0.4);
       s.scale.setScalar(2.4 + t * 4.5);
     });
   }
@@ -3260,6 +3401,8 @@ export class World {
       rig.light.intensity = (h === undefined ? 6 : 1.2) * s * dim * low;
       rig.trail.visible = stone < 0.5;
       if (w.rim > 0) rimPulse = Math.max(rimPulse, 1);
+      const hide = !!st.dying?.blind;
+      if (hide !== !!rig.root.userData.blind) (rig.root.visible = !hide), (rig.root.userData.blind = hide);
       wispPos.set(w.id, rig.root.position.clone());
     }
     // Her lantern, where the sparks start: about hand height by her side.

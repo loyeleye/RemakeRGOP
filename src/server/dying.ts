@@ -1,14 +1,17 @@
-// Story runs 6 and 7, the dying brazier and Hesta's landing, played in the page as one piece with
-// no break. Run 6: Rook alone at night, feeding a flame that drains faster than anyone can bank;
-// wisps outside its light dim and go out; it cannot be won. Then embers and silence, Hesta lands
-// like a comet beside the brazier, and run 7 follows on the same ground: her earth line holds the
-// far wisps lit, the glass of her crater carries a wisp home, and Rook fetches. The rules are the
-// light law in game.ts, the numbers DYING (src/engine/dying.ts), the brief project files
-// gameplay/runs6-7-prototype-brief.md, the lines story/runs6-7-lines.md (placeholders).
+// Story runs 6 and 7, the night the island goes down, played in the page as one piece with no
+// break. Run 6: Rook alone at night, feeding a flame that drains faster than anyone can bank. As it
+// falls the island settles into the cloud sea: pale cloud comes in from the rim in steps, each with
+// a lurch, and a wisp it covers fades and is lost. A bank pushes it back a tile. It cannot be won.
+// Then the bottom, scripted: the cloud closes round the brazier and over Rook, the sounds go one by
+// one, and everything is lit orange from above. Three held pictures of Hesta landing; then run 7 on
+// the same ground with her crater in it: the cloud thrown back to the rim, the wisps it took last
+// held on her earth line, every bank lifting the island. The rules are the light law in game.ts,
+// the numbers DYING (src/engine/dying.ts), the brief project files gameplay/runs6-7-rework-brief.md.
 
 import { Mover, Tile, pt, type Pt } from "../engine/board.js";
 import { botCommand } from "../engine/bot.js";
 import { DYING } from "../engine/dying.js";
+import { compass, neglected } from "../engine/kindling.js";
 import { Game, Grip, Rng, TICK_MS, lightRadius, type Action, type Guild, type Wisp } from "../engine/game.js";
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
@@ -16,12 +19,12 @@ import { lineTicks } from "./granny.js";
 import { realClock, type Clock } from "./room.js";
 
 const YOU = 1, HESTA_ID = 2;
-const ROOK = "Rook", HESTA = "Hesta";
+const ROOK = "Rook", HESTA = "Hesta", LUMI = "Lumi";
 
 /** How a stand-in for the player plays, in tests and measurements. */
 export type Stand = "juggle" | "hold" | "idle";
-/** Where the piece is: run 6, its embers, the comet in the air, run 7, the fire roaring. */
-export type Part = "six" | "embers" | "landing" | "seven" | "roar";
+/** Where the piece is: run 6, its bottom, the three stills, run 7, the hold after the last bank, the last picture, the village gathering. */
+export type Part = NonNullable<StoryView["dying"]>["part"];
 
 export class DyingRoom {
   private send: ((m: ServerMsg) => void) | null = null;
@@ -44,6 +47,22 @@ export class DyingRoom {
   private side = 0;
   private lastHold = -99;
   private faltered = false;
+  /** The cloud: how many steps in it has come, how far banks are holding it back and since when, and how many times the ground has lurched. */
+  private cloudStep = 0;
+  private push = 0;
+  private pushAt = 0;
+  private lurch = 0;
+  /** Run 6: when Rook's staff was last on each wisp (Lumi's calls), when she last called, and where and when each wisp was lost. */
+  private lastTouch = new Map<number, number>();
+  private lastCall = -99;
+  private lostAt: { tick: number; pos: Pt }[] = [];
+  /** What Ladi ruled, each on a switch (DYING.switches); tests and the page can turn them. */
+  switches: { cloudOverRook: boolean; lineGivesBack: boolean; lumiCalls: boolean; crowdSound: boolean } = { ...DYING.switches };
+  /** How many wisps her line gave back at the landing: for the measurements. */
+  gaveBack = 0;
+  get lost6() {
+    return this.lostAt.length;
+  }
   /** How many ticks run 6 lasted, the flame at each of its ticks, and run 7's length and wisps lost after the falter: for the measurements. */
   lasted = 0;
   curve: number[] = [];
@@ -90,7 +109,9 @@ export class DyingRoom {
         if (this.phase === "results") this.begin();
         return;
       case "act": {
-        if (this.phase !== "playing") return;
+        if (this.phase !== "playing" || this.part === "stills" || this.part === "risen") return;
+        // Under the cloud he can walk, and has nothing to put his staff on.
+        if (this.blind() && (msg.action as { kind?: string } | undefined)?.kind === "staff") return;
         this.game.command(YOU, { action: cleanAction(msg.action, this.game), toggleRun: !!msg.toggleRun, toggleMode: !!msg.toggleMode });
         return;
       }
@@ -105,8 +126,12 @@ export class DyingRoom {
     this.busyUntil = 0;
     this.lines = [];
     this.curve = [];
-    this.lasted = this.sevenTicks = this.lostLate = this.lostSeven = 0;
+    this.lasted = this.sevenTicks = this.lostLate = this.lostSeven = this.gaveBack = 0;
     this.faltered = false;
+    this.cloudStep = this.push = this.pushAt = this.lurch = 0;
+    this.lastTouch = new Map();
+    this.lastCall = -99;
+    this.lostAt = [];
     this.endClock();
     this.startSix();
     this.stop = this.clock.every(TICK_MS, () => this.onTick());
@@ -123,10 +148,14 @@ export class DyingRoom {
     g.dimTicks = S.dimTicks;
     g.outPause = S.outPause;
     g.respawnPause = 1;
+    g.cloudAt = this.cloud();
     this.side = this.rng.next() * Math.PI * 2;
     g.onReturn = (w) => {
       this.side += (this.rng.next() - 0.5) * 2 * S.arcDrift;
-      this.arrive(w, lightRadius(g.flame!) * S.arrive[0], lightRadius(g.flame!) + S.arrive[1], this.side, S.arc);
+      // From where the cloud stands of itself: a bank that pushes it back does not push the wisps out with it.
+      const edge = this.cloud() - this.push;
+      this.arrive(w, edge + S.arrive[0], edge + S.arrive[1], this.side, S.arc);
+      this.lastTouch.set(w.id, g.tick);
     };
     for (const w of g.wisps) g.onReturn(w);
     // Rook alone, by the fire, on the side away from Hesta's terrace.
@@ -142,58 +171,108 @@ export class DyingRoom {
     this.broadcastTick();
   }
 
+  /** Where the cloud's edge is in run 6: in by a step for each fall of the flame, back a little for his banks. */
+  private cloud() {
+    const C = DYING.cloud;
+    return C.start - C.stepIn * this.cloudStep + this.push;
+  }
+
+  /** The cloud is over Rook: the bottom, once it has closed. */
+  private blind() {
+    return this.switches.cloudOverRook && this.part === "bottom" && this.game.tick - this.since >= DYING.bottom.blindAt;
+  }
+
   private stepSix() {
-    const g = this.game, S = DYING.six;
+    const g = this.game, S = DYING.six, C = DYING.cloud;
     const t = g.tick + 1;
     // The drain grows every tick, until it outruns anything a player can bank. A weak run is held just above embers until the run has had its length.
     g.flameDrain = t <= S.calmTicks ? S.calmDrain : S.drain + S.drainGrow * t;
     g.flameFloor = t < S.minTicks ? S.embersAt + 0.5 : 0;
     if (this.stand) this.steer();
+    const rook = this.player(YOU);
+    if (rook.action.kind === "staff" && g.inReach(rook, g.wisps[rook.action.wisp]!)) this.lastTouch.set(rook.action.wisp, g.tick);
+    g.cloudAt = this.cloud();
+    const was = g.wisps.map((w) => w.pos);
     g.step();
     this.curve.push(g.flame!);
+    for (const o of g.outs) this.lostAt.push({ tick: g.tick, pos: was[o.wisp]! });
+    // Each fall of the flame past a mark: the ground lurches and the cloud comes in. It never goes back out.
+    while (this.cloudStep < C.stepsAt.length && g.flame! < C.stepsAt[this.cloudStep]!) (this.cloudStep++, this.lurch++);
+    // Each bank flares and pushes it back, for a while.
+    if (g.banks.length) {
+      this.push = Math.min(C.pushMax, this.push + C.push * g.banks.length);
+      this.pushAt = g.tick;
+    } else if (this.push > 0 && g.tick - this.pushAt >= C.pushHold) {
+      this.push = Math.max(0, this.push - C.push);
+      this.pushAt = g.tick;
+    }
     // Her voice, from the terrace: three calls and a broken one, then nothing however long he lasts.
     if (g.banks.length && !this.said.has("flare")) (this.said.add("flare"), this.say(HESTA, "That's it. Keep it breathing."));
     if (g.tick === S.leaveFarAt) this.say(HESTA, "Leave the far ones, Rook. Hold what's near.", {}, "key");
     if (g.tick === S.cutOffAt) this.say(HESTA, "North one. Then the...", {}, "key");
+    if (this.switches.lumiCalls) this.lumiCalls();
     if ((g.flame! <= S.embersAt && g.tick >= S.minTicks) || g.tick >= S.maxTicks) {
       this.lasted = g.tick;
-      this.part = "embers";
+      this.part = "bottom";
       this.since = g.tick;
       this.queue = [];
-      // However he did: the flame falls to embers, and nothing more goes out or flares.
+      // However he did: the last lurch, the flame falls to embers, the cloud closes, and nothing more is lost or flares.
+      this.lurch++;
       g.flameFloor = 0;
       g.flameFeed = 0;
       g.dimTicks = 0;
-      g.flameDrain = Math.max(0, g.flame! - DYING.embers.level) / DYING.embers.fall;
+      g.cloudAt = DYING.bottom.radius;
+      g.flameDrain = Math.max(0, g.flame! - DYING.bottom.level) / DYING.bottom.fall;
     }
   }
 
-  private stepEmbers() {
-    const g = this.game, E = DYING.embers;
-    if (g.tick - this.since >= E.fall) g.flameDrain = 0;
-    if (this.stand) this.steer();
+  /** The switch: Lumi calls in Hesta's place, with her own calls from the Kindling, for the wisp he has left longest. */
+  private lumiCalls() {
+    const g = this.game, L = DYING.lumi;
+    if (g.tick < DYING.six.cutOffAt + L.after || g.tick - this.lastCall < L.every || this.talking()) return;
+    const w = neglected(g, YOU, this.lastTouch, L.neglect, (id) => g.away.has(id));
+    if (!w) return;
+    const dir = compass(g.board, w.pos);
+    this.lastCall = g.tick;
+    this.lastTouch.set(w.id, g.tick);
+    this.say(LUMI, `Dad. ${dir[0]!.toUpperCase()}${dir.slice(1)} one.`, { wisp: w.id });
+  }
+
+  private stepBottom() {
+    const g = this.game, B = DYING.bottom;
+    const n = g.tick - this.since;
+    if (n >= B.fall) g.flameDrain = 0;
+    const rook = this.player(YOU);
+    if (this.blind()) {
+      if (rook.action.kind === "staff") g.command(YOU, { action: { kind: "idle" } });
+    } else if (this.stand) this.steer();
     g.step();
     this.curve.push(g.flame!);
-    // Nothing happens. Rook can still move. Then the comet.
-    if (g.tick - this.since >= E.fall + E.silence) {
-      this.part = "landing";
+    // Nobody speaks. He can still move. Then the pictures.
+    if (g.tick - this.since >= B.ticks) {
+      this.part = "stills";
       this.since = g.tick;
+      this.stillTick = 0;
     }
   }
 
   // ---------------------------------------------------------------- the landing
 
-  private stepLanding() {
-    const g = this.game;
-    if (this.stand) this.steer();
-    g.step();
-    if (g.tick - this.since >= DYING.landing.streak) this.strike();
+  private stillTick = 0;
+  /** Three held pictures: nothing on the board moves. Then the board, with her standing in the glass. */
+  private stepStills() {
+    if (++this.stillTick >= DYING.stills.ticks) this.strike();
   }
 
   /** The comet lands: the same ground with the crater in it, Rook and the wisps put clear of it, Hesta standing in the glass. */
   private strike() {
     const old = this.game, S = DYING.seven, L = DYING.landing;
     const shrine = shrineById(DYING.craterShrine);
+    // The wisps on the board are not lost in the landing. And the ones the cloud took last are still there, on her line: most, not all.
+    const kept = old.wisps.filter((w) => !old.away.has(w.id)).map((w) => w.pos);
+    const back = this.switches.lineGivesBack ? this.lostAt.filter((o) => o.tick > this.lasted - DYING.giveBack).map((o) => o.pos) : [];
+    this.gaveBack = back.length;
+    const count = Math.min(12, Math.max(S.wisps, kept.length + back.length));
     const g = (this.game = new Game(
       shrine,
       [
@@ -201,7 +280,7 @@ export class DyingRoom {
         { id: HESTA_ID, guild: 0 as Guild, name: HESTA },
       ],
       this.seed(),
-      [S.wisps, 0],
+      [count, 0],
       100000,
     ));
     g.waterLawHere = true;
@@ -229,13 +308,18 @@ export class DyingRoom {
     rook.mode = was.mode;
     const hesta = this.player(HESTA_ID);
     hesta.pos = hesta.prev = at;
-    // The wisps on the board are not lost in the landing; the rest arrive far out.
-    const kept = old.wisps.filter((w) => !old.away.has(w.id));
     g.onReturn = (w) => this.arriveSeven(w);
+    const here = [...kept, ...back];
+    const taken = new Set<string>();
     g.wisps.forEach((w, i) => {
-      const k = kept[i];
-      if (k) moveWisp(w, clear(k.pos, Mover.Wisp));
-      else this.arriveSeven(w);
+      const from = here[i];
+      if (!from) return this.arriveSeven(w);
+      let p = clear(from, Mover.Wisp);
+      if (taken.has(`${p.x},${p.y}`) || g.board.tile(p) !== Tile.Floor) p = g.nearestFree(p, 1) ?? p;
+      taken.add(`${p.x},${p.y}`);
+      moveWisp(w, p);
+      // Held on her earth line from the first moment, wherever the cloud had them.
+      if (this.switches.lineGivesBack) g.rooted.set(w.id, HESTA_ID);
     });
     this.part = "seven";
     this.since = 0;
@@ -257,7 +341,7 @@ export class DyingRoom {
   private arriveSeven(w: Wisp) {
     const g = this.game, S = DYING.seven;
     const others = g.wisps.filter((o) => o !== w && !g.away.has(o.id)).length;
-    if (others >= this.needed()) return void g.away.set(w.id, 1e9);
+    if (others >= Math.min(S.wisps, this.needed())) return void g.away.set(w.id, 1e9);
     const band = this.faltered ? S.nearBand : S.band;
     this.arrive(w, band[0], band[1]);
   }
@@ -286,12 +370,12 @@ export class DyingRoom {
       if (w) {
         g.rooted.set(w.id, HESTA_ID);
         this.lastHold = g.tick;
-        if (!this.said.has("hold")) {
-          this.said.add("hold");
-          this.say(HESTA, "I'll hold them. You fetch.", { player: HESTA_ID }, "key");
-          this.say(HESTA, "My hands, your legs.", { player: HESTA_ID }, "key");
-        }
       }
+    }
+    if (!this.faltered && !this.said.has("hold") && g.rooted.size && g.tick >= DYING.landing.line + 4) {
+      this.said.add("hold");
+      this.say(HESTA, "I'll hold them. You fetch.", { player: HESTA_ID }, "key");
+      this.say(HESTA, "My hands, your legs.", { player: HESTA_ID }, "key");
     }
     const before = g.scores[0]!;
     g.step();
@@ -301,6 +385,9 @@ export class DyingRoom {
       if (this.faltered) this.lostLate += g.outs.length;
     }
     if (g.tick === DYING.landing.line) this.say(HESTA, "Budge up, Rook.", { player: HESTA_ID }, "key");
+    // The first sound from the crowd: two children, one on top of the other.
+    if (g.tick === DYING.landing.line + 3) this.lines.push({ who: "Nell", text: "Granny!" });
+    if (g.tick === DYING.landing.line + 4) this.lines.push({ who: "Sefa", text: "Granny!" });
     if (this.lasted >= S.warmAfter && g.tick === DYING.landing.line + 8) this.say(HESTA, "Still warm, this. Somebody taught you well.", { player: HESTA_ID }, "key");
     if (!this.said.has("glass") && g.wisps.some((w) => !g.away.has(w.id) && g.board.tile(w.pos) === Tile.Rime)) {
       this.said.add("glass");
@@ -315,7 +402,7 @@ export class DyingRoom {
       this.say(HESTA, "That one's yours, Rook. At my age?", { player: HESTA_ID }, "key");
     }
     if (g.flame! >= 100 && g.scores[0]! > before) {
-      this.part = "roar";
+      this.part = "lifted";
       this.since = g.tick;
       g.dimTicks = 0;
       g.rooted.clear();
@@ -323,10 +410,22 @@ export class DyingRoom {
     }
   }
 
-  private stepRoar() {
-    const g = this.game;
-    g.step();
-    if (g.tick - this.since >= DYING.seven.roar && !this.talking()) this.finish();
+  /** After the last bank: a short hold on the board with the crowd moving, the picture, then the village round her and Lumi out to Rook. */
+  private stepEnd() {
+    const g = this.game, S = DYING.seven;
+    if (this.part === "lifted") {
+      g.step();
+      if (g.tick - this.since >= S.hold) (this.part = "risen"), (this.stillTick = 0);
+    } else if (this.part === "risen") {
+      if (++this.stillTick >= DYING.risen.ticks) (this.part = "after"), (this.since = g.tick), (this.queue = []);
+    } else {
+      g.step();
+      if (g.tick - this.since === S.gather) {
+        this.say(LUMI, "Nine seconds from the terrace. I counted.", {}, "key");
+        this.say(HESTA, "Slow. I used to be quick.", { player: HESTA_ID }, "key");
+      }
+      if (g.tick - this.since > S.gather + 2 && !this.talking()) this.finish();
+    }
   }
 
   // ---------------------------------------------------------------- shared
@@ -353,10 +452,10 @@ export class DyingRoom {
     }
     if (this.phase !== "playing") return;
     if (this.part === "six") this.stepSix();
-    else if (this.part === "embers") this.stepEmbers();
-    else if (this.part === "landing") this.stepLanding();
+    else if (this.part === "bottom") this.stepBottom();
+    else if (this.part === "stills") this.stepStills();
     else if (this.part === "seven") this.stepSeven();
-    else this.stepRoar();
+    else this.stepEnd();
     if (this.phase === "playing") this.due();
     this.flush();
     if (this.phase === "playing") this.broadcastTick();
@@ -375,8 +474,8 @@ export class DyingRoom {
   private finish() {
     this.queue = [];
     this.phase = "results";
-    // No score, and nothing that says how run 6 went.
-    this.end = { banked: 0, kes: 0, summary: "The fire holds.", lines: [] };
+    // No score, no summary, and nothing that says how run 6 went.
+    this.end = { banked: 0, kes: 0, summary: "\u00a0", lines: [] };
     this.endClock();
     this.broadcastRoom();
     this.broadcastTick();
@@ -420,7 +519,9 @@ export class DyingRoom {
 
   storyView(): StoryView {
     const L = DYING.landing, c = this.game.board.center;
-    const after = this.part === "seven" || this.part === "roar";
+    const after = this.after(), B = DYING.bottom, g = this.game;
+    const n = g.tick - this.since;
+    const low = this.part === "bottom";
     return {
       run: DYING.run,
       movement: after ? 1 : 0,
@@ -434,14 +535,26 @@ export class DyingRoom {
       dying: {
         part: this.part,
         strike: { x: c.x + L.at[0], y: c.y + L.at[1], r: L.radius },
+        lurch: this.lurch + (after ? g.scores[0]! : 0),
+        ...(after ? { lift: g.scores[0]!, lifts: Math.ceil((100 - DYING.seven.flame) / DYING.seven.feed) } : { cloud: low || this.part === "stills" ? B.radius : this.cloud() }),
+        fire: this.part === "six" || (low && n < B.fireOff) || after,
+        bell: this.part === "six" || (low && n < B.bellOff),
+        ...(this.blind() || this.part === "stills" ? { blind: true } : {}),
+        ...((low && n >= B.orange) || this.part === "stills" ? { orange: true } : {}),
+        ...(this.part === "stills" ? { still: Math.min(2, Math.floor((this.stillTick * 3) / DYING.stills.ticks)) } : {}),
         ...(this.faltered ? { faltered: true } : {}),
         ...(after ? { hesta: HESTA_ID } : {}),
       },
     };
   }
 
+  /** She has landed: the crater's board, with her on it. */
+  private after() {
+    return this.part !== "six" && this.part !== "bottom" && this.part !== "stills";
+  }
+
   view(): RoomView {
-    const after = this.part === "seven" || this.part === "roar";
+    const after = this.after();
     return {
       code: "STORY",
       phase: this.phase,
@@ -470,7 +583,7 @@ export class DyingRoom {
 
   /** For tests. */
   get state() {
-    return { phase: this.phase, part: this.part, game: this.game, end: this.end, said: this.said, faltered: this.faltered };
+    return { phase: this.phase, part: this.part, game: this.game, end: this.end, said: this.said, faltered: this.faltered, cloud: this.cloud(), lurch: this.lurch };
   }
 }
 

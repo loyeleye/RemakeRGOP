@@ -604,6 +604,45 @@ export function fireBed(flame: number | null) {
   }
 }
 
+/** The alarm: Lumi's bell, struck hard, once. She rings it steadily through run 6, and it is the last sound left. */
+export function alarmBell(gain = 0.34) {
+  const s = out();
+  if (!s) return;
+  strike(784, gain, -0.25, HANDBELL);
+  strike(1175, gain * 0.35, -0.25, HANDBELL);
+}
+
+/** The ground lurches: the island's timbers and rock groan, and something heavy shifts. Up (run 7) it is shorter and rises. */
+export function lurchGroan(up = false) {
+  const s = out();
+  if (!s) return;
+  const { c, o } = s;
+  thump(up ? 0.3 : 0.55);
+  const t = c.currentTime, len = up ? 0.6 : 1.1;
+  for (const [f, g] of [[58, 0.22], [87, 0.12], [131, 0.05]] as const) {
+    const osc = c.createOscillator(), gn = c.createGain();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(up ? f * 0.8 : f * 1.25, t);
+    osc.frequency.exponentialRampToValueAtTime(up ? f * 1.2 : f * 0.72, t + len);
+    // A creak: the tone wavers as the wood gives.
+    const wob = c.createOscillator(), wg = c.createGain();
+    wob.frequency.value = 9 + f / 20;
+    wg.gain.value = f * 0.06;
+    wob.connect(wg).connect(osc.frequency);
+    const lp = c.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 420;
+    env(c, gn, g * (up ? 0.6 : 1), 0.08, len, t);
+    osc.connect(lp).connect(gn).connect(o);
+    osc.start(t);
+    wob.start(t);
+    osc.stop(t + len + 0.2);
+    wob.stop(t + len + 0.2);
+  }
+  noise(up ? 0.08 : 0.2, "lowpass", 300, len);
+  if (!up) for (let i = 0; i < 3; i++) setTimeout(() => noise(0.07, "bandpass", 500 + Math.random() * 600, 0.07, Math.random() * 1.4 - 0.7), 250 + i * 170);
+}
+
 /** The comet: a rising rush for `sec` seconds, then nothing (the strike is its own sound). */
 export function cometFall(sec: number) {
   const s = out();

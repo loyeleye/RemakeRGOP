@@ -92,11 +92,29 @@ export interface StoryView {
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[] };
   /**
-   * Runs 6 and 7, the dying brazier: where the piece is (run 6, its embers, the comet in the air,
-   * run 7, the fire roaring), where the comet strikes and how wide its crater is, whether Hesta's
-   * hold has faltered, and who she is once she has landed.
+   * Runs 6 and 7, the night the island goes down. `part`: run 6, its scripted bottom, the three
+   * stills, run 7, the hold after the last bank, the picture of the island clear of the cloud, and
+   * the village gathering after. `cloud`: where the cloud's edge is in run 6, tiles from the
+   * brazier. `lurch`: how many times the ground has lurched (down in run 6, up in run 7).
+   * `fire`, `bell`: which sounds are still going. `blind`: the cloud is over Rook and he sees no
+   * wisp. `orange`: lit from above. `still`: which picture is held. `lift`: banks in run 7, each
+   * lifting the island, of `lifts` to fill the fire; `cloudGone`: the lifts that clear the wall.
    */
-  dying?: { part: "six" | "embers" | "landing" | "seven" | "roar"; strike: { x: number; y: number; r: number }; faltered?: boolean; hesta?: number };
+  dying?: {
+    part: "six" | "bottom" | "stills" | "seven" | "lifted" | "risen" | "after";
+    strike: { x: number; y: number; r: number };
+    cloud?: number;
+    lurch?: number;
+    fire?: boolean;
+    bell?: boolean;
+    blind?: boolean;
+    orange?: boolean;
+    still?: number;
+    lift?: number;
+    lifts?: number;
+    faltered?: boolean;
+    hesta?: number;
+  };
   /** Run 8, the Sieve: who the keeper is (a player who stands and watches), and which wells are about to have a wisp over them. Nothing is counted on screen. */
   sieve?: { keeper: number; /** How much of the supply has come (0 to 1): the morning's colour drains with it. */ drain?: number; /** The first fall: the tile to look down at, while nothing moves. */ look?: { x: number; y: number }; /** Wells (by their place in the shrine's list) where a wisp is about to appear: the air over them shimmers. */ warn?: number[] };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */

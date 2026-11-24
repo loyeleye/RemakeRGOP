@@ -108,6 +108,22 @@ describe("the light law", () => {
     expect(g.snapshot().rootLit).toBe(true);
   });
 
+  it("with a cloud set, the cloud's edge and not the light's is where a wisp is lost", () => {
+    const { g, c, w } = lit();
+    g.cloudAt = 11;
+    // Outside the light (9 tiles at this flame), inside the cloud's edge: safe.
+    put(w, c.x + 10, c.y);
+    for (let i = 0; i < 8; i++) g.step();
+    expect(g.outs).toEqual([]);
+    expect(g.snapshot().wisps[0]!.dim).toBeUndefined();
+    expect(g.snapshot().cloud).toBe(11);
+    // The cloud comes in over it: it fades and is lost.
+    g.cloudAt = 9;
+    for (let i = 0; i < 5; i++) g.step();
+    expect(g.away.has(w.id)).toBe(true);
+    expect(g.scores[0]).toBe(0);
+  });
+
   it("with no flame set, nothing dims", () => {
     const { g, c, w } = lit();
     g.flame = null;
@@ -156,15 +172,17 @@ describe("the glass", () => {
   });
 });
 
-function play(stand: Stand | null, seed = 99, max = 3000) {
+function play(stand: Stand | null, seed = 99, max = 3000, set: Partial<DyingRoom["switches"]> = {}) {
   let s = seed;
   const room = new DyingRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), stand);
-  const lines: StoryLine[] = [], parts: string[] = [], shrines: string[] = [];
+  Object.assign(room.switches, set);
+  const lines: StoryLine[] = [], parts: string[] = [], shrines: string[] = [], views: NonNullable<NonNullable<ServerMsg & { t: "room" }>["room"]["story"]>["dying"][] = [];
   let hush = 0;
   room.connect((m: ServerMsg) => {
     if (m.t === "say") lines.push(...m.lines);
     if (m.t === "room") {
       const p = m.room.story!.dying!.part;
+      views.push(m.room.story!.dying);
       if (parts[parts.length - 1] !== p) (parts.push(p), shrines.push(m.room.shrine));
     }
   }).message(JSON.stringify({ t: "hello", name: "Rook" }));
@@ -174,9 +192,9 @@ function play(stand: Stand | null, seed = 99, max = 3000) {
     const before = lines.length;
     room.onTick();
     n++;
-    if (room.state.part === "embers" || room.state.part === "landing") hush += lines.length - before;
+    if (room.state.part === "bottom" || room.state.part === "stills") hush += lines.length - before;
   }
-  return { room, lines, parts, shrines, opening: lines.slice(0, seen), hush };
+  return { room, lines, parts, shrines, opening: lines.slice(0, seen), hush, views };
 }
 
 describe("runs 6 and 7, the dying brazier", () => {
@@ -191,33 +209,148 @@ describe("runs 6 and 7, the dying brazier", () => {
   it("run 6 cannot be won: the flame is down to embers by its end however he plays", () => {
     for (const stand of ["juggle", "hold"] as Stand[]) {
       const { room } = play(stand, 31);
-      expect(room.curve[room.lasted + DYING.embers.fall - 1]).toBeLessThanOrEqual(DYING.embers.level + 0.01);
+      expect(room.curve[room.lasted + DYING.bottom.fall - 1]).toBeLessThanOrEqual(DYING.bottom.level + 0.01);
     }
   });
 
-  it("plays through as one piece: run 6, embers, the landing, run 7, the fire roaring", () => {
+  it("plays through as one piece: run 6, its bottom, the stills, run 7, the hold, the picture, the village", () => {
     const { room, parts, shrines, lines, hush } = play("hold");
-    expect(parts).toEqual(["six", "embers", "landing", "seven", "roar"]);
-    expect(shrines).toEqual([DYING.shrine, DYING.shrine, DYING.shrine, DYING.craterShrine, DYING.craterShrine]);
+    expect(parts).toEqual(["six", "bottom", "stills", "seven", "lifted", "risen", "after"]);
+    expect(shrines).toEqual([DYING.shrine, DYING.shrine, DYING.shrine, DYING.craterShrine, DYING.craterShrine, DYING.craterShrine, DYING.craterShrine]);
     expect(room.state.phase).toBe("results");
     expect(room.state.game.flame).toBe(100);
-    // Nobody speaks from the embers until she has landed.
+    // Nobody speaks from the bottom until she has landed.
     expect(hush).toBe(0);
     const said = lines.map((l) => l.text);
     expect(said[0]).toBe("It's low, Rook. Feed it. Nearest first.");
     expect(said).toContain("Budge up, Rook.");
     expect(said).toContain("That one's yours, Rook. At my age?");
-    expect(said[said.length - 1]).toBe("There. That'll hold.");
-    // Rook has no line, and nothing is ever said about losing or sinking.
-    expect(lines.every((l) => l.who === "Hesta")).toBe(true);
+    expect(said.slice(-3)).toEqual(["There. That'll hold.", "Nine seconds from the terrace. I counted.", "Slow. I used to be quick."]);
+    // The first sound from the crowd is two children.
+    expect(lines.filter((l) => l.text === "Granny!").map((l) => l.who)).toEqual(["Nell", "Sefa"]);
+    // Rook has no line, nobody calls once Hesta's voice has cut off, and nothing is ever said about losing or sinking.
+    expect(lines.some((l) => l.who === "Rook")).toBe(false);
+    const cut = said.indexOf("North one. Then the..."), budge = said.indexOf("Budge up, Rook.");
+    expect(cut).toBeGreaterThan(0);
+    expect(budge).toBe(cut + 1);
+    expect(room.state.end!.summary!.trim()).toBe("");
     expect(JSON.stringify([said, room.state.end])).not.toMatch(/sink|lost|lose|fail/i);
+  });
+
+  it("the cloud comes in a step each time the flame falls past a mark, with a lurch, and never goes back out", () => {
+    const { views } = play("idle", 5, 400);
+    const six = views.filter((v) => v!.part === "six");
+    const C = DYING.cloud;
+    expect(six[0]!.cloud).toBe(C.start);
+    expect(six[0]!.lurch).toBe(0);
+    // An idle player banks nothing, so nothing pushes it back: it only comes in, by whole steps.
+    for (let i = 1; i < six.length; i++) {
+      const d = six[i - 1]!.cloud! - six[i]!.cloud!;
+      expect(d === 0 || Math.abs(d % C.stepIn) < 1e-9).toBe(true);
+      expect(d).toBeGreaterThanOrEqual(0);
+      expect(six[i]!.lurch! - six[i - 1]!.lurch!).toBeCloseTo(d / C.stepIn);
+    }
+    expect(six[six.length - 1]!.cloud).toBe(C.start - C.stepIn * C.stepsAt.length);
+  });
+
+  it("a bank pushes the cloud back a tile, at once, and the push eases off", () => {
+    let s = 4242;
+    const room = new DyingRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "juggle");
+    room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    let pushed = false, eased = false, last = room.state.cloud, lastStep = 0;
+    while (room.state.part === "six") {
+      const banked = room.state.game.scores[0]!;
+      room.onTick();
+      if ((room.state.part as string) !== "six") break;
+      const now = room.state.cloud, stepped = room.state.lurch !== lastStep;
+      if (!stepped && room.state.game.scores[0]! > banked && now > last) pushed = true;
+      if (!stepped && room.state.game.scores[0]! === banked && now < last) eased = true;
+      expect(now).toBeLessThanOrEqual(DYING.cloud.start + DYING.cloud.pushMax);
+      last = now;
+      lastStep = room.state.lurch;
+    }
+    expect(pushed).toBe(true);
+    expect(eased).toBe(true);
+  });
+
+  it("the bottom is the same ten seconds however he played: the cloud closes, over Rook too, the sounds go one by one, then orange from above", () => {
+    for (const stand of ["juggle", "idle"] as Stand[]) {
+      const { views } = play(stand, 31, 400);
+      const low = views.filter((v) => v!.part === "bottom");
+      const B = DYING.bottom;
+      // One view when the part turns, then one a tick.
+      expect(low.length).toBe(B.ticks);
+      expect(low.every((v) => v!.cloud === B.radius)).toBe(true);
+      const first = (k: "blind" | "orange") => low.findIndex((v) => v![k]);
+      const lastOn = (k: "fire" | "bell") => low.map((v) => !!v![k]).lastIndexOf(true);
+      expect(first("blind")).toBe(B.blindAt);
+      expect(lastOn("fire")).toBe(B.fireOff - 1);
+      // The bell is the last sound, alone, and stops before the light.
+      expect(lastOn("bell")).toBe(B.bellOff - 1);
+      expect(first("orange")).toBe(B.orange);
+      const stills = views.filter((v) => v!.part === "stills").map((v) => v!.still);
+      expect([...new Set(stills)]).toEqual([0, 1, 2]);
+    }
+  });
+
+  it("under the cloud he can walk and has no wisp to put his staff on", () => {
+    let s = 77;
+    const room = new DyingRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), null);
+    const c = room.connect(() => {});
+    c.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    while (room.state.part !== "bottom") room.onTick();
+    for (let i = 0; i <= DYING.bottom.blindAt; i++) room.onTick();
+    const g = room.state.game, rook = g.players[0]!;
+    const w = g.wisps[0]!;
+    c.message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: w.id } }));
+    room.onTick();
+    expect(rook.action.kind).not.toBe("staff");
+    const at = { ...rook.pos };
+    c.message(JSON.stringify({ t: "act", action: { kind: "walk", to: { x: at.x + 2, y: at.y } } }));
+    room.onTick();
+    room.onTick();
+    expect(rook.pos).not.toEqual(at);
+  });
+
+  it("her line gives back the wisps the cloud took in the last 40 ticks, held from her first moment; with the switch off, none", () => {
+    const on = play("idle", 77, 400);
+    expect(on.room.gaveBack).toBeGreaterThan(0);
+    const off = play("idle", 77, 400, { lineGivesBack: false });
+    expect(off.room.gaveBack).toBe(0);
+    let s = 77;
+    const room = new DyingRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "idle");
+    room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    while (room.state.part !== "seven") room.onTick();
+    const g = room.state.game;
+    const live = g.wisps.filter((w) => !g.away.has(w.id));
+    expect(live.length).toBeGreaterThanOrEqual(Math.min(12, room.gaveBack));
+    expect(live.every((w) => g.rooted.get(w.id) === 2)).toBe(true);
+    for (const w of live) expect(g.board.tile(w.pos)).toBe(Tile.Floor);
+  });
+
+  it("Lumi does not call unless the switch is on; then she calls with her Kindling calls after Hesta's voice stops", () => {
+    expect(play("hold", 12).lines.some((l) => l.who === "Lumi" && l.text.startsWith("Dad."))).toBe(false);
+    const { lines } = play("hold", 12, 3000, { lumiCalls: true });
+    const calls = lines.filter((l) => l.who === "Lumi" && l.text.startsWith("Dad."));
+    expect(calls.length).toBeGreaterThan(0);
+    for (const l of calls) expect(l.text).toMatch(/^Dad\. (North|South|East|West|North-east|North-west|South-east|South-west) one\.$/);
+    expect(lines.indexOf(calls[0]!)).toBeGreaterThan(lines.findIndex((l) => l.text === "North one. Then the..."));
+  });
+
+  it("every bank in run 7 lifts the island, and nine fill the fire", () => {
+    const { views } = play("juggle", 8);
+    const seven = views.filter((v) => v!.part === "seven" || v!.part === "lifted");
+    expect(seven[0]!.lift).toBe(0);
+    expect(seven[0]!.lifts).toBe(9);
+    expect(seven[seven.length - 1]!.lift).toBe(9);
+    for (let i = 1; i < seven.length; i++) expect(seven[i]!.lurch! - seven[i - 1]!.lurch!).toBe(seven[i]!.lift! - seven[i - 1]!.lift!);
   });
 
   it("the landing puts Rook and the wisps clear of the crater, and loses none", () => {
     let s = 77;
     const room = new DyingRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "idle");
     room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
-    while (room.state.part !== "landing") room.onTick();
+    while (room.state.part !== "stills") room.onTick();
     // He walks onto the very spot.
     const g0 = room.state.game, c = g0.board.center;
     g0.players[0]!.pos = pt(c.x + DYING.landing.at[0], c.y + DYING.landing.at[1]);
@@ -236,6 +369,7 @@ describe("runs 6 and 7, the dying brazier", () => {
   it("in run 7 Hesta holds the far wisps, never moves, and lets go when Rook takes hold", () => {
     let s = 123;
     const room = new DyingRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "idle");
+    room.switches.lineGivesBack = false;
     room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
     while (room.state.part !== "seven") room.onTick();
     for (let i = 0; i < 20; i++) room.onTick();
@@ -267,7 +401,7 @@ describe("runs 6 and 7, the dying brazier", () => {
     expect(room.state.game.rooted.size).toBe(0);
     const i = lines.findIndex((l) => l.text.startsWith("That one's yours"));
     expect(i).toBeGreaterThan(0);
-    expect(lines.slice(i + 1).map((l) => l.text)).toEqual(["There. That'll hold."]);
+    expect(lines.slice(i + 1).map((l) => l.text)).toEqual(["There. That'll hold.", "Nine seconds from the terrace. I counted.", "Slow. I used to be quick."]);
   });
 
   it("she remarks on the fire only if he kept it alive a long time", () => {

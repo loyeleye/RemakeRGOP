@@ -4,7 +4,7 @@ import { Tile, type Board, type Pt } from "../engine/board.js";
 import { Game, PULL_REACH, PUSH_REACH, ROUND_TICKS, TICK_MS, tideIn, type Action, type GameSnapshot, type Guild } from "../engine/game.js";
 import { SHRINES, ringNote, shrineById, shrineFor } from "../engine/maps.js";
 import { faceOf as faceFile } from "../engine/moods.js";
-import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg, type StoryLine } from "../engine/protocol.js";
+import { FLAMES, FLAME_COLORS, type BotDebug, type BotLevelName, type LobbyPlayer, type ClientMsg, type Flame, type RoomView, type ServerMsg, type StoryLine, type StoryView } from "../engine/protocol.js";
 import { Room } from "../server/room.js";
 import { LessonRoom } from "../server/lesson.js";
 import { GrannyRoom } from "../server/granny.js";
@@ -134,7 +134,7 @@ function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | "pond" = 1,
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 8 ? new SieveRoom() : run === 6 ? new DyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "pond" ? new PondRoom(undefined, undefined, walk) : run === 8 ? new SieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
@@ -734,7 +734,7 @@ function storyPhaseSound(was: string | undefined) {
 /** Per-tick story sounds: banks, Kes's island, and Rook's staff (catch, hum, slip). */
 function storyTickSound(s: GameSnapshot) {
   const st = room!.story!;
-  if (st.dying) dyingSound(st.dying.part, s);
+  if (st.dying) dyingSound(st.dying, s);
   else if (st.sieve) void 0;
   else if (room!.phase === "playing" && musicFor !== st.movement) {
     musicFor = st.movement;
@@ -772,22 +772,74 @@ function storyTickSound(s: GameSnapshot) {
 }
 
 let dyingPart = "";
+let dyingLurch = 0;
+let dyingStill = -1;
 
-/** Runs 6 and 7: the fire is the only sound, as loud as it is high; nothing in the embers; then the comet. */
-function dyingSound(part: string, s: GameSnapshot) {
+/** Runs 6 and 7 with Ladi's switches: add ?calls=1 (Lumi calls), ?noback=1 (her line gives nothing back) or ?nocloud=1 (the cloud never reaches Rook) to the address to try the other way. */
+function dyingRoom() {
+  const r = new DyingRoom();
+  const q = new URLSearchParams(location.search);
+  if (q.has("calls")) r.switches.lumiCalls = true;
+  if (q.has("noback")) r.switches.lineGivesBack = false;
+  if (q.has("nocloud")) r.switches.cloudOverRook = false;
+  return r;
+}
+
+/**
+ * Runs 6 and 7. Run 6 is loud: Lumi's alarm bell, steady, the fire as loud as it is high, and the
+ * timbers at each lurch. At the bottom they go one at a time, and her bell is the last. Then the
+ * rush from above, the strike under the pictures, and in run 7 each lift.
+ */
+function dyingSound(d: NonNullable<StoryView["dying"]>, s: GameSnapshot) {
   const flame = s.flame ?? 0;
-  if (part !== dyingPart) {
-    if (part === "landing") sound.cometFall(DYING.landing.streak * (tickMs / 1000));
-    if (part === "seven" && dyingPart === "landing") {
-      sound.cometStrike();
-      const f = $("flash");
-      f.classList.remove("go");
-      void f.offsetWidth;
-      f.classList.add("go");
-    }
-    dyingPart = part;
+  const after = d.part !== "six" && d.part !== "bottom" && d.part !== "stills";
+  if (d.part !== dyingPart) {
+    if (d.part === "six") dyingLurch = d.lurch ?? 0;
+    dyingPart = d.part;
   }
-  sound.fireBed(part === "landing" || (part === "embers" && flame <= DYING.embers.level + 1) ? null : flame);
+  if ((d.lurch ?? 0) !== dyingLurch) {
+    dyingLurch = d.lurch ?? 0;
+    sound.lurchGroan(after);
+  }
+  if (d.bell && s.tick % 2 === 0) sound.alarmBell();
+  if (d.orange && d.part === "bottom" && !dyingOrange) sound.cometFall((DYING.bottom.ticks - DYING.bottom.orange + 3) * (tickMs / 1000));
+  dyingOrange = !!d.orange;
+  sound.fireBed(d.fire ? flame : null);
+}
+let dyingOrange = false;
+
+/** Run 6: the eye comes in with the cloud, so that by the bottom the fire and the people round it fill the picture; after the stills it goes back out to the whole ground. */
+let dyingZoomed = false;
+function dyingZoom(d: NonNullable<StoryView["dying"]> | undefined, board: Board) {
+  if (!d) return void (dyingZoomed = false);
+  const fit = cam.fitScale(board);
+  const closing = d.part === "six" || d.part === "bottom" || d.part === "stills";
+  if (!closing) {
+    if (!dyingZoomed) return;
+    cam.scale += (fit - cam.scale) * 0.06;
+    if (Math.abs(cam.scale - fit) < 0.2) (cam.scale = fit), (dyingZoomed = false);
+    return;
+  }
+  const want = Math.max(fit, Math.min(cam.w, cam.h) / (2 * ((d.cloud ?? DYING.cloud.start) + 5)));
+  if (want > fit * 1.02) dyingZoomed = true;
+  if (dyingZoomed) cam.scale += (want - cam.scale) * 0.03;
+}
+
+/** The held pictures: the three of the landing, and the island clear of the cloud. Plain dark cards with the picture's name until the cutscene thread's pictures exist. */
+function dyingCard(d: NonNullable<StoryView["dying"]> | undefined) {
+  const el = $("still");
+  const n = !d ? -1 : d.part === "stills" ? (d.still ?? 0) : d.part === "risen" ? 3 : -1;
+  if (n === dyingStill) return;
+  dyingStill = n;
+  el.hidden = n < 0;
+  if (n < 0) return;
+  const name = n === 3 ? DYING.risen.name : DYING.stills.names[n]!;
+  el.innerHTML = `<div><small>picture to come</small><b>${esc(name)}</b></div>`;
+  el.classList.remove("in");
+  void el.offsetWidth;
+  el.classList.add("in");
+  // The strike lands under the third picture.
+  if (n === 2) sound.cometStrike();
 }
 
 function stopStorySound() {
@@ -795,6 +847,7 @@ function stopStorySound() {
   sound.fireBed(null);
   sound.windOff(0.5);
   dyingPart = "";
+  dyingCard(undefined);
   sound.stopMusic(0.3);
   musicFor = -1;
 }
@@ -1415,6 +1468,8 @@ function frame(now: number) {
   const mine = snap.players.find((p) => p.id === me);
   if (lookBeat) stepLook(now, shrine.props ?? [], mine);
   stepWellLook(room?.story?.sieve?.look);
+  dyingCard(room?.story?.dying);
+  dyingZoom(room?.story?.dying, shrine.board);
   if (cam.follow && mine) {
     if (cam.compact || cam.zoomedIn) {
       const tx = mine.px + (mine.x - mine.px) * t + 0.5;
@@ -1493,6 +1548,8 @@ function speakerAt(who: string): { x: number; y: number; h: number } | null {
   const head = 2.1 * (CAST_SCALE[cast] ?? 1);
   const w = lastWatchers?.find((q) => q.cast === cast);
   if (w) return { x: w.x, y: w.y, h: head };
+  const inCrowd = room?.story?.dying ? world?.crowdAt(cast) : null;
+  if (inCrowd) return { ...inCrowd, h: cast === "sefa" ? 3.1 : head };
   const id = [...(castOf() ?? [])].find(([, c]) => c === cast)?.[0];
   const p = id != null && id !== me ? snap?.players.find((q) => q.id === id) : undefined;
   return p ? { x: p.x + 0.5, y: p.y + 0.5, h: head } : null;

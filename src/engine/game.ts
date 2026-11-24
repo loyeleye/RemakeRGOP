@@ -193,6 +193,8 @@ export interface GameSnapshot {
   /** The light law (story runs 6 and 7): the flame's level (0 to 100), how far its light reaches in tiles, wisps that went out this tick, and whether wisps held in the ground stay lit. */
   flame?: number;
   lit?: number;
+  /** Where the cloud's edge is, tiles from the brazier, when the cloud and not the dark takes wisps. */
+  cloud?: number;
   outs?: { tick: number; wisp: number }[];
   /** The falling law: wisps that fell away this tick, where, and whether over a well. */
   falls?: { tick: number; wisp: number; x: number; y: number; well: boolean }[];
@@ -355,6 +357,8 @@ export class Game {
   dimTicks = 0;
   /** Ticks each wisp has counted outside the light. */
   dark = new Map<number, number>();
+  /** The cloud (runs 6 and 7 reworked): when set, wisps are lost beyond this many tiles from the brazier, in the cloud, and not beyond the flame's light. The room moves it, in steps. */
+  cloudAt: number | null = null;
   /** This tick's wisps that went out. */
   outs: { tick: number; wisp: number }[] = [];
   /** Ticks a wisp that went out stays gone. */
@@ -633,7 +637,7 @@ export class Game {
     this.outs = [];
     this.flame = Math.max(Math.min(this.flame!, this.flameFloor), this.flame! - this.flameDrain);
     if (this.dimTicks <= 0) return void this.dark.clear();
-    const lit = lightRadius(this.flame), c = this.board.center;
+    const lit = this.cloudAt ?? lightRadius(this.flame), c = this.board.center;
     for (const w of this.wisps) {
       if (this.away.has(w.id) || (this.rootedLit && this.rooted.has(w.id)) || Math.hypot(w.pos.x - c.x, w.pos.y - c.y) <= lit) {
         this.dark.delete(w.id);
@@ -1364,7 +1368,7 @@ export class Game {
       banks: this.banks,
       ...(this.string.length ? { string: [...this.string], stringLive: this.stringLive } : {}),
       ...(this.stormLight != null ? { stormLight: this.stormLight } : {}),
-      ...(this.flame !== null ? { flame: this.flame, lit: lightRadius(this.flame), outs: this.outs.length ? this.outs : undefined, rootLit: this.rootedLit || undefined } : {}),
+      ...(this.flame !== null ? { flame: this.flame, lit: lightRadius(this.flame), ...(this.cloudAt !== null ? { cloud: this.cloudAt } : {}), outs: this.outs.length ? this.outs : undefined, rootLit: this.rootedLit || undefined } : {}),
       ...(this.falls.length ? { falls: this.falls } : {}),
       stops: this.bankStops.length ? this.bankStops.map((b) => ({ player: b.player, wisp: b.wisp, x: b.water.x, y: b.water.y })) : undefined,
       moss: this.mossHp.size ? [...this.mossHp].flat() : undefined,
