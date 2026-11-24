@@ -509,7 +509,12 @@ export class GrannyRoom {
       [HESTA, "Is it working?", HESTA_ID],
     ];
     if (g.tick === GRANNY.ageAt) for (const [who, text, id] of age) this.say(who, text, { player: id }, "key");
-    if (g.tick >= GRANNY.runningAt && !this.said.has("running") && !this.keyTalking()) {
+    // "She's not even running!": the first time she leads by two (story thread), so it lands on her
+    // lead and not on the clock. Most games she never gets two ahead, so past the old time it goes
+    // the first time she leads at all, and at twice that time whatever the score, so it's never lost.
+    const ahead = this.hestaScore() - this.kidsScore();
+    const runningNow = ahead >= 2 || (ahead >= 1 && g.tick >= GRANNY.runningAt) || g.tick >= GRANNY.runningAt * 2;
+    if (runningNow && g.tick > GRANNY.ageAt + 10 && !this.said.has("running") && !this.keyTalking()) {
       this.said.add("running");
       this.say(SEFA, "She's not even running!", { player: KID_IDS[1] }, "key");
       this.say(HESTA, "Why would I run? You're all coming to me.", { player: HESTA_ID }, "key");
