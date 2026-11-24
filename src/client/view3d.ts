@@ -17,7 +17,7 @@ import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
 import { makeCloud, makeCurtain, makeIsland, makeWaterfall } from "./islands.js";
 import { DYING, crowdSpot } from "../engine/dying.js";
-import { DRESS, dressVerge, quarryPit, sieveGrain, sieveGround, sievePaths, wellLoop } from "./sieve-dress.js";
+import { DRESS, dressVerge, quarryPit, sieveGrain, sieveMask, sievePaths, wellLoop } from "./sieve-dress.js";
 import { SIEVE } from "../engine/sieve.js";
 import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
@@ -186,7 +186,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "offering-stone", "offering-boat", "offering-mooring", "kes-house", "wind-vane", "bent-tree", "referee-stand"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "offering-stone", "offering-boat", "offering-mooring", "kes-house", "wind-vane", "bent-tree", "referee-stand", "sieve-well-pit", "sieve-cutters-hut-a", "sieve-cutters-hut-b", "sieve-block-stacks", "sieve-stone-cart", "sieve-hoist", "sieve-tally-table"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -1855,10 +1855,6 @@ export class World {
 
     // The Sieve is dressed as a worked quarry floor (sieve-dress.ts).
     const dressed = shrine.id === SIEVE.shrine && !!shrine.wells?.length && !!shrine.coast;
-    const tableAt = (() => {
-      const a = Math.atan2(SIEVE.keeper[1], SIEVE.keeper[0]);
-      return { x: Math.cos(a) * (coast(a) + 1.5), z: Math.sin(a) * (coast(a) + 1.5) };
-    })();
     // The plaza: flagstones laid right up to the island's edge.
     const floorTex = tex(`textures/floor-${th.floor}.webp`, 1 / 6, `textures/floor-${shrine.id}.webp`);
     const floorShape = new THREE.Shape();
@@ -1893,11 +1889,28 @@ export class World {
     g.add(floor);
     if (dressed) {
       const S = Math.max(W, H) + 2;
-      const { paths, ruts } = sievePaths(shrine.wells!, coast, tableAt);
-      floor.material = new THREE.MeshStandardMaterial({
-        map: sieveGround({ S, wells: shrine.wells!, coastAt: shrine.coast!, paths, ruts, low: this.low }),
-        bumpMap: sieveGrain(), bumpScale: 1.6, roughness: 0.93, color: "#ffffff",
-      });
+      const { paths, ruts } = sievePaths(shrine.wells!, coast);
+      // The maps thread's cut-slab chalk, the worn slabs blended in where the mask says, darkened at the lips and ruts.
+      const slab = tex("textures/floor-sieve.webp", 1 / DRESS.slab), worn = tex("textures/floor-sieve-worn.webp", 1 / DRESS.slab);
+      const mask = sieveMask({ S, wells: shrine.wells!, coastAt: shrine.coast!, paths, ruts, low: this.low });
+      const mat = new THREE.MeshStandardMaterial({ map: slab, bumpMap: sieveGrain(), bumpScale: 0.8, roughness: 0.93, color: "#ffffff" });
+      mat.onBeforeCompile = (sh) => {
+        sh.uniforms.uWorn = { value: worn };
+        sh.uniforms.uMask = { value: mask };
+        sh.uniforms.uS = { value: S };
+        sh.fragmentShader = sh.fragmentShader
+          .replace("#include <map_pars_fragment>", "#include <map_pars_fragment>\nuniform sampler2D uWorn;\nuniform sampler2D uMask;\nuniform float uS;")
+          .replace(
+            "#include <map_fragment>",
+            `vec4 slabC = texture2D(map, vMapUv);
+            vec4 wornC = texture2D(uWorn, vMapUv);
+            vec4 mk = texture2D(uMask, vMapUv * ${DRESS.slab.toFixed(1)} / uS + 0.5);
+            vec4 tc = mix(slabC, wornC, mk.r);
+            tc.rgb *= (1.0 - 0.5 * mk.g) * (1.0 - 0.16 * mk.r) * (0.86 + 0.28 * mk.b);
+            diffuseColor *= tc;`,
+          );
+      };
+      floor.material = mat;
     }
     if (shrine.raceOval) {
       // The race ground: shorter, paler grass in an oval round the brazier, on a larger repeat.
@@ -1924,6 +1937,7 @@ export class World {
     });
     island.position.set(shrine.core?.x ?? 0, -0.03, shrine.core?.y ?? 0);
     g.add(island);
+    if (dressed) this.dressSieveIsland(island, this.low ? 128 : 220);
     // Each arm is a chain of overlapping plateaus that shrink toward the tip.
     if (shrine.isle?.arms?.length) {
       const pts = armSamples(shrine.isle);
@@ -2015,13 +2029,15 @@ export class World {
       this.timeUniforms.push(u.uTime);
       const R = w.r + 0.55;
       if (dressed) {
-        // A quarry pit, stepped down to a shaft, the cloud far below.
-        const i = this.wellRings.length;
-        const pit = quarryPit(w, i, new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: PIT_CLOUD_FS, uniforms: u, fog: false }), this.low);
-        pit.position.set(w.x, 0.01, w.y);
-        g.add(pit);
+        // The maps thread's stepped quarry pit (top radius 1, scaled across by r), the procedural one standing in until it loads; the cloud far below.
+        const i = this.wellRings.length, cloud = new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: PIT_CLOUD_FS, uniforms: u, fog: false });
+        const slot = this.placeSlot("sieve-well-pit", quarryPit({ x: 0, y: 0, r: 1 }, i, cloud, this.low), w.x, w.y, 0, 0.01);
+        slot.scale.set(w.r, 1, w.r);
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(w.r * DRESS.pitShaft * 1.02, 32).rotateX(-Math.PI / 2), cloud);
+        disc.position.set(w.x, DRESS.pitBottom, w.y);
+        g.add(disc);
         // A thin outline at the lip, so the pit stays dark inside it (gameplay thread).
-        const ring = new THREE.Mesh(new THREE.RingGeometry(R * 0.93, R * 1.01, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffb53a", transparent: true, opacity: 0, depthWrite: false }));
+        const ring = new THREE.Mesh(new THREE.RingGeometry(w.r * 0.93, w.r * 1.01, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffb53a", transparent: true, opacity: 0, depthWrite: false }));
         ring.position.set(w.x, 0.3, w.y);
         ring.visible = false;
         ring.renderOrder = 2;
@@ -2051,7 +2067,10 @@ export class World {
       }
     }
 
-    if (dressed) dressVerge(g, coast, tableAt, this.low);
+    if (dressed) {
+      dressVerge(g, coast, this.low, (m, bo, x, z, rot) => void this.placeSlot(m, bo, x, z, rot));
+      this.fillHouse();
+    }
     // A place to walk has no parapet and no monoliths: its paths, fence, wash line and bench instead.
     if (th.place || th.dressed) this.addPlace(shrine, b);
     else {
@@ -2784,7 +2803,7 @@ export class World {
       for (let y = 0; y < b.height; y++) for (let x = 0; x < b.width; x++) if (b.tile({ x, y }) === Tile.Floor) floor.push(new THREE.Vector2(this.worldX(b, x), this.worldZ(b, y)));
       const wells = this.wellRings.map((r) => r.getWorldPosition(new THREE.Vector3()));
       const p = Array.from({ length: N }, () => ({ x: 0, z: 0, w: 0, v: 0 }));
-      this.tugDust = { mesh, p, floor, wells, mouth: (st.shrine.wells ?? []).map((q) => q.r + 0.55), endAt: -1 };
+      this.tugDust = { mesh, p, floor, wells, mouth: (st.shrine.wells ?? []).map((q) => q.r), endAt: -1 };
       for (const d of p) this.seedDust(d);
     }
     const D = this.tugDust;
@@ -3353,6 +3372,26 @@ export class World {
       link.scale.y = p.distanceTo(q);
       link.quaternion.setFromUnitVectors(up, q.sub(p).normalize());
     });
+  }
+
+  /**
+   * The Sieve's island: the shelf round the chalk (the island's top) in the same slabs, darker and
+   * weathered, not walked on; and the maps thread's chalk cliff rock on its sides.
+   */
+  private dressSieveIsland(island: THREE.Group, seg: number) {
+    const [under, ...rest] = island.children as THREE.Mesh[];
+    if (under?.isMesh) {
+      const pos = under.geometry.getAttribute("position"), uv: number[] = [];
+      // Round the island by segment, down it by height: about 6 tiles a repeat.
+      for (let k = 0; k < pos.count; k++) uv.push(((k % (seg + 1)) / seg) * 22, pos.getY(k) / 6);
+      under.geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+      const m = under.material as THREE.MeshStandardMaterial;
+      m.map = tex("textures/rock-sieve-cliff.webp", 1);
+      m.needsUpdate = true;
+    }
+    const top = rest.find((o) => o.isMesh && o.geometry.type === "ShapeGeometry");
+    // Rough chalk rock, not cut slabs, so it reads as ground nobody walks on.
+    if (top) top.material = new THREE.MeshStandardMaterial({ map: tex("textures/rock-sieve-cliff.webp", 1 / 6), color: "#c9c0aa", roughness: 1 });
   }
 
   private placeSlot(model: string, blockout: THREE.Object3D, x: number, z: number, rot = 0, y = 0) {

@@ -1,6 +1,7 @@
-// The Sieve (run 8), dressed with no bought art: a quarry floor of warm, worked chalk, its wells
-// cut as stepped pits, and the cutters' things on a grass verge round the rim. Procedural only.
-// (gameplay/run8-rework-brief.md, "dress the Sieve", 24 Nov.)
+// The Sieve (run 8), dressed: a quarry floor of cut chalk slabs, worn along the paths, its wells
+// cut as stepped pits, and the cutters' things on a shelf round the rim. The maps thread's drawn
+// art (places/sieve, 24 Nov): floor textures, the pit and the props; the procedural pieces here
+// stand in until each model has loaded. (gameplay/run8-rework-brief.md, "dress the Sieve".)
 
 import * as THREE from "three";
 import { noise3 } from "./islands.js";
@@ -30,14 +31,29 @@ export const DRESS = {
   blocks: [-0.95, -2.95, 2.75],
   spoil: [-2.28, -0.62, 0.42, 3.4],
   cart: -0.25,
+  /** The maps thread's placements (sieve-props-1.json): tiles from the brazier, x east, y south; turn in degrees, counter-clockwise from above. The table on its shelf spot (the one by Tilda is in the arrival band). */
+  props: [
+    { model: "sieve-cutters-hut-a", x: -6, y: -19.3, rot: 0 },
+    { model: "sieve-cutters-hut-b", x: 8, y: -18.5, rot: 0 },
+    { model: "sieve-block-stacks", x: -2, y: -19, rot: 15 },
+    { model: "sieve-block-stacks", x: -22.5, y: -9, rot: -20 },
+    { model: "sieve-stone-cart", x: -23.5, y: -4, rot: 80 },
+    { model: "sieve-hoist", x: 19.5, y: -11.5, rot: 0 },
+    { model: "sieve-tally-table", x: 7, y: 18, rot: 180 },
+  ],
+  /** The drawn pit: top radius 1 (scaled by the well's r across, not down), open at this depth. */
+  pitBottom: -4.0,
+  pitShaft: 0.64,
+  /** The floor's slab texture repeats every this many tiles. */
+  slab: 4,
 };
 
-/** Each well's edge wobbles, the same everywhere it is drawn (the hole in the ground, the pit's walls). */
-export function wellEdge(w: Well, i: number) {
-  return (a: number) => 1 + 0.035 * Math.sin(3 * a + i * 1.7) + 0.025 * Math.sin(7 * a + i * 4.1);
+/** A well's edge: a true circle, to meet the drawn pit's round top. */
+export function wellEdge(_w: Well, _i: number) {
+  return (_a: number) => 1;
 }
-/** The mouth of a well in world units: its tiles plus the half tile round them. */
-export const mouthOf = (w: Well) => w.r + 0.55;
+/** The mouth of a well in world units: its radius (the maps thread: no kerb outside r; the pit's top ledge is the lip). */
+export const mouthOf = (w: Well) => w.r;
 
 /** A well's mouth as a closed loop of points, for cutting it out of the ground. */
 export function wellLoop(w: Well, i: number, n = 48): Pt[] {
@@ -58,9 +74,8 @@ function rnd(seed: number) {
   return () => ((s = (s * 48271) % 2147483647) - 1) / 2147483646;
 }
 
-/** Where the worn paths run: from the brazier out to each hut, each hut to its nearest well, to Tilda's table, and round the brazier. */
-export function sievePaths(wells: Well[], coast: (a: number) => number, table: Pt): { paths: Pt[][]; ruts: Pt[] } {
-  const at = (a: number, out: number) => ({ x: Math.cos(a) * (coast(a) + out), z: Math.sin(a) * (coast(a) + out) });
+/** Where the worn paths run: round the brazier, out to each hut and from it to its nearest well, to Tilda's table, and the cart's track with its ruts. */
+export function sievePaths(wells: Well[], coast: (a: number) => number): { paths: Pt[][]; ruts: Pt[] } {
   const curve = (from: Pt, to: Pt, bend: number, n = 24) => {
     const dx = to.x - from.x, dz = to.z - from.z, len = Math.hypot(dx, dz) || 1;
     return Array.from({ length: n + 1 }, (_, k) => {
@@ -68,217 +83,114 @@ export function sievePaths(wells: Well[], coast: (a: number) => number, table: P
       return { x: from.x + dx * t + (-dz / len) * s, z: from.z + dz * t + (dx / len) * s };
     });
   };
+  const rim = (p: Pt) => Math.atan2(p.z, p.x);
+  const out = (a: number, d: number) => ({ x: Math.cos(a) * (coast(a) + d), z: Math.sin(a) * (coast(a) + d) });
   const ring = Array.from({ length: 49 }, (_, k) => {
     const a = (k / 48) * Math.PI * 2;
     return { x: Math.cos(a) * 3.4, z: Math.sin(a) * 3.1 };
   });
   const paths: Pt[][] = [ring];
-  DRESS.huts.forEach((a, i) => {
-    const hut = at(a, 0.2), from = { x: Math.cos(a) * 3.3, z: Math.sin(a) * 3.1 };
-    paths.push(curve(from, hut, i % 2 ? 1.2 : -1.0));
-    // Hut to the nearest well's lip.
-    const w = wells.reduce((b, q) => (Math.hypot(q.x - hut.x, q.y - hut.z) < Math.hypot(b.x - hut.x, b.y - hut.z) ? q : b), wells[0]!);
-    const d = Math.hypot(hut.x - w.x, hut.z - w.y) || 1, R = mouthOf(w) + 0.5;
-    paths.push(curve(hut, { x: w.x + ((hut.x - w.x) / d) * R, z: w.y + ((hut.z - w.y) / d) * R }, 0.6, 14));
+  const prop = (m: string) => DRESS.props.filter((p) => p.model === m).map((p) => ({ x: p.x, z: p.y }));
+  [...prop("sieve-cutters-hut-a"), ...prop("sieve-cutters-hut-b")].forEach((h, i) => {
+    const a = rim(h), door = out(a, 0.3), from = { x: Math.cos(a) * 3.3, z: Math.sin(a) * 3.1 };
+    paths.push(curve(from, door, i % 2 ? 1.2 : -1.0));
+    const w = wells.reduce((b, q) => (Math.hypot(q.x - door.x, q.y - door.z) < Math.hypot(b.x - door.x, b.y - door.z) ? q : b), wells[0]!);
+    const d = Math.hypot(door.x - w.x, door.z - w.y) || 1, R = mouthOf(w) + 0.6;
+    paths.push(curve(door, { x: w.x + ((door.x - w.x) / d) * R, z: w.y + ((door.z - w.y) / d) * R }, 0.6, 14));
   });
-  const ta = Math.atan2(table.z, table.x);
-  paths.push(curve({ x: Math.cos(ta) * 3.3, z: Math.sin(ta) * 3.1 }, table, 0.7));
-  const ruts = curve({ x: Math.cos(DRESS.cart) * 3.4, z: Math.sin(DRESS.cart) * 3.1 }, at(DRESS.cart, 0.6), -1.4, 30);
+  const [table] = prop("sieve-tally-table");
+  if (table) paths.push(curve({ x: Math.cos(rim(table)) * 3.3, z: Math.sin(rim(table)) * 3.1 }, out(rim(table), 0.3), 0.7));
+  const [cart] = prop("sieve-stone-cart");
+  const ca = cart ? rim(cart) : DRESS.cart;
+  const ruts = curve({ x: Math.cos(ca) * 3.4, z: Math.sin(ca) * 3.1 }, out(ca, 0.6), -1.4, 30);
   paths.push(ruts);
   return { paths, ruts };
 }
 
 /**
- * The quarry floor, painted once into one big texture laid over the whole island in world space:
- * bedding bands with flint in them, pick marks, cracks, worn paths and cart ruts, a darker lip round
- * every well and trampled ground near it, and grass stains toward the rim. `S` world units square.
+ * Where the floor is worn, darkened and toned, painted once in world space (`S` world units square)
+ * and read by the floor's shader: red, how trodden (the worn slab texture shows through); green, how
+ * dark (the lip of every well, the ruts, the rim); blue, a broad light and shade to hide the repeat.
  */
-export function sieveGround(o: { S: number; wells: Well[]; coastAt: (x: number, z: number) => number; paths: Pt[][]; ruts: Pt[]; low: boolean }) {
+export function sieveMask(o: { S: number; wells: Well[]; coastAt: (x: number, z: number) => number; paths: Pt[][]; ruts: Pt[]; low: boolean }) {
   const { S, wells } = o;
-  const N = o.low ? 1536 : 3072;
-  const M = o.low ? 384 : 768;
+  const N = o.low ? 512 : 1024;
   const R = rnd(8117);
-  const [cr, cg, cb] = DRESS.chalk;
-  const ca = Math.cos(DRESS.bandAngle), sa = Math.sin(DRESS.bandAngle);
-  const across = (x: number, z: number) => x * ca + z * sa;
-  const along = (x: number, z: number) => -x * sa + z * ca;
-  const warp = (v: number) => 1.1 * Math.sin(v * 0.11 + 0.7) + 0.5 * Math.sin(v * 0.31 + 2.1);
-  const lipDist = (x: number, z: number) => Math.min(...wells.map((w) => Math.hypot(x - w.x, z - w.y) - mouthOf(w)));
-
-  // The broad colour, a pixel per ~0.07 tile: mottling, the bands' tones, the rim's stain, the trampled ring round each well.
-  const base = document.createElement("canvas");
-  base.width = base.height = M;
-  const bg = base.getContext("2d")!;
-  const img = bg.createImageData(M, M);
-  for (let py = 0; py < M; py++)
-    for (let px = 0; px < M; px++) {
-      const x = (px / M - 0.5) * S, z = (py / M - 0.5) * S;
-      const u = across(x, z) + warp(along(x, z)), band = Math.floor(u / DRESS.band);
-      const tone = 0.93 + 0.1 * (((band * 7919) % 13) / 13) + (fbm2(x * 0.09, z * 0.09, 3) - 0.5) * 0.22;
-      const fine = (noise3(x * 1.3, 2.5, z * 1.3, 11) - 0.5) * 0.06;
-      let k = tone + fine;
-      // Warm patches and cool patches.
-      const warm = (fbm2(x * 0.05 + 9, z * 0.05, 5) - 0.5) * 0.5;
-      // Toward the rim: weathered and stained by the grass.
-      const edge = Math.max(0, Math.min(1, (o.coastAt(x, z) + 1.6) / 1.6));
-      // Trampled near the wells.
-      const ld = lipDist(x, z), tr = ld > 0 && ld < 2.2 ? (1 - ld / 2.2) * 0.12 : 0;
-      k *= 1 - tr;
-      let r = cr * k * (1 + warm * 0.06), g = cg * k, b = cb * k * (1 - warm * 0.08);
-      r = r * (1 - edge * 0.25) + 150 * edge * 0.25;
-      g = g * (1 - edge * 0.25) + 145 * edge * 0.25;
-      b = b * (1 - edge * 0.25) + 100 * edge * 0.25;
-      const i = (py * M + px) * 4;
-      img.data[i] = Math.min(255, r);
-      img.data[i + 1] = Math.min(255, g);
-      img.data[i + 2] = Math.min(255, b);
-      img.data[i + 3] = 255;
-    }
-  bg.putImageData(img, 0, 0);
-
-  const c = document.createElement("canvas");
-  c.width = c.height = N;
-  const g = c.getContext("2d")!;
-  g.imageSmoothingQuality = "high";
-  g.drawImage(base, 0, 0, N, N);
-  // From here on, draw in world units.
-  g.setTransform(N / S, 0, 0, N / S, N / 2, N / 2);
-  const onFloor = (x: number, z: number) => o.coastAt(x, z) < -0.3 && lipDist(x, z) > 0.2;
-  const line = (pts: Pt[], w: number, style: string) => {
-    g.strokeStyle = style;
+  const layer = () => {
+    const c = document.createElement("canvas");
+    c.width = c.height = N;
+    const g = c.getContext("2d")!;
+    g.fillStyle = "#000";
+    g.fillRect(0, 0, N, N);
+    g.setTransform(N / S, 0, 0, N / S, N / 2, N / 2);
+    return { c, g };
+  };
+  const line = (g: CanvasRenderingContext2D, pts: Pt[], w: number, a: number) => {
+    g.strokeStyle = `rgba(255,255,255,${a})`;
     g.lineWidth = w;
     g.lineCap = g.lineJoin = "round";
     g.beginPath();
     pts.forEach((p, k) => (k ? g.lineTo(p.x, p.z) : g.moveTo(p.x, p.z)));
     g.stroke();
   };
-
-  // Bedding planes: a thin dark seam at every band's edge, a pale one beside it, and flint nodules strung along every third.
-  const span = S * 0.75;
-  for (let k = -Math.ceil(span / DRESS.band); k <= Math.ceil(span / DRESS.band); k++) {
-    const u0 = k * DRESS.band;
-    const pts: Pt[] = [];
-    for (let v = -span; v <= span; v += 0.4) {
-      const u = u0 - warp(v) + (noise3(v * 0.6, k, 0.3, 21) - 0.5) * 0.12;
-      pts.push({ x: u * ca - v * sa, z: u * sa + v * ca });
-    }
-    line(pts, 0.05, "rgba(92, 78, 58, 0.42)");
-    line(pts.map((p) => ({ x: p.x + ca * 0.07, z: p.z + sa * 0.07 })), 0.04, "rgba(246, 238, 220, 0.35)");
-    if (((k % 4) + 4) % 4 === 1)
-      for (const p of pts) {
-        if (R() > 0.16 || !onFloor(p.x, p.z)) continue;
-        const s = 0.07 + R() * 0.16, q = { x: p.x + ca * (0.2 + R() * 0.5) + (R() - 0.5) * 0.4, z: p.z + sa * (0.2 + R() * 0.5) + (R() - 0.5) * 0.4 };
-        g.fillStyle = "rgba(72, 74, 82, 0.55)";
-        g.beginPath();
-        g.ellipse(q.x, q.z, s, s * (0.5 + R() * 0.4), R() * 3, 0, Math.PI * 2);
-        g.fill();
-        g.strokeStyle = "rgba(240, 236, 226, 0.6)";
-        g.lineWidth = 0.025;
-        g.stroke();
-      }
+  // Trodden: the paths, soft-edged; round the brazier; a ring round each well where they stand to look.
+  const worn = layer();
+  for (const p of o.paths) (line(worn.g, p, 2.8, 0.45), line(worn.g, p, 1.6, 0.85));
+  const glow = (g: CanvasRenderingContext2D, x: number, z: number, r0: number, r1: number, a: number) => {
+    const gr = g.createRadialGradient(x, z, r0, x, z, r1);
+    gr.addColorStop(0, `rgba(255,255,255,${a})`);
+    gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(x, z, r1, 0, Math.PI * 2);
+    g.fill();
+  };
+  glow(worn.g, 0, 0, 1.5, 5.5, 0.85);
+  for (const w of wells) glow(worn.g, w.x, w.y, mouthOf(w), mouthOf(w) + 2.2, 0.55);
+  // Dark: a dark worn band at every lip, the two ruts, scuffs; and the rim, stained.
+  const dark = layer();
+  for (const w of wells) {
+    const loop = Array.from({ length: 65 }, (_, k) => ({ x: w.x + Math.cos((k / 64) * Math.PI * 2) * (mouthOf(w) + 0.12), z: w.y + Math.sin((k / 64) * Math.PI * 2) * (mouthOf(w) + 0.12) }));
+    line(dark.g, loop, 0.28, 0.9);
+    const wide = loop.map((p) => ({ x: w.x + (p.x - w.x) * 1.12, z: w.y + (p.z - w.y) * 1.12 }));
+    line(dark.g, wide, 0.7, 0.3);
   }
-
-  // Worn paths, then the cart's two ruts along its track.
-  for (const p of o.paths) line(p, 2.1, DRESS.pathEdge);
-  for (const p of o.paths) line(p, 1.25, DRESS.path);
-  for (const p of o.paths)
-    for (let k = 0; k < p.length * 6; k++) {
-      const q = p[Math.floor(R() * p.length)]!, s = 0.025 + R() * 0.05;
-      g.fillStyle = R() < 0.5 ? "rgba(70, 56, 40, 0.5)" : "rgba(235, 226, 205, 0.55)";
-      g.fillRect(q.x + (R() - 0.5) * 1.4, q.z + (R() - 0.5) * 1.4, s, s);
-    }
   const offset = (pts: Pt[], d: number) =>
     pts.map((p, k) => {
       const a = pts[Math.max(0, k - 1)]!, b = pts[Math.min(pts.length - 1, k + 1)]!, dx = b.x - a.x, dz = b.z - a.z, l = Math.hypot(dx, dz) || 1;
       return { x: p.x + (-dz / l) * d, z: p.z + (dx / l) * d };
     });
-  for (const d of [-0.42, 0.42]) {
-    line(offset(o.ruts, d), 0.16, "rgba(72, 56, 38, 0.5)");
-    line(offset(o.ruts, d + 0.1), 0.05, "rgba(240, 230, 210, 0.35)");
+  for (const d of [-0.42, 0.42]) line(dark.g, offset(o.ruts, d), 0.16, 0.8);
+  for (let n = 0; n < 400; n++) {
+    const x = (R() - 0.5) * S * 0.9, z = (R() - 0.5) * S * 0.8, s = 0.05 + R() * 0.2;
+    dark.g.fillStyle = `rgba(255,255,255,${0.1 + R() * 0.2})`;
+    dark.g.fillRect(x, z, s, s * (0.4 + R()));
   }
-
-  // Pick marks: little fans of parallel strokes where blocks were cut.
-  for (let n = 0; n < (o.low ? 70 : 140); n++) {
-    const x = (R() - 0.5) * S * 0.85, z = (R() - 0.5) * S * 0.75;
-    if (!onFloor(x, z)) continue;
-    const a = R() * Math.PI, len = 0.3 + R() * 0.45, m = 4 + Math.floor(R() * 6);
-    for (let j = 0; j < m; j++) {
-      const ox = x + Math.cos(a + Math.PI / 2) * j * 0.11, oz = z + Math.sin(a + Math.PI / 2) * j * 0.11;
-      const l = len * (0.7 + R() * 0.5);
-      line([{ x: ox, z: oz }, { x: ox + Math.cos(a) * l, z: oz + Math.sin(a) * l }], 0.035, "rgba(84, 68, 48, 0.32)");
-      line([{ x: ox + 0.03, z: oz + 0.03 }, { x: ox + 0.03 + Math.cos(a) * l, z: oz + 0.03 + Math.sin(a) * l }], 0.025, "rgba(250, 244, 230, 0.3)");
+  // Read back and put the three together, with the broad tone and the rim done per pixel.
+  const out = document.createElement("canvas");
+  out.width = out.height = N;
+  const og = out.getContext("2d")!;
+  const img = og.createImageData(N, N);
+  const wd = worn.g.getImageData(0, 0, N, N).data, dd = dark.g.getImageData(0, 0, N, N).data;
+  // Per pixel noise is costly: tone and rim are worked out on a coarser grid and looked up.
+  const G = N / (o.low ? 4 : 2), toneG = new Float32Array(G * G), edgeG = new Float32Array(G * G);
+  for (let gy = 0; gy < G; gy++)
+    for (let gx = 0; gx < G; gx++) {
+      const x = ((gx + 0.5) / G - 0.5) * S, z = ((gy + 0.5) / G - 0.5) * S;
+      toneG[gy * G + gx] = fbm2(x * 0.07, z * 0.07, 3, 3);
+      edgeG[gy * G + gx] = Math.max(0, Math.min(1, (o.coastAt(x, z) + 1.4) / 1.4));
     }
-  }
-  // Saw-cut squares, where blocks came out of the floor.
-  for (let n = 0; n < (o.low ? 10 : 18); n++) {
-    const x = (R() - 0.5) * S * 0.8, z = (R() - 0.5) * S * 0.7;
-    if (!onFloor(x, z) || Math.hypot(x, z) < 4) continue;
-    const w = 0.9 + R() * 0.8, h = 0.45 + R() * 0.3, a = DRESS.bandAngle + (R() < 0.5 ? 0 : Math.PI / 2);
-    g.save();
-    g.translate(x, z);
-    g.rotate(a);
-    g.fillStyle = "rgba(120, 104, 80, 0.16)";
-    g.fillRect(-w / 2, -h / 2, w, h);
-    g.strokeStyle = "rgba(80, 64, 46, 0.45)";
-    g.lineWidth = 0.04;
-    g.strokeRect(-w / 2, -h / 2, w, h);
-    g.restore();
-  }
-
-  // Cracks: wandering, branching, tapering.
-  const crack = (x: number, z: number, a: number, n: number, w: number) => {
-    let px = x, pz = z;
-    for (let k = 0; k < n; k++) {
-      a += (R() - 0.5) * 0.9;
-      const nx = px + Math.cos(a) * 0.22, nz = pz + Math.sin(a) * 0.22;
-      const ww = w * (1 - k / n) + 0.012;
-      line([{ x: px, z: pz }, { x: nx, z: nz }], ww, "rgba(56, 44, 32, 0.6)");
-      line([{ x: px + 0.025, z: pz + 0.025 }, { x: nx + 0.025, z: nz + 0.025 }], ww * 0.6, "rgba(246, 238, 220, 0.25)");
-      if (R() < 0.06 && n - k > 5) crack(nx, nz, a + (R() < 0.5 ? 0.9 : -0.9), Math.floor((n - k) * 0.6), ww * 0.7);
-      (px = nx), (pz = nz);
+  for (let py = 0; py < N; py++)
+    for (let px = 0; px < N; px++) {
+      const i = (py * N + px) * 4, gi = Math.floor((py * G) / N) * G + Math.floor((px * G) / N);
+      img.data[i] = wd[i]!;
+      img.data[i + 1] = Math.min(255, dd[i]! + edgeG[gi]! * 120);
+      img.data[i + 2] = Math.max(0, Math.min(255, toneG[gi]! * 255));
+      img.data[i + 3] = 255;
     }
-  };
-  for (let n = 0; n < (o.low ? 45 : 80); n++) {
-    const x = (R() - 0.5) * S * 0.85, z = (R() - 0.5) * S * 0.75;
-    if (!onFloor(x, z)) continue;
-    crack(x, z, R() * Math.PI * 2, 10 + Math.floor(R() * 22), 0.05 + R() * 0.04);
-  }
-  // From each well's lip, a few cracks run out into the floor.
-  wells.forEach((w) => {
-    for (let k = 0; k < 7; k++) {
-      const a = R() * Math.PI * 2, R0 = mouthOf(w) + 0.1;
-      crack(w.x + Math.cos(a) * R0, w.y + Math.sin(a) * R0, a, 6 + Math.floor(R() * 10), 0.07);
-    }
-  });
-
-  // Each well's lip: a dark worn band, broken edge specks, a spill of pale rubble.
-  wells.forEach((w, i) => {
-    const loop = wellLoop(w, i, 64);
-    loop.push(loop[0]!);
-    const out = (d: number) => loop.map((p) => ({ x: w.x + (p.x - w.x) * (1 + d / mouthOf(w)), z: w.y + (p.z - w.y) * (1 + d / mouthOf(w)) }));
-    line(out(0.45), 0.8, "rgba(110, 92, 68, 0.2)");
-    line(out(0.18), 0.36, "rgba(78, 62, 44, 0.5)");
-    line(out(0.04), 0.1, "rgba(48, 38, 28, 0.75)");
-    for (let k = 0; k < 140; k++) {
-      const a = R() * Math.PI * 2, d = mouthOf(w) + 0.15 + R() ** 2 * 1.6, s = 0.03 + R() * 0.09;
-      g.fillStyle = R() < 0.6 ? "rgba(236, 228, 210, 0.75)" : "rgba(84, 70, 52, 0.5)";
-      g.fillRect(w.x + Math.cos(a) * d, w.y + Math.sin(a) * d, s, s * (0.6 + R() * 0.6));
-    }
-  });
-
-  // Grit everywhere.
-  for (let n = 0; n < (o.low ? 9000 : 26000); n++) {
-    const x = (R() - 0.5) * S, z = (R() - 0.5) * S, s = 0.02 + R() * 0.05;
-    g.fillStyle = R() < 0.5 ? "rgba(70, 58, 42, 0.32)" : "rgba(250, 245, 232, 0.4)";
-    g.fillRect(x, z, s, s);
-  }
-
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
-  // The floor's UVs are its shape's (x, -z) in world units.
-  t.repeat.set(1 / S, 1 / S);
-  t.offset.set(0.5, 0.5);
+  og.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(out);
+  t.colorSpace = THREE.NoColorSpace;
   return t;
 }
 
@@ -575,14 +487,14 @@ function table(mt: Mats) {
 }
 
 /**
- * Everything on the verge: the huts, the stacked blocks, the spoil heaps, the cart at the end of
- * its ruts, Tilda's table behind where she stands, tools, and grass and scrub all round. Nothing
- * stands on the chalk (every tile of it is in play).
+ * Everything on the shelf round the chalk: the maps thread's huts, block stacks, cart, hoist and
+ * Tilda's table where it placed them (each through `place`, with a stand-in until its model has
+ * loaded), spoil heaps and tools, and grass and scrub all round. Nothing stands on the chalk (every
+ * tile of it is in play).
  */
-export function dressVerge(group: THREE.Group, coast: (a: number) => number, tableAt: Pt, low: boolean) {
+export function dressVerge(group: THREE.Group, coast: (a: number) => number, low: boolean, place: (model: string, blockout: THREE.Object3D, x: number, z: number, rot: number) => void) {
   const mt = Object.fromEntries(Object.entries(M).map(([k, f]) => [k, f()])) as Mats;
   const at = (a: number, out: number) => ({ x: Math.cos(a) * (coast(a) + out), z: Math.sin(a) * (coast(a) + out) });
-  const facing = (x: number, z: number) => Math.atan2(-x, -z);
   const taken: { x: number; z: number; r: number }[] = [];
   const put = (o: THREE.Object3D, p: Pt, rot: number, r: number) => {
     o.position.set(p.x, 0, p.z);
@@ -590,34 +502,35 @@ export function dressVerge(group: THREE.Group, coast: (a: number) => number, tab
     group.add(o);
     taken.push({ ...p, r });
   };
-  DRESS.huts.forEach((a, i) => {
-    const p = at(a, 2.5);
-    put(hut(mt, 31 + i * 7), p, facing(p.x, p.z), 2.0);
-  });
-  DRESS.blocks.forEach((a, i) => {
-    const p = at(a, 2.0);
-    put(blockStack(mt, 51 + i * 13), p, facing(p.x, p.z) + Math.PI / 2, 2.0);
-  });
+  const stand: Record<string, () => THREE.Object3D> = {
+    "sieve-cutters-hut-a": () => hut(mt, 31),
+    "sieve-cutters-hut-b": () => hut(mt, 38),
+    "sieve-block-stacks": () => blockStack(mt, 51),
+    "sieve-stone-cart": () => cart(mt),
+    "sieve-tally-table": () => table(mt),
+    "sieve-hoist": () => new THREE.Group(),
+  };
+  for (const p of DRESS.props) {
+    place(p.model, stand[p.model]?.() ?? new THREE.Group(), p.x, p.y, (p.rot * Math.PI) / 180);
+    taken.push({ x: p.x, z: p.y, r: p.model.includes("hut") || p.model.includes("hoist") ? 2.0 : 1.4 });
+  }
+  const free = (p: Pt, r: number) => taken.every((t) => Math.hypot(t.x - p.x, t.z - p.z) > t.r + r);
   DRESS.spoil.forEach((a, i) => {
     const p = at(a, 2.6);
-    put(spoilHeap(mt, 71 + i * 3, 1.3 + (i % 2) * 0.5), p, a, 1.9);
+    if (free(p, 1.2)) put(spoilHeap(mt, 71 + i * 3, 1.3 + (i % 2) * 0.5), p, a, 1.9);
   });
-  const cp = at(DRESS.cart, 1.9);
-  put(cart(mt), cp, facing(cp.x, cp.z), 1.4);
-  const ta = Math.atan2(tableAt.z, tableAt.x);
-  put(table(mt), tableAt, facing(tableAt.x, tableAt.z) + Math.PI, 0.9);
-  // A shovel and a pick laid by the cart; a shovel stuck in the nearest spoil heap.
-  put(laid(toolShovel(mt), 0.6), at(DRESS.cart + 0.12, 1.1), 0, 0.3);
+  // A shovel stuck in a spoil heap, and a pick laid on the shelf by the cart.
   const sh = toolShovel(mt);
   sh.rotation.z = 0.3;
   put(sh, at(DRESS.spoil[0]! + 0.05, 1.6), 0, 0.2);
+  const cartAt = DRESS.props.find((p) => p.model === "sieve-stone-cart");
+  if (cartAt) put(laid(toolPick(mt), 0.6), { x: cartAt.x + 0.4, z: cartAt.y + 1.6 }, 0, 0.3);
 
-  // Grass tufts and scrub, all round the verge, lower and sparser on the near (south) side so nothing hides the floor.
+  // Grass tufts and scrub, all round the shelf, lower and sparser on the near (south) side so nothing hides the floor.
   const R = rnd(4242);
-  const bushes = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: "#5f6a45", roughness: 1, flatShading: true }), low ? 50 : 110);
-  const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.09, 0.42, 4), new THREE.MeshStandardMaterial({ color: "#a8a46c", roughness: 1 }), low ? 260 : 700);
+  const bushes = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: "#5f6a45", roughness: 1, flatShading: true }), low ? 40 : 90);
+  const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.09, 0.42, 4), new THREE.MeshStandardMaterial({ color: "#a8a46c", roughness: 1 }), low ? 220 : 560);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
-  const free = (p: Pt, r: number) => taken.every((t) => Math.hypot(t.x - p.x, t.z - p.z) > t.r + r);
   let nb = 0;
   for (let k = 0; k < 2000 && nb < bushes.count; k++) {
     const a = R() * Math.PI * 2, near = Math.sin(a) > 0.3;
@@ -639,5 +552,4 @@ export function dressVerge(group: THREE.Group, coast: (a: number) => number, tab
   }
   tufts.count = nt;
   group.add(bushes, tufts);
-  void ta;
 }
