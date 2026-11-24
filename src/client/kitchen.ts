@@ -8,8 +8,8 @@ import { card } from "./ending.js";
 
 /** The three things, as boxes on the picture (percent of its width and height). The picture is square
  *  and shown whole (black either side), so the boxes hold on any screen. From the cutscene art thread's
- *  draft (kitchen-tappable-walk2-draft-2.png, 1536 px): portrait 496,636–690,856; cup 655,485–785,625;
- *  lantern 910,720–1155,1130. */
+ *  picture (kitchen-tappable-walk2-draft-3.png, 1536 px, Ladi's yes on 24 Nov): portrait 496,636–690,856;
+ *  cup 655,485–785,625; lantern 925,692–1135,1062. */
 const px = (x0: number, y0: number, x1: number, y1: number) => [x0 / 15.36, y0 / 15.36, (x1 - x0) / 15.36, (y1 - y0) / 15.36] as const;
 export const KITCHEN = {
   slot: "walk-kitchen",
@@ -20,7 +20,7 @@ export const KITCHEN = {
   spots: [
     { id: "portrait", label: "Rosalind's portrait", box: px(496, 636, 690, 856), line: null },
     { id: "cup", label: "Her cup", box: px(655, 485, 785, 625), line: "Don't. That one stays on its hook." },
-    { id: "lantern", label: "The lantern", box: px(910, 720, 1155, 1130), line: "It was Mum's. It used to sit in the window." },
+    { id: "lantern", label: "The lantern", box: px(925, 692, 1135, 1062), line: "It was Mum's. It used to sit in the window." },
   ],
 } as const;
 
