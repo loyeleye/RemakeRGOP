@@ -47,6 +47,8 @@ export interface DrawState {
   /** The walks: time of day on the island (see LIGHTS). */
   light?: string;
   /** Runs 6 and 7, the dying brazier (see StoryView.dying). */
+  /** Run 8, the Sieve (see StoryView.sieve). */
+  sieve?: { warn?: number[]; drain?: number; look?: { x: number; y: number } };
   dying?: { part: string; strike: { x: number; y: number; r: number }; faltered?: boolean; hesta?: number };
   /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
   walk?: number;
@@ -397,8 +399,12 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
+/** The Sieve's light: the sun's and the sky's colour at the start, and each one's strength at the start and at the end; and the cold colours they drain to. */
+const SIEVE_LIGHT = { sun: ["#ffd9a0", 2.6, 1.5] as const, sky: ["#fff3e0", 0.95, 1.3] as const };
+const SIEVE_COLD = { sun: new THREE.Color("#e6ecf2"), sky: new THREE.Color("#e9edf0") };
+
 /** The falling law's look (run 8): how high a wisp at full height floats, where the low sun throws its shadow, and how long a fall takes to watch. */
-const FALL = { /** Wisps and their shadows are drawn this much bigger under the law, so height reads with the whole island in view. */ big: 1.5, low: 0.32, high: 1.95, sun: [1.15, 0.55] as const, groundSec: 0.9, wellSec: 1.9, wellDrop: 9 };
+const FALL = { /** Wisps and their shadows are drawn this much bigger under the law, so height reads with the whole island in view. */ big: 1.5, low: 0.32, high: 1.95, sun: [1.15, 0.55] as const, groundSec: 0.9, wellSec: 2.6, wellDrop: 9 };
 
 /** How big the village's glows at the rim are drawn, against their sizes in DYING.rim. */
 const RIM_GLOW = 2.4;
@@ -1927,6 +1933,7 @@ export class World {
     const amb = ambientParticles(th.particles, Math.max(W, H) * 0.65, this.low, (u) => this.timeUniforms.push(u));
     if (amb) g.add(amb);
 
+    this.wellRings = [];
     // The Sieve's wells: old chalk pits gone through, each with a kerb of whitewashed stones.
     for (const w of shrine.wells ?? []) {
       const u = { uTime: { value: 0 } };
@@ -1935,6 +1942,13 @@ export class World {
       const disc = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, R * 2).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ vertexShader: UV_VS, fragmentShader: WELL_FS, uniforms: u, transparent: true, polygonOffset: true, polygonOffsetFactor: -1 }));
       disc.position.set(w.x, 0.03, w.y);
       g.add(disc);
+      // The shimmer in the air over it, before a wisp appears there.
+      const ring = new THREE.Mesh(new THREE.RingGeometry(R * 0.35, R * 0.98, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffb53a", transparent: true, opacity: 0, depthWrite: false }));
+      ring.position.set(w.x, 0.3, w.y);
+      ring.visible = false;
+      ring.renderOrder = 2;
+      g.add(ring);
+      this.wellRings.push(ring);
       const kerbMat = new THREE.MeshStandardMaterial({ color: "#f6f3ea", roughness: 0.95 });
       const n = Math.max(10, Math.round(R * 7));
       for (let i = 0; i < n; i++) {
@@ -2596,6 +2610,38 @@ export class World {
    * step back as the light shrinks, and the comet: a streak, a flash that lights everything, dust.
    */
   private dyingFx: { all: THREE.Object3D[]; dark: THREE.Mesh; u: { uLit: { value: number }; uDark: { value: number } }; glows: THREE.Sprite[]; head: THREE.Sprite; trail: THREE.Sprite[]; dust: THREE.Sprite[]; burst: THREE.PointLight; ember: THREE.Sprite; part: string; partAt: number; struckAt: number; lit: number; flame: number } | null = null;
+  /** Run 8: the shimmer over each well, and the morning's colour draining to grey-white as the supply comes. */
+  private wellRings: THREE.Mesh[] = [];
+  private sieveOn = false;
+  private stepSieve(st: DrawState, time: number) {
+    const sv = st.sieve;
+    if (!sv) {
+      if (this.sieveOn) {
+        this.sieveOn = false;
+        const th = themeFor(st.shrine.id);
+        this.hemi.color.set(th.hemi[0]);
+        this.sun.color.set(th.sun[0]);
+        this.hemi.intensity = this.dayLight.hemi;
+        this.sun.intensity = this.dayLight.sun;
+      }
+      return;
+    }
+    this.sieveOn = true;
+    this.wellRings.forEach((r, i) => {
+      const on = !!sv.warn?.includes(i);
+      const m = r.material as THREE.MeshBasicMaterial;
+      m.opacity += ((on ? 0.3 + 0.2 * Math.sin(time * 11 + i) : 0) - m.opacity) * 0.15;
+      r.visible = m.opacity > 0.01;
+      r.scale.setScalar(0.9 + 0.1 * Math.sin(time * 5 + i * 2));
+    });
+    // Warm morning to a flat grey-white: the sun cools and weakens, the sky's own light makes up the brightness.
+    const k = sv.drain ?? 0;
+    this.sun.color.set(SIEVE_LIGHT.sun[0]).lerp(SIEVE_COLD.sun, k);
+    this.hemi.color.set(SIEVE_LIGHT.sky[0]).lerp(SIEVE_COLD.sky, k);
+    this.sun.intensity = SIEVE_LIGHT.sun[1] + (SIEVE_LIGHT.sun[2] - SIEVE_LIGHT.sun[1]) * k;
+    this.hemi.intensity = SIEVE_LIGHT.sky[1] + (SIEVE_LIGHT.sky[2] - SIEVE_LIGHT.sky[1]) * k;
+  }
+
   /** Run 8: wisps that have just fallen away, watched going: down into the chalk, or down a well getting smaller. */
   private fallFx: { key: string; s: THREE.Sprite; x: number; z: number; well: boolean; at: number }[] = [];
   private stepFalls(st: DrawState, time: number) {
@@ -2619,7 +2665,7 @@ export class World {
       if (q.well) {
         q.s.position.set(q.x, FALL.low - FALL.wellDrop * k * k, q.z + 0.6 * k);
         q.s.scale.setScalar(1.2 * (1 - 0.8 * k));
-        q.s.material.opacity = 0.9 * (1 - k * k);
+        q.s.material.opacity = 0.95 * (1 - k * k * k);
       } else {
         q.s.position.set(q.x, FALL.low - 0.5 * k, q.z);
         q.s.scale.setScalar(1.2 * (1 - 0.5 * k));
@@ -3222,6 +3268,7 @@ export class World {
     for (const [id, rig] of this.wisps) if (!seenW.has(id)) (this.scene.remove(rig.root), rig.stones && this.scene.remove(rig.stones), rig.earth && this.scene.remove(rig.earth), rig.shade && this.scene.remove(...rig.shade), this.wisps.delete(id));
     this.stepDying(st, time);
     this.stepFalls(st, time);
+    this.stepSieve(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
     // Watchers: story figures standing off the plaza, turning slowly to keep you in view.

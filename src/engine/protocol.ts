@@ -97,8 +97,8 @@ export interface StoryView {
    * hold has faltered, and who she is once she has landed.
    */
   dying?: { part: "six" | "embers" | "landing" | "seven" | "roar"; strike: { x: number; y: number; r: number }; faltered?: boolean; hesta?: number };
-  /** Run 8, the Sieve: who the keeper is (a player who stands and watches). Nothing is counted on screen. */
-  sieve?: { keeper: number };
+  /** Run 8, the Sieve: who the keeper is (a player who stands and watches), and which wells are about to have a wisp over them. Nothing is counted on screen. */
+  sieve?: { keeper: number; /** How much of the supply has come (0 to 1): the morning's colour drains with it. */ drain?: number; /** The first fall: the tile to look down at, while nothing moves. */ look?: { x: number; y: number }; /** Wells (by their place in the shrine's list) where a wisp is about to appear: the air over them shimmers. */ warn?: number[] };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */
   /** kitchen: how many times Rook has gone in his door this walk (from walk 2); a rise opens the kitchen still. */
   pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "night" | "dusk"; kitchen?: number };

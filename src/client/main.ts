@@ -437,6 +437,31 @@ function stepLook(now: number, props: { kind: string; x: number; y: number }[], 
   cam.scale = Math.exp(Math.log(a.scale) + (Math.log(b.scale) - Math.log(a.scale)) * k);
 }
 
+/** Run 8, the first fall: the camera goes to the well and looks down it, with the sound cut, and comes back. */
+let wellLook: { from: { cx: number; cy: number; scale: number; follow: boolean }; k: number; to: { x: number; y: number } } | null = null;
+function stepWellLook(look: { x: number; y: number } | undefined) {
+  if (!wellLook && !look) return;
+  if (!wellLook) {
+    wellLook = { from: { cx: cam.cx, cy: cam.cy, scale: cam.scale, follow: cam.follow }, k: 0, to: look! };
+    cam.follow = false;
+    sound.windOff(0.15);
+  }
+  const L = wellLook;
+  L.k += ((look ? 1 : 0) - L.k) * 0.09;
+  if (!look && L.k < 0.02) {
+    cam.cx = L.from.cx;
+    cam.cy = L.from.cy;
+    cam.scale = L.from.scale;
+    cam.follow = L.from.follow;
+    wellLook = null;
+    if (room?.story?.sieve) sound.wind(2);
+    return;
+  }
+  cam.cx = L.from.cx + (L.to.x + 0.5 - L.from.cx) * L.k;
+  cam.cy = L.from.cy + (L.to.y + 0.5 - L.from.cy) * L.k;
+  cam.scale = L.from.scale * (1 + 1.1 * L.k);
+}
+
 /** The walking map: a closer camera that follows Rook, and a short fade out when Hesta's game starts. */
 let inPlace = false;
 let placeFade: HTMLElement | null = null;
@@ -1389,6 +1414,7 @@ function frame(now: number) {
   const t = Math.min(1, (now - snapAt) / tickMs);
   const mine = snap.players.find((p) => p.id === me);
   if (lookBeat) stepLook(now, shrine.props ?? [], mine);
+  stepWellLook(room?.story?.sieve?.look);
   if (cam.follow && mine) {
     if (cam.compact || cam.zoomedIn) {
       const tx = mine.px + (mine.x - mine.px) * t + 0.5;
@@ -1428,7 +1454,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, walk: room?.story?.pond?.walk };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, walk: room?.story?.pond?.walk };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.

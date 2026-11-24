@@ -11,7 +11,7 @@ export const SIEVE = {
   /** Ticks of talk before the stop starts. */
   bellTicks: 3,
   /** Height lost a tick untouched; gained on the tick a staff first reaches a wisp; gained each tick it stays. */
-  fall: 1.45,
+  fall: 1.6,
   liftTap: 35,
   liftHold: 8,
   /** Wisps arrive lower as the run goes on: the first at `arriveHigh`, the last of the supply at `arriveLow`. */
@@ -22,14 +22,18 @@ export const SIEVE = {
   supply: 16,
   onBoard: 4,
   /** Where they arrive: between these shares of the way from the brazier to the coast. */
-  band: [0.68, 0.9] as const,
+  band: [0.82, 0.97] as const,
   /** Which of the supply (counted from 0) arrive hanging over a well: six of the sixteen, never two running, and not the first. */
   overWell: [2, 5, 7, 10, 12, 14] as readonly number[],
   /** They hang over one of this many wells furthest from Rook, and this much lower than a wisp arriving then on the ground. */
   wellFarthest: 2,
   wellLower: 55,
   /** However late it comes, a wisp over a well arrives at least this high. */
-  wellFloor: 10,
+  wellFloor: 27,
+  /** The first fall: ticks of looking down the well after it, with nothing moving and no sound (about 2 seconds). */
+  lookTicks: 4,
+  /** Ticks the air over a well shimmers before a wisp appears there. */
+  warnTicks: 6,
   /** Ticks before another comes in the place of one that banked or fell. */
   pause: 2,
   /** A wisp counts as kept up if a staff was on it within this many ticks (for Tilda's line when three are). */

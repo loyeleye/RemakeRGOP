@@ -131,21 +131,29 @@ describe("Run 8: a harder job, on the Sieve", () => {
     }
     expect(room.state.doomed).toBeNull();
     expect(room.lost).toBe(0);
+    // A moment of looking down the well after it: nothing moves, and then she speaks.
+    expect(room.storyView().sieve!.look).toEqual({ x: g.wisps[id]!.pos.x, y: g.wisps[id]!.pos.y });
+    expect(room.state.said.has("there")).toBe(false);
+    const tick = g.tick;
+    for (let t = 0; t < SIEVE.lookTicks; t++) room.onTick();
+    expect(g.tick).toBe(tick);
+    expect(room.storyView().sieve!.look).toBeUndefined();
     expect(room.state.said.has("there")).toBe(true);
   });
 
-  it("a juggler loses none or one and banks ten; the count is read against sixteen", () => {
+  it("all sixteen play out: a juggler loses none or one, and she counts what he banked against sixteen", () => {
     for (const seed of [3, 44, 501]) {
       const { room, said } = play("juggle", seed);
       expect(room.state.phase).toBe("results");
       expect(room.lost).toBeLessThanOrEqual(1);
       expect(room.restarts).toBe(0);
-      expect(room.state.game.scores[0]).toBe(SIEVE.need);
-      expect(room.state.arrived).toBeLessThanOrEqual(SIEVE.supply);
+      // The first can't be saved, so fifteen at most.
+      expect(room.state.game.scores[0]).toBe(SIEVE.supply - 1 - room.lost);
+      expect(room.state.arrived).toBe(SIEVE.supply);
       expect(said).toContain("There. That's what I sent for you about.");
       expect(said).toContain("I can't do that. I can only hold one.");
       const end = room.state.end!.lines.map((l) => l.text);
-      expect(end.slice(0, 2)).toEqual(["Ten.", "The book says sixteen. Every year, back to the first page."]);
+      expect(end.slice(0, 2)).toEqual([room.lost ? "Fourteen." : "Fifteen.", "The book says sixteen. Every year, back to the first page."]);
       expect(end.at(-1)).toBe("Come home, Rook.");
       expect([...said, ...end].join(" ").toLowerCase()).not.toContain("sink");
     }
@@ -155,22 +163,26 @@ describe("Run 8: a harder job, on the Sieve", () => {
     expect(SIEVE.overWell.length).toBe(6);
     expect(SIEVE.overWell[0]).toBeGreaterThan(0);
     SIEVE.overWell.forEach((n, i) => i && expect(n - SIEVE.overWell[i - 1]!).toBeGreaterThan(1));
-    let s = 77, seen = 0;
+    let s = 77, seen = 0, warnedFor = 0;
     const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "juggle");
     room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
     const was = new Map<number, boolean>();
     for (let n = 0; n < 1500 && room.state.phase !== "results"; n++) {
-      const before = room.state.arrived;
+      // The air over a well shimmers for some ticks before a wisp appears there, and it comes with time to reach it.
+      const waiting = [...room.state.warned.keys()];
+      if (waiting.length) (warnedFor++, expect(room.storyView().sieve!.warn!.length).toBeGreaterThan(0));
       room.onTick();
       const g = room.state.game;
+      for (const id of waiting) if (!room.state.warned.has(id) && !g.away.has(id)) expect(g.height.get(id)! / SIEVE.fall).toBeGreaterThanOrEqual(15);
       // A wisp newly on the board over a well (the scripted first one aside).
       for (const w of g.wisps) {
         const on = !g.away.has(w.id) && g.board.tile(w.pos) === Tile.Well && w.id !== room.state.doomed;
-        if (on && !was.get(w.id) && room.state.arrived > before) seen++;
+        if (on && !was.get(w.id)) seen++;
         was.set(w.id, !g.away.has(w.id));
       }
     }
-    expect(seen).toBeGreaterThanOrEqual(2);
+    expect(seen).toBeGreaterThanOrEqual(4);
+    expect(warnedFor).toBeGreaterThanOrEqual(seen * (SIEVE.warnTicks - 1));
     expect(room.lost).toBeLessThanOrEqual(1);
   });
 

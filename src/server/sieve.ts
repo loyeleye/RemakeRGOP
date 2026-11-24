@@ -41,6 +41,11 @@ export class SieveRoom {
   private touchedAt = new Map<number, number>();
   /** Wisps that arrived over a well this time round. */
   private overWell = new Set<number>();
+  /** Wisps on their way to a well: where each will appear, over which well, and how high. That well shimmers meanwhile. */
+  /** The first fall: ticks left of standing and looking down the well, and where. Nothing moves meanwhile. */
+  private lookLeft = 0;
+  private look: Pt | null = null;
+  private warned = new Map<number, { at: Pt; well: number; height: number }>();
   /** For the measurements: wisps lost (the first not counted), how many of those over a well, restarts, and the ticks the last try took. */
   lost = 0;
   lostWell = 0;
@@ -86,7 +91,7 @@ export class SieveRoom {
         if (this.phase === "results") this.begin();
         return;
       case "act": {
-        if (this.phase !== "playing") return;
+        if (this.phase !== "playing" || this.lookLeft > 0) return;
         this.game.command(YOU, { action: cleanAction(msg.action, this.game), toggleRun: !!msg.toggleRun, toggleMode: !!msg.toggleMode });
         return;
       }
@@ -126,6 +131,10 @@ export class SieveRoom {
     this.busyUntil = 0;
     this.arrived = 0;
     this.touchedAt = new Map();
+    this.warned = new Map();
+    this.overWell = new Set();
+    this.lookLeft = 0;
+    this.look = null;
     this.lost = this.lostWell = this.ticks = 0;
     g.onReturn = (w) => this.arrive(w);
     for (const w of g.wisps) this.arrive(w);
@@ -141,7 +150,6 @@ export class SieveRoom {
     tilda.pos = tilda.prev = g.nearestFree(pt(c.x + S.keeper[0], c.y + S.keeper[1]), 0);
     const rook = this.player(YOU);
     rook.pos = rook.prev = g.nearestFree(pt(c.x + S.rook[0], c.y + S.rook[1]), 0);
-    this.arrived--;
     this.phase = first ? "countdown" : "playing";
     if (first) {
       const before = this.lines.length;
@@ -156,6 +164,15 @@ export class SieveRoom {
   /** A wisp of the supply comes onto the board, in the outer band, lower the later it comes. None once the supply is spent. */
   private arrive(w: Wisp) {
     const g = this.game, S = SIEVE, b = g.board, c = b.center;
+    // One that was warned of: it appears over its well now.
+    const due = this.warned.get(w.id);
+    if (due) {
+      this.warned.delete(w.id);
+      moveWisp(w, due.at);
+      g.height.set(w.id, due.height);
+      this.overWell.add(w.id);
+      return;
+    }
     if (this.arrived >= S.supply) return void g.away.set(w.id, 1e9);
     this.overWell.delete(w.id);
     const sh = shrineById(S.shrine);
@@ -169,11 +186,14 @@ export class SieveRoom {
       const a = this.rng.next() * Math.PI * 2, r = this.rng.next() * Math.max(0, k.r - 0.8);
       const p = pt(Math.round(c.x + k.x + Math.cos(a) * r), Math.round(c.y + k.y + Math.sin(a) * r));
       if (b.tile(p) !== Tile.Well || taken.has(`${p.x},${p.y}`) || g.wisps.some((o) => o !== w && !g.away.has(o.id) && b.tile(o.pos) === Tile.Well && Math.hypot(o.pos.x - p.x, o.pos.y - p.y) < 4)) continue;
-      moveWisp(w, p);
-      n = 1e9;
-      this.overWell.add(w.id);
+      // The air over that well shimmers for a few ticks first, as run 4's pools did.
+      const height = Math.max(S.wellFloor, S.arriveHigh + ((S.arriveLow - S.arriveHigh) * this.arrived) / Math.max(1, S.supply - 1) - S.wellLower);
+      this.warned.set(w.id, { at: p, well: SV_WELLS.indexOf(k), height });
+      g.away.set(w.id, g.tick + S.warnTicks);
+      this.arrived++;
+      return;
     }
-    for (let n = 0; n < 80 && !this.overWell.has(w.id); n++) {
+    for (let n = 0; n < 80; n++) {
       const a = this.rng.next() * Math.PI * 2, edge = sh.outline!(a);
       const r = edge * (S.band[0] + this.rng.next() * (S.band[1] - S.band[0]));
       const p = pt(Math.round(c.x + Math.cos(a) * r), Math.round(c.y + Math.sin(a) * r));
@@ -181,7 +201,7 @@ export class SieveRoom {
       moveWisp(w, p);
       break;
     }
-    g.height.set(w.id, Math.max(S.wellFloor, S.arriveHigh + ((S.arriveLow - S.arriveHigh) * this.arrived) / Math.max(1, S.supply - 1) - (this.overWell.has(w.id) ? S.wellLower : 0)));
+    g.height.set(w.id, S.arriveHigh + ((S.arriveLow - S.arriveHigh) * this.arrived) / Math.max(1, S.supply - 1));
     this.arrived++;
   }
 
@@ -201,13 +221,26 @@ export class SieveRoom {
 
   private step() {
     const g = this.game, S = SIEVE;
+    // The first one has just gone down the well: a moment of looking after it, in silence, and then her line.
+    if (this.lookLeft > 0) {
+      if (--this.lookLeft === 0) {
+        this.look = null;
+        if (!this.said.has("there")) (this.said.add("there"), this.say(KEEPER, "There. That's what I sent for you about.", { player: KEEPER_ID }, "key"));
+      }
+      return;
+    }
     if (this.stand && this.stand !== "idle") this.steer();
     g.step();
     this.ticks = g.tick;
     for (const f of g.falls) {
       if (f.wisp === this.doomed) {
         this.doomed = g.pastSaving = null;
-        if (!this.said.has("there")) (this.said.add("there"), this.say(KEEPER, "There. That's what I sent for you about.", { player: KEEPER_ID }, "key"));
+        // The first time only (not on a restart): hold on it.
+        if (!this.said.has("there")) {
+          this.lookLeft = S.lookTicks;
+          this.look = pt(f.x, f.y);
+          this.player(YOU).action = { kind: "idle" };
+        }
         continue;
       }
       this.lost++;
@@ -230,10 +263,11 @@ export class SieveRoom {
       this.said.add("knock");
       this.say(KEEPER, "If I leave one, it goes down. If I knock it, it comes up. For a while.", { player: KEEPER_ID }, "key");
     }
+    // All sixteen play out: ten is the pass mark, and she counts what he banked.
     const banked = g.scores[0]!;
-    if (banked >= S.need) return this.finish(banked);
-    // So many lost that ten can't be reached: again, at once, and no blame.
     const live = g.wisps.filter((w) => !g.away.has(w.id) || g.away.get(w.id)! < 1e8).length - (this.doomed !== null ? 1 : 0);
+    if (live === 0 && this.arrived >= S.supply && this.doomed === null && banked >= S.need) return this.finish(banked);
+    // So many lost that ten can't be reached: again, at once, and no blame.
     if (banked + live + (S.supply - this.arrived) < S.need) {
       this.restarts++;
       this.lines.push({ who: HESTA, text: "Again, Rook." });
@@ -319,7 +353,7 @@ export class SieveRoom {
   }
 
   storyView(): StoryView {
-    return { run: SIEVE.run, movement: 0, title: "", ring: null, mark: null, kes: 0, rival: null, note: "", end: this.end, sieve: { keeper: KEEPER_ID } };
+    return { run: SIEVE.run, movement: 0, title: "", ring: null, mark: null, kes: 0, rival: null, note: "", end: this.end, sieve: { keeper: KEEPER_ID, drain: Math.max(0, Math.min(1, (this.arrived - SIEVE.onBoard) / (SIEVE.supply - SIEVE.onBoard))), ...(this.look ? { look: { x: this.look.x, y: this.look.y } } : {}), ...(this.warned.size ? { warn: [...new Set([...this.warned.values()].map((q) => q.well))] } : {}) } };
   }
 
   view(): RoomView {
@@ -351,7 +385,7 @@ export class SieveRoom {
 
   /** For tests. */
   get state() {
-    return { phase: this.phase, game: this.game, end: this.end, said: this.said, doomed: this.doomed, arrived: this.arrived };
+    return { phase: this.phase, game: this.game, end: this.end, said: this.said, doomed: this.doomed, arrived: this.arrived, warned: this.warned };
   }
 }
 
