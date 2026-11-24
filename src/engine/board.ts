@@ -45,6 +45,8 @@ export enum Tile {
   Plate = 14,
   /** Sun glyph: a wisp left resting on one is relayed along the way toward the brazier. */
   Glyph = 15,
+  /** A well: a shaft open to the sky below. Nobody walks on it; wisps float over it, and sight and reach carry across. It is not water. */
+  Well = 16,
 }
 
 /** In mist you can still make out anything this close (Chebyshev tiles). */
@@ -141,6 +143,7 @@ export class Board {
       case Tile.CrystalB:
         return who === Mover.Sight;
       case Tile.Water:
+      case Tile.Well:
       case Tile.Brazier:
         return who !== Mover.Walker;
       case Tile.Moss:

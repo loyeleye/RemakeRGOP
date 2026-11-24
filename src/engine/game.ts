@@ -167,7 +167,7 @@ export interface GameSnapshot {
   moss?: number[];
   /** One score per team in the round. */
   scores: number[];
-  wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null; rooted?: number; away?: boolean; /** How far gone a wisp outside the light is: 0 just out of it, 1 about to go out. */ dim?: number }[];
+  wisps: { id: number; guild: Guild; x: number; y: number; px: number; py: number; rim: number; holder: number | null; rooted?: number; away?: boolean; /** How far gone a wisp outside the light is: 0 just out of it, 1 about to go out. */ dim?: number; /** Height under the falling law, 0 (down) to 1 (full). */ h?: number }[];
   players: {
     id: number;
     guild: Guild;
@@ -194,6 +194,8 @@ export interface GameSnapshot {
   flame?: number;
   lit?: number;
   outs?: { tick: number; wisp: number }[];
+  /** The falling law: wisps that fell away this tick, where, and whether over a well. */
+  falls?: { tick: number; wisp: number; x: number; y: number; well: boolean }[];
   rootLit?: boolean;
   /** Pulls stopped at the bank this tick (the laws of water): who, which wisp, and the water tile it met. */
   stops?: { player: number; wisp: number; x: number; y: number }[];
@@ -364,6 +366,26 @@ export class Game {
    * grip, and banks.
    */
   slideHome = false;
+  /**
+   * The falling law (story run 8, gameplay/run8-prototype-brief.md): every wisp has a height, 0
+   * to 100. Untouched, it loses `fallRate` a tick. A staff on it lifts it: `liftTap` on the tick
+   * the staff first reaches it, `liftHold` for every tick the staff stays. At 0 it is gone
+   * (`falls`, with whether it was over a well), without scoring, and another comes in its place
+   * after `outPause`. A wisp on the brazier's rim no longer falls. Height changes nothing else:
+   * a low wisp pulls and taps exactly as a high one.
+   * `fallRate` 0: no heights, and none of this applies.
+   */
+  fallRate = 0;
+  liftTap = 0;
+  liftHold = 0;
+  /** Each wisp's height; one not listed is at full height. */
+  height = new Map<number, number>();
+  /** A wisp no staff can lift (run 8's first, which is not his to save), or null. */
+  pastSaving: number | null = null;
+  /** This tick's wisps that fell away. */
+  falls: { tick: number; wisp: number; x: number; y: number; well: boolean }[] = [];
+  /** Wisps a staff was on last tick, to tell a staff arriving from one staying. */
+  private lifted = new Set<number>();
   /** Story: nobody can push another side's wisps (run 5: no shoving). */
   noShove = false;
   /** Ticks a banked wisp stays gone before it comes back (0: straight back, as in a match). */
@@ -568,9 +590,43 @@ export class Game {
     for (const w of this.wisps) {
       if (!w.touched && w.grip !== Grip.Free) w.grip = (w.grip + 1) % 4;
     }
+    if (this.fallRate > 0) this.stepFall();
   }
 
   // ---------------------------------------------------------------- wisps
+
+  /** The falling law: untouched wisps lose height, a staff lifts them, and one that reaches the ground is gone. */
+  private stepFall() {
+    this.falls = [];
+    const now = new Set<number>();
+    for (const w of this.wisps) {
+      if (this.away.has(w.id)) {
+        this.height.delete(w.id);
+        continue;
+      }
+      const h = this.height.get(w.id) ?? 100;
+      if (w.touched && w.id !== this.pastSaving) {
+        now.add(w.id);
+        this.height.set(w.id, Math.min(100, h + (this.lifted.has(w.id) ? this.liftHold : this.liftTap)));
+        continue;
+      }
+      // Riding in on the rim: as good as banked.
+      if (this.board.inBankZone(w.pos) && w.id !== this.pastSaving) continue;
+      const to = h - this.fallRate;
+      if (to > 0) {
+        this.height.set(w.id, to);
+        continue;
+      }
+      this.height.delete(w.id);
+      this.falls.push({ tick: this.tick, wisp: w.id, x: w.pos.x, y: w.pos.y, well: this.board.tile(w.pos) === Tile.Well });
+      this.letGo(w);
+      w.holder = null;
+      w.target = null;
+      w.skate = null;
+      this.away.set(w.id, this.tick + Math.max(1, this.outPause));
+    }
+    this.lifted = now;
+  }
 
   /** The light law: the flame drains, and wisps left outside its light dim and go out. */
   private stepLight() {
@@ -1288,6 +1344,7 @@ export class Game {
         ...(this.rooted.has(w.id) ? { rooted: this.rooted.get(w.id)! } : {}),
         ...(this.away.has(w.id) ? { away: true } : {}),
         ...(this.dark.has(w.id) && this.dimTicks > 0 ? { dim: this.dark.get(w.id)! / this.dimTicks } : {}),
+        ...(this.fallRate > 0 && !this.away.has(w.id) ? { h: (this.height.get(w.id) ?? 100) / 100 } : {}),
       })),
       players: this.players.map((p) => ({
         id: p.id,
@@ -1308,6 +1365,7 @@ export class Game {
       ...(this.string.length ? { string: [...this.string], stringLive: this.stringLive } : {}),
       ...(this.stormLight != null ? { stormLight: this.stormLight } : {}),
       ...(this.flame !== null ? { flame: this.flame, lit: lightRadius(this.flame), outs: this.outs.length ? this.outs : undefined, rootLit: this.rootedLit || undefined } : {}),
+      ...(this.falls.length ? { falls: this.falls } : {}),
       stops: this.bankStops.length ? this.bankStops.map((b) => ({ player: b.player, wisp: b.wisp, x: b.water.x, y: b.water.y })) : undefined,
       moss: this.mossHp.size ? [...this.mossHp].flat() : undefined,
     };

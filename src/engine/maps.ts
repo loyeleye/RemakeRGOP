@@ -9,6 +9,7 @@
 //   1  Dawn start   2  Dusk start
 
 import { DYING, craterBoard, craterTiles } from "./dying.js";
+import { SV_WELLS, sieveRows, svCoast, svOutline } from "./sieve.js";
 import { KF_FAR, KF_OVAL, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
 import { HS_CENTRE, HS_FAR, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
 import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
@@ -403,6 +404,8 @@ export interface Shrine {
   glass?: boolean;
   /** Story places: an oval of other ground round the brazier (Kite Fell's race ground), half-sizes in tiles; drawn from textures/floor-<id>-race.webp. */
   raceOval?: { rx: number; ry: number };
+  /** Story places: wells, shafts open to the sky below (the Sieve), as offsets from the brazier and radii in tiles. */
+  wells?: { x: number; y: number; r: number }[];
   /** Story places: where the lower terraces hang (radians, east is 0, south a quarter turn), to keep them clear of a landing or falls. */
   tierAngles?: number[];
   /** Story places: model turns (radians) by prop kind, or by tile as "x,y", over the usual. */
@@ -904,6 +907,8 @@ const TILE_OF: Record<string, Tile> = {
   "≈": Tile.Water,
   B: Tile.Brazier,
   "%": Tile.Rime,
+  /** A well (the Sieve, run 8): open to the sky below. */
+  "@": Tile.Well,
   "+": Tile.Bloom,
   "^": Tile.Vent,
   "=": Tile.Gate,
@@ -1364,6 +1369,8 @@ export const STORY_SHRINES: Shrine[] = [
   homeIsland(),
   // Runs 6 and 7: the Kindling ground after Hesta's landing, with the glass crater by the brazier (see dying.ts).
   kindlingCrater(),
+  // Run 8, a harder job: the Sieve, pale chalk pierced by wells (see sieve.ts).
+  sieve(),
 ];
 
 /** The Kindling ground with the crater in it: everything else as run 1's island. */
@@ -1373,6 +1380,14 @@ function kindlingCrater(): Shrine {
   // The stones the comet struck are gone from the drawing too.
   const gone = new Set(craterTiles(base.board).map((p) => `${p.x},${p.y}`));
   return { ...base, id: DYING.craterShrine, name: "The Kindling ground", board, props: base.props?.filter((p) => !gone.has(`${p.x},${p.y}`)), glass: true };
+}
+
+/** The Sieve: a plain chalk oval with its wells, and nothing else on it. */
+function sieve(): Shrine {
+  const rows = sieveRows();
+  const def: ShrineDef = { id: "sieve", name: "The Sieve", blurb: "Pale chalk pierced by wells open to the cloud below.", full: true, scale: 1, rings: [], spawnBand: [10, 14], rows };
+  const sh = finish(def, rows, 2, null);
+  return { ...sh, coast: svCoast, outline: svOutline, arms: true, lobes: [], wells: SV_WELLS.map((w) => ({ ...w })) };
 }
 
 /** Kite Fell: drawn from the maps thread's shapes, like the home island. */
