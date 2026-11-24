@@ -489,10 +489,8 @@ describe("Run 8: the reaction stills", () => {
     expect(text("r8-5").text).toBe("They don't do that.");
     expect(text("r8-6").text).toBe("They've never done that.");
     expect(text("r8-7")).toMatchObject({ who: "Rook", text: "Granny?" });
-    // His line is a bubble over him; the picture comes alone. The others caption their pictures.
-    expect(text("r8-7").still!.bubble).toBe(true);
-    expect(text("r8-7").player).toBe(1);
-    expect(text("r8-5").still!.bubble).toBeUndefined();
+    // Every line is its picture's caption; none is a bubble beside it.
+    expect(lines.filter((x) => x.l.still?.bubble)).toEqual([]);
     expect(text("r8-5").still!.seq && text("r8-6").still!.seq).toBe(true);
     const end = room.state.end!.lines.filter((l) => l.still).map((l) => l.still!.id);
     expect(end).toEqual(["r8-10", "r8-11a", "r8-11b"]);

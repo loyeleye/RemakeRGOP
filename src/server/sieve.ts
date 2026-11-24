@@ -337,10 +337,8 @@ export class SieveRoom {
       const quiet = rook.beam === null && rook.action.kind !== "staff" && g.wisps.every((w) => g.away.has(w.id) || w.id === this.doomed || (g.height.get(w.id) ?? 100) >= Q.grannyLow);
       if (since >= Q.grannyAfter && (quiet || since >= Q.grannyBy) && this.stillReady()) {
         this.said.add("granny");
-        // A bubble over him, with his picture beside it and no caption (Ladi, 24 Nov). It always lands, so the picture does.
-        const cue = this.still("r8-7");
-        if (cue.still) cue.still.bubble = true;
-        this.say(ROOK, "Granny?", { player: YOU, ...cue }, "key");
+        // His line is the caption on his small picture, not a bubble (Ladi tried the bubble on 24 Nov and went back).
+        this.say(ROOK, "Granny?", { player: YOU, ...this.still("r8-7") }, "key");
       }
     }
     if (!this.said.has("knock") && this.said.has("there") && g.wisps.some((w) => w.touched)) {
