@@ -3,7 +3,7 @@ import { Tile, pt } from "../src/engine/board.js";
 import { DYING, craterTiles } from "../src/engine/dying.js";
 import { Game, lightRadius } from "../src/engine/game.js";
 import { shrineById } from "../src/engine/maps.js";
-import type { ServerMsg, StoryLine } from "../src/engine/protocol.js";
+import type { ServerMsg, StoryLine, StoryView } from "../src/engine/protocol.js";
 import { DyingRoom, type Stand } from "../src/server/dying.js";
 
 /** Rook by the fire on the Kindling ground with one wisp, and a flame. */
@@ -292,9 +292,26 @@ describe("runs 6 and 7, the dying brazier", () => {
       // The bell is the last sound, alone, and stops before the light.
       expect(lastOn("bell")).toBe(B.bellOff - 1);
       expect(first("orange")).toBe(B.orange);
-      const stills = views.filter((v) => v!.part === "stills").map((v) => v!.still);
-      expect([...new Set(stills)]).toEqual([0, 1, 2]);
+      // The faces fade in and out, the comet falls on the map, and her picture comes up over the strike while the new board waits.
+      const T = DYING.landingShow;
+      const stills = views.filter((v) => v!.part === "stills");
+      expect(stills.filter((v) => v!.still === 0).length).toBe(T.faces);
+      expect(stills.filter((v) => v!.still === 0).every((v) => v!.stillTicks === T.faces)).toBe(true);
+      expect(stills.filter((v) => v!.comet !== undefined).map((v) => v!.comet)).toEqual([...Array(T.comet).keys()]);
+      const hers = views.filter((v) => v!.still === 2);
+      expect(hers.length).toBe(T.hesta);
+      expect(hers.every((v) => v!.part === "seven")).toBe(true);
     }
+  });
+
+  it("with the comet on the map switched off, the three pictures play as before", () => {
+    const room = new DyingRoom({ every: () => () => {} }, () => 7, "idle");
+    room.switches.cometOnMap = false;
+    const views: NonNullable<StoryView["dying"]>[] = [];
+    room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    for (let n = 0; n < 400 && room.state.part !== "seven"; n++) room.onTick(), views.push(room.storyView().dying!);
+    expect([...new Set(views.filter((v) => v.part === "stills").map((v) => v.still))]).toEqual([0, 1, 2]);
+    expect(views.some((v) => v.comet !== undefined)).toBe(false);
   });
 
   it("under the cloud he can walk and has no wisp to put his staff on", () => {

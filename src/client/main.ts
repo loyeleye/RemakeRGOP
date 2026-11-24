@@ -774,6 +774,7 @@ function storyTickSound(s: GameSnapshot) {
 let dyingPart = "";
 let dyingLurch = 0;
 let dyingStill = -1;
+let dyingCometOn = true;
 
 /** Run 8 with the first pull (a test), its third take, the tug; ?pull=2 in the address plays the second take (v112), ?pull=1 the first (v111), ?nopull=1 none (v108). */
 function sieveRoom() {
@@ -839,6 +840,8 @@ function dyingRoom() {
   if (q.has("calls")) r.switches.lumiCalls = true;
   if (q.has("noback")) r.switches.lineGivesBack = false;
   if (q.has("nocloud")) r.switches.cloudOverRook = false;
+  if (q.has("stillsonly")) r.switches.cometOnMap = false;
+  dyingCometOn = r.switches.cometOnMap;
   return r;
 }
 
@@ -864,7 +867,9 @@ function dyingSound(d: NonNullable<StoryView["dying"]>, s: GameSnapshot) {
   // Run 7 ends on her ordinary three rings, once the island is clear.
   if (d.part === "after" && dyingRung !== d.part) sound.handBell(3);
   dyingRung = d.part;
-  if (d.orange && d.part === "bottom" && !dyingOrange) sound.cometFall((DYING.bottom.ticks - DYING.bottom.orange + 3) * (tickMs / 1000));
+  // The rush from above: on to the strike, which comes after the first picture and the comet's fall on the map.
+  const toStrike = room?.story?.dying && (DYING.bottom.ticks - DYING.bottom.orange) + (dyingCometOn ? DYING.landingShow.faces + DYING.landingShow.comet : 3);
+  if (d.orange && d.part === "bottom" && !dyingOrange) sound.cometFall((toStrike || 5) * (tickMs / 1000));
   dyingOrange = !!d.orange;
   sound.fireBed(d.fire ? flame : null);
 }
@@ -892,18 +897,30 @@ function dyingZoom(d: NonNullable<StoryView["dying"]> | undefined, board: Board)
 /** The held pictures: the three of the landing, and the island clear of the cloud. Plain dark cards with the picture's name until the cutscene thread's pictures exist. */
 function dyingCard(d: NonNullable<StoryView["dying"]> | undefined) {
   const el = $("still");
-  const n = !d ? -1 : d.part === "stills" ? (d.still ?? 0) : d.part === "risen" ? 3 : -1;
+  const n = !d ? -1 : d.still !== undefined ? d.still : d.part === "risen" ? 3 : -1;
   if (n === dyingStill) return;
   dyingStill = n;
   el.hidden = n < 0;
   if (n < 0) return;
   const name = n === 3 ? DYING.risen.name : DYING.stills.names[n]!;
   el.innerHTML = `<div><small>picture to come</small><b>${esc(name)}</b></div>`;
-  el.classList.remove("in");
+  el.classList.remove("in", "inout");
+  el.style.animationDuration = "";
   void el.offsetWidth;
-  el.classList.add("in");
-  // The strike lands under the third picture.
-  if (n === 2) sound.cometStrike();
+  // A picture held for a set time fades in and out again, onto the map (Ladi, 24 Nov).
+  if (d!.stillTicks) (el.style.animationDuration = `${(d!.stillTicks * tickMs) / 1000}s`), el.classList.add("inout");
+  else el.classList.add("in");
+  // The strike lands under her picture.
+  if (n === 2) {
+    sound.cometStrike();
+    // Seen on the map, it lands with a flash before her picture comes up.
+    if (d!.stillTicks) {
+      const f = $("flash");
+      f.classList.remove("go");
+      void f.offsetWidth;
+      f.classList.add("go");
+    }
+  }
 }
 
 function stopStorySound() {

@@ -57,7 +57,7 @@ export class DyingRoom {
   private lastCall = -99;
   private lostAt: { tick: number; pos: Pt }[] = [];
   /** What Ladi ruled, each on a switch (DYING.switches); tests and the page can turn them. */
-  switches: { cloudOverRook: boolean; lineGivesBack: boolean; lumiCalls: boolean; crowdSound: boolean } = { ...DYING.switches };
+  switches: { cloudOverRook: boolean; lineGivesBack: boolean; lumiCalls: boolean; crowdSound: boolean; cometOnMap: boolean } = { ...DYING.switches };
   /** How many wisps her line gave back at the landing: for the measurements. */
   gaveBack = 0;
   get lost6() {
@@ -109,7 +109,7 @@ export class DyingRoom {
         if (this.phase === "results") this.begin();
         return;
       case "act": {
-        if (this.phase !== "playing" || this.part === "stills" || this.part === "risen") return;
+        if (this.phase !== "playing" || this.part === "stills" || this.part === "risen" || this.card > 0) return;
         // Under the cloud he can walk, and has nothing to put his staff on.
         if (this.blind() && (msg.action as { kind?: string } | undefined)?.kind === "staff") return;
         this.game.command(YOU, { action: cleanAction(msg.action, this.game), toggleRun: !!msg.toggleRun, toggleMode: !!msg.toggleMode });
@@ -128,6 +128,7 @@ export class DyingRoom {
     this.curve = [];
     this.lasted = this.sevenTicks = this.lostLate = this.lostSeven = this.gaveBack = 0;
     this.faltered = false;
+    this.card = 0;
     this.cloudStep = this.push = this.pushAt = this.lurch = 0;
     this.lastTouch = new Map();
     this.lastCall = -99;
@@ -261,7 +262,24 @@ export class DyingRoom {
   private stillTick = 0;
   /** Three held pictures: nothing on the board moves. Then the board, with her standing in the glass. */
   private stepStills() {
-    if (++this.stillTick >= DYING.stills.ticks) this.strike();
+    const T = DYING.landingShow;
+    if (!this.switches.cometOnMap) {
+      if (++this.stillTick >= DYING.stills.ticks) this.strike();
+      return;
+    }
+    // Faces, then the comet on the map; at the strike her picture comes up over the new board.
+    if (++this.stillTick >= T.faces + T.comet) (this.strike(), (this.card = T.hesta));
+  }
+  /** Ticks her picture still covers the new board, which waits under it. */
+  private card = 0;
+  /** What picture is up, if any, and for how many ticks in all. */
+  private picture(): { still: number; stillTicks: number } | { comet: number } | null {
+    const T = DYING.landingShow;
+    if (this.card > 0) return { still: 2, stillTicks: T.hesta };
+    if (this.part !== "stills") return null;
+    if (!this.switches.cometOnMap) return { still: Math.min(2, Math.floor((this.stillTick * 3) / DYING.stills.ticks)), stillTicks: Math.ceil(DYING.stills.ticks / 3) };
+    if (this.stillTick < T.faces) return { still: 0, stillTicks: T.faces };
+    return { comet: this.stillTick - T.faces };
   }
 
   /** The comet lands: the same ground with the crater in it, Rook and the wisps put clear of it, Hesta standing in the glass. */
@@ -454,6 +472,7 @@ export class DyingRoom {
     if (this.part === "six") this.stepSix();
     else if (this.part === "bottom") this.stepBottom();
     else if (this.part === "stills") this.stepStills();
+    else if (this.card > 0) this.card--;
     else if (this.part === "seven") this.stepSeven();
     else this.stepEnd();
     if (this.phase === "playing") this.due();
@@ -542,7 +561,7 @@ export class DyingRoom {
         great: this.part === "six" || (low && n < B.greatOff),
         ...(this.blind() || this.part === "stills" ? { blind: true } : {}),
         ...((low && n >= B.orange) || this.part === "stills" ? { orange: true } : {}),
-        ...(this.part === "stills" ? { still: Math.min(2, Math.floor((this.stillTick * 3) / DYING.stills.ticks)) } : {}),
+        ...(this.picture() ?? {}),
         ...(this.faltered ? { faltered: true } : {}),
         ...(after ? { hesta: HESTA_ID } : {}),
       },

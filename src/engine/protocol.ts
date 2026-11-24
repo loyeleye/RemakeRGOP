@@ -111,6 +111,10 @@ export interface StoryView {
     blind?: boolean;
     orange?: boolean;
     still?: number;
+    /** Ticks the picture on screen is held for, so it can fade in and out over them. */
+    stillTicks?: number;
+    /** The comet falling on the map: ticks since it was first seen. */
+    comet?: number;
     lift?: number;
     lifts?: number;
     faltered?: boolean;

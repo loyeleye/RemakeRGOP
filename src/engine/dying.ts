@@ -57,6 +57,12 @@ export const DYING = {
   bottom: { ticks: 17, fall: 3, level: 2, radius: 3, blindAt: 3, fireOff: 6, crowdOff: 8, greatOff: 10, bellOff: 14, orange: 15 },
   /** Three held pictures, the cutscene thread's, for this many ticks in all; plain cards with these names until they exist. */
   stills: { ticks: 10, names: ["Faces, lit from above", "The comet over the horseshoe", "Hesta on one knee in the glass"] as const },
+  /**
+   * Ladi, 24 Nov: the comet lands on the map. The first picture fades in and out (`faces` ticks),
+   * then the map, with the comet falling onto the terrace for `comet` ticks, then Hesta's picture
+   * fades in over the strike and out again (`hesta` ticks) onto the board with her in the glass.
+   */
+  landingShow: { faces: 4, comet: 5, hesta: 4 },
   /** The picture at the end of run 7, and how long it is held. */
   risen: { ticks: 5, name: "The island clears the cloud" },
   /** What Ladi ruled on 24 Nov, each on a switch so the other way can be tried. */
@@ -69,6 +75,8 @@ export const DYING = {
     lumiCalls: false,
     /** A crowd sound. (Ladi: shown by movement for now; the game has no such sound.) */
     crowdSound: false,
+    /** The comet is seen landing on the map, between two pictures. (Ladi: yes; off plays the three pictures alone.) */
+    cometOnMap: true,
   },
   giveBack: 40,
   /** Lumi's calls, when switched on: not before this many ticks after Hesta's voice stops, this far apart, for a wisp untouched this long. */

@@ -11,7 +11,7 @@ import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Tile, type Board } from "../engine/board.js";
-import { PULL_REACH, PUSH_REACH, gateOpen, mistBanks, platesHeld, quarterOf, MOSS_HP, type GameSnapshot, type Guild } from "../engine/game.js";
+import { PULL_REACH, PUSH_REACH, TICK_MS, gateOpen, mistBanks, platesHeld, quarterOf, MOSS_HP, type GameSnapshot, type Guild } from "../engine/game.js";
 import { armSamples, ringWalls, type Ring, type Shrine } from "../engine/maps.js";
 import { contourLoops } from "./contour.js";
 import { FLAME_COLORS, type Flame } from "../engine/protocol.js";
@@ -2949,7 +2949,7 @@ export class World {
     u: Record<"uLit" | "uDark" | "uCloud" | "uCloudA" | "uVeil" | "uTime", { value: number }> & { uTint: { value: THREE.Color } };
     crowd: { root: THREE.Group; lamp: THREE.Sprite; x: number; z: number; anim?: CastAnim; kid?: CastAnim; real: boolean }[];
     dust: THREE.Sprite[]; burst: THREE.PointLight; ember: THREE.Sprite;
-    part: string; partAt: number; struckAt: number; lit: number; flame: number; cloud: number; wallH: number; lurch: number; lurchAt: number; lurchUp: boolean; up: number; orangeAt: number;
+    part: string; partAt: number; struckAt: number; lit: number; flame: number; cloud: number; wallH: number; lurch: number; lurchAt: number; lurchUp: boolean; up: number; orangeAt: number; dusk: number; duskAt: number;
   } | null = null;
   /** Where one of the crowd is standing now (tile coordinates), for a bubble over them. */
   crowdAt(who: string): { x: number; y: number } | null {
@@ -3053,7 +3053,7 @@ export class World {
       ember.renderOrder = 4;
       const all = [ground, veil, wall, ...crowd.map((f) => f.root), ...dust, burst, ember];
       this.scene.add(...all);
-      this.dyingFx = { all, ground, veil, wall, u, crowd, dust, burst, ember, part: d.part, partAt: time, struckAt: after ? time - 9 : -99, lit: st.snap.lit ?? 9, flame, cloud: d.cloud ?? CLOUD_WALL.at, wallH: after ? CLOUD_WALL.high : 0, lurch: d.lurch ?? 0, lurchAt: -9, lurchUp: false, up: 0, orangeAt: -1 };
+      this.dyingFx = { all, ground, veil, wall, u, crowd, dust, burst, ember, part: d.part, partAt: time, struckAt: after ? time - 9 : -99, lit: st.snap.lit ?? 9, flame, cloud: d.cloud ?? CLOUD_WALL.at, wallH: after ? CLOUD_WALL.high : 0, lurch: d.lurch ?? 0, lurchAt: -9, lurchUp: false, up: 0, orangeAt: -1, dusk: 0, duskAt: -1 };
     }
     const fx = this.dyingFx;
     this.dressCrowd();
@@ -3101,19 +3101,22 @@ export class World {
     fx.u.uCloud.value = fx.cloud;
     fx.u.uCloudA.value = after ? 0.94 * Math.min(1, fx.wallH / 0.6) : 0.94;
     const pale = after ? 1 : CLOUD_DRAW.dull + (1 - CLOUD_DRAW.dull) * Math.min(1, Math.max(0, 1 - (fx.flame - 10) / (DYING.six.flame - 10)));
-    fx.u.uTint.value.setRGB(pale, pale, pale).lerp(new THREE.Color(1.25, 0.72, 0.36), orange);
+    // While the comet comes down on the map, the cloud goes dusky round it so its own light shows.
+    if (d.comet === undefined) (fx.dusk = 0), (fx.duskAt = -1);
+    else fx.dusk = Math.min(1, (time - (fx.duskAt < 0 ? (fx.duskAt = time) : fx.duskAt)) / 0.6);
+    fx.u.uTint.value.setRGB(pale, pale, pale).lerp(new THREE.Color(1.25, 0.72, 0.36), orange).lerp(new THREE.Color(0.22, 0.1, 0.1), fx.dusk);
     // The firelight is the warm tone; the ground past it is dark, but lifted enough to read. The cloud hides things, not the dark.
     fx.u.uLit.value = Math.min(fx.lit, fx.cloud - 2) + (after ? share * 20 : 0);
-    fx.u.uDark.value = 0.62 * (1 - share) * (1 - orange * 0.5);
+    fx.u.uDark.value = 0.62 * (1 - share) * (1 - orange * 0.5 * (1 - fx.dusk));
     fx.wall.visible = after && fx.wallH > 0.08;
     fx.wall.position.set(cx, fx.wallH / 2, cz);
     fx.wall.scale.set(1, Math.max(0.01, fx.wallH), 1);
     (fx.wall.material as THREE.MeshBasicMaterial).opacity = 0.86 * Math.min(1, fx.wallH / 0.6);
     // Everything off the ground: night, lifted so the board can be read, and its own light coming back as the island lifts.
-    const up = Math.max(0.42 + 0.2 * k, share, orange * 0.7);
+    const up = Math.max(0.42 + 0.2 * k, share, orange * 0.7) * (1 - fx.dusk * 0.7);
     this.hemi.intensity = this.dayLight.hemi * up;
     this.sun.intensity = this.dayLight.sun * (0.3 + 0.7 * share);
-    this.renderer.toneMappingExposure = this.dayLight.exposure * (0.85 + 0.15 * share);
+    this.renderer.toneMappingExposure = this.dayLight.exposure * (0.85 + 0.15 * share) * (1 - fx.dusk * 0.45);
     this.dimGlows(0.4 + 0.6 * share);
     // Under the cloud there are no stars. They come out when the wall is gone.
     this.skyU.uStars.value = this.theme.sky.stars * (after ? Math.max(0.15, 1 - fx.wallH / CLOUD_WALL.high) : 0.15);
@@ -3133,6 +3136,9 @@ export class World {
     const sx = this.worldX(b, d.strike.x), sz = this.worldZ(b, d.strike.y);
     fx.burst.position.set(sx + 2, 16 - 6 * orange, sz - 6);
     fx.burst.intensity = orange > 0 ? 500 * orange : since >= 0 && since < 1.6 ? 300 * (1 - since / 1.6) : 0;
+    this.stepComet(d, sx, sz, time, fx.burst);
+    // The strike on the map: the ground jolts.
+    if (d.part === "seven" && fx.struckAt === time && this.cometFx) (fx.lurchAt = time), (fx.lurchUp = false);
     // The village, never on the field while there is play: at the island's edge in the cloud through run 6, in round the fire at its bottom, back at the edge as the meter in run 7, and round her at the end, with Lumi going to her father.
     const rook = st.snap.players.find((p) => p.id === st.me);
     const n = DYING.crowd.length;
@@ -3177,6 +3183,90 @@ export class World {
       s.material.opacity = 0.55 * (1 - t) * Math.min(1, t * 8 + 0.4);
       s.scale.setScalar(2.4 + t * 4.5);
     });
+  }
+
+  /**
+   * Run 6's comet, seen on the map between the pictures (Ladi, 24 Nov): a white-hot head in an
+   * orange glow with a long tail, coming down out of the sky onto the terrace, faster and brighter
+   * all the way, lighting everything; a hot spot grows on the ground under it. At the strike, a
+   * ring of light runs out over the ground and fades (her picture comes up over it).
+   */
+  private cometFx: { all: THREE.Object3D[]; head: THREE.Sprite; glow: THREE.Sprite; core: THREE.Mesh; tail: THREE.Mesh[]; spot: THREE.Sprite; ring: THREE.Mesh; at: number; hitAt: number; from?: THREE.Vector3 } | null = null;
+  private stepComet(d: NonNullable<DrawState["dying"]>, sx: number, sz: number, time: number, light: THREE.PointLight) {
+    if (d.comet === undefined && !this.cometFx) return;
+    if (!this.cometFx) {
+      const head = glowSprite("#fff1d0", 2.4, 1), glow = glowSprite("#ff5a10", 6, 0.85), spot = glowSprite("#ff7a20", 1, 0);
+      const core = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 12), new THREE.MeshBasicMaterial({ color: "#fffaf0", fog: false, toneMapped: false }));
+      const tail = [
+        [0.0, 0.45, "#ffd890", 0.85],
+        [0.0, 1.3, "#ff5a10", 0.4],
+      ].map(([r0, r1, c, o]) => {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r0 as number, r1 as number, 1, 12, 1, true).translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ color: c as string, transparent: true, opacity: o as number, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+        m.renderOrder = 8;
+        return m;
+      });
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffd9a0", transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+      for (const o of [head, glow, spot]) (o.renderOrder = 9), (o.material.fog = false);
+      // It is above the cloud until the last moment: drawn over it.
+      for (const o of [head, glow, core, ...tail]) (o.material as THREE.Material).depthTest = false;
+      core.renderOrder = 10;
+      const all = [head, glow, core, ...tail, spot, ring];
+      this.scene.add(...all);
+      this.cometFx = { all, head, glow, core, tail, spot, ring, at: time, hitAt: -1 };
+    }
+    const C = this.cometFx;
+    const sec = (DYING.landingShow.comet * TICK_MS) / 1000;
+    const k = d.comet !== undefined ? Math.min(1, (time - C.at) / sec) : 1;
+    if (d.comet === undefined && C.hitAt < 0) C.hitAt = time;
+    // Down out of the north-west sky, a little toward the eye, onto the terrace; quicker as it comes.
+    // It comes in at the top left of the screen, high up, whatever the eye's framing.
+    if (!C.from) {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(new THREE.Vector2(-0.82, 0.95), this.cam.three);
+      const hit = ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -13), new THREE.Vector3());
+      C.from = hit ?? new THREE.Vector3(sx - 19, 21, sz - 15);
+    }
+    const from = C.from, to = new THREE.Vector3(sx, 0.6, sz);
+    const e = k * k * (0.35 + 0.65 * k);
+    const pos = from.clone().lerp(to, e), dir = to.clone().sub(from).normalize();
+    const falling = C.hitAt < 0;
+    for (const o of [C.head, C.glow, C.core, ...C.tail]) o.visible = falling;
+    if (falling) {
+      C.head.position.copy(pos);
+      C.glow.position.copy(pos);
+      C.core.position.copy(pos);
+      C.head.scale.setScalar(2.4 + 1.8 * k + Math.sin(time * 40) * 0.2);
+      C.glow.scale.setScalar(6 + 6 * k);
+      // The tail streams back up the way it came, longer as it speeds up.
+      C.tail.forEach((m, i) => {
+        m.position.copy(pos);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().negate());
+        m.scale.set(1 + 0.3 * k, (i ? 16 : 11) * (0.5 + 0.8 * k), 1 + 0.3 * k);
+        m.rotation.y += 0;
+      });
+      light.position.copy(pos);
+      light.intensity = 120 + 900 * k * k;
+      light.color.set("#ffb070");
+    }
+    // The hot spot on the ground under it, growing as it comes.
+    C.spot.position.set(sx, 0.3, sz);
+    C.spot.visible = true;
+    const after = falling ? 0 : time - C.hitAt;
+    C.spot.scale.setScalar(falling ? 2 + 8 * e : 10 + after * 6);
+    C.spot.material.opacity = falling ? 0.25 + 0.75 * e : Math.max(0, 1 - after / 1.5);
+    // The strike: a ring of light runs out across the ground.
+    C.ring.visible = !falling && after < 1.6;
+    if (C.ring.visible) {
+      C.ring.position.set(sx, 0.25, sz);
+      C.ring.scale.setScalar(1 + after * 16);
+      (C.ring.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - after / 1.6);
+      light.position.set(sx, 3, sz);
+      light.intensity = 3000 * Math.max(0, 1 - after / 1.2);
+    }
+    if (!falling && after > 2.5) {
+      this.scene.remove(...C.all);
+      this.cometFx = null;
+    }
   }
 
   /** The moored skiff: what it hangs from, its rope and the shade under it. */
@@ -3744,7 +3834,8 @@ export class World {
         // Animated cast: the clips do the moving, so no bob.
         // Hesta, two or more ahead and with nothing to do, eats a honey drop from her bag (story thread).
         const lead = (st.snap.scores[p.guild] ?? 0) - Math.max(...st.snap.scores.filter((_, i) => i !== p.guild), 0);
-        const snack = rig.cast === "hesta" && lead >= 2 && anim.has("snack");
+        // Not in runs 6 and 7 (Ladi).
+        const snack = rig.cast === "hesta" && lead >= 2 && !st.dying && anim.has("snack");
         anim.set(p.beam !== null ? (p.mode === "push" ? "push" : "pull") : moving ? (p.run ? "run" : "walk") : snack ? "snack" : "idle");
         anim.update(time);
         rig.root.position.set(wx, 0, wz);
