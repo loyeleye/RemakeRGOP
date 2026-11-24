@@ -424,6 +424,8 @@ void main() {
 const SIEVE_LIGHT = { sun: ["#ffd9a0", 2.6, 1.5] as const, sky: ["#fff3e0", 0.95, 1.3] as const };
 /** Run 8's pull, second take: the cold colour of its rings and threads. */
 const PULL_COLD = "#9cc8f0";
+/** The same cold, dark enough to read on the drawn Sieve's pale paving. */
+const PULL_DARK = "#1d3350";
 const SIEVE_COLD = { sun: new THREE.Color("#e6ecf2"), sky: new THREE.Color("#e9edf0") };
 
 /** The falling law's look (run 8): how high a wisp at full height floats, where the low sun throws its shadow, and how long a fall takes to watch. */
@@ -1855,6 +1857,7 @@ export class World {
 
     // The Sieve is dressed as a worked quarry floor (sieve-dress.ts).
     const dressed = shrine.id === SIEVE.shrine && !!shrine.wells?.length && !!shrine.coast;
+    this.sieveDressed = dressed;
     // The plaza: flagstones laid right up to the island's edge.
     const floorTex = tex(`textures/floor-${th.floor}.webp`, 1 / 6, `textures/floor-${shrine.id}.webp`);
     const floorShape = new THREE.Shape();
@@ -2037,7 +2040,7 @@ export class World {
         disc.position.set(w.x, DRESS.pitBottom, w.y);
         g.add(disc);
         // A thin outline at the lip, so the pit stays dark inside it (gameplay thread).
-        const ring = new THREE.Mesh(new THREE.RingGeometry(w.r * 0.93, w.r * 1.01, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffb53a", transparent: true, opacity: 0, depthWrite: false }));
+        const ring = new THREE.Mesh(new THREE.RingGeometry(w.r * 0.86, w.r * 1.03, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffb53a", transparent: true, opacity: 0, depthWrite: false }));
         ring.position.set(w.x, 0.3, w.y);
         ring.visible = false;
         ring.renderOrder = 2;
@@ -2753,7 +2756,7 @@ export class World {
       const tug = this.pullFx.phase === "tug", since = time - this.pullFx.at;
       this.wellRings.forEach((r, i) => {
         const m = r.material as THREE.MeshBasicMaterial;
-        m.color.set(PULL_COLD);
+        m.color.set(this.sieveDressed ? PULL_DARK : PULL_COLD);
         r.visible = true;
         const c = (time * 1.4 + i * 0.13) % 1;
         // Closing in on the lip, again and again, brightest as it reaches it.
@@ -2785,6 +2788,8 @@ export class World {
     this.lightSieve(sv, time);
   }
   private pullFx: { at: number; phase: string } | null = null;
+  /** The drawn Sieve: its paving is pale, so the tug's rings and dust are drawn dark on it (gameplay thread). */
+  private sieveDressed = false;
   /**
    * The tug's dust: streaks of chalk dust skimming the ground into every well, faster as they near
    * it, for the whole of the tug; they settle in the silence after. Sized to read at island view.
@@ -2799,9 +2804,10 @@ export class World {
       const N = this.low ? 120 : 240;
       // A streak, wide at its head (toward the well) and thinning to nothing behind.
       const geo = new THREE.BufferGeometry();
-      geo.setAttribute("position", new THREE.Float32BufferAttribute([-0.09, 0, 0.5, 0.09, 0, 0.5, 0, 0, -0.5], 3));
+      const hw = this.sieveDressed ? 0.15 : 0.09;
+      geo.setAttribute("position", new THREE.Float32BufferAttribute([-hw, 0, 0.5, hw, 0, 0.5, 0, 0, -0.5], 3));
       geo.setIndex([0, 2, 1]);
-      const mat = new THREE.MeshBasicMaterial({ color: "#eef4fb", transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+      const mat = new THREE.MeshBasicMaterial({ color: this.sieveDressed ? "#26364c" : "#eef4fb", transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
       const mesh = new THREE.InstancedMesh(geo, mat, N);
       mesh.renderOrder = 3;
       mesh.frustumCulled = false;

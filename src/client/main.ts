@@ -189,6 +189,7 @@ const barks: Record<"bark" | "chip", Bark | null> = { bark: null, chip: null };
 /** Reaction stills over the map (engine/stills.ts). */
 const stills = new StillsPanel(() => sound.paper());
 let stillTimers: number[] = [];
+let miniAlpha = 1;
 
 /** A line that comes with a still: the panel shows it and its words as the caption, and it gets no bubble or box of its own. */
 function stillLine(l: StoryLine) {
@@ -203,8 +204,19 @@ function stillLine(l: StoryLine) {
   return ms;
 }
 
-function sayLine(l: StoryLine) {
+/** Ordinary bubbles that came while a still was up: they wait until it has gone, so there is one place to read (gameplay thread). */
+const heldBarks: StoryLine[] = [];
+let heldNext = 0;
+function releaseBarks(now: number) {
+  if (!heldBarks.length || stills.up || now < heldNext) return;
+  const l = heldBarks.shift()!;
+  heldNext = now + Math.max(2000, l.text.length * 60);
+  sayLine(l, true);
+}
+
+function sayLine(l: StoryLine, released = false) {
   if (l.still && !l.talk) return void stillLine(l);
+  if (!released && !l.talk && room?.phase === "playing" && l.who && (stills.up || heldBarks.length)) return void heldBarks.push(l);
   if (l.talk || room?.phase !== "playing" || !l.who) return talk(l);
   // A line about nothing in particular sits over its speaker's model when they're on the field.
   const speaker = l.wisp == null && !l.ring && l.player == null ? speakerAt(l.who) && l.who.toLowerCase() : undefined;
@@ -374,6 +386,7 @@ function leave() {
   clearCaptions();
   for (const t of stillTimers) clearTimeout(t);
   stillTimers = [];
+  heldBarks.length = 0;
   stills.clear();
   inPlace = false;
   jumped = false;
@@ -1657,11 +1670,17 @@ function frame(now: number) {
   if (bigTaps) drawBigTaps(g, mine?.mode === "push", mine?.guild, lit, t, now);
   drawTide(g, shrine, now);
   if (room.story) drawStory(g, t, now);
-  if (cam.compact && !ending) {
+  releaseBarks(now);
+  // On a phone the still's band lies over the minimap: it fades out while one is up.
+  miniAlpha += ((stills.up ? 0 : 1) - miniAlpha) * 0.15;
+  if (cam.compact && !ending && miniAlpha > 0.02) {
     const w = Math.min(120, cam.w * 0.3);
     minimapRect = { x: cam.w - w - 10, y: 64, w, h: w };
+    g.save();
+    g.globalAlpha = miniAlpha;
     drawMinimap(g, cam, st, minimapRect);
-  }
+    g.restore();
+  } else if (cam.compact) minimapRect = { x: 0, y: 0, w: 0, h: 0 };
 }
 requestAnimationFrame(frame);
 
