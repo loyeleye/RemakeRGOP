@@ -51,8 +51,17 @@ export const RESCUE = {
   goal: "Fill the lamp and the boat lifts. Three boats, Rook. Then us.",
   part: "I'll bring them to the stones. You put them in.",
   goalTicks: 10,
-  /** The one still that stops play (Ladi, 24 Nov): when the first crossing's warning has `warnLeft` ticks to run, play holds for `ticks` on a full-screen picture. */
-  hold: { id: "r9-what-is-that", ticks: 5, warnLeft: 1, minTicks: 1 },
+  /**
+   * The one pause that stops play (Ladi, 24 Nov): when the first crossing's warning has `warnLeft`
+   * ticks to run, play holds for `ticks` on full-screen pictures. Three stills now (Ladi, 24 Nov,
+   * 7:43 PM): each for its `ms`, the line on the first, and between the second and third a burst
+   * of static, picture and sound (`static`: its frames in order, for `ms` in all). A tap goes on.
+   */
+  hold: {
+    id: "r9-what-is-that", ticks: 10, warnLeft: 1, minTicks: 1,
+    frames: [{ id: "r9-what-is-that-1", ms: 2000 }, { id: "r9-what-is-that-2", ms: 1500 }, { id: "r9-what-is-that-3", ms: 2000 }],
+    static: { after: 1, ms: 400, frames: ["r9-static-1", "r9-static-2", "r9-static-3", "r9-static-4"] },
+  },
   /** How near the landing a wisp may arrive (tiles), how far inside the cloud's edge, and how loose one of her groups is. */
   arriveNear: 11,
   arriveInside: 3,

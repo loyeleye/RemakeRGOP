@@ -73,29 +73,64 @@ export class StillsPanel {
 
   private whole: HTMLDivElement | null = null;
 
-  /** The one still that fills the screen (run 9's "What is that"): up until `fullOff`. A tap anywhere on it calls `onTap`. */
-  full(id: string, who: string, caption: string, onTap: () => void) {
+  private fullTimers: number[] = [];
+
+  /**
+   * The pause that fills the screen (run 9's "What is that"): up until `fullOff`. A tap anywhere on
+   * it calls `onTap`. With `seq` it is several pictures, each for its time, the line under the first
+   * only; after picture `static.after` a burst of static, its frames cut one to the next with no
+   * fade, and `onStatic` is called as it starts (for its sound).
+   */
+  full(id: string, who: string, caption: string, onTap: () => void, seq?: { frames: readonly { id: string; ms: number }[]; static?: { after: number; ms: number; frames: readonly string[] }; onStatic?: () => void }) {
     this.fullOff(0);
     const el = document.createElement("div");
     el.id = "still-full";
-    const info = STILLS[id];
-    const ph = document.createElement("div");
-    ph.className = "ph";
-    ph.innerHTML = `<small>${esc(id)}</small><b>${esc(info?.who ?? id)}</b><span>${esc(info?.faces ?? "")}</span>`;
-    el.append(ph);
-    const got = fetchStill(this.base, id);
-    if (got) {
-      const img = new Image();
-      img.alt = "";
-      const put = () => ((ph.hidden = true), el.prepend(img));
-      img.src = got.src;
-      if (got.complete && got.naturalWidth) put();
-      else img.onload = put;
-    }
+    const frames = seq?.frames ?? [{ id, ms: 0 }];
+    for (const f of [...frames.map((q) => q.id), ...(seq?.static?.frames ?? [])]) fetchStill(this.base, f);
     const cap = document.createElement("p");
     cap.className = "cap";
     cap.innerHTML = who ? `<b>${esc(who)}</b> ${esc(caption)}` : esc(caption);
+    let top: HTMLDivElement | null = null;
+    /** One picture over the last: faded in, or cut in (static). Its card shows until its picture is drawn. */
+    const put = (fid: string, cut: boolean) => {
+      const layer = document.createElement("div");
+      layer.className = cut ? "frame cut" : "frame";
+      const info = STILLS[fid];
+      const ph = document.createElement("div");
+      ph.className = "ph";
+      ph.innerHTML = `<small>${esc(fid)}</small><b>${esc(info?.who ?? fid)}</b><span>${esc(info?.faces ?? "")}</span>`;
+      const got = fetchStill(this.base, fid);
+      // A static frame that is not there is left out: the picture under it stays.
+      if (cut && !got) return;
+      if (!cut) layer.append(ph);
+      if (got) {
+        const img = new Image();
+        img.alt = "";
+        const show = () => ((ph.hidden = true), layer.prepend(img));
+        img.src = got.src;
+        if (got.complete && got.naturalWidth) show();
+        else img.onload = show;
+      }
+      if (cap.parentNode === el) el.insertBefore(layer, cap);
+      else el.append(layer);
+      const old = top;
+      top = layer;
+      requestAnimationFrame(() => layer.classList.add("in"));
+      if (old) window.setTimeout(() => old.remove(), cut ? 0 : 400);
+    };
     el.append(cap);
+    put(frames[0]!.id, false);
+    let t = 0;
+    frames.forEach((f, i) => {
+      if (i > 0) this.fullTimers.push(window.setTimeout(() => (put(f.id, false), cap.remove()), t));
+      t += f.ms;
+      const st = seq?.static;
+      if (st && st.after === i && st.frames.length) {
+        const each = st.ms / st.frames.length;
+        st.frames.forEach((sid, k) => this.fullTimers.push(window.setTimeout(() => (k === 0 && seq?.onStatic?.(), cap.remove(), put(sid, true)), t + k * each)));
+        t += st.ms;
+      }
+    });
     el.addEventListener("pointerdown", (e) => (e.preventDefault(), e.stopPropagation(), onTap()));
     document.body.append(el);
     this.whole = el;
@@ -109,6 +144,8 @@ export class StillsPanel {
   /** Play goes on: it eases away over `ms`. */
   fullOff(ms = 500) {
     const el = this.whole;
+    for (const t of this.fullTimers) clearTimeout(t);
+    this.fullTimers = [];
     if (!el) return;
     this.whole = null;
     el.style.setProperty("--out", `${ms}ms`);

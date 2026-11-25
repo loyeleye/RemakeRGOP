@@ -19,6 +19,8 @@ export const SOUND = {
   pullCue: 1.1,
   /** The speakers' babble blips. */
   babbleGain: 0.05,
+  /** Run 9's static: the hard burst (seconds, and how loud), and the low hiss while Kes is under the shadow. */
+  static: { burst: 0.4, gain: 0.2, hiss: 0.03 },
   /** Music volume, and how long it fades under Lumi's bell. */
   musicGain: 0.45,
   musicFade: 1.5,
@@ -335,7 +337,12 @@ export const VOICE: { who: string; match: RegExp; src: string }[] = [
 
 /** The voice clip playing now. One voice at a time: a line that comes while it plays stays silent. */
 let voicing: HTMLAudioElement | null = null;
-const voiceBusy = () => voicing != null && !voicing.ended && !voicing.paused;
+/** Who the clip is, and the last babble with its speaker: so one speaker can be cut off (run 9's static). */
+let voicingWho = "";
+let babbling: { who: string; g: GainNode } | null = null;
+/** The speaker whose voice the shadow has cut off, while it has. */
+let cutWho: string | null = null;
+const voiceBusy = () => voicing != null && !voicing.ended && (!voicing.paused || cutWho === voicingWho);
 
 /** A line appears: its clip if it has one, else Hesta's "Now" cue or the speaker's babble. */
 export function speak(who: string, text: string, now = false) {
@@ -349,12 +356,14 @@ export function speak(who: string, text: string, now = false) {
     a.volume = SOUND.volume;
     a.muted = muted;
     voicing = a;
+    voicingWho = who;
     const done = () => { if (voicing === a) voicing = null; };
     a.addEventListener("ended", done);
     a.addEventListener("error", done);
-    void a.play().catch(done);
+    if (cutWho !== who) void a.play().catch(done);
     return;
   }
+  if (cutWho === who) return;
   if (now) nowCue();
   else babble(who, text);
 }
@@ -373,13 +382,98 @@ export function babble(who: string, text: string) {
   const gap = hesta ? 0.13 : 0.085;
   // Hesta: A3 to E4. Lumi: D5 to B5. Both from the pentatonic, so they sit in the music.
   const pool = hesta ? [220.0, 246.94, 293.66, 329.63] : [587.33, 659.25, 739.99, 880.0, 987.77];
+  // Through a gain of its own, so that it can be cut off mid-word.
+  const bus = s.c.createGain();
+  bus.connect(s.o);
+  babbling = { who, g: bus };
   for (let k = 0; k < n; k++) {
     const f = pool[Math.floor(Math.random() * pool.length)]!;
     strike(f, SOUND.babbleGain * (hesta ? 1.3 : 1), hesta ? 0.15 : -0.15, [
       [1, 1, hesta ? 0.09 : 0.06],
       [2, 0.2, 0.04],
-    ], undefined, s.c.currentTime + k * gap);
+    ], bus, s.c.currentTime + k * gap);
   }
+}
+
+// ------------------------------------------------------------------ static (run 9)
+
+/**
+ * A hard burst of static: the shadow going over Kes cuts her off with it, and it is the same sound
+ * between the stills of the "What is that?" pause. Made here from noise: samples held for uneven
+ * lengths, so it is the grit of a dead channel and not a hiss. Nowhere else.
+ */
+export function staticBurst(len = SOUND.static.burst) {
+  const s = out();
+  if (!s) return;
+  const { c, o } = s, n = Math.ceil(c.sampleRate * len), buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
+  let v = 0, hold = 0;
+  for (let i = 0; i < n; i++) {
+    if (hold-- <= 0) (v = Math.random() * 2 - 1), (hold = Math.floor(Math.random() * 6));
+    d[i] = v;
+  }
+  const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime;
+  src.buffer = buf;
+  f.type = "highpass";
+  f.frequency.value = 600;
+  // Hard on, hard off.
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(SOUND.static.gain, t + 0.004);
+  g.gain.setValueAtTime(SOUND.static.gain, t + len - 0.006);
+  g.gain.linearRampToValueAtTime(0.0001, t + len);
+  src.connect(f).connect(g).connect(o);
+  src.start(t);
+}
+
+let hissing: { src: AudioBufferSourceNode; g: GainNode } | null = null;
+/** The low hiss for as long as she is under it. Off, it stops dead. */
+export function staticHiss(on: boolean) {
+  if (!on) {
+    if (hissing) {
+      hissing.g.gain.value = 0;
+      try {
+        hissing.src.stop();
+      } catch {
+        /* never started */
+      }
+      hissing = null;
+    }
+    return;
+  }
+  const s = out();
+  if (hissing || !s) return;
+  const { c, o } = s, buf = c.createBuffer(1, c.sampleRate, c.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  src.buffer = buf;
+  src.loop = true;
+  f.type = "bandpass";
+  f.frequency.value = 3800;
+  f.Q.value = 0.5;
+  g.gain.value = SOUND.static.hiss;
+  src.connect(f).connect(g).connect(o);
+  src.start();
+  hissing = { src, g };
+}
+
+/**
+ * Cut one speaker's voice off where it is (her clip stops, her babble goes silent), or with null let
+ * them speak again. True if a clip of theirs took up where it stopped; if not, the page says the
+ * line again.
+ */
+export function cutVoice(who: string | null): boolean {
+  const was = cutWho;
+  cutWho = who;
+  if (who) {
+    if (voicing && voicingWho === who) voicing.pause();
+    if (babbling?.who === who) (babbling.g.gain.value = 0), (babbling = null);
+    return false;
+  }
+  if (was && voicing && voicingWho === was && voicing.paused && !voicing.ended) {
+    const a = voicing;
+    void a.play().catch(() => { if (voicing === a) voicing = null; });
+    return true;
+  }
+  return false;
 }
 
 /** Hesta's "Now": its own two rising notes, so the ear learns it. */

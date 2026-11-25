@@ -470,6 +470,14 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(room.storyView().rescue!.patch).toBeUndefined();
   });
 
+  it("the pause is three pictures with static between the second and third, and they fit the time play is held", () => {
+    const H = RESCUE.hold, ms = H.frames.reduce((n, f) => n + f.ms, 0) + H.static.ms;
+    expect(H.frames.map((f) => f.id)).toEqual(["r9-what-is-that-1", "r9-what-is-that-2", "r9-what-is-that-3"]);
+    expect(H.static.after).toBe(1);
+    expect(ms).toBeLessThanOrEqual(H.ticks * 600);
+    expect(ms).toBeGreaterThan((H.ticks - 1) * 600);
+  });
+
   describe("the rule: it goes for the brightest thing", () => {
     type Bait = { tell: { k: number; left: number } | null; toldAt: number; said: Set<string>; fill: number[]; sipAt: number };
     const bait = (room: RescueRoom) => room as unknown as Bait;

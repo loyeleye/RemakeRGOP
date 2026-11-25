@@ -254,8 +254,11 @@ let typing: { l: StoryLine; shown: number; at: number } | null = null;
 interface Bark {
   el: HTMLElement;
   until: number;
-  /** Run 9: when its speaker went into the patch, for holding its time over. */
+  /** Run 9: when its speaker went into the patch, for holding its time over; and when the static cut it off. */
   darkAt?: number;
+  cutAt?: number;
+  who?: string;
+  text?: string;
   /** What it points at: a wisp, Hesta's ring, or nothing (the corner chip). */
   wisp?: number;
   ring?: boolean;
@@ -298,7 +301,8 @@ function releaseBarks(now: number) {
 function sayLine(l: StoryLine, released = false) {
   // The one still that fills the screen and stops play: up until the room goes on (rescueSound takes it down). A tap goes on.
   if (l.still?.full) {
-    stills.full(l.still.id, l.who, l.text, () => link?.send({ t: "on" }));
+    // Run 9's pause is three pictures, with a burst of static (the same one that cuts Kes off in play) between the second and third.
+    stills.full(l.still.id, l.who, l.text, () => link?.send({ t: "on" }), l.still.id === RESCUE.hold.id ? { frames: RESCUE.hold.frames, static: RESCUE.hold.static, onStatic: () => sound.staticBurst(RESCUE.hold.static.ms / 1000) } : undefined);
     sound.paper();
     if (l.text && l.who) sound.speak(l.who, l.text);
     return;
@@ -326,25 +330,74 @@ function sayLine(l: StoryLine, released = false) {
   el.style.animation = "none";
   void el.offsetWidth;
   el.style.animation = "";
-  barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60), wisp: l.wisp, ring: l.ring, player: l.player, speaker: speaker || undefined };
+  barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60), wisp: l.wisp, ring: l.ring, player: l.player, speaker: speaker || undefined, who: l.who, text: l.text };
   sound.speak(l.who, l.text, l.who === "Hesta" && l.wisp != null);
   if (!anchored) placeBarks(performance.now());
 }
 
+// The static's picture: grey noise made here once, until the cutscene thread's tiling texture is in.
+{
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d");
+  if (g) {
+    const im = g.createImageData(64, 64);
+    for (let i = 0; i < im.data.length; i += 4) {
+      const v = Math.floor(Math.random() * 256);
+      (im.data[i] = im.data[i + 1] = v), (im.data[i + 2] = Math.min(255, v + 14)), (im.data[i + 3] = 255);
+    }
+    g.putImageData(im, 0, 0);
+    document.documentElement.style.setProperty("--static", `url(${c.toDataURL()})`);
+  }
+}
+
+/**
+ * Run 9 (Ladi, 24 Nov): static when the shadow goes over Kes and cuts off her lines. The moment it
+ * covers her: a hard burst, in which her bubble and her name break up; then a low hiss for as long
+ * as she is under it. Out again, the hiss stops dead and she finishes what she was saying.
+ * `staticCut`: who is under it, and when the burst ends.
+ */
+let staticCut: { player: number; who: string; until: number } | null = null;
+/** Her clip took up where it stopped (so the line is not said again). */
+let staticResumed = false;
+function stepStatic(now: number) {
+  const under = room?.phase === "playing" ? room.story?.rescue?.dark?.find((id) => id !== me) : undefined;
+  if (under !== undefined && !staticCut) {
+    const who = room!.players.find((p) => p.id === under)?.name ?? "";
+    staticCut = { player: under, who, until: now + sound.SOUND.static.burst * 1000 };
+    sound.cutVoice(who);
+    sound.staticBurst();
+  } else if (under === undefined && staticCut) {
+    sound.staticHiss(false);
+    staticResumed = sound.cutVoice(null);
+    staticCut = null;
+  }
+  if (staticCut && now >= staticCut.until) sound.staticHiss(true);
+}
+
 /** Each frame: keep barks on what they point at, and fade them when their time is up. */
 function placeBarks(now: number) {
+  stepStatic(now);
   for (const k of ["bark", "chip"] as const) {
     const b = barks[k];
     if (!b) continue;
     // Run 9: inside the patch her bubble is not seen, and what she was saying waits until she is out.
-    const dark = k === "bark" && b.player != null && !!room?.story?.rescue?.dark?.includes(b.player);
-    b.el.style.visibility = dark ? "hidden" : "";
+    // It breaks up in static for the burst that cuts her off (see stepStatic), and is then gone.
+    const dark = k === "bark" && b.player != null && b.player === staticCut?.player;
+    const burst = dark && now < staticCut!.until;
+    if (dark) b.cutAt = now;
+    b.el.classList.toggle("static", burst);
+    b.el.style.visibility = dark && !burst ? "hidden" : "";
     if (dark) {
       b.until += now - (b.darkAt ?? now);
       b.darkAt = now;
-      continue;
+      if (!burst) continue;
+    } else if (b.cutAt !== undefined) {
+      // She is out: she finishes the line.
+      b.cutAt = undefined;
+      if (b.who && b.text && room?.phase === "playing" && !staticResumed) sound.speak(b.who, b.text);
     }
-    b.darkAt = undefined;
+    if (!dark) b.darkAt = undefined;
     if (now > b.until) {
       b.el.classList.add("fade");
       if (now > b.until + 350) {
@@ -1995,7 +2048,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, opt: room?.story?.opt, ship: room?.story?.ship, walk: room?.story?.pond?.walk };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), staticOn: staticCut && now < staticCut.until ? staticCut.player : undefined, steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, opt: room?.story?.opt, ship: room?.story?.ship, walk: room?.story?.pond?.walk };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.

@@ -49,6 +49,8 @@ export interface DrawState {
   now: number;
   /** Story figures who aren't playing, standing on the island (tile coords) and turning to watch you. */
   watchers?: { cast: string; x: number; y: number }[];
+  /** Run 9: the player whose name is breaking up in static just now (the shadow has cut her off). */
+  staticOn?: number;
   /** Story run 1 only: a flight of steps leaving the island at this spot (tile coords), heading north. For looks: nobody walks them. */
   steps?: { x: number; y: number };
   /** The free walk on the pond: Lumi's lantern, left by the water (tile coords). Something to find and tap. */
@@ -4570,7 +4572,8 @@ export function drawOverlay(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
   }
   for (const pl of st.snap.players) {
     // Run 9: inside the patch her name is not seen either. His always is: it does nothing to him.
-    if (pl.id !== st.me && st.rescue?.dark?.includes(pl.id)) continue;
+    const cut = st.staticOn === pl.id;
+    if (pl.id !== st.me && st.rescue?.dark?.includes(pl.id) && !cut) continue;
     const x = lerp(pl.px, pl.x) + 0.5;
     const y = lerp(pl.py, pl.y) + 0.5;
     const p = cam.toScreen(x, y, 2.05);
@@ -4579,6 +4582,21 @@ export function drawOverlay(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     g.textAlign = "center";
     const label = pl.name + (pl.id === st.me ? " (you)" : "");
     const tw = g.measureText(label).width + 10;
+    if (cut) {
+      // Cut off: where her name was, static for the length of the burst.
+      const x0 = p.x - tw / 2, y0 = p.y - fs - 4, hh = fs + 8, cell = 3;
+      g.save();
+      roundRect(g, x0, y0, tw, hh, 6);
+      g.clip();
+      for (let yy = 0; yy < hh; yy += cell)
+        for (let xx = 0; xx < tw; xx += cell) {
+          const v = Math.floor(Math.random() * 230);
+          g.fillStyle = `rgb(${v},${v},${v + 20})`;
+          g.fillRect(x0 + xx, y0 + yy, cell, cell);
+        }
+      g.restore();
+      continue;
+    }
     g.fillStyle = "rgba(10,6,18,0.55)";
     roundRect(g, p.x - tw / 2, p.y - fs - 4, tw, fs + 8, 6);
     g.fill();

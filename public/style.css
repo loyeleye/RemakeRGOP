@@ -151,6 +151,10 @@ b.kes, .bark.kes span b { color: #c9a2ff; }
 .bark.hesta { border-color: #9fd8ff88; }
 .bark.kes { border-color: #c9a2ff88; }
 .bark.fade { opacity: 0; }
+/* Run 9: the shadow cuts Kes off. Her bubble breaks up in static for the burst, and is then gone. */
+.bark.static { background-color: #8a8a94; background-image: url(stills/r9-static-tile.png), var(--static); background-size: 128px 128px, 64px 64px; border-color: #ffffff77; animation: static-jump 0.09s steps(1) infinite; }
+.bark.static img, .bark.static span { opacity: 0.22; filter: grayscale(1) contrast(2.4); }
+@keyframes static-jump { 0% { background-position: 0 0, 0 0; } 33% { background-position: 23px 41px, -11px 19px; } 66% { background-position: -17px 9px, 31px -7px; } }
 .bark.chip { top: 64px; right: 12px; left: auto; transform: none; }
 body.touch .bark.chip { top: 58px; left: 12px; right: auto; }
 #end-lines img.face { width: 28px; height: 28px; border-radius: 50%; vertical-align: middle; margin-right: 6px; object-fit: cover; }
@@ -324,6 +328,9 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #still-full { position: fixed; inset: 0; z-index: 80; opacity: 0; transition: opacity 260ms ease-out; background: #05060b; cursor: pointer; touch-action: none; }
 #still-full.in { opacity: 1; }
 #still-full.gone { opacity: 0; transition: opacity var(--out, 500ms) ease-in-out; pointer-events: none; }
+#still-full .frame { position: absolute; inset: 0; opacity: 0; transition: opacity 320ms ease-in-out; }
+#still-full .frame.in { opacity: 1; }
+#still-full .frame.cut { opacity: 1; transition: none; }
 #still-full img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
 #still-full .ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 8vh 14vw 22vh; text-align: center; color: #c5cde4; font: 15px/1.45 Georgia, serif; background: radial-gradient(ellipse at 50% 42%, #1b2236 0%, #05060b 78%); }
 #still-full .ph small { font: 600 10px system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.4; }
