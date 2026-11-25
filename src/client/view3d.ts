@@ -19,7 +19,8 @@ import { makeCloud, makeCurtain, makeIsland, makeWaterfall } from "./islands.js"
 import { DYING, crowdSpot, terraceHeight } from "../engine/dying.js";
 import { DRESS, dressVerge, quarryPit, sieveGrain, sieveMask, sievePaths, wellLoop } from "./sieve-dress.js";
 import { SIEVE } from "../engine/sieve.js";
-import { RESCUE_LOOK, RescueFx } from "./rescue-dress.js";
+import { RESCUE_LOOK, RescueFx, type VillagerRig } from "./rescue-dress.js";
+import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villagers.js";
 import { RematchFx } from "./rematch-dress.js";
 import { drawOptHud } from "./opt-hud.js";
 import { SHIP_LOOK, ShipFx } from "./ship-dress.js";
@@ -230,33 +231,96 @@ export function loadModels() {
         });
     });
   }
-  for (const n of ["dawn", "dusk", "brazier", "monolith", "boulder", ...CAST_MODELS] as string[]) {
-    loader.load(
-      `models/${n}.glb`,
-      (g: GLTF) => {
-        clips[n] = g.animations;
-        models[n] = normalize(g.scene, n === "monolith");
-        modelWaiters.forEach((f) => f());
-      },
-      undefined,
-      () => {
-        // Hosts that won't serve .glb (the shareable demo page) get it as base64 text instead.
-        fetch(`models/${n}.glb.txt`)
-          .then((r) => (r.ok ? r.text() : Promise.reject()))
-          .then((b64) => {
-            const bin = Uint8Array.from(atob(b64.trim()), (c) => c.charCodeAt(0));
-            plainLoader.parse(bin.buffer, "", (g: GLTF) => {
-              clips[n] = g.animations;
-              models[n] = normalize(g.scene, n === "monolith");
-              modelWaiters.forEach((f) => f());
-            });
-          })
-          .catch(() => {
-            /* missing model: the procedural stand-in stays */
+  for (const n of ["dawn", "dusk", "brazier", "monolith", "boulder", ...CAST_MODELS] as string[]) loadFigure(n);
+}
+
+/** A model that is brought to one unit tall, with its clips (the cast, and the props that stand in for anything). */
+function loadFigure(n: string) {
+  loader.load(
+    `models/${n}.glb`,
+    (g: GLTF) => {
+      clips[n] = g.animations;
+      models[n] = normalize(g.scene, n === "monolith");
+      modelWaiters.forEach((f) => f());
+    },
+    undefined,
+    () => {
+      // Hosts that won't serve .glb (the shareable demo page) get it as base64 text instead.
+      fetch(`models/${n}.glb.txt`)
+        .then((r) => (r.ok ? r.text() : Promise.reject()))
+        .then((b64) => {
+          const bin = Uint8Array.from(atob(b64.trim()), (c) => c.charCodeAt(0));
+          plainLoader.parse(bin.buffer, "", (g: GLTF) => {
+            clips[n] = g.animations;
+            models[n] = normalize(g.scene, n === "monolith");
+            modelWaiters.forEach((f) => f());
           });
-      },
-    );
-  }
+        })
+        .catch(() => {
+          /* missing model: the procedural stand-in stays */
+        });
+    },
+  );
+}
+
+/** Run 9's villagers are asked for when that run first opens, not with the page: six models nobody else needs. */
+let villagersAsked = false;
+function loadVillagers() {
+  if (villagersAsked) return;
+  villagersAsked = true;
+  for (const n of VILLAGER_BASES) loadFigure(n);
+}
+
+/**
+ * One villager, as a figure of its own: its base's model at its height, lit by its own colours
+ * as the cast is, in its skin and outfit colours, with its clips. Null until its model is in.
+ */
+function villagerRig(v: Villager): VillagerRig | null {
+  const model = models[v.base], anims = clips[v.base];
+  if (!model || !anims?.length) return null;
+  const root = cloneSkinned(model);
+  root.scale.multiplyScalar(v.height);
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    if ((m as THREE.SkinnedMesh).isSkinnedMesh) m.frustumCulled = false;
+    const c = (m.material as THREE.MeshStandardMaterial).clone();
+    if (c.map) {
+      c.emissiveMap = c.map;
+      c.emissive = new THREE.Color("#ffffff");
+      c.emissiveIntensity = VILLAGERS.flat;
+    }
+    m.material = c;
+  });
+  // Last, as the cast thread says: a later clone would drop the colours.
+  tintVillager(root, v.skin, v.outfit);
+  const mixer = new THREE.AnimationMixer(root), actions = new Map(anims.map((c) => [c.name, mixer.clipAction(c)] as const));
+  const mats: THREE.MeshStandardMaterial[] = [];
+  root.traverse((o) => (o as THREE.Mesh).isMesh && mats.push((o as THREE.Mesh).material as THREE.MeshStandardMaterial));
+  let cur = "", last = 0, shade = 1;
+  return {
+    root,
+    shade(k: number) {
+      if (Math.abs(k - shade) < 0.004) return;
+      shade = k;
+      for (const m of mats) m.color.setScalar(k), (m.emissiveIntensity = VILLAGERS.flat * k);
+    },
+    play(clip: string) {
+      const next = actions.get(clip) ?? actions.get("idle");
+      if (!next || cur === clip) return;
+      const prev = actions.get(cur);
+      next.reset().play();
+      // Each starts somewhere of its own in the clip, so that no two move together.
+      next.time = v.phase * next.getClip().duration;
+      if (prev && prev !== next) next.crossFadeFrom(prev, 0.35, false);
+      cur = clip;
+    },
+    update(time: number, still: boolean) {
+      const dt = last ? Math.min(0.1, time - last) : 0;
+      last = time;
+      if (!still) mixer.update(dt);
+    },
+  };
 }
 
 /**
@@ -2989,7 +3053,8 @@ export class World {
       return;
     }
     if (!this.rescueFx) {
-      this.rescueFx = new RescueFx(glowSprite, (n) => models[n]);
+      loadVillagers();
+      this.rescueFx = new RescueFx(glowSprite, (n) => models[n], villagerRig);
       this.scene.add(this.rescueFx.all);
     }
     // No fire burns at the slip.

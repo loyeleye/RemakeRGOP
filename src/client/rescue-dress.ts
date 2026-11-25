@@ -7,6 +7,7 @@
 import * as THREE from "three";
 import type { StoryView } from "../engine/protocol.js";
 import { LO_BRAZIER, LO_HOUSES, LO_LAMPS, LO_LANDING, LO_OVAL, RESCUE, loPlanks } from "../engine/rescue.js";
+import { VILLAGERS, villagerRoster, type Villager } from "./villagers.js";
 
 type Rescue = NonNullable<StoryView["rescue"]>;
 type Glow = (color: string, size: number, opacity?: number) => THREE.Sprite;
@@ -139,7 +140,10 @@ void main() {
 interface Lamp { x: number; z: number; glow: THREE.Sprite; core: THREE.Sprite; box: THREE.MeshStandardMaterial; lit: number; seed: number; coldAt: number; size: number; warm: THREE.Color }
 interface Boat { root: THREE.Group; shell: THREE.Group; real: boolean; lamp: THREE.Sprite; core: THREE.Sprite; pips: THREE.Mesh[]; pipGlows: THREE.Sprite[]; mist: THREE.Sprite[]; mistOn: number; wentAt: number; seated: number; riders: THREE.Object3D[]; paint: { m: THREE.MeshStandardMaterial; base: THREE.Color; glow?: number }[]; at: THREE.Vector3; from: THREE.Vector3; to: THREE.Vector3; rot: number; rotFrom: number; rotTo: number; movedAt: number; liftedAt: number; fill: number; pulse: number; lit: number; /** Under the patch: how dark it is drawn (0 to 1), and when the patch last moved off it. */ under: number; backAt: number }
 interface Fly { s: THREE.Sprite; from: THREE.Vector3; at: number }
-interface Body { root: THREE.Group; glow: THREE.Sprite; group: number; seat: number; gone: number }
+interface Body { root: THREE.Group; glow: THREE.Sprite; group: number; seat: number; gone: number; /** Who this is, its own figure once its model is in, the block-out it replaces, which way it faces on the landing, and whether it has gone into its seat. */ v: Villager; rig: VillagerRig | null; blocks: THREE.Object3D[]; face: number; aboard: boolean }
+
+/** One villager's figure (view3d makes them): its clips by name, its clock (held still when asked), and how dark it is drawn. */
+export interface VillagerRig { root: THREE.Object3D; play(clip: string): void; update(time: number, still: boolean): void; shade(k: number): void }
 interface Smoke { s: THREE.Sprite; x: number; z: number; at: number }
 
 export interface RescueFrame {
@@ -203,7 +207,7 @@ export class RescueFx {
   private cloud = RESCUE.cloud.start as number;
   private ember = new THREE.Color(RESCUE_LOOK.ember);
 
-  constructor(private glow: Glow, private model: (name: string) => THREE.Object3D | undefined = () => undefined) {
+  constructor(private glow: Glow, private model: (name: string) => THREE.Object3D | undefined = () => undefined, private villager: (v: Villager) => VillagerRig | null = () => null) {
     const std = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, ...extra });
     const K = RESCUE_LOOK;
     // The cloud on the ground, and the wall's body standing on it.
@@ -327,9 +331,10 @@ export class RescueFx {
       // Dealt out so each boat's people stand on both wings, the first boat's nearest the slip.
       const group = i % RESCUE.boats, seat = Math.floor(i / RESCUE.boats), side = seat % 2 ? 1 : -1, k = Math.floor(seat / 2) * RESCUE.boats + group;
       const root = new THREE.Group();
-      const small = group === 0 && seat < 5;
+      const small = group === 0 && seat < VILLAGERS.children;
       const h = small ? 0.72 + (seat % 3) * 0.08 : 1.2 + ((i * 37) % 5) * 0.05;
-      root.add(...figure(std, cloth[(i * 5) % cloth.length]!, h, small));
+      const blocks = figure(std, cloth[(i * 5) % cloth.length]!, h, small);
+      root.add(...blocks);
       const glow = this.glow(["#ffcf8a", "#bfe0ff", "#ffd9c0", "#c9f0c0"][i % 4]!, 1.2, 0.45);
       glow.position.set(0.3, h * 0.7, 0.1);
       glow.renderOrder = 6;
@@ -337,7 +342,54 @@ export class RescueFx {
       const col = k % cols, row = Math.floor(k / cols);
       root.position.set(side * (WING.x0 + 0.3 + col * ((WING.x1 - WING.x0 - 0.4) / Math.max(1, cols - 1)) + (row % 2) * 0.3), 0.1, WING.y0 + 0.5 + row * 1.45 + ((i * 13) % 4) * 0.1);
       this.all.add(root);
-      this.bodies.push({ root, glow, group, seat, gone: -1 });
+      // They wait facing the slip, where the boat is.
+      this.bodies.push({ root, glow, group, seat, gone: -1, v: null as unknown as Villager, rig: null, blocks, face: Math.atan2(-root.position.x, 2.5 - root.position.z), aboard: false });
+    }
+    // Who each one is: the same every run, and no two who stand together alike.
+    const roster = villagerRoster(this.bodies.map((b) => [b.root.position.x, b.root.position.z] as const), this.bodies.map((b) => b.group), this.bodies.map((b) => b.seat));
+    this.bodies.forEach((b, i) => (b.v = roster[i]!));
+  }
+
+  /**
+   * The villagers: each block-out gives way to its own figure once its model is in. On the landing
+   * they stand as they are (easy, hunched, or looking up) and hunch while the patch is about. One
+   * who goes aboard is the same figure, sitting in its seat. In a boat the patch sits on, nobody
+   * moves, and all are as dark as the boat.
+   */
+  private people(time: number, patch: boolean, sat: boolean, lifted: number) {
+    for (const body of this.bodies) {
+      const boat = this.boats[body.group], seat = boat?.riders[body.seat];
+      if (!body.rig) {
+        body.rig = this.villager(body.v);
+        if (!body.rig) continue;
+        for (const o of body.blocks) o.removeFromParent();
+        // The block-out in its seat goes too: all but its glow.
+        if (seat) for (const o of [...seat.children]) if (o !== seat.userData.glow) seat.remove(o);
+        body.root.add(body.rig.root);
+        body.rig.root.rotation.y = body.face;
+        // Its glow is the small light it carries, at the chest: smaller than the block-out's, so the person is seen.
+        body.glow.position.set(0.22, body.v.height * 0.6, 0.2);
+        body.glow.scale.setScalar(0.8);
+        body.aboard = false;
+      }
+      const rig = body.rig, gone = body.gone >= 0;
+      if (gone !== body.aboard && seat) {
+        body.aboard = gone;
+        if (gone) {
+          // Feet hang from the bench: the underside of the thighs sits on the seat's top.
+          seat.add(rig.root);
+          rig.root.position.set(0, -VILLAGERS.seat[body.v.base] * body.v.height, 0);
+          rig.root.rotation.y = 0;
+        } else {
+          body.root.add(rig.root);
+          rig.root.position.set(0, 0, 0);
+          rig.root.rotation.y = body.face;
+        }
+      }
+      const docked = body.group === lifted, under = gone && docked && sat;
+      rig.play(gone ? (patch && docked) || body.v.mood === 1 ? "sithuddle" : "sit" : patch || body.v.mood === 1 ? "huddle" : body.v.mood === 2 ? "lookup" : "idle");
+      rig.shade(gone && boat ? 1 - (1 - RESCUE_LOOK.sat.shade) * boat.under : 1);
+      if (gone ? boat?.root.visible : body.root.visible) rig.update(time, under);
     }
   }
 
@@ -783,6 +835,7 @@ export class RescueFx {
     });
     // The crowd thins: each one goes from the wing as a seat in the boat fills.
     for (const b of this.bodies) b.root.visible = b.gone < 0 || time - b.gone < 0.2;
+    this.people(time, !!p, !!r.lamp?.sat, this.lifted);
   }
 
   dispose() {
