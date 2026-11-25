@@ -1458,6 +1458,7 @@ function cove(): Shrine {
   const sh = finish(def, rows, 2, null);
   const b = sh.board, c = b.center;
   b.frame = { x: c.x + CV_FRAME.x0, y: c.y + CV_FRAME.y0, w: CV_FRAME.x1 - CV_FRAME.x0 + 1, h: CV_FRAME.y1 - CV_FRAME.y0 + 1 };
+  b.phoneSpan = COVE.phoneSpan;
   const tidal = coveFlats().map(([x, y]) => (c.y + y) * b.width + c.x + x);
   return { ...sh, coast: cvCoast, outline: cvFromBrazier, arms: true, lobes: [], core: { x: CV_ISLE.x, y: CV_ISLE.y, outline: cvOutline }, tidal };
 }

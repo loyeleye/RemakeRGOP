@@ -21,12 +21,12 @@ export const COVE = {
    * The tide. It starts out, for `firstOut` ticks, then is in for `in` and out for `out`, over and
    * over. `warn`: the water is seen coming this many ticks before it is in.
    */
-  tide: { firstOut: 14, in: 16, out: 20, warn: 5 },
+  tide: { firstOut: 14, in: 12, out: 18, warn: 5 },
   /** The light goes at the end of this many tides in. */
   tides: 5,
   /** How far her pull reaches over the water (the game's usual pull is 10), and how far round her it draws the loose ones on the water. */
   reach: 7,
-  draw: 7,
+  draw: 9,
   /** With the tide out, a wisp on wet stone is hers when she is this near it. */
   feet: 1,
   /**
@@ -45,6 +45,8 @@ export const COVE = {
   nell: [-3, 3] as const,
   /** Nell asks for the far one once she has taken hold of a wisp from this far. */
   far: 5,
+  /** On a phone, how many tiles the short side of the screen shows (12 is usual): more, so that a pool or two is in sight. */
+  phoneSpan: 18,
 } as const;
 
 /** How many ticks of light there are: the light goes as the last tide turns. */
@@ -63,7 +65,7 @@ export function coveLevel(tick: number): number {
   const s = coveTide(tick), W = COVE.tide.warn;
   if (s.in) return s.left <= 2 && tick < coveTicks() ? 0.6 + 0.4 * (s.left / 2) : 1;
   if (s.left <= W) return 0.6 * (1 - s.left / W);
-  return s.of - s.left < 2 ? 0.6 * (1 - (s.of - s.left) / 2) : 0;
+  return s.n > 0 && s.of - s.left < 2 ? 0.6 * (1 - (s.of - s.left) / 2) : 0;
 }
 
 // ---------------------------------------------------------------- the board

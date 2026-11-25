@@ -14,7 +14,9 @@ interface Cam { w: number; h: number; compact: boolean; toScreen(tx: number, ty:
 export const OPT_HUD = {
   /** A cell of the strip: its width, the gap between cells, and a pip's size. */
   cell: 112, gap: 8, pip: 5.4,
-  us: "#ffd98a", her: "#d7c4ff", chalk: "#f3f1e8", unlit: "rgba(255,255,255,0.14)",
+  us: "#ffd98a", her: "#d7c4ff", chalk: "#f3f1e8", water: "#7fd0e0", unlit: "rgba(255,255,255,0.14)",
+  /** A wisp left on wet stone: the ring under it. */
+  stranded: "rgba(255,217,138,0.9)",
   /** Her eye on a wisp: the line's colour and dashes, and the ring's size on the wisp. */
   eye: { line: "rgba(226,212,255,0.98)", under: "rgba(30,16,60,0.75)", dash: [3, 7] as [number, number], ring: 19 },
   /** A moved goal: while it is being told, and once it counts. */
@@ -111,6 +113,20 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
       g.fill();
     }
   }
+  // Wisps left on wet stone (the Cove): a ring on the ground under each, to be walked to.
+  for (const id of o.stranded ?? []) {
+    const w = snap.wisps.find((q) => q.id === id);
+    if (!w || w.away) continue;
+    const p0 = at(w), beat = 0.5 + 0.5 * Math.sin(now / 300);
+    g.lineWidth = 2.2;
+    g.strokeStyle = "rgba(20,18,30,0.6)";
+    ground(g, cam, p0.x, p0.y, 0.95 + 0.12 * beat);
+    g.strokeStyle = H.stranded;
+    g.setLineDash([5, 6]);
+    g.lineDashOffset = -now / 90;
+    ground(g, cam, p0.x, p0.y, 0.9 + 0.12 * beat);
+    g.setLineDash([]);
+  }
   // A goal that has been moved: told with a dashed ring and a line from the fire, then a ring that counts while its time runs.
   if (o.goal) {
     const G = o.goal, gx = G.x + 0.5, gy = G.y + 0.5, share = Math.max(0, Math.min(1, (G.left - k1) / Math.max(1, G.of)));
@@ -161,6 +177,40 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
     }
   }
 
+  // The Cove, with the tide out: how many are in each pool, so that the next place to stand can be
+  // chosen with the whole cove not in sight. A pool off the screen has its count at the edge, with an arrow.
+  if (o.pools && o.tide && !o.tide.in) {
+    const mx = cam.compact ? 150 : 60, top = 96, bot = cam.compact ? 110 : 70;
+    for (const p of o.pools) {
+      if (!p.n) continue;
+      const s0 = cam.toScreen(p.x + 0.5, p.y + 0.5, 1.6);
+      const x = Math.max(mx, Math.min(cam.w - mx, s0.x)), y = Math.max(top, Math.min(cam.h - bot, s0.y)), off = x !== s0.x || y !== s0.y;
+      const r = 5, wide = p.n * (r * 2 + 3) + 11, beat = p.n >= 3 ? 0.5 + 0.5 * Math.sin(now / 260) : 0;
+      g.fillStyle = "rgba(10,8,20,0.74)";
+      box(g, x - wide / 2, y - 11, wide, 22, 11);
+      g.fill();
+      g.strokeStyle = p.n >= 3 ? `rgba(255,217,138,${0.55 + 0.4 * beat})` : "rgba(255,255,255,0.25)";
+      g.lineWidth = 1.5;
+      g.stroke();
+      for (let i = 0; i < p.n; i++) {
+        g.beginPath();
+        g.arc(x - wide / 2 + 7 + r + i * (r * 2 + 3), y, r, 0, Math.PI * 2);
+        g.fillStyle = H.us;
+        g.fill();
+      }
+      if (off) {
+        const a = Math.atan2(s0.y - y, s0.x - x), ax = x + Math.cos(a) * (wide / 2 + 9), ay = y + Math.sin(a) * 20;
+        g.fillStyle = H.us;
+        g.beginPath();
+        g.moveTo(ax + Math.cos(a) * 8, ay + Math.sin(a) * 8);
+        g.lineTo(ax + Math.cos(a + 2.4) * 7, ay + Math.sin(a + 2.4) * 7);
+        g.lineTo(ax + Math.cos(a - 2.4) * 7, ay + Math.sin(a - 2.4) * 7);
+        g.closePath();
+        g.fill();
+      }
+    }
+  }
+
   // The strip, fitted between the corner buttons.
   const room = cam.w - (cam.compact ? 230 : 150), wide = n * H.cell + (n - 1) * H.gap + 20;
   const k = Math.max(0.6, Math.min(1.15, room / wide)), W = wide * k, x0 = Math.max(52, Math.min((cam.w - W) / 2 - (cam.compact && cam.w > cam.h ? 30 : 0), cam.w - 112 - W)), y0 = 4, hgt = 50 * k;
@@ -168,14 +218,75 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
   box(g, x0, y0, W, hgt, 12 * k);
   g.fill();
   o.strip.forEach((c, i) => {
-    const cx = x0 + 10 * k + i * (H.cell + H.gap) * k, cw = H.cell * k, color = c.tone === "us" ? H.us : c.tone === "her" ? H.her : H.chalk;
+    const cx = x0 + 10 * k + i * (H.cell + H.gap) * k, cw = H.cell * k, color = c.tone === "us" ? H.us : c.tone === "her" ? H.her : c.tone === "water" ? H.water : H.chalk;
     g.font = `600 ${Math.round(11 * k)}px system-ui, sans-serif`;
     g.textAlign = "left";
     g.fillStyle = "rgba(233,236,246,0.88)";
     g.fillText(c.label, cx, y0 + 16 * k);
     const py = y0 + 33 * k;
-    if (c.tone === "chalk") tallies(g, cx + 3 * k, py - 9 * k, c.n, 17 * k, color);
-    else
+    if (c.tide) {
+      // The tide mark: a post with the water standing against it, and under it how long this tide has left.
+      const T = c.tide, bx = cx + 2 * k, bw = cw - 8 * k, by = py - 9 * k, bh = 13 * k, beat = T.soon ? 0.6 + 0.4 * Math.sin(now / 140) : 1;
+      g.fillStyle = "rgba(255,255,255,0.1)";
+      box(g, bx, by, bw, bh, 3 * k);
+      g.fill();
+      g.save();
+      box(g, bx, by, bw, bh, 3 * k);
+      g.clip();
+      const top = by + bh * (1 - Math.max(0.08, T.level));
+      g.fillStyle = color;
+      g.globalAlpha = (T.in ? 0.95 : 0.6) * beat;
+      g.beginPath();
+      g.moveTo(bx, by + bh);
+      g.lineTo(bx, top);
+      for (let wx = 0; wx <= bw; wx += 4) g.lineTo(bx + wx, top + Math.sin(now / 320 + wx / (7 * k)) * 1.6 * k);
+      g.lineTo(bx + bw, by + bh);
+      g.closePath();
+      g.fill();
+      g.restore();
+      g.globalAlpha = 1;
+      // What is left of it.
+      g.fillStyle = "rgba(255,255,255,0.16)";
+      g.fillRect(bx, by + bh + 3 * k, bw, 2.5 * k);
+      g.fillStyle = T.soon ? "#ffe9c4" : color;
+      g.fillRect(bx, by + bh + 3 * k, bw * Math.max(0, Math.min(1, T.share)), 2.5 * k);
+    } else if (c.bar !== undefined) {
+      // A bar that runs down: warm while there is plenty, red at the last.
+      const bx = cx + 2 * k, bw = cw - 8 * k, by = py - 4 * k, bh = 8 * k, f = Math.max(0, Math.min(1, c.bar));
+      g.fillStyle = "rgba(255,255,255,0.14)";
+      box(g, bx, by, bw, bh, 4 * k);
+      g.fill();
+      if (f > 0.01) {
+        g.fillStyle = f > 0.25 ? "#ffcf7a" : "#ff8a5c";
+        g.globalAlpha = f > 0.25 ? 1 : 0.75 + 0.25 * Math.sin(now / 200);
+        box(g, bx, by, Math.max(bh, bw * f), bh, 4 * k);
+        g.fill();
+        g.globalAlpha = 1;
+      }
+    } else if (c.tone === "chalk") tallies(g, cx + 3 * k, py - 9 * k, c.n, 17 * k, color);
+    else if (c.group) {
+      // Strings: the pips in groups, each group on a thread, a full one bright.
+      const groups = Math.ceil(c.of / c.group), r = Math.min(H.pip, (cw - (groups - 1) * 7) / (c.of * 2.5)) * k, step = r * 2.5, gw = c.group * step - r * 0.5;
+      for (let q = 0; q < groups; q++) {
+        const gx = cx + q * (gw + 7 * k), full = c.n >= (q + 1) * c.group;
+        g.strokeStyle = full ? color : "rgba(255,255,255,0.3)";
+        g.lineWidth = 1.4 * k;
+        g.beginPath();
+        g.moveTo(gx, py);
+        g.lineTo(gx + gw, py);
+        g.stroke();
+        for (let p = 0; p < c.group; p++) {
+          const on = q * c.group + p < c.n;
+          g.beginPath();
+          g.arc(gx + r + p * step, py, r, 0, Math.PI * 2);
+          g.fillStyle = on ? color : "rgba(20,18,30,0.9)";
+          if (on && full) (g.shadowColor = color), (g.shadowBlur = 7 * k);
+          g.fill();
+          g.shadowBlur = 0;
+          if (!on) (g.strokeStyle = "rgba(255,255,255,0.35)"), (g.lineWidth = 1), g.stroke();
+        }
+      }
+    } else
       for (let p = 0; p < c.of; p++) {
         const px = cx + H.pip * k + p * (H.pip * 2 + 4) * k, on = p < c.n;
         g.beginPath();

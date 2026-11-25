@@ -137,6 +137,11 @@ export const THEMES: Record<string, Theme> = {
       sunAt: [-30, 14, -6] as [number, number, number],
     };
   },
+  // The Cove of the home pond (optional run 2, Lumi's lesson with Kes): the afternoon pond's light, plain grass, its fence. The run takes the light down as it goes.
+  get cove() {
+    const base = THEMES["home-pond-afternoon"]!;
+    return { ...base, name: "The Cove", floor: "kite-fell", grass: "#7a9c58", particles: null, dressed: true, decorate() {} };
+  },
   // Kite Fell, Kes's island (run 5, the race): short wind-flattened grass, bare of palms, and dressed
   // with its props like a place, but played on like a shrine.
   get "kite-fell"() {

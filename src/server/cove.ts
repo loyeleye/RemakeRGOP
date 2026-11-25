@@ -101,7 +101,8 @@ export class CoveRoom {
       case "act": {
         if (this.phase !== "playing" || this.stand) return;
         const action = cleanAction(msg.action, this.game);
-        this.game.command(YOU, { action, toggleRun: !!msg.toggleRun, toggleMode: !!msg.toggleMode });
+        // She pulls: there is nothing here to push.
+        this.game.command(YOU, { action, toggleRun: !!msg.toggleRun });
         return;
       }
     }
@@ -471,6 +472,7 @@ export class CoveRoom {
         reach: g.pullReach,
         light,
         ...(stranded.length ? { stranded } : {}),
+        pools: CV_POOLS.map((p, i) => ({ x: g.board.center.x + p.x, y: g.board.center.y + p.y, n: g.wisps.filter((w) => !g.away.has(w.id) && this.pools[i]!.some((t) => samePt(t, w.pos))).length })),
         ...(this.record ? { record: { id: COVE.id, best: this.record.best, won: this.record.won, count: this.record.count } } : {}),
       },
     };

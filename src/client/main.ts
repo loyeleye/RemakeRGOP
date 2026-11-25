@@ -25,6 +25,8 @@ import { WALKS } from "../engine/walks.js";
 import { loadOpt, loadProgress, reach, resetOpts, resetProgress, saveOpt } from "./progress.js";
 import { RematchRoom } from "../server/rematch.js";
 import { REMATCH } from "../engine/rematch.js";
+import { CoveRoom } from "../server/cove.js";
+import { COVE } from "../engine/cove.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
@@ -138,7 +140,7 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | null = null;
 
 /** The walkable map, at the speed on trial: ?walkspeed=1.5, 2 or 2.5 shortens the map's beat; with &only=rook only his stride is longer. */
 function pondRoom(walk: number) {
@@ -169,6 +171,26 @@ function rematchRoom() {
   return r;
 }
 
+/**
+ * Optional run 2, Lumi's lesson with Kes. Her best (wisps landed in one lesson) and how many
+ * lessons there have been are kept in this browser. Any number in COVE can be set from the link to
+ * judge it by feel: ?cove=tide.in:10,tide.out:14,reach:10 and so on.
+ */
+function coveRoom() {
+  const r = new CoveRoom();
+  const q = new URLSearchParams(location.search), rec = loadOpt(COVE.id);
+  for (const part of (q.get("cove") ?? "").split(",").filter(Boolean)) {
+    const [k, v] = part.split(":"), path = (k ?? "").split("."), last = path.pop()!;
+    let at = COVE as unknown as Record<string, unknown>;
+    for (const step of path) at = (at?.[step] ?? {}) as Record<string, unknown>;
+    if (typeof at[last] === "number" && Number.isFinite(Number(v))) at[last] = Number(v);
+  }
+  r.best = rec.best;
+  r.count = rec.count;
+  optSeen = null;
+  return r;
+}
+
 /** Which playing of an optional run has had its record kept (its count), so that each is kept once. */
 let optSeen: number | null = null;
 
@@ -193,11 +215,11 @@ function noteOpt() {
 }
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
@@ -1803,6 +1825,7 @@ $("story8").onclick = () => connectStory(playerName(), 8);
 $("story9").onclick = () => connectStory(playerName(), 9);
 $("story10").onclick = () => connectStory(playerName(), 10);
 $("story-o1").onclick = () => connectStory(playerName(), "o1");
+$("story-o2").onclick = () => connectStory(playerName(), "o2");
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Saved progress: continue from where this browser got to, jump to any walk, or start over.
 function renderProgress() {
@@ -2031,7 +2054,7 @@ function frame(now: number) {
     const p = snap.players.find((q) => q.id === me);
     const w = snap.wisps.find((q) => q.id === lit);
     const ship = room?.story?.ship, c = shrine.board.center;
-    const reach = p?.mode === "push" || !ship ? (p?.mode === "push" ? PUSH_REACH : PULL_REACH) : ship.reach;
+    const reach = p?.mode === "push" || !ship ? (p?.mode === "push" ? PUSH_REACH : room?.story?.opt?.reach ?? PULL_REACH) : ship.reach;
     const near = !!p && !!w && (ship && p.mode !== "push" ? shipReach(p.x - c.x, p.y - c.y, w.x - c.x, w.y - c.y, reach) : Math.max(Math.abs(w.x - p.x), Math.abs(w.y - p.y)) <= reach);
     $("staff").classList.toggle("far", !near);
   }

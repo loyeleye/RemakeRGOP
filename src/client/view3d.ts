@@ -22,6 +22,7 @@ import { SIEVE } from "../engine/sieve.js";
 import { RESCUE_LOOK, RescueFx, type VillagerRig } from "./rescue-dress.js";
 import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villagers.js";
 import { RematchFx } from "./rematch-dress.js";
+import { CoveFx } from "./cove-dress.js";
 import { drawOptHud } from "./opt-hud.js";
 import { SHIP_LOOK, ShipFx } from "./ship-dress.js";
 import { SHIP, SHIP_DECK } from "../engine/shiphome.js";
@@ -1929,7 +1930,8 @@ export class World {
     const g = this.shrineGroup;
     const th = themeFor(shrine.id);
     // Keep the far islands clear of a big island's edge.
-    this.distantPush = Math.max(0, Math.max(W, H) / 2 - 28);
+    // (The Cove is played right out to its east end, so nothing drifts over that either.)
+    this.distantPush = Math.max(0, Math.max(W, H) / 2 - 28) + (shrine.tidal ? 14 : 0);
     this.applyTheme(th);
 
     // The coastline the rules use: tiles past it are open sky. Shrines without one are the
@@ -3041,6 +3043,25 @@ export class World {
     this.rematchFx.step(o);
   }
 
+  /** Optional run 2, Lumi's lesson with Kes: the Cove's flats, its tide and its standing stones (cove-dress.ts). The light goes as the run does. */
+  private coveFx: CoveFx | null = null;
+  private stepCove(st: DrawState, time: number) {
+    const o = st.opt?.id === "o2" ? st.opt : undefined;
+    if (!o) {
+      if (this.coveFx) {
+        this.coveFx.dispose();
+        this.coveFx = null;
+        this.renderer.toneMappingExposure = this.dayLight.exposure;
+        this.sun.intensity = this.dayLight.sun;
+      }
+      return;
+    }
+    if (!this.coveFx) this.scene.add((this.coveFx = new CoveFx()).all);
+    const light = this.coveFx.step(o, time);
+    this.renderer.toneMappingExposure = this.dayLight.exposure * light;
+    this.sun.intensity = this.dayLight.sun * (0.5 + 0.5 * light);
+  }
+
   /** Run 9, the rescue: the cloud sea and its wall, the patch, the landing, the boats and the lamps (rescue-dress.ts). */
   private rescueFx: RescueFx | null = null;
   private stepRescue(st: DrawState, time: number) {
@@ -4134,6 +4155,7 @@ export class World {
     this.stepSieve(st, time);
     this.stepRescue(st, time);
     this.stepRematch(st);
+    this.stepCove(st, time);
     this.stepShip(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
@@ -4289,7 +4311,7 @@ export class World {
     // My reach square and walk marker.
     const me = st.snap.players.find((p) => p.id === st.me);
     if (me) {
-      const r = me.mode === "pull" ? (st.ship?.reach ?? PULL_REACH) : PUSH_REACH;
+      const r = me.mode === "pull" ? (st.ship?.reach ?? st.opt?.reach ?? PULL_REACH) : PUSH_REACH;
       const mx = lerp(me.px, me.x);
       const my = lerp(me.py, me.y);
       let x0 = Math.max(1, mx - r);

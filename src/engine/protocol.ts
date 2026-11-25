@@ -130,6 +130,8 @@ export interface StoryView {
     reach?: number;
     light?: number;
     stranded?: number[];
+    /** The Cove: each tide pool (its middle, in tiles) and how many wisps are in it now. */
+    pools?: { x: number; y: number; n: number }[];
   };
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };
