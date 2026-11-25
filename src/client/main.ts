@@ -38,7 +38,7 @@ import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
 import { MENU_RUNS, OPTIONAL_RUNS, PART1, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
-import { ENDING, ENDING_CUTS, endingCut, KindlingEnding, lanternCard, setEndingCut } from "./ending.js";
+import { card as storyCard, ENDING, ENDING_CUTS, endingCut, KindlingEnding, lanternCard, setEndingCut } from "./ending.js";
 import * as sound from "./sound.js";
 import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
@@ -298,7 +298,12 @@ function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "p
   link = { send: (m) => conn.message(JSON.stringify(m)), close: () => conn.close() };
   const hello = () => link?.send({ t: "hello", name: name || "Rook" });
   // Run 2 opens on Lumi's unlit lantern, where the eye was, before play.
-  if (run === 2) {
+  if (run === 2 && lanternShown) {
+    // Reached through Part 1's kitchen scene, which has just shown the lantern: no second showing.
+    lanternShown = false;
+    hello();
+    talkHold = performance.now() + ENDING.lantern.fade * 1000;
+  } else if (run === 2) {
     lanternCard(hello);
     // Hold the first lines until the picture has faded, so none plays under it.
     talkHold = performance.now() + (ENDING.lantern.hold + ENDING.lantern.fade) * 1000;
@@ -1960,7 +1965,7 @@ function playPiece(i: number) {
   savePlace(i);
   renderPart1();
   $("chain-card").hidden = true;
-  if (p.kind === "card") return chainCard(p);
+  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : chainCard(p);
   if (p.kind === "walk") return connectStory(playerName(), "pond", p.walk);
   connectStory(playerName(), p.run!);
 }
@@ -2037,6 +2042,41 @@ function chainCard(p: Piece) {
     leave();
   };
   el.querySelectorAll<HTMLButtonElement>(".opt").forEach((b) => (b.onclick = () => chainOptional(b.dataset.id as "o1")));
+}
+
+/** Set by the kitchen scene as it hands on, so run 2 does not open on the lantern a second time. */
+let lanternShown = false;
+/** How long the kitchen picture holds before the lantern (seconds), and its fade in. */
+const KITCHEN_SCENE = { hold: 4.5, fade: 0.6 };
+
+/**
+ * Gap 1-2 as pictures: the kitchen held with no taps and no words, then Lumi's unlit lantern (run 2's
+ * opening picture, shown here in its place), then run 2. Rosalind's cup and Lumi at the door are draft
+ * and stay out. Marked DRAFT: the pictures are Ladi's, the scene is not ruled.
+ */
+function kitchenScene(p: Piece) {
+  const el = document.createElement("div");
+  el.id = "gap-scene";
+  el.innerHTML = `<div class="tags"><span class="nb">Draft</span><span>${esc(p.card!.heading)}</span><span>Lines not in yet</span></div><button class="ghost small out" aria-label="Leave">✕</button>`;
+  el.prepend(storyCard("walk-kitchen", "pic"));
+  document.body.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("on")));
+  let left = false;
+  const timer = window.setTimeout(() => {
+    // The lantern comes up over the kitchen as a cut; the kitchen goes once it is covered.
+    lanternCard(() => {
+      if (left || chainAt !== pieceIndex(p.id)) return;
+      lanternShown = true;
+      chainOn();
+    });
+    window.setTimeout(() => el.remove(), 200);
+  }, (KITCHEN_SCENE.fade + KITCHEN_SCENE.hold) * 1000);
+  el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
+    left = true;
+    clearTimeout(timer);
+    el.remove();
+    leave();
+  };
 }
 
 /** The menu's Part 1 buttons: Play, or Continue with the piece's name, and Start again. */

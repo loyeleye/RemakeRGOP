@@ -17,6 +17,13 @@ export interface Piece {
   walk?: number;
   /** A card: its heading and one line on what it will be, and how much of it is ruled. */
   card?: { heading: string; summary: string; ruled: string; optional?: true; end?: true };
+  /**
+   * A card piece shown as held pictures in place of its card, where the pictures exist (the card's
+   * words stay here: take this field off and the piece is its card again). "kitchen": the kitchen
+   * picture, then Lumi's unlit lantern, then on. The gameplay thread's call, not Ladi's: the pictures
+   * are his, the scene's content is draft, so it carries a DRAFT mark.
+   */
+  scene?: "kitchen";
 }
 
 const DRAFT = "Draft: not ruled by Ladi yet.";
@@ -24,7 +31,7 @@ const DRAFT = "Draft: not ruled by Ladi yet.";
 export const PART1: Piece[] = [
   { id: "0", name: "Before run 1", kind: "card", card: { heading: "Before run 1: the dream", summary: "The dream, then he wakes to Lumi. Cut to the Kindling ground at night.", ruled: "Part ruled: the dream is in the bible. How he wakes is still open. Pictures are a storyboard only." } },
   { id: "1", name: "Run 1, the Kindling", kind: "run", run: 1 },
-  { id: "1-2", name: "The kitchen, morning", kind: "card", card: { heading: "The kitchen, morning", summary: "Rosalind's cup. Lumi at the door with his staff. (Lumi's unlit lantern, the first picture, opens run 2.)", ruled: "Part ruled: the lantern picture and Rosalind's portrait are Ladi's. The rest is draft." } },
+  { id: "1-2", name: "The kitchen, morning", kind: "card", scene: "kitchen", card: { heading: "The kitchen, morning", summary: "Rosalind's cup. Lumi at the door with his staff. (Lumi's unlit lantern, the first picture, opens run 2.)", ruled: "Part ruled: the lantern picture and Rosalind's portrait are Ladi's. The rest is draft." } },
   { id: "2", name: "Run 2, Lumi's lesson", kind: "run", run: 2 },
   { id: "2-3", name: "Walk 1, the pond", kind: "walk", walk: 1 },
   { id: "3", name: "Run 3, Granny's game", kind: "run", run: 3 },

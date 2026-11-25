@@ -350,6 +350,16 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 /* Part 1 played through (client/part1.ts): a card stands in for a scene not built yet. */
 #chain-card { position: fixed; inset: 0; z-index: 60; background: #0b0a12; display: grid; place-items: center; padding: 16px; color: #e9dcc4; overflow-y: auto; }
 #chain-card[hidden] { display: none; }
+/* A gap shown as held pictures in place of its card (Part 1's kitchen, 1-2): under the lantern opening (z 50). */
+#gap-scene { position: fixed; inset: 0; z-index: 49; background: #000; opacity: 0; transition: opacity 0.6s; }
+#gap-scene.on { opacity: 1; }
+#gap-scene .pic { position: absolute; left: 50%; top: 50%; width: min(100vw, 100vh); aspect-ratio: 1; transform: translate(-50%, -50%); background-size: cover; background-position: center; background-color: #2a2018; }
+#gap-scene .pic .ph { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: #ffffff80; font-style: normal; }
+#gap-scene .pic.real .ph { display: none; }
+#gap-scene .tags { position: absolute; left: 12px; top: 12px; display: flex; gap: 8px; flex-wrap: wrap; max-width: calc(100% - 70px); }
+#gap-scene .tags span { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; border: 1px solid #e9dcc455; color: #e9dcc4; background: #0b0a12b0; }
+#gap-scene .tags .nb { border-color: #ffb46a; color: #ffcf9a; }
+#gap-scene .out { position: absolute; right: 12px; top: 12px; }
 #chain-card .card { max-width: 520px; width: 100%; display: grid; gap: 14px; text-align: center; animation: still-in 0.35s ease-out; }
 #chain-card .tags { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 #chain-card .tags span { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; border: 1px solid #e9dcc455; opacity: 0.8; }
