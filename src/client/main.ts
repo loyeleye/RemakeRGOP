@@ -1407,6 +1407,8 @@ function renderHud() {
   $("score-1").classList.toggle("kes", !!story);
   $("mute").hidden = !story;
   $("call").hidden = !story?.canCall;
+  // In an optional run the strip takes the middle of the top row; on a narrow screen the Send button goes under it.
+  document.body.classList.toggle("opt-call", !!story?.canCall && !!story?.opt);
   callHint();
   if (story) {
     const rv = story.rival;

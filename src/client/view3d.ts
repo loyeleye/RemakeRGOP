@@ -24,6 +24,7 @@ import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villag
 import { RematchFx } from "./rematch-dress.js";
 import { CoveFx } from "./cove-dress.js";
 import { KiteFx } from "./kite-dress.js";
+import { TidepoolFx } from "./tidepool-dress.js";
 import { drawOptHud } from "./opt-hud.js";
 import { SHIP_LOOK, ShipFx } from "./ship-dress.js";
 import { SHIP, SHIP_DECK } from "../engine/shiphome.js";
@@ -3076,6 +3077,19 @@ export class World {
     this.kiteFx.step(o, time);
   }
 
+  /** Optional run 3b, Tidepool Steps: the terraces, their kerbs and stairs, the strips' tide and the weirs (tidepool-dress.ts). */
+  private tidepoolFx: TidepoolFx | null = null;
+  private stepTidepool(st: DrawState, time: number) {
+    const o = st.opt?.id === "o3b" ? st.opt : undefined;
+    if (!o) {
+      this.tidepoolFx?.dispose();
+      this.tidepoolFx = null;
+      return;
+    }
+    if (!this.tidepoolFx) this.scene.add((this.tidepoolFx = new TidepoolFx()).all);
+    this.tidepoolFx.step(o, time);
+  }
+
   /** Run 9, the rescue: the cloud sea and its wall, the patch, the landing, the boats and the lamps (rescue-dress.ts). */
   private rescueFx: RescueFx | null = null;
   private stepRescue(st: DrawState, time: number) {
@@ -4175,6 +4189,7 @@ export class World {
     this.stepRematch(st);
     this.stepCove(st, time);
     this.stepKite(st, time);
+    this.stepTidepool(st, time);
     this.stepShip(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 

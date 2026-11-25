@@ -340,3 +340,9 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #still-full .cap b { color: #c9b6ff; font-weight: 700; }
 #stills.top .ph { padding: 10px 12px 36px; font-size: 12px; }
 #stills.top .ph b { font-size: 13px; }
+
+/* An optional run with someone to send (Tidepool Steps): on a narrow screen the strip has the top
+   row, so the Send button sits under the close button. */
+@media (max-width: 700px) {
+  body.opt-call #call { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 64px); left: 10px; right: auto; }
+}

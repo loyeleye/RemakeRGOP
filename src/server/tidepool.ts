@@ -668,6 +668,7 @@ export class TidepoolRoom {
         ...(caption.length ? { caption } : {}),
         tide: { level, in: tide.in, left: tide.left, of: tide.of, n: tide.n },
         reach: TIDEPOOL.reach,
+        terraces: this.dry.map((d, k) => (k === 0 ? 0 : d ? level : 1)),
         ...(stranded.length ? { stranded } : {}),
         ...(this.record ? { record: { id: TIDEPOOL.id, best: this.record.best, won: this.record.won, count: this.record.count } } : {}),
       },

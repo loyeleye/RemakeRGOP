@@ -139,6 +139,8 @@ export interface StoryView {
     pools?: { x: number; y: number; n: number }[];
     /** Kite Fell (optional run 3c): the mark by each vane (its tile and how near counts), how many wisps are on the wind toward it, and who is standing at it. */
     vanes?: { x: number; y: number; r: number; n: number; you?: boolean; her?: boolean }[];
+    /** Tidepool Steps (optional run 3b): how high the water stands over each step's strips, 0 (stone) to 1, by step (0 the court, unused). */
+    terraces?: number[];
   };
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };
