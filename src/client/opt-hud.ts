@@ -185,11 +185,11 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
       if (!p.n) continue;
       const s0 = cam.toScreen(p.x + 0.5, p.y + 0.5, 1.6);
       const x = Math.max(mx, Math.min(cam.w - mx, s0.x)), y = Math.max(top, Math.min(cam.h - bot, s0.y)), off = x !== s0.x || y !== s0.y;
-      const r = 5, wide = p.n * (r * 2 + 3) + 11, beat = p.n >= 3 ? 0.5 + 0.5 * Math.sin(now / 260) : 0;
+      const r = 5, wide = p.n * (r * 2 + 3) + 11, beat = p.n >= 2 ? 0.5 + 0.5 * Math.sin(now / 260) : 0;
       g.fillStyle = "rgba(10,8,20,0.74)";
       box(g, x - wide / 2, y - 11, wide, 22, 11);
       g.fill();
-      g.strokeStyle = p.n >= 3 ? `rgba(255,217,138,${0.55 + 0.4 * beat})` : "rgba(255,255,255,0.25)";
+      g.strokeStyle = p.n >= 2 ? `rgba(255,217,138,${0.55 + 0.4 * beat})` : "rgba(255,255,255,0.25)";
       g.lineWidth = 1.5;
       g.stroke();
       for (let i = 0; i < p.n; i++) {

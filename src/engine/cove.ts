@@ -21,9 +21,9 @@ export const COVE = {
    * The tide. It starts out, for `firstOut` ticks, then is in for `in` and out for `out`, over and
    * over. `warn`: the water is seen coming this many ticks before it is in.
    */
-  tide: { firstOut: 14, in: 12, out: 18, warn: 5 },
-  /** The light goes at the end of this many tides in. */
-  tides: 5,
+  tide: { firstOut: 14, in: 14, out: 22, warn: 5 },
+  /** The light goes at the end of this many tides in. (Six, and two to the rich pool: a string takes two tides at least, a run that reads the pools about 80 seconds, with a tide to spare. The gameplay thread, 24 Nov.) */
+  tides: 6,
   /** How far her pull reaches over the water (the game's usual pull is 10), and how far round her it draws the loose ones on the water. */
   reach: 7,
   draw: 9,
@@ -33,7 +33,7 @@ export const COVE = {
    * What comes up each tide: this many in one pool (the rich one), and one in each of this many
    * other pools. The rich pool is never on the side of the cove the last one was.
    */
-  rich: 3,
+  rich: 2,
   singles: 1,
   /** The goal stays up this long as a caption (6 seconds). */
   goalTicks: 10,

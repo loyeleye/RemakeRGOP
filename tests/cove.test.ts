@@ -64,9 +64,9 @@ describe("optional run 2: Lumi's lesson with Kes", () => {
     expect(o.strip[0]).toMatchObject({ n: 0, of: 9, group: 3 });
     expect(o.strip[1]!.tide).toMatchObject({ in: false });
     expect(o.strip[2]!.bar).toBeCloseTo(1, 1);
-    // The first lot comes up by the fire: three in a west pool, one somewhere else.
-    expect(o.pools!.map((p) => p.n).sort()).toEqual([0, 0, 0, 1, 3]);
-    expect(o.pools![0]!.n + o.pools![1]!.n).toBe(3);
+    // The first lot comes up by the fire: the rich pool is a west one, and one more is somewhere else.
+    expect(o.pools!.map((p) => p.n).sort()).toEqual([0, 0, 0, COVE.singles, COVE.rich]);
+    expect(o.pools![0]!.n + o.pools![1]!.n).toBe(COVE.rich);
   });
 
   it("with the tide out the flats are stone, her staff reaches only what is at her feet, and nothing in a pool is hers", () => {
@@ -131,12 +131,12 @@ describe("optional run 2: Lumi's lesson with Kes", () => {
   it("what she lands comes up again at the turn of the tide, most of it on another side of the cove", () => {
     const { room, tick } = play(6, "smart");
     tick(COVE.tide.firstOut + COVE.tide.in + 1);
-    expect(room.state.landed).toBeGreaterThanOrEqual(3);
+    expect(room.state.landed).toBeGreaterThanOrEqual(COVE.rich);
     const pools = room.storyView().opt!.pools!;
     // The rich pool is not one of the two by the fire this time.
-    expect(pools[0]!.n).toBeLessThan(3);
-    expect(pools[1]!.n).toBeLessThan(3);
-    expect(Math.max(...pools.map((p) => p.n))).toBeGreaterThanOrEqual(3);
+    expect(pools[0]!.n).toBeLessThan(COVE.rich);
+    expect(pools[1]!.n).toBeLessThan(COVE.rich);
+    expect(Math.max(...pools.map((p) => p.n))).toBeGreaterThanOrEqual(COVE.rich);
   });
 
   it("three full strings win it, with Kes's lines; the record is kept and a first win is marked", () => {
