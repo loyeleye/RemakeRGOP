@@ -33,6 +33,12 @@ export const KINDLING = {
     crew: ["Wick", "Moth"],
     /** How far a crew bot will walk to a feeding spot. */
     crewWalk: 14,
+    /**
+     * A crew bot lets go of a wisp Rook can bank once it is this close to him (tiles), and not
+     * before. 10 keeps Hesta's "Wick left you one" calls (about 10 a relay) and Rook banking the
+     * most; closer cut her calls to a few.
+     */
+    bringWithin: 10,
     /** A wisp this close to Rook is his to sort out: the crew leave it. */
     leaveNear: 3,
     /**
@@ -195,7 +201,9 @@ export function crewCommand(game: Game, id: number, rookId: number, state: CrewS
     // the rim, let go anyway rather than bank it himself.
     const next = w.target ? wispMove(board, w.pos, Math.sign(w.target.x - w.pos.x), Math.sign(w.target.y - w.pos.y), Math.abs(w.target.x - w.pos.x), Math.abs(w.target.y - w.pos.y)) : null;
     const rimNext = !!next && board.inBankZone(pt(w.pos.x + next.step[0], w.pos.y + next.step[1]));
-    if (live(w) && (ready(w.pos) || rimNext)) {
+    // A wisp Rook could bank from where it is, but still far off, he keeps bringing: letting go of
+    // it a tile or two after taking it looked like giving up (Ladi, 25 Nov).
+    if (live(w) && ((ready(w.pos) && cheb(w.pos, fin) <= KINDLING.relay.bringWithin) || rimNext)) {
       state.fed = state.drop = w.id;
       state.wisp = null;
       return { action: { kind: "idle" } };

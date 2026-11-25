@@ -161,6 +161,7 @@ export const VOICE_LINES: Record<string, string> = {
   "Rook|I always do.": "voice/rook-always-do.mp3",
   "Lumi|Mum cheated?": "voice/lumi-mum-cheated.mp3",
   "Lumi|How did you do that?": "voice/lumi-how-did-you.mp3",
+  "Rook|How did you do that?": "voice/rook-how.mp3",
   "Lumi|She won't.": "voice/lumi-she-wont.mp3",
   "Lumi|I'm picking my own teacher.": "voice/lumi-own-teacher.mp3",
   "Lumi|First to six. No shoving.": "voice/lumi-first-to-six.mp3",

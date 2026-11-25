@@ -64,6 +64,8 @@ export interface StoryLine {
   mood?: string;
   /** A reaction still shown with it (engine/stills.ts): the line is its caption, with no bubble. A line with no text is the picture alone. */
   still?: StillCue;
+  /** Shown but not voiced (Nell and Sefa in Granny's game, Ladi 25 Nov). */
+  quiet?: boolean;
 }
 
 /** One cell of an optional run's strip: a label over `of` pips with `n` lit, in a tone, and a small badge beside it (e.g. "x2"). */
@@ -227,7 +229,11 @@ export interface StoryView {
     /** Part 1's chain: the walk's last tap was made, and the page goes on. */
     done?: boolean;
     /** An optional run asked for in the walk (counted, so each ask opens it once). */
-    optional?: { id: string; n: number } };
+    optional?: { id: string; n: number };
+    /** Who to talk to next, shown on screen (Ladi, 25 Nov). */
+    goal?: string;
+    /** A tap that would start a run asks first (Ladi, 25 Nov): the question and its two buttons. */
+    ask?: { text: string; yes: string; no: string } };
 }
 
 export type ClientMsg =
@@ -245,6 +251,8 @@ export type ClientMsg =
   | { t: "on" }
   /** Story run 2: call the partner to a tile. */
   | { t: "call"; x: number; y: number }
+  /** A walk: the answer to its "Play ...?" question. */
+  | { t: "answer"; yes: boolean }
   | { t: "ping"; at: number };
 
 export type ServerMsg =

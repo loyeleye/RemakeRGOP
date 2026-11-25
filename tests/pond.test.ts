@@ -12,7 +12,8 @@ function open() {
   conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
   const said = () => msgs.flatMap((m) => (m.t === "say" ? m.lines : []));
   const tap = (x: number, y: number) => conn.message(JSON.stringify({ t: "act", action: { kind: "walk", to: { x, y } } }));
-  return { room, msgs, said, tap };
+  const answer = (yes: boolean) => conn.message(JSON.stringify({ t: "answer", yes }));
+  return { room, msgs, said, tap, answer };
 }
 
 describe("The pond, between runs", () => {
@@ -28,13 +29,20 @@ describe("The pond, between runs", () => {
   });
 
   it("answers a tap from afar once Rook has walked up, and tapping Hesta starts Granny's game", () => {
-    const { room, said, tap } = open();
+    const { room, said, tap, answer } = open();
     for (let i = 0; i < 80; i++) room.onTick();
     tap(room.spots.lantern.x, room.spots.lantern.y);
     for (let i = 0; i < 40 && !said().some((l) => l.text.startsWith("Lumi's lantern")); i++) room.onTick();
     expect(said().some((l) => l.who === "Rook" && l.text.startsWith("Lumi's lantern"))).toBe(true);
     const h = room.state.game.players.find((p) => p.name === "Hesta")!.pos;
     tap(h.x, h.y);
+    // It asks first (Ladi, 25 Nov): nothing starts until he says yes.
+    const asked = () => (room as unknown as { asking: unknown }).asking;
+    for (let i = 0; i < 40 && !asked(); i++) room.onTick();
+    expect(asked()).toBeTruthy();
+    for (let i = 0; i < 20; i++) room.onTick();
+    expect(room.state.granny).toBeFalsy();
+    answer(true);
     for (let i = 0; i < 40 && !room.state.granny; i++) room.onTick();
     const granny = room.state.granny!;
     expect(granny).toBeTruthy();
@@ -83,6 +91,15 @@ describe("The later walks", () => {
     conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
     const skiff = room.state.game.shrine.props!.find((p) => p.kind === "skiff")!;
     conn.message(JSON.stringify({ t: "act", action: { kind: "walk", to: { x: skiff.x, y: skiff.y } } }));
+    const asked = () => (room as unknown as { asking: unknown }).asking;
+    for (let i = 0; i < 200 && !asked(); i++) room.onTick();
+    // "Not yet" leaves him on the walk; asked again, a yes goes.
+    conn.message(JSON.stringify({ t: "answer", yes: false }));
+    for (let i = 0; i < 20; i++) room.onTick();
+    expect(room.state.job).toBeFalsy();
+    conn.message(JSON.stringify({ t: "act", action: { kind: "walk", to: { x: skiff.x, y: skiff.y } } }));
+    for (let i = 0; i < 200 && !asked(); i++) room.onTick();
+    conn.message(JSON.stringify({ t: "answer", yes: true }));
     for (let i = 0; i < 200 && !room.state.job; i++) room.onTick();
     expect(room.state.job).toBeTruthy();
     expect(room.state.job!.state.stop).toBe(0);

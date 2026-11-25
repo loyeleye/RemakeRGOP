@@ -325,7 +325,7 @@ export class LessonRoom {
     const held = lumi.beam !== null ? g.wisps[lumi.beam] : undefined;
     const tide = held && held.touched && g.board.tile(held.pos) === Tile.Water && g.wisps.some((o) => o !== held && o.guild === 0 && g.board.tile(o.pos) === Tile.Water && !samePt(o.pos, o.prev) && !o.target);
     if (tide && this.tideSeen < 0) this.tideFirstWorks(held!);
-    if (this.tideSeen >= 0 && g.tick === this.tideSeen + T.howAfter) this.say(ROOK, "How did you do that?");
+    if (this.tideSeen >= 0 && g.tick === this.tideSeen + T.howAfter) this.say(ROOK, "How did you do that?", { player: ROOK_ID });
     if (this.tideSeen >= 0 && g.tick === this.tideSeen + T.pulledAfter) this.say(LUMI, "I pulled.", { player: LUMI_ID });
     if (g.scores[0]! >= T.target) return this.finish();
     // Rook to three first, or the clock runs out: she goes again.

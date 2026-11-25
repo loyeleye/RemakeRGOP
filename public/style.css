@@ -433,3 +433,12 @@ label.t-text { cursor: pointer; }
 .t-actions button { flex: 1; }
 #t-apply.ready { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--dawn); }
 .t-status { min-height: 1.3em; color: var(--muted); font-size: 12.5px; }
+
+/* A walk: the goal under the top bar, and the question before a tap starts a run. */
+#walk-goal { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 44px); left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); padding: 6px 14px; border-radius: 999px; background: #0b0a12cc; color: #e9dcc4; font-size: 14px; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#walk-goal::before { content: "◆ "; color: #f3c463; }
+#walk-goal[hidden], #walk-ask[hidden] { display: none; }
+#walk-ask { position: absolute; left: 50%; bottom: calc(max(16px, env(safe-area-inset-bottom)) + 84px); transform: translateX(-50%); width: min(360px, calc(100% - 32px)); padding: 16px; border-radius: 14px; background: #0b0a12ee; color: #e9dcc4; text-align: center; display: grid; gap: 12px; z-index: 20; animation: still-in 0.25s ease-out; }
+#walk-ask p { margin: 0; font-size: 18px; }
+#walk-ask .btns { display: flex; gap: 10px; justify-content: center; }
+#walk-ask .btns button { flex: 1; white-space: nowrap; }

@@ -247,6 +247,9 @@ export class StoryRoom {
       } else {
         c.forRook = true;
         cmd = crewCommand(g, c.id, ROOK, c.state, others, this.split && post ? (w) => !rookSide(w) : undefined);
+        // Nothing on the far side: rather than stand about (Ladi, 25 Nov: "Wick does nothing"),
+        // he fetches one on Rook's side that nobody else has.
+        if (this.split && post && c.state.wisp === null && c.state.drop == null && c.state.fed == null) cmd = crewCommand(g, c.id, ROOK, c.state, others);
       }
       if (cmd) g.command(c.id, cmd);
       // A wisp the crew leave for Rook stops where it is, and is his: a fresh touch takes it.

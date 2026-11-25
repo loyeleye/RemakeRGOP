@@ -156,6 +156,7 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Rook|I always do.": 0.74,
   "Lumi|Mum cheated?": 0.77,
   "Lumi|How did you do that?": 0.86,
+  "Rook|How did you do that?": 2.3,
   "Lumi|She won't.": 0.53,
   "Lumi|I'm picking my own teacher.": 1.46,
   "Lumi|First to six. No shoving.": 1.82,

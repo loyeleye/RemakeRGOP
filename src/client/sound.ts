@@ -321,6 +321,7 @@ export function pullHum(near: number | null) {
  */
 export const VOICE: { who: string; match: RegExp; src: string }[] = [
   // Rook's run 2 lines, whole: Umbriel, lowered a semitone (Ladi's pick).
+  { who: "Rook", match: /^How did you do that\?$/, src: "voice/rook-how.mp3" },
   { who: "Rook", match: /^Three wisps\. I won't point today\.$/, src: "voice/rook-three-wisps.mp3" },
   { who: "Rook", match: /^Where would I stand\?$/, src: "voice/rook-where-stand.mp3" },
   { who: "Rook", match: /^Remember, across the fire from\.\.\.$/, src: "voice/rook-remember.mp3" },
@@ -331,7 +332,6 @@ export const VOICE: { who: string; match: RegExp; src: string }[] = [
   { who: "Rook", match: /^Now you're the boss\. Tell me where to stand\.$/, src: "voice/rook-boss.mp3" },
   { who: "Rook", match: /^Yes, ma'am\.$/, src: "voice/rook-yes-maam.mp3" },
   { who: "Rook", match: /^First to three\. No help\.$/, src: "voice/rook-first-to-three.mp3" },
-  { who: "Rook", match: /^How did you do that\?$/, src: "voice/rook-how.mp3" },
   { who: "Rook", match: /^Let's call it for now\. We can try again tomorrow\.$/, src: "voice/rook-call-it.mp3" },
 ];
 

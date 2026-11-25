@@ -603,7 +603,8 @@ export class GrannyRoom {
    * - "chatter": Lumi's calls to the others: only into silence, and never near a key line.
    */
   private say(who: string, text: string, how: Omit<StoryLine, "who" | "text"> = {}, kind: "key" | "quip" | "chatter" = how.talk ? "key" : "quip") {
-    const line = { who, text, ...how };
+    // Nell and Sefa are read, not heard, in this run (Ladi, 25 Nov).
+    const line = { who, text, ...how, ...(who === NELL || who === SEFA ? { quiet: true } : {}) };
     if (this.phase !== "playing") return void this.lines.push(line);
     const now = this.game.tick;
     if (kind === "chatter" && (this.talking() || now - this.lastKey < GRANNY.quietAround)) return;

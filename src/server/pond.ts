@@ -123,6 +123,8 @@ export class PondRoom {
   private lines: StoryLine[] = [];
   /** What Rook is walking up to, after a tap from afar. */
   private going: Thing | null = null;
+  /** A tap that would start a run, waiting on his answer (the page asks "Play ...?"). Walking off is a no. */
+  private asking: { thing: Thing; text: string; yes: string; no: string } | null = null;
   private taps = new Map<string, number>();
   private gatheredAt = -1;
   private lastSefa = -99;
@@ -198,6 +200,12 @@ export class PondRoom {
         return this.begin();
       case "act":
         return this.act(msg);
+      case "answer": {
+        const a = this.asking;
+        this.asking = null;
+        if (a && msg.yes && !this.granny && this.leavingAt < 0) this.answer(a.thing, true);
+        return this.broadcast();
+      }
     }
   }
 
@@ -402,6 +410,7 @@ export class PondRoom {
   private act(msg: Extract<ClientMsg, { t: "act" }>) {
     if (this.granny || this.leavingAt >= 0) return;
     const g = this.game;
+    if (this.asking) (this.asking = null), this.broadcast();
     const action = cleanAction(msg.action, g);
     const to = action?.kind === "walk" ? action.to : null;
     const thing = to ? this.thingAt(to) : null;
@@ -446,11 +455,24 @@ export class PondRoom {
     return null;
   }
 
-  private answer(thing: Thing) {
+  /** Who to talk to next. Walk 1's waits until Hesta has come down to the pond. */
+  private goal(): string | null {
+    if (this.walkDef.n === 1 && this.gatheredAt < 0) return null;
+    return this.walkDef.goal;
+  }
+
+  /** Puts the question up; a yes comes back through answer(thing, true). */
+  private ask(thing: Thing, text: string, yes = "Play", no = "Not yet") {
+    this.asking = { thing, text, yes, no };
+    this.broadcast();
+  }
+
+  private answer(thing: Thing, sure = false) {
     const W = this.walkDef;
-    if (W.n === 1 && thing.name === "Hesta") return this.startGame();
+    if (W.n === 1 && thing.name === "Hesta") return sure ? this.startGame() : this.ask(thing, W.ask);
     // Walk 2's skiff: off to the first job (run 4), with Lumi's "I won. So I'm coming." behind it.
     if (W.n === 2 && thing.name === W.go && W.next === 4) {
+      if (!sure) return this.ask(thing, W.ask, "Set out");
       this.nextRun = 4;
       this.going = null;
       this.leavingAt = this.game.tick;
@@ -459,6 +481,7 @@ export class PondRoom {
     }
     // Walk 2: Nell or Sefa, asked twice, starts the rematch (the optional run, O1): the page opens it, and brings him back here after.
     if (W.n === 2 && (thing.name === NELL || thing.name === SEFA) && (this.taps.get(thing.name) ?? 0) >= 1) {
+      if (!sure) return this.ask(thing, "Play Granny's rematch?", "Play", "Not now");
       this.say(thing.name, "Yes! Granny! Rematch!");
       this.optional = { id: "o1", n: (this.optional?.n ?? 0) + 1 };
       this.broadcast();
@@ -467,6 +490,12 @@ export class PondRoom {
     // From walk 2, his door opens the kitchen: a still with three things to tap (client/kitchen.ts).
     if (W.n >= 2 && thing.name === "house") {
       this.kitchen++;
+      this.broadcast();
+      return;
+    }
+    // A yes to the walk's question: on, without the line again.
+    if (sure && W.n !== 1 && thing.name === W.go && this.chain) {
+      this.done = true;
       this.broadcast();
       return;
     }
@@ -481,9 +510,8 @@ export class PondRoom {
     if (W.n !== 1 && thing.name === W.go) {
       // In Part 1's chain the page goes on from here; on its own, say that nothing is built after it.
       if (this.chain) {
-        this.done = true;
-        this.broadcast();
-        return;
+        // Their line first, then the question.
+        return this.ask(thing, W.ask, "Go on");
       }
       this.notBuilt = true;
       this.lines.push({ who: "", text: `(This is where run ${W.next} would start. It isn't built yet.)`, talk: true });
@@ -579,7 +607,7 @@ export class PondRoom {
   }
 
   storyView(): StoryView {
-    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.kitchen ? { kitchen: this.kitchen } : {}), ...(this.leavingAt >= 0 ? { leaving: true } : {}), ...(this.done ? { done: true } : {}), ...(this.optional ? { optional: this.optional } : {}) } };
+    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.kitchen ? { kitchen: this.kitchen } : {}), ...(this.leavingAt >= 0 ? { leaving: true } : {}), ...(this.done ? { done: true } : {}), ...(this.optional ? { optional: this.optional } : {}), ...(this.goal() ? { goal: this.goal()! } : {}), ...(this.asking ? { ask: { text: this.asking.text, yes: this.asking.yes, no: this.asking.no } } : {}) } };
   }
 
   view(): RoomView {

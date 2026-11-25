@@ -386,7 +386,7 @@ function stillLine(l: StoryLine) {
   const from = held ? cam.toScreen(held.x + 0.5, held.y + 0.5, 1) : c.at ? cam.toScreen(c.at.x + 0.5, c.at.y + 0.5, 0) : null;
   // A line that stays a bubble: the picture comes alone, and the bubble says it.
   stills.show({ cue: c, caption: c.bubble ? "" : l.text, who: l.who, ms }, from);
-  if (l.text && l.who && !c.bubble) sound.speak(l.who, l.text);
+  if (l.text && l.who && !c.bubble && !l.quiet) sound.speak(l.who, l.text);
   return ms;
 }
 
@@ -406,7 +406,7 @@ function sayLine(l: StoryLine, released = false) {
     // Run 9's pause is three pictures, with a burst of static (the same one that cuts Kes off in play) between the second and third.
     stills.full(l.still.id, l.who, l.text, () => link?.send({ t: "on" }), l.still.id === RESCUE.hold.id ? { frames: RESCUE.hold.frames, static: RESCUE.hold.static, onStatic: () => sound.staticBurst(RESCUE.hold.static.ms / 1000) } : undefined);
     sound.paper();
-    if (l.text && l.who) sound.speak(l.who, l.text);
+    if (l.text && l.who && !l.quiet) sound.speak(l.who, l.text);
     return;
   }
   if (l.still && !l.talk) {
@@ -432,8 +432,8 @@ function sayLine(l: StoryLine, released = false) {
   el.style.animation = "none";
   void el.offsetWidth;
   el.style.animation = "";
-  barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60), wisp: l.wisp, ring: l.ring, player: l.player, speaker: speaker || undefined, who: l.who, text: l.text };
-  sound.speak(l.who, l.text, l.who === "Hesta" && l.wisp != null);
+  barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60, (VOICE_SECONDS[`${l.who}|${l.text}`] ?? 0) * 1000 + 400), wisp: l.wisp, ring: l.ring, player: l.player, speaker: speaker || undefined, who: l.who, text: l.text };
+  if (!l.quiet) sound.speak(l.who, l.text, l.who === "Hesta" && l.wisp != null);
   if (!anchored) placeBarks(performance.now());
 }
 
@@ -584,7 +584,7 @@ function nextTalk() {
     requestAnimationFrame(() => {
       if (typing !== t) return;
       t.at = performance.now();
-      if (l.who) sound.speak(l.who, l.text);
+      if (l.who && !l.quiet) sound.speak(l.who, l.text);
       typeOn();
     }),
   );
@@ -1444,6 +1444,27 @@ function stopStorySound() {
   musicFor = -1;
 }
 
+/** A walk's goal line, and its "Play ...?" question with two buttons (the room waits for the answer; walking off is a no). */
+let askShown = "";
+function renderWalkGoal(pond: NonNullable<RoomView["story"]>["pond"] | undefined) {
+  const goal = $("walk-goal");
+  const text = pond?.goal && !pond.leaving && !pond.done ? pond.goal : "";
+  goal.hidden = !text;
+  if (goal.textContent !== text) goal.textContent = text;
+  const box = $("walk-ask");
+  const a = pond?.ask;
+  box.hidden = !a;
+  const key = a ? `${a.text}|${a.yes}|${a.no}` : "";
+  if (!a || key === askShown) return void (askShown = key);
+  askShown = key;
+  box.querySelector("p")!.textContent = a.text;
+  const yes = box.querySelector<HTMLButtonElement>(".yes")!, no = box.querySelector<HTMLButtonElement>(".no")!;
+  yes.textContent = a.yes;
+  no.textContent = a.no;
+  yes.onclick = () => link?.send({ t: "answer", yes: true });
+  no.onclick = () => link?.send({ t: "answer", yes: false });
+}
+
 function renderHud() {
   if (!room) return;
   const s = snap;
@@ -1453,6 +1474,7 @@ function renderHud() {
     el.textContent = String(s?.scores[g] ?? 0);
   }
   const story = room.story;
+  renderWalkGoal(story?.pond);
   $("score-1").classList.toggle("kes", !!story);
   $("mute").hidden = !story;
   $("call").hidden = !story?.canCall;

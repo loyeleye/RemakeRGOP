@@ -31,14 +31,17 @@ export interface Walk {
   people: WalkPerson[];
   /** Who or what to tap to go on: a person's name or a place. */
   go: string;
+  /** The goal shown on screen, and the question asked before the tap on `go` goes on (gameplay placeholders, not story lines). */
+  goal: string;
+  ask: string;
   /** Where Rook starts. */
   start: Anchor;
 }
 
 export const WALKS: Walk[] = [
-  { n: 1, title: "The pond, afternoon", light: "afternoon", after: 2, next: 3, people: [], go: "Hesta", start: "pond" },
+  { n: 1, title: "The pond, afternoon", light: "afternoon", after: 2, next: 3, people: [], go: "Hesta", start: "pond", goal: "Talk to Hesta", ask: "Play Granny's game?" },
   {
-    n: 2, title: "Morning, before the job", light: "morning", after: 3, next: 4, go: "skiff", start: "door",
+    n: 2, title: "Morning, before the job", light: "morning", after: 3, next: 4, go: "skiff", start: "door", goal: "Take the skiff at the landing", ask: "Set out on the job?",
     people: [
       { name: "Lumi", at: "door", lines: ["I won. So I'm coming.", "I packed. Don't look in the bag."] },
       { name: "Moth", at: "landing", lines: ["Two islands called for you. Granny has the route."] },
@@ -48,7 +51,7 @@ export const WALKS: Walk[] = [
     ],
   },
   {
-    n: 3, title: "Festival morning", light: "morning", after: 5, next: 6, go: "Mabry", start: "door",
+    n: 3, title: "Festival morning", light: "morning", after: 5, next: 6, go: "Mabry", start: "door", goal: "Go to Mabry at the shrine", ask: "Go into the shrine with Mabry?",
     people: [
       { name: "Lumi", at: "path", lines: ["Do I look bright? Don't answer that."] },
       { name: "Maudie", at: "door", lines: ["Hold still, your collar's all wrong."] },
@@ -59,11 +62,11 @@ export const WALKS: Walk[] = [
     ],
   },
   {
-    n: 4, title: "Night", light: "night", after: 7, next: 8, go: "Hesta", start: "door",
+    n: 4, title: "Night", light: "night", after: 7, next: 8, go: "Hesta", start: "door", goal: "Find Hesta on the terrace", ask: "Sit with Hesta?",
     people: [{ name: "Hesta", at: "chair", lines: ["Couldn't sleep either?"] }],
   },
   {
-    n: 5, title: "Dusk", light: "dusk", after: 8, next: 9, go: "Mabry", start: "door",
+    n: 5, title: "Dusk", light: "dusk", after: 8, next: 9, go: "Mabry", start: "door", goal: "Go to Mabry at the shrine", ask: "Go to the shrine with Mabry?",
     people: [
       { name: "Mabry", at: "shrine", lines: ["We will speak of the Offering. Not here."] },
       { name: "Kes", at: "shrine", stay: true, lines: ["Old men arguing. Don't worry about it."] },
