@@ -202,18 +202,16 @@ export const DYING = {
     { who: "Maudie", a: 0.525, c: "#f4a6c8", s: 0.9, cast: "maudie" },
     { who: "Wick", a: 0.47, c: "#9fd8ff", s: 0.9, cast: "wick" },
     { who: "Moth", a: 0.425, c: "#c8b0ff", s: 0.9, cast: "moth" },
-    { who: "Jarek", a: 0.37, c: "#ffc890", s: 0.8, stand: { base: "villager-man", skin: "#e2b494", outfit: "#5c6e80" } },
+    { who: "Jarek", a: 0.37, c: "#ffc890", s: 0.8, cast: "jarek" },
     { who: "Nell", a: 0.32, c: "#a8e6a0", s: 0.7, cast: "nell" },
     { who: "Orrin", a: 0.265, c: "#8fd0c8", s: 0.8, cast: "orrin" },
     { who: "Mabry", a: 0.21, c: "#ffe9b0", s: 0.8, cast: "mabry" },
-    { who: "Manu", a: 0.15, c: "#b8e0ff", s: 0.8, carries: "sefa", stand: { base: "villager-man", skin: "#8d5a3c", outfit: "#4e807c", tall: 1.08 } },
-    { who: "Sina", a: 0.115, c: "#ffd0a0", s: 0.75, stand: { base: "villager-woman", skin: "#8d5a3c", outfit: "#4a4e78" } },
-    { who: "Hania", a: 0.05, c: "#f0d0ff", s: 0.75, stand: { base: "villager-woman", skin: "#e2b494", outfit: "#d6ccb0" } },
-    { who: "Garrick", a: 0.99, c: "#d8c8a0", s: 0.8, stand: { base: "villager-elder-man", skin: "#5c3a28", outfit: "#464a5c" } },
-    { who: "Marit", a: 0.94, c: "#c0e8c0", s: 0.8, stand: { base: "villager-woman", skin: "#a8714e", outfit: "#c4b696" } },
-    // `stand`: no model of their own yet (the cast thread is asked, 25 Nov), so run 9's villager base
-    // in their sheet's skin and main garment colour.
-  ] as readonly { who: string; a: number; c: string; s: number; cast?: string; carries?: string; stand?: { base: string; skin: string; outfit: string; tall?: number } }[],
+    { who: "Manu", a: 0.15, c: "#b8e0ff", s: 0.8, carries: "sefa", cast: "manu" },
+    { who: "Sina", a: 0.115, c: "#ffd0a0", s: 0.75, cast: "sina" },
+    { who: "Hania", a: 0.05, c: "#f0d0ff", s: 0.75, cast: "hania" },
+    { who: "Garrick", a: 0.99, c: "#d8c8a0", s: 0.8, cast: "garrick" },
+    { who: "Marit", a: 0.94, c: "#c0e8c0", s: 0.8, cast: "marit" },
+  ] as readonly { who: string; a: number; c: string; s: number; cast?: string; carries?: string }[],
   /**
    * Where they stand (Ladi, 24 Nov: "I definitely do not want the crowd on the field... they are by
    * Hesta's house looking down at the Kindling field"). Never on the field: all through both runs

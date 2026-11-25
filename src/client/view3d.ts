@@ -20,7 +20,7 @@ import { DYING, crowdSpot, terraceHeight } from "../engine/dying.js";
 import { DRESS, dressVerge, quarryPit, sieveGrain, sieveMask, sievePaths, wellLoop } from "./sieve-dress.js";
 import { SIEVE } from "../engine/sieve.js";
 import { RESCUE_LOOK, RescueFx, type VillagerRig } from "./rescue-dress.js";
-import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager, type VillagerBase } from "./villagers.js";
+import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villagers.js";
 import { RematchFx } from "./rematch-dress.js";
 import { CoveFx } from "./cove-dress.js";
 import { KiteFx } from "./kite-dress.js";
@@ -187,7 +187,7 @@ type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
 const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell", "sefa", "kes", "maudie", "mabry", "orrin"] as const;
 /** Each character's height against Rook's (models come in at one height). Lumi is nine. */
-export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78 };
+export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};
@@ -268,6 +268,15 @@ function loadFigure(n: string) {
         });
     },
   );
+}
+
+/** The rest of the village, seen only on Hesta's terrace in runs 6 and 7: asked for when it first shows. */
+const CROWD_MODELS = ["jarek", "hania", "manu", "garrick", "marit", "sina"] as const;
+let crowdAsked = false;
+function loadCrowd() {
+  if (crowdAsked) return;
+  crowdAsked = true;
+  for (const n of CROWD_MODELS) loadFigure(n);
 }
 
 /** Run 9's villagers are asked for when that run first opens, not with the page: six models nobody else needs. */
@@ -1332,31 +1341,6 @@ class CastAnim {
     this.last = nowSec;
     this.mixer.update(dt);
   }
-}
-
-/** One of the village in run 9's villager base, at its height, lit and tinted as there, with its idle and walk. */
-function standBody(s: { base: string; skin: string; outfit: string; tall?: number }): THREE.Object3D | null {
-  loadVillagers();
-  const model = models[s.base], anims = clips[s.base];
-  if (!model || !anims?.length) return null;
-  const body = cloneSkinned(model);
-  body.scale.multiplyScalar(VILLAGERS.man * (VILLAGERS.heights[s.base as VillagerBase] ?? 1) * (s.tall ?? 1));
-  body.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    if ((m as THREE.SkinnedMesh).isSkinnedMesh) m.frustumCulled = false;
-    const c = (m.material as THREE.MeshStandardMaterial).clone();
-    if (c.map) {
-      c.emissiveMap = c.map;
-      c.emissive = new THREE.Color("#ffffff");
-      c.emissiveIntensity = VILLAGERS.flat;
-    }
-    m.material = c;
-  });
-  // Last: a later clone would drop the colours.
-  tintVillager(body, s.skin, s.outfit);
-  body.userData.anim = new CastAnim(body, anims);
-  return body;
 }
 
 function castBody(cast: string): THREE.Object3D | null {
@@ -3263,16 +3247,13 @@ export class World {
     const m = DYING.crowd[i]!;
     const cast = m.cast && models[m.cast] ? castBody(m.cast) : null;
     if (cast) return { body: cast, real: true };
-    // A stand-in: run 9's villager base, tinted to them.
-    const stand = m.stand ? standBody(m.stand) : null;
-    if (stand) return { body: stand, real: true };
+    if (m.cast && !models[m.cast]) loadCrowd();
     // No model of their own yet: the plain lamplighter figure, a little different in height from the next.
     const plain = models[i % 2 ? "dawn" : "dusk"];
     if (plain) {
       const body = plain.clone();
       body.scale.multiplyScalar(1.8 * (0.88 + (i % 3) * 0.06));
-      // Final for those with no model coming; the cast and the stand-ins replace it when theirs is in.
-      return { body, real: !m.cast && !m.stand };
+      return { body, real: !m.cast };
     }
     const body = new THREE.Group();
     const robe = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.2, 10), new THREE.MeshStandardMaterial({ color: "#4a4660", roughness: 0.8 }));
