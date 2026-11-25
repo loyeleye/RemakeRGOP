@@ -13,6 +13,7 @@ import { SV_WELLS, sieveRows, svCoast, svOutline } from "./sieve.js";
 import { LO_FRAME, LO_OVAL, RESCUE, loCoast, loFromSlip, loOutline, lowOneRows } from "./rescue.js";
 import { SHIP, SHIP_DECK, SHIP_FRAME, shipRows } from "./shiphome.js";
 import { KF_FAR, KF_OVAL, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
+import { COVE, CV_FRAME, CV_ISLE, coveFlats, coveRows, cvCoast, cvFromBrazier, cvOutline } from "./cove.js";
 import { HS_CENTRE, HS_FAR, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
 import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
 
@@ -425,6 +426,8 @@ export interface Shrine {
   deck?: boolean;
   /** Story places: named islands of the sky that must be in view from here, in tiles from the centre; `drop` is how far below this one they hang. */
   far?: { x: number; y: number; r: number; drop: number }[];
+  /** Story (the Cove): the tiles (by index) that the tide covers and uncovers. Open ground on this board; a round floods them (Game.setTide). */
+  tidal?: number[];
 }
 
 /**
@@ -1401,6 +1404,8 @@ export const STORY_SHRINES: Shrine[] = [
   sieve(),
   lowOne(),
   shipDeck(),
+  // Optional run 2, Lumi's lesson with Kes: the Cove of the home pond (see cove.ts).
+  cove(),
 ];
 
 /** The Kindling ground with the crater in it: everything else as run 1's island. */
@@ -1444,6 +1449,17 @@ function lowOne(): Shrine {
   // On a phone the view takes in half the island's depth, so the line of lamps going cold is seen.
   sh.board.phoneSpan = RESCUE.phoneSpan;
   return { ...sh, coast: loCoast, outline: loFromSlip, arms: true, lobes: [], core: { x: LO_OVAL.x, y: LO_OVAL.y, outline: loOutline }, landing: true };
+}
+
+/** The Cove (optional run 2): mostly water, its flats under the tide or out of it. The board's centre is the pond brazier, by its west end. */
+function cove(): Shrine {
+  const rows = coveRows();
+  const def: ShrineDef = { id: COVE.shrine, name: "The Cove", blurb: "The cove of the home pond: mostly water, and the tide comes and goes.", full: true, scale: 1, rings: [], spawnBand: [3, 30], rows };
+  const sh = finish(def, rows, 2, null);
+  const b = sh.board, c = b.center;
+  b.frame = { x: c.x + CV_FRAME.x0, y: c.y + CV_FRAME.y0, w: CV_FRAME.x1 - CV_FRAME.x0 + 1, h: CV_FRAME.y1 - CV_FRAME.y0 + 1 };
+  const tidal = coveFlats().map(([x, y]) => (c.y + y) * b.width + c.x + x);
+  return { ...sh, coast: cvCoast, outline: cvFromBrazier, arms: true, lobes: [], core: { x: CV_ISLE.x, y: CV_ISLE.y, outline: cvOutline }, tidal };
 }
 
 /** Kite Fell: drawn from the maps thread's shapes, like the home island. */

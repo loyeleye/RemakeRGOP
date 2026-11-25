@@ -5,10 +5,11 @@
 export const MOODS: Record<string, readonly string[]> = {
   // "grinning" and "dozing" are the optional run's (Granny's rematch): only a line that names them gets them.
   Hesta: ["neutral", "approving", "firm", "grinning", "dozing"],
-  Lumi: ["neutral", "calling", "delighted", "grudging", "smug", "unimpressed", "delight-flash"],
+  // "proud" is the optional run's (Lumi's lesson with Kes), as "teaching" is Kes's: only a line that names them gets them.
+  Lumi: ["neutral", "calling", "delighted", "grudging", "smug", "unimpressed", "delight-flash", "proud"],
   Rook: ["neutral", "warm", "proud", "baffled"],
   Nell: ["neutral", "curious", "delighted", "determined", "sheepish", "worried"],
-  Kes: ["neutral", "smug", "challenging", "wistful", "gracious", "alarmed", "bereft"],
+  Kes: ["neutral", "smug", "challenging", "wistful", "gracious", "alarmed", "bereft", "teaching"],
   // The two old people on the low one (run 9). First drafts from the cast thread, not approved by Ladi; he has no line yet.
   "Sefa's grandmother": ["talking", "steady", "soft"],
   "Sefa's grandfather": ["neutral"],

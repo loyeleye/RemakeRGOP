@@ -451,6 +451,14 @@ export class Game {
    * water, every loose wisp on that pool drifts a tile a tick toward her for as long as she holds.
    */
   tidePuller: number | null = null;
+  /** Story (the Cove): her pull draws only the loose wisps within this many tiles of her; null draws the whole pool. */
+  tideDraw: number | null = null;
+  /** Story (the Cove): the tide comes in over the flats (Shrine.tidal), or goes out and leaves them wet stone. */
+  setTide(isIn: boolean) {
+    for (const i of this.shrine.tidal ?? []) this.board.tiles[i] = isIn ? Tile.Water : Tile.Floor;
+    this.pools = null;
+    this.board.version++;
+  }
   /** Each water tile's pool (its connected stretch of water), worked out when first needed. */
   private pools: Int32Array | null = null;
   /** The wisp the tide puller took hold of on water, and its pool, while she holds it. */
@@ -475,7 +483,8 @@ export class Game {
     const gp = gm.portcullis || gm.plates;
     // Gates and mist change the board mid-round, so this round gets its own copy of it.
     const moss = shrine.board.tiles.includes(Tile.Moss);
-    this.board = gp || gm.mist || moss ? new Board(shrine.board.width, shrine.board.height, shrine.board.tiles.slice()) : shrine.board;
+    this.board = gp || gm.mist || moss || shrine.tidal ? new Board(shrine.board.width, shrine.board.height, shrine.board.tiles.slice()) : shrine.board;
+    if (shrine.tidal) (this.board.deep = shrine.board.deep), (this.board.frame = shrine.board.frame), (this.board.phoneSpan = shrine.board.phoneSpan);
     if (gm.glyphs) this.flow = this.board.bankFlow();
     if (moss) this.board.tiles.forEach((t, i) => t === Tile.Moss && this.mossHp.set(i, MOSS_HP));
     if (gm.mist) this.setMist();
@@ -690,6 +699,7 @@ export class Game {
     for (const w of this.wisps) {
       if (w === held || w.touched || w.target || w.skate || this.board.inBankZone(w.pos)) continue;
       if (this.board.tile(w.pos) !== Tile.Water || this.poolOf(w.pos) !== pool) continue;
+      if (this.tideDraw !== null && cheb(w.pos, p.pos) > this.tideDraw) continue;
       const to = this.tideStep(w.pos, p.pos);
       if (!to) continue;
       // Moving water and her pull add up (laws of water, 6): with the flow she draws them two tiles

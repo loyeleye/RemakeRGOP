@@ -71,8 +71,14 @@ export interface OptCell {
   label: string;
   n: number;
   of: number;
-  tone: "us" | "her" | "chalk";
+  tone: "us" | "her" | "chalk" | "water";
   badge?: string;
+  /** Pips in groups of this many, with a gap between groups (Kes's strings of three). */
+  group?: number;
+  /** A bar instead of pips: how full it is, 0 to 1 (the light that is left). */
+  bar?: number;
+  /** A tide mark instead of pips: how high the water stands (0 to 1), whether the tide is in, how much of this tide is left (1 to 0), and whether it is about to turn. */
+  tide?: { level: number; in: boolean; share: number; soon: boolean };
 }
 
 export interface StoryView {
@@ -119,6 +125,11 @@ export interface StoryView {
     nap?: { who: number; left: number; of: number };
     wall?: { best: number; now: number; hers: number };
     record?: { id: string; best: number; won: boolean; count: number };
+    /** The Cove (optional run 2): the tide (how high the water stands over the flats, 0 to 1, and whether it is in), how far the pull reaches now, how much light is left (1 to 0), and the wisps left on wet stone. */
+    tide?: { level: number; in: boolean; left: number; of: number; n: number };
+    reach?: number;
+    light?: number;
+    stranded?: number[];
   };
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };
