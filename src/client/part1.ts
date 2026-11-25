@@ -92,23 +92,23 @@ export interface Held {
 export const HELD: Record<string, Held> = {
   // 4-5 is now two pictures with two walks between them (story/gap4-5-walk-beats.md, Ladi's shape, 25
   // Nov): the skiff coming in, then walks 7 and 8, then the skiff leaving. No words in either picture;
-  // Kes's challenge is said in walk 7. Both are to be redrawn by the cutscene thread from the personas
-  // (Ladi: Maudie off model and facing the camera, strangers in the boat); these are the old ones.
+  // Kes's challenge is said in walk 7. Both redrawn by the cutscene thread from the personas on Ladi's
+  // notes (production/story/part1/skiff-home/final-2/), its picks, not seen by him.
   "4-5": {
-    tag: "Old picture, being redrawn",
+    tag: "Picture not seen by Ladi",
     fade: 0.7,
     lead: 0,
     line: 2.6,
     gap: 0.4,
-    pictures: [{ slot: "skiff-1-kes-waiting", hold: 4 }],
+    pictures: [{ slot: "skiff-1-arrives-sunset", hold: 5 }],
   },
   "4-5b": {
-    tag: "Old picture, being redrawn",
+    tag: "Picture not seen by Ladi",
     fade: 0.7,
     lead: 0,
     line: 2.6,
     gap: 0.4,
-    pictures: [{ slot: "skiff-3-leaving", hold: 4 }],
+    pictures: [{ slot: "skiff-2-leaves-morning", hold: 4 }],
   },
   // 7-8b, Hesta's hands at night, then the morning (production/story/part1/hands/final/README.md, 25
   // Nov): the cutscene thread's picks; Ladi was sent an earlier draft on 23 Nov and has not ruled.
@@ -183,7 +183,7 @@ export const HELD: Record<string, Held> = {
   // every line is a caption until he has read it (the story thread's advice: its voiced lines are the
   // peak of Part 1). Picture 24 is 23 with the light gone. The end of Part 1.
   "11": {
-    tag: "Rough first draft. Pictures and story not seen by Ladi",
+    tag: "Rough first draft, being redrawn. Pictures and story not seen by Ladi",
     shape: "four3",
     fade: 0.6,
     lead: 0.5,

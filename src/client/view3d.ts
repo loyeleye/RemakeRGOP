@@ -72,6 +72,8 @@ export interface DrawState {
   ship?: NonNullable<import("../engine/protocol.js").StoryView["ship"]>;
   /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
   walk?: number;
+  /** A walk's people who face somewhere while they stand (Maudie toward the dock in walk 7). */
+  looks?: { id: number; x: number; y: number }[];
 }
 
 // ------------------------------------------------------------------ camera
@@ -4289,6 +4291,8 @@ export class World {
       // Run 9, busy Kes standing: her face to what she is watching (the patch, the west, the people she waves aboard).
       const look = st.rescue?.kes === p.id ? st.rescue.kesLook : undefined;
       if (look && !moving && p.beam === null) face = Math.atan2(this.worldX(b, look.x) - wx, this.worldZ(b, look.y) - wz);
+      const toward = st.looks?.find((q) => q.id === p.id);
+      if (toward && !moving && p.beam === null) face = Math.atan2(this.worldX(b, toward.x) - wx, this.worldZ(b, toward.y) - wz);
       rig.facing = lerpAngle(rig.facing, face, 0.18);
       const anim = rig.body?.userData.anim as CastAnim | undefined;
       if (anim) {

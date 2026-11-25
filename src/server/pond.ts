@@ -256,15 +256,16 @@ export class PondRoom {
     this.spots = pondSpots(this.game.board, shrine.starts, shrine.house);
     this.gatheredAt = 1e9;
     const taken: Pt[] = [];
-    const put = (id: number, a: Anchor) => {
-      const at = this.openNear(this.anchor(a), taken);
+    const put = (id: number, a: Anchor, off?: [number, number]) => {
+      const base = this.anchor(a);
+      const at = this.openNear(off ? pt(base.x + off[0], base.y + off[1]) : base, taken);
       taken.push(at);
       const p = this.player(id);
       p.pos = p.prev = at;
       p.run = id === ROOK_ID;
     };
     W.people.forEach((p, i) => {
-      put(10 + i, p.at);
+      put(10 + i, p.at, p.off);
       this.walkLines.set(p.name, p.lines);
       // Anyone the story doesn't need where they are wanders about near their place.
       if (!p.stay && p.name !== W.go) {
@@ -302,7 +303,7 @@ export class PondRoom {
       const b = g.board;
       for (let tries = 0; tries < 12; tries++) {
         const to = pt(w.home.x + Math.round((this.rand() * 2 - 1) * Wd.range), w.home.y + Math.round((this.rand() * 2 - 1) * Wd.range));
-        if (!b.inside(to) || !b.passable(to, Mover.Walker) || g.players.some((q) => q.pos.x === to.x && q.pos.y === to.y)) continue;
+        if (!b.inside(to) || !b.passable(to, Mover.Walker) || this.banned(to) || g.players.some((q) => q.pos.x === to.x && q.pos.y === to.y)) continue;
         this.walk(id, to);
         break;
       }
@@ -327,8 +328,9 @@ export class PondRoom {
         return f ? pt(mid(f), f.y1 + 2) : this.spots.rook;
       }
       case "landing": {
+        // On the boards, one tile in from the dock's north edge (Ladi, 25 Nov: the edge row reads as standing on air).
         const k = box("skiff");
-        return k ? pt(k.x1 + 2, k.y0) : this.spots.rook;
+        return k ? pt(k.x1 + 3, k.y0 + 1) : this.spots.rook;
       }
       case "stall": {
         // Orrin's open workshop is the stall now (the horseshoe island): before its door, west.
@@ -366,9 +368,20 @@ export class PondRoom {
         for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
           const q = pt(at.x + dx, at.y + dy);
-          if (b.inside(q) && b.passable(q, Mover.Walker) && !taken.some((t) => t.x === q.x && t.y === q.y)) return q;
+          if (b.inside(q) && b.passable(q, Mover.Walker) && !this.banned(q) && !taken.some((t) => t.x === q.x && t.y === q.y)) return q;
         }
     return at;
+  }
+
+  /**
+   * Tiles nobody is put or wanders to: the dock's north edge row, from its mooring post by the skiff
+   * to its land end, which reads as standing on air (Ladi, 25 Nov).
+   */
+  private banned(q: Pt) {
+    const ks = (this.game.shrine.props ?? []).filter((p) => p.kind === "skiff");
+    if (!ks.length) return false;
+    const x1 = Math.max(...ks.map((p) => p.x)), y0 = Math.min(...ks.map((p) => p.y));
+    return q.y === y0 && q.x >= x1 + 1 && q.x <= x1 + 6;
   }
 
   onTick() {
@@ -461,6 +474,12 @@ export class PondRoom {
     }
     for (const p of this.game.players) if (p.id !== ROOK_ID && p.pos.x === at.x && p.pos.y === at.y) return { name: p.name, at: () => this.player(p.id).pos };
     return null;
+  }
+
+  /** Where the walk's people face while they stand (WalkPerson.look). */
+  private looks() {
+    if (this.walkDef.n === 1 || !this.game) return [];
+    return this.walkDef.people.flatMap((p, i) => (p.look ? [{ id: 10 + i, ...this.anchor(p.look) }] : []));
   }
 
   /** Who to talk to next. Walk 1's waits until Hesta has come down to the pond. */
@@ -560,7 +579,9 @@ export class PondRoom {
     const talk = W.people.find((p) => p.name === thing.name)?.talk;
     if (talk && n === 0) {
       const on = W.n !== 1 && thing.name === W.go && this.chain && !first;
-      this.exchange(talk, on ? () => this.ask(thing, W.ask, "Go on") : undefined);
+      // After the walk's first talk, whoever has somewhere to be goes there, running (walk 7's Lumi).
+      const off = W.first?.name === thing.name ? () => W.people.forEach((p, i) => p.then && ((this.player(10 + i).run = true), this.walk(10 + i, this.openNear(this.anchor(p.then), [])))) : undefined;
+      this.exchange(talk, on ? () => this.ask(thing, W.ask, "Go on") : off);
       this.broadcast();
       return;
     }
@@ -669,7 +690,7 @@ export class PondRoom {
   }
 
   storyView(): StoryView {
-    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.kitchen ? { kitchen: this.kitchen } : {}), ...(this.leavingAt >= 0 ? { leaving: true } : {}), ...(this.done ? { done: true } : {}), ...(this.optional ? { optional: this.optional } : {}), ...(this.goal() ? { goal: this.goal()! } : {}), ...(this.asking ? { ask: { text: this.asking.text, choices: this.asking.choices, no: this.asking.no } } : {}) } };
+    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.kitchen ? { kitchen: this.kitchen } : {}), ...(this.leavingAt >= 0 ? { leaving: true } : {}), ...(this.done ? { done: true } : {}), ...(this.optional ? { optional: this.optional } : {}), ...(this.goal() ? { goal: this.goal()! } : {}), ...(this.looks().length ? { looks: this.looks() } : {}), ...(this.asking ? { ask: { text: this.asking.text, choices: this.asking.choices, no: this.asking.no } } : {}) } };
   }
 
   view(): RoomView {

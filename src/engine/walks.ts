@@ -25,6 +25,12 @@ export interface WalkPerson {
   offer?: { lines: { who: string; text: string }[]; ask: string; runs: { label: string; run: "o1" | "o2" | "o3a" | "o3b" | "o3c"; then?: { who: string; text: string }[] }[] };
   /** Said over their head now and then while he is not close (Maudie's "When you've finished playing."). */
   idle?: string;
+  /** Tiles from their place (east, south), to stand clear of something there (walk 7: off the landing's posts, onto the grass). */
+  off?: [number, number];
+  /** Where they face while standing (walk 7: Maudie toward the landing). */
+  look?: Anchor;
+  /** Where they go on their own once the walk's `first` talk is done (walk 7: Lumi runs home). */
+  then?: Anchor;
   /** An exchange said on the first tap, one line after another, who by who (Kes's challenge in walk 7); later taps say `lines`. */
   talk?: { who: string; text: string }[];
 }
@@ -88,8 +94,10 @@ export const WALKS: Walk[] = [
     n: 7, title: "Sunset", light: "sunset", after: 4, next: 5, go: "Lumi", start: "landing",
     first: { name: "Kes", goal: "Talk to Kes" }, goal: "Go home", ask: "Turn in for the night?",
     people: [
+      // Ladi (25 Nov): Kes a little onto the grass, Lumi by her for the talk, Moth off the anchor post;
+      // after the talk Lumi runs home on her own.
       {
-        name: "Kes", at: "landing", stay: true, lines: ["Tomorrow, then. The Fell. Bring the referee."],
+        name: "Kes", at: "landing", off: [4, -1], stay: true, lines: ["Tomorrow, then. The Fell. Bring the referee."],
         talk: [
           { who: "Kes", text: "You took my pupil on a job." },
           { who: "Rook", text: "She's my daughter." },
@@ -98,12 +106,13 @@ export const WALKS: Walk[] = [
           { who: "Kes", text: "Tomorrow, then. The Fell. Bring the referee." },
         ],
       },
-      { name: "Maudie", at: "path", stay: true, lines: ["Ten years that girl ate at my table. Her and Ros.", "I know that look on her.", "Go on in. That child's asleep on her feet."] },
-      { name: "Moth", at: "landing", lines: ["Both stops before supper. Granny will say she planned it."] },
+      // Ladi: near enough to watch, far enough not to be part of it, facing the dock.
+      { name: "Maudie", at: "landing", off: [9, -5], look: "landing", stay: true, lines: ["Ten years that girl ate at my table. Her and Ros.", "I know that look on her.", "Go on in. That child's asleep on her feet."] },
+      { name: "Moth", at: "landing", stay: true, lines: ["Both stops before supper. Granny will say she planned it."] },
       { name: "Hesta", at: "chair", stay: true, lines: ["Back already? I'd barely shut my eyes."] },
       { name: "Nell", at: "pond", lines: ["Did they pay you?"] },
       { name: "Sefa", at: "pond", lines: ["Did you see a fish?"] },
-      { name: "Lumi", at: "door", stay: true, lines: ["Marit said 'Thank you, Lumi.' You heard her."], talk: [{ who: "Lumi", text: "Marit said 'Thank you, Lumi.' You heard her." }, { who: "Rook", text: "I heard her." }] },
+      { name: "Lumi", at: "landing", off: [4, 0], then: "door", stay: true, lines: ["Marit said 'Thank you, Lumi.' You heard her."], talk: [{ who: "Lumi", text: "Marit said 'Thank you, Lumi.' You heard her." }, { who: "Rook", text: "I heard her." }] },
     ],
   },
   {
