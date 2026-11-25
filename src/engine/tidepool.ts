@@ -46,6 +46,10 @@ export const TIDEPOOL = {
   /** Lumi, sent: how far her pull reaches over the water, and how far round her it draws the loose ones on her pool. */
   lumiReach: 5,
   lumiDraw: 4,
+  /** How many times she can be sent in a job (the gameplay thread, 25 Nov: so that she does not take the place of climbing or waiting). 99: any number. */
+  lumiSends: 2,
+  /** The stand-in sends her only to a spot where she would reach at least this many on the water. */
+  lumiWorth: 2,
   /** The stand-in sends her no farther than this many steps from where he will wait (99: anywhere). */
   lumiNear: 99,
   /** The goal stays up this long as a caption (6 seconds). */

@@ -75,6 +75,8 @@ export class TidepoolRoom {
   private lastSide: TpSide | null = null;
   /** Where Lumi was sent, while she is on her way or there. */
   private sentTo: Pt | null = null;
+  /** The flood she was sent on: with sends limited, she comes back to him when the next one comes in. */
+  private sentFlood = 0;
   private record: { best: number; was: number; won: boolean; count: number } | null = null;
   /** The sums: taken by him and by her, gone off the bottom, the highest step he took one from, sends, and how many he took from each step. */
   private tally = { rook: 0, lumi: 0, off: 0, high: 0, sends: 0, steps: [0, 0, 0, 0, 0, 0] as number[] };
@@ -318,6 +320,8 @@ export class TidepoolRoom {
     if (now.in) {
       this.floods++;
       this.riseTop();
+      // Sent for one tide: she comes back to him as the next comes in.
+      if (TIDEPOOL.lumiSends < 99 && this.sentTo && this.floods > this.sentFlood) this.recallLumi();
       if (this.floods === 1 && !this.said.has("turned")) {
         this.said.add("turned");
         this.say(HESTA, "Tide's turned. Wait for it.", {}, true, TIDEPOOL.landTicks);
@@ -378,12 +382,29 @@ export class TidepoolRoom {
     const spot = [to, ...this.footing, ...this.stranded().map((w) => w.pos)]
       .filter((f) => b.passable(f, Mover.Walker) && from[f.y * b.width + f.x]! >= 0 && !g.players.some((p) => p.id !== LUMI_ID && samePt(p.pos, f)))
       .sort((a, c) => cheb(a, to) - cheb(c, to) || Math.hypot(a.x - to.x, a.y - to.y) - Math.hypot(c.x - to.x, c.y - to.y))[0];
-    if (!spot) return;
+    if (!spot || this.sendsLeft() <= 0) return;
     this.sentTo = spot;
+    this.sentFlood = this.floods;
     this.tally.sends++;
+    // The first time, she says she can go only so often. [placeholder line, the build thread's, for the story thread]
+    if (this.tally.sends === 1 && TIDEPOOL.lumiSends < 99) this.say(LUMI, "Two goes, Rook. A tide each.", { player: LUMI_ID }, true, TIDEPOOL.landTicks);
     g.command(LUMI_ID, { action: { kind: "walk", to: spot } });
     this.flush();
     this.broadcastRoom();
+  }
+
+  /** Back to his side, and her staff off whatever it held. */
+  private recallLumi() {
+    const g = this.game, lumi = this.player(LUMI_ID), me = this.player(YOU);
+    this.sentTo = null;
+    const by = this.footing.filter((f) => !samePt(f, me.pos)).sort((a, b) => cheb(a, me.pos) - cheb(b, me.pos))[0];
+    g.command(LUMI_ID, { action: by ? { kind: "walk", to: by } : { kind: "idle" } });
+    void lumi;
+  }
+
+  /** How many more times she can be sent. */
+  private sendsLeft() {
+    return Math.max(0, TIDEPOOL.lumiSends - this.tally.sends);
   }
 
   private steerLumi() {
@@ -601,7 +622,8 @@ export class TidepoolRoom {
       score -= s * 0.03 + his(f) * 0.05;
       if (!best || score > best.score) best = { f, score };
     }
-    if (best && best.score > 0.5 && !(this.sentTo && samePt(best.f, this.sentTo))) this.sendLumi(best.f);
+    const worth = TIDEPOOL.lumiSends < 99 ? TIDEPOOL.lumiWorth - 0.5 : 0.5;
+    if (best && best.score > worth && !(this.sentTo && samePt(best.f, this.sentTo))) this.sendLumi(best.f);
   }
 
   // ---------------------------------------------------------------- wire
@@ -654,7 +676,7 @@ export class TidepoolRoom {
       mark: null,
       kes: 0,
       end: this.end,
-      canCall: this.phase === "playing",
+      canCall: this.phase === "playing" && this.sendsLeft() > 0,
       callWho: LUMI,
       called: this.sentTo,
       opt: {
@@ -664,6 +686,7 @@ export class TidepoolRoom {
           { label: "For Marit", n: Math.min(TIDEPOOL.target, this.taken), of: TIDEPOOL.target, tone: "us" },
           { label: tide.in ? "Tide in" : soon ? "Tide coming" : "Tide out", n: 0, of: 0, tone: "water", tide: { level, in: tide.in, share: tide.left / tide.of, soon } },
           { label: left === 1 ? "Last tide" : "Tides left", n: left, of: TIDEPOOL.tides, tone: "chalk" },
+          ...(TIDEPOOL.lumiSends < 99 ? [{ label: "Send Lumi", n: this.sendsLeft(), of: TIDEPOOL.lumiSends, tone: "water" as const }] : []),
         ],
         ...(caption.length ? { caption } : {}),
         tide: { level, in: tide.in, left: tide.left, of: tide.of, n: tide.n },

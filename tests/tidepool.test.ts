@@ -55,7 +55,7 @@ describe("optional run 3b: Tidepool Steps", () => {
     expect(texts[1]).toMatch(/^Eight by the turn of the tide, Rook\./);
     const opt = room.storyView().opt!;
     expect(opt.caption?.[0]?.text).toMatch(/^Eight by the turn of the tide/);
-    expect(opt.strip.map((c) => c.label)).toEqual(["For Marit", "Tide in", "Tides left"]);
+    expect(opt.strip.map((c) => c.label)).toEqual(["For Marit", "Tide in", "Tides left", "Send Lumi"]);
     expect(opt.strip[0]!.of).toBe(TIDEPOOL.target);
     expect(tidepoolTicks() * 0.6).toBeGreaterThanOrEqual(90);
     expect(tidepoolTicks() * 0.6).toBeLessThanOrEqual(150);
@@ -94,21 +94,25 @@ describe("optional run 3b: Tidepool Steps", () => {
 
   it("Lumi, sent to a pool, takes what comes to her over the water, and says so the first time", () => {
     const p = play(4, null), g = p.room.state.game;
-    const top = p.room.state.cascades.filter((q) => q.k === TP.steps).find((q) => q.pool.some((t) => g.wisps.some((w) => !g.away.has(w.id) && w.pos.x === t.x && w.pos.y === t.y)))!;
+    const top = p.room.state.cascades.filter((q) => q.k < TP.steps).find((q) => q.pool.some((t) => g.wisps.some((w) => !g.away.has(w.id) && w.pos.x === t.x && w.pos.y === t.y)))!;
     const s = top.strips[0]!;
     p.conn.message(JSON.stringify({ t: "call", x: s.x, y: s.y }));
     for (let i = 0; i < 60 && p.room.state.tally.lumi === 0; i++) p.tick();
     expect(p.room.state.tally.lumi).toBeGreaterThan(0);
     p.tick(20);
     expect(p.lines.filter((l) => l.text === "They come to me.")).toHaveLength(1);
+    // Twice a job, and no more.
+    for (let n = 0; n < 2; n++) p.conn.message(JSON.stringify({ t: "call", x: s.x, y: s.y + 1 }));
+    expect(p.room.state.tally.sends).toBe(TIDEPOOL.lumiSends);
+    expect(p.room.storyView().canCall).toBe(false);
   });
 
   it("eight wins it with Marit's lines, short says by how many, and nobody says he lost; the record is kept", () => {
-    const won = play(1, "smart").toEnd();
+    const won = play(2, "smart").toEnd();
     expect(won.end!.summary).toBe("Eight by the turn of the tide.");
     expect(won.end!.lines.map((l) => l.text)).toEqual(["As agreed. And one over, for the small one.", "I'm not small.", "For the lamplighter, then."]);
     expect(won.record).toMatchObject({ won: true, best: 8, count: 1 });
-    const short = play(1, "idle").toEnd();
+    const short = play(2, "idle").toEnd();
     expect(short.end!.summary).toMatch(/of eight by the turn of the tide\.$/);
     expect(short.end!.lines[0]!.text).toMatch(/^Short by \w+\. Come back on the next tide\.$/);
     expect(short.record!.won).toBe(false);
@@ -117,12 +121,12 @@ describe("optional run 3b: Tidepool Steps", () => {
 
   it("ignoring the choice costs: reading the tides wins most, waiting low or only sending Lumi wins far less, and standing still never", () => {
     const wins = (stand: Stand) => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter((k) => play(k, stand).toEnd().end!.banked >= TIDEPOOL.target).length;
-    // 7, 3, 5, 2 and 0 of these ten; 57, 12, 29, 6 and 0 of 60 (tools/tidepool-sim.ts 60).
+    // 8, 3, 5, 0 and 0 of these ten; 55, 12, 29, 0 and 0 of 60 (tools/tidepool-sim.ts 60), with Lumi sent at most twice.
     const smart = wins("smart");
     expect(smart).toBeGreaterThanOrEqual(6);
     expect(wins("low")).toBeLessThanOrEqual(smart - 3);
     expect(wins("climb")).toBeLessThan(smart);
-    expect(wins("lumi")).toBeLessThanOrEqual(3);
+    expect(wins("lumi")).toBeLessThanOrEqual(2);
     expect(wins("idle")).toBe(0);
   });
 });
