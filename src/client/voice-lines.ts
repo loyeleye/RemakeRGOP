@@ -356,6 +356,8 @@ export const VOICE_LINES: Record<string, string> = {
   "Marit|Rook. Good. Half of them are out on the water again.": "voice/run4.mp3#t=56.20,59.57",
   "Marit|Granny said you'd bring someone for the water.": "voice/run4.mp3#t=60.47,63.20",
   "Lumi|Last go, Dad.": "voice/optional.mp3#t=236.96,238.28",
+  "Lumi|Moss is mine.": "voice/optional.mp3#t=239.18,240.31",
+  "Lumi|They come to me.": "voice/optional.mp3#t=241.21,242.37",
 };
 
 /**

@@ -23,8 +23,26 @@ export interface Piece {
    * picture, then Lumi's unlit lantern, then on. The gameplay thread's call, not Ladi's: the pictures
    * are his, the scene's content is draft, so it carries a DRAFT mark.
    */
-  scene?: "kitchen";
+  scene?: "kitchen" | "supper";
 }
+
+/**
+ * Supper, after run 7 (story/part1-cutscene-brief.md, 1c): one picture, Lumi's glow breathing on it,
+ * and Dawn's creed said like grace. The picture is Ladi's ("Looks good", 25 Nov, 1:27 AM) and so are
+ * the creed's four lines (25 Nov, 1:11 AM). The glow's breathing is his idea: about 60 to 100 percent
+ * over four to six seconds. How long each line holds is the build's.
+ */
+export const SUPPER = {
+  creed: ["The sun gave light, and light is owed.", "The bright were born to carry it. The rest were born to carry them.", "What the dark asks for, we give with open hands.", "No light goes out alone."],
+  /** Seconds: the picture's fade, the hold before the first line, each line, the pause between lines, the hold after the last. */
+  fade: 0.8,
+  lead: 2.5,
+  line: 5,
+  gap: 0.7,
+  tail: 3,
+  /** The glow: its low point (of 1) and the seconds from low to full. */
+  glow: { low: 0.6, rise: 5 },
+};
 
 const DRAFT = "Draft: not ruled by Ladi yet.";
 
@@ -44,7 +62,7 @@ export const PART1: Piece[] = [
   { id: "5-6", name: "Walk 3, the festival morning", kind: "walk", walk: 3 },
   { id: "5-6b", name: "The glow test", kind: "card", card: { heading: "The glow test", summary: "Mabry's shrine: the glow test. Then the alarm at night (its pictures open run 6).", ruled: "Part ruled: the glow test is in the bible; its pictures are being settled with Ladi. The island going down into cloud is Ladi's pick." } },
   { id: "6", name: "Runs 6 and 7, the dying brazier", kind: "run", run: 6 },
-  { id: "7-8a", name: "Supper", kind: "card", card: { heading: "Supper", summary: "One picture: Rook and Lumi say Dawn's creed, Lumi on the bench beside him.", ruled: "Part ruled: the supper is in the bible and Lumi's seat is Ladi's. The creed's lines are draft." } },
+  { id: "7-8a", name: "Supper", kind: "card", scene: "supper", card: { heading: "Supper", summary: "One picture: Rook and Lumi say Dawn's creed, Lumi on the bench beside him.", ruled: "Ruled: the supper is in the bible, and the picture, Lumi's seat and the creed's four lines are Ladi's." } },
   { id: "7-8", name: "Walk 4, night", kind: "walk", walk: 4 },
   { id: "7-8b", name: "Hesta's hands, and morning", kind: "card", card: { heading: "Hesta's hands, and morning", summary: "Hesta on the terrace is shaking, her hands burned, and laughs it off. Cut to morning: Lumi at the door with the staff and no bag.", ruled: "Part ruled: Hesta's hands are in the bible. The rest is draft." } },
   { id: "8", name: "Run 8, the Sieve", kind: "run", run: 8 },

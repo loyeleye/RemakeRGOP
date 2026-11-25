@@ -343,4 +343,6 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Marit|Rook. Good. Half of them are out on the water again.": 3.17,
   "Marit|Granny said you'd bring someone for the water.": 2.53,
   "Lumi|Last go, Dad.": 1.12,
+  "Lumi|Moss is mine.": 0.93,
+  "Lumi|They come to me.": 0.96,
 };

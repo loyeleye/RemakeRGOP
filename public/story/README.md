@@ -14,3 +14,5 @@ on wide screens. Timing lives in `src/client/ending.ts` (`ENDING`).
 | kindling-eye-1, -2, -3 | The eye shut, a slit, open | Black around it; one eye, nothing else |
 | kindling-eye-glint | Fairy Ring's light in the eye's reflection, transparent background | Its opacity follows the score |
 | lesson-lantern | Lumi's unlit lantern on the kitchen table, morning | The lantern sits where the eye was, centre of the frame |
+| supper | Supper after run 7: Rook and Lumi at the table, with no glow painted in | Square. Part 1's piece 7-8a (`src/client/part1.ts`, `SUPPER`) |
+| supper-glow | Lumi's glow alone for the supper picture, transparent background, same frame | Drawn over `supper` with a screen blend; its opacity breathes between 60 and 100 percent |

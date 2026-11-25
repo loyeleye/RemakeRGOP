@@ -37,7 +37,7 @@ import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
-import { MENU_RUNS, OPTIONAL_RUNS, PART1, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
+import { MENU_RUNS, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
 import { card as storyCard, ENDING, ENDING_CUTS, endingCut, KindlingEnding, lanternCard, setEndingCut } from "./ending.js";
 import * as sound from "./sound.js";
 import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
@@ -1965,7 +1965,7 @@ function playPiece(i: number) {
   savePlace(i);
   renderPart1();
   $("chain-card").hidden = true;
-  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : chainCard(p);
+  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : p.scene === "supper" ? supperScene(p) : chainCard(p);
   if (p.kind === "walk") return connectStory(playerName(), "pond", p.walk);
   connectStory(playerName(), p.run!);
 }
@@ -2074,6 +2074,52 @@ function kitchenScene(p: Piece) {
   el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
     left = true;
     clearTimeout(timer);
+    el.remove();
+    leave();
+  };
+}
+
+/**
+ * Gap 7-8's supper as its picture: Lumi's glow drawn over it and breathing slowly (a screen blend,
+ * which matches the painter's baked picture at full strength), the creed's four lines one at a time
+ * as captions, no taps, then on to walk 4. Nothing is said aloud: the lines have no voices yet.
+ */
+function supperScene(p: Piece) {
+  const S = SUPPER, el = document.createElement("div");
+  el.id = "gap-scene";
+  el.className = "supper";
+  el.style.setProperty("--glow-low", String(S.glow.low));
+  el.style.setProperty("--glow-rise", `${S.glow.rise}s`);
+  el.innerHTML = `<p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
+  const pic = storyCard("supper", "pic");
+  pic.appendChild(storyCard("supper-glow", "glow"));
+  el.prepend(pic);
+  document.body.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("on")));
+  const creed = el.querySelector<HTMLElement>(".creed")!;
+  const timers: number[] = [];
+  const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
+  let t = S.fade + S.lead;
+  for (const line of S.creed) {
+    at(t, () => ((creed.textContent = line), creed.classList.add("on")));
+    at(t + S.line, () => creed.classList.remove("on"));
+    t += S.line + S.gap;
+  }
+  // The picture goes to black (the scene stays up, so the menu never shows), then the walk comes up under it.
+  at(t + S.tail, () => el.classList.add("out"));
+  at(t + S.tail + S.fade, () => {
+    if (chainAt !== pieceIndex(p.id)) return el.remove();
+    chainOn();
+    let n = 0;
+    const out = () => {
+      if (++n < 3) return void requestAnimationFrame(out);
+      el.classList.remove("on");
+      window.setTimeout(() => el.remove(), 700);
+    };
+    requestAnimationFrame(out);
+  });
+  el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
+    timers.forEach((x) => clearTimeout(x));
     el.remove();
     leave();
   };
