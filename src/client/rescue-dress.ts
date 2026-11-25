@@ -28,8 +28,23 @@ export const RESCUE_LOOK = {
   slideSec: 1.6,
   /** A boat: half its width and half its length (tiles), and how far its middle lies south of the slip. */
   boat: { w: 1.7, l: 4.3, south: 3.1 },
-  /** Where the two waiting boats lie, east then west of the slip (tiles from it). */
-  berths: [[8.4, 4.1], [-8.4, 4.1]] as const,
+  /**
+   * The queue: where the next boat and the one after wait (tiles from the slip, and how far they
+   * are turned, stern toward the slip), one behind the other off the east wing. They are dark
+   * (`waiting` of their own colour, no lamp) until they come into the slip.
+   */
+  berths: [[9.4, 2.7, 1.26], [10.0, 6.5, 1.26]] as const,
+  waiting: 0.42,
+  /** The pips, on a yard across the lamp post so they read from above: how big, how far apart, how high, and the size of a lit one's glow. */
+  pip: { r: 0.27, gap: 0.72, top: 2.5, glow: 1.7 },
+  /** The lamp's light on the planks (where a wisp flies in from): its colour and how strong, and seconds a wisp takes to fly in. */
+  pool: "#ffc070",
+  poolShow: 0.34,
+  flySec: 0.4,
+  /** Kes's stones: how many, their colour, and how strong the pale ring on the ground is. */
+  stones: 9,
+  stone: "#c9ccd6",
+  stoneRing: 0.5,
   /** People waiting on the landing's wings: this many go with each boat, some as each bank goes in. */
   perBoat: 8,
   /** The lane on the ground along its course, ahead of it: its colour and how strong it is (0 is none). */
@@ -53,7 +68,7 @@ void main() {
 const FS = `
 precision highp float;
 varying vec2 vW;
-uniform float uTime, uCloud, uBase, uVeil, uPatchA, uRag, uShow, uLane;
+uniform float uTime, uCloud, uBase, uVeil, uPatchA, uRag, uShow, uLane, uLaneR;
 uniform vec3 uCold;
 uniform vec3 uPatch, uLo, uHi, uDark;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -83,7 +98,7 @@ void main() {
   float k = (1.0 - smoothstep(edge - 0.12, edge, length(d))) * uPatchA * (1.0 - uVeil);
   // Its course ahead of it: a faint cold lane on the ground, with a thin line down its middle, as far as the land goes.
   float ahead = step(uPatch.x, vW.x) * (1.0 - smoothstep(20.0, 23.0, abs(vW.x))) * (1.0 - wall) * (1.0 - uVeil) * uLane;
-  float lane = (1.0 - smoothstep(uPatch.z * 0.8, uPatch.z, abs(d.y))) * 0.22 + (1.0 - smoothstep(0.05, 0.16, abs(d.y))) * 0.5;
+  float lane = (1.0 - smoothstep(uLaneR * 0.8, uLaneR, abs(d.y))) * 0.22 + (1.0 - smoothstep(0.05, 0.16, abs(d.y))) * 0.5;
   col = mix(col, uCold, clamp(lane * ahead, 0.0, 1.0));
   a = max(a, lane * ahead * 0.9);
   col = mix(col, uDark + col * uShow * (0.3 + 1.2 * n2 * n), k);
@@ -92,7 +107,8 @@ void main() {
 }`;
 
 interface Lamp { x: number; z: number; glow: THREE.Sprite; core: THREE.Sprite; box: THREE.MeshStandardMaterial; lit: number; seed: number; coldAt: number; size: number; warm: THREE.Color }
-interface Boat { root: THREE.Group; lamp: THREE.Sprite; core: THREE.Sprite; pips: THREE.Mesh[]; riders: THREE.Object3D[]; at: THREE.Vector3; from: THREE.Vector3; to: THREE.Vector3; movedAt: number; liftedAt: number; fill: number; pulse: number }
+interface Boat { root: THREE.Group; lamp: THREE.Sprite; core: THREE.Sprite; pips: THREE.Mesh[]; pipGlows: THREE.Sprite[]; riders: THREE.Object3D[]; paint: { m: THREE.MeshStandardMaterial; base: THREE.Color }[]; at: THREE.Vector3; from: THREE.Vector3; to: THREE.Vector3; rot: number; rotFrom: number; rotTo: number; movedAt: number; liftedAt: number; fill: number; pulse: number; lit: number }
+interface Fly { s: THREE.Sprite; from: THREE.Vector3; at: number }
 interface Body { root: THREE.Group; glow: THREE.Sprite; group: number; seat: number; gone: number }
 interface Smoke { s: THREE.Sprite; x: number; z: number; at: number }
 
@@ -125,13 +141,22 @@ export class RescueFx {
   readonly all = new THREE.Group();
   private u = {
     uTime: { value: 0 }, uCloud: { value: RESCUE.cloud.start as number }, uBase: { value: RESCUE_LOOK.sea as number }, uVeil: { value: 0 }, uPatchA: { value: 0 },
-    uRag: { value: RESCUE_LOOK.ragged as number }, uShow: { value: RESCUE_LOOK.stainShow as number }, uLane: { value: 0 }, uCold: { value: new THREE.Color(RESCUE_LOOK.lane) },
+    uRag: { value: RESCUE_LOOK.ragged as number }, uShow: { value: RESCUE_LOOK.stainShow as number }, uLane: { value: 0 }, uLaneR: { value: 3 }, uCold: { value: new THREE.Color(RESCUE_LOOK.lane) },
     uPatch: { value: new THREE.Vector3(0, 0, 3) }, uLo: { value: new THREE.Color(RESCUE_LOOK.pale[0]) }, uHi: { value: new THREE.Color(RESCUE_LOOK.pale[1]) }, uDark: { value: new THREE.Color(RESCUE_LOOK.dark) },
   };
   private lamps: Lamp[] = [];
   private boats: Boat[] = [];
   private bodies: Body[] = [];
   private smokes: Smoke[] = [];
+  private flies: Fly[] = [];
+  private flown = new Set<string>();
+  private pool!: THREE.Mesh;
+  private poolLit = 0;
+  private poolPulse = -9;
+  private stones: THREE.Group | null = null;
+  /** The patch's size as drawn, eased toward what it is. */
+  private pr = 3;
+  private patchBig = 0;
   private smoked = new Set<string>();
   private smokeMap = smokeTexture();
   private lifted = 0;
@@ -152,12 +177,13 @@ export class RescueFx {
     veil.position.set(0, K.wallY, LO_OVAL.y);
     veil.renderOrder = 5;
     this.all.add(sea, veil);
-    // The slip, where a wisp is banked: a warm line round it that shows through the cloud.
-    const s = 2.5, y = K.seaY + 0.06;
-    const edge = [[-s, -s], [s, -s], [s, -s], [s, s], [s, s], [-s, s], [-s, s], [-s, -s]].map(([x, z]) => new THREE.Vector3(x!, y, z!));
-    const rim = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineBasicMaterial({ color: "#ffcf8a", transparent: true, opacity: 0.85, depthTest: false }));
-    rim.renderOrder = 6;
-    this.all.add(rim);
+    // The docked boat's lamplight on the planks: a wisp pulled into it flies into the lamp. It shows through the cloud.
+    const poolGeo = new THREE.CircleGeometry(RESCUE.lamp.take, 56);
+    poolGeo.rotateX(-Math.PI / 2);
+    this.pool = new THREE.Mesh(poolGeo, new THREE.MeshBasicMaterial({ map: poolTexture(), color: K.pool, transparent: true, opacity: 0, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.pool.position.set(RESCUE.lamp.at[0], K.seaY + 0.07, RESCUE.lamp.at[1]);
+    this.pool.renderOrder = 6;
+    this.all.add(this.pool);
 
     // The landing: planks round the slip, on posts over the sky, with a wide wing each side where the crowd waits.
     const wood = std("#7d5c3c"), dark = std("#4e3a28");
@@ -237,12 +263,14 @@ export class RescueFx {
       light(x + 0.55, tall * 0.58, z + w / 2 + 0.25, pane, 2.2, "#ffb24a");
     });
 
-    // The boats: the first lies stern-in at the slip, the others wait at either side.
+    // The boats: the first lies stern-in at the slip, the others wait in a queue off the east wing.
     for (let i = 0; i < RESCUE.boats; i++) {
       const b = this.makeBoat(std, i);
       b.at.copy(this.berth(i));
       b.from.copy(b.at);
       b.to.copy(b.at);
+      b.rot = b.rotFrom = b.rotTo = this.turn(i);
+      b.lit = i === 0 ? 1 : 0;
       b.root.position.copy(b.at);
       this.boats.push(b);
       this.all.add(b.root);
@@ -269,11 +297,38 @@ export class RescueFx {
     }
   }
 
-  /** Where boat `i` lies before its turn: the first in the slip, the rest at the berths. */
+  /** Where the boat `i` places back in the queue lies: 0 in the slip, the rest at the berths. */
   private berth(i: number) {
     const K = RESCUE_LOOK;
-    const at = i === 0 ? [0, K.boat.south] : K.berths[(i - 1) % K.berths.length]!;
+    const at = i <= 0 ? [0, K.boat.south] : K.berths[Math.min(i, K.berths.length) - 1]!;
     return new THREE.Vector3(at[0]!, 0, at[1]!);
+  }
+
+  /** How far it is turned there. */
+  private turn(i: number) {
+    return i <= 0 ? 0 : RESCUE_LOOK.berths[Math.min(i, RESCUE_LOOK.berths.length) - 1]![2];
+  }
+
+  /** Kes's drop: a low ring of pale stones, and a pale ring on the ground that shows through the cloud. A block-out until the maps thread's stones are in. */
+  private makeStones(x: number, z: number, r: number) {
+    const K = RESCUE_LOOK, g = new THREE.Group();
+    for (let i = 0; i < K.stones; i++) {
+      const a = (i / K.stones) * Math.PI * 2 + 0.3, k = 0.75 + ((i * 37) % 5) * 0.09;
+      const st = new THREE.Mesh(new THREE.SphereGeometry(0.34 * k, 10, 8), new THREE.MeshStandardMaterial({ color: K.stone, roughness: 1 }));
+      st.scale.set(1.15, 0.62, 0.95);
+      st.rotation.y = a * 2.3;
+      st.position.set(Math.cos(a) * r, 0.12, Math.sin(a) * r);
+      st.castShadow = st.receiveShadow = true;
+      g.add(st);
+    }
+    const ringGeo = new THREE.RingGeometry(r - 0.12, r + 0.12, 48);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: "#e8ecff", transparent: true, opacity: K.stoneRing, depthTest: false, depthWrite: false }));
+    ring.position.y = K.seaY + 0.07;
+    ring.renderOrder = 6;
+    g.add(ring);
+    g.position.set(x, 0, z);
+    return g;
   }
 
   private makeBoat(std: (color: string, extra?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial, i: number): Boat {
@@ -333,15 +388,30 @@ export class RescueFx {
     core.position.set(0, 3.4, sz);
     lamp.renderOrder = core.renderOrder = 6;
     const pips: THREE.Mesh[] = [];
+    // The pips: four in a row on a yard across the post, under the lamp, filled from the left, each with a glow when lit so they read from far off.
+    const pipGlows: THREE.Sprite[] = [];
+    const yard = new THREE.Mesh(new THREE.BoxGeometry(K.pip.gap * RESCUE.perBoat, 0.07, 0.07), std("#3a2c20"));
+    yard.position.set(0, K.pip.top, sz);
     for (let k = 0; k < RESCUE.perBoat; k++) {
-      const pip = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), std("#3a3228", { emissive: "#ffc060", emissiveIntensity: 0 }));
-      pip.position.set(0, 2.85 - k * 0.36, sz);
+      const x = (k - (RESCUE.perBoat - 1) / 2) * K.pip.gap;
+      const pip = new THREE.Mesh(new THREE.SphereGeometry(K.pip.r, 12, 10), std("#f2ead8", { emissive: "#ffc060", emissiveIntensity: 0 }));
+      pip.position.set(x, K.pip.top, sz);
       pips.push(pip);
+      const pg = this.glow("#ffd27a", K.pip.glow, 0);
+      pg.position.set(x, K.pip.top, sz);
+      pg.renderOrder = 7;
+      pipGlows.push(pg);
     }
-    root.add(mast, lampBox, lamp, core, ...pips);
+    root.add(mast, yard, lampBox, lamp, core, ...pips, ...pipGlows);
     root.traverse((o) => (o as THREE.Mesh).isMesh && ((o as THREE.Mesh).castShadow = true));
     root.userData.lampBox = lampBox;
-    return { root, lamp, core, pips, riders, at: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), movedAt: -9, liftedAt: -1, fill: 0, pulse: -9 };
+    // Its own colours, kept so a waiting boat can be drawn dark.
+    const paint: Boat["paint"] = [];
+    root.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (m?.isMeshStandardMaterial && !pips.includes(o as THREE.Mesh) && o !== lampBox) paint.push({ m, base: m.color.clone() });
+    });
+    return { root, lamp, core, pips, pipGlows, riders, paint, at: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), rot: 0, rotFrom: 0, rotTo: 0, movedAt: -9, liftedAt: -1, fill: 0, pulse: -9, lit: 0 };
   }
 
   /** From the top again (a restart): the boats back at their berths, everyone back on the landing. */
@@ -351,6 +421,7 @@ export class RescueFx {
       b.at.copy(this.berth(i));
       b.from.copy(b.at);
       b.to.copy(b.at);
+      b.rot = b.rotFrom = b.rotTo = this.turn(i);
       b.liftedAt = -1;
       b.movedAt = time - 9;
       b.fill = 0;
@@ -373,25 +444,38 @@ export class RescueFx {
     if (p) {
       px = p.x - p.dx * (1 - f.t) - f.half.w;
       pz = p.y - p.dy * (1 - f.t) - f.half.h;
-      pr = p.r;
+      // Its size eases to what it is, so a swell is seen growing; a new one starts at its own size.
+      if (this.patchN !== p.n) this.pr = p.r;
+      this.pr += (p.r - this.pr) * 0.14;
+      pr = this.pr;
       this.u.uPatch.value.set(px, pz, pr);
       this.u.uPatchA.value = Math.min(1, this.u.uPatchA.value + 0.08);
-      this.u.uLane.value = Math.min(L.laneShow, this.u.uLane.value + 0.05);
-      if (this.patchN !== p.n) {
+      // The lane is as wide as it will be: it widens the moment a swell begins. Sitting still, it has no lane.
+      const wide = Math.max(p.r, p.big ?? 0);
+      this.u.uLaneR.value += (wide - this.u.uLaneR.value) * 0.3;
+      this.u.uLane.value = p.sit ? 0 : Math.min(L.laneShow, this.u.uLane.value + 0.05);
+      if (this.patchN !== p.n && !p.sit) {
         // It has just set out: the lamps on its course go cold one after another, west to east, over the warning.
         this.patchN = p.n;
-        const course = this.lamps.filter((l) => Math.abs(l.z - pz) <= pr + 1.2).sort((a, b) => a.x - b.x);
+        this.patchBig = 0;
+        this.u.uLaneR.value = wide;
+        const course = this.lamps.filter((l) => Math.abs(l.z - pz) <= wide + 1.2).sort((a, b) => a.x - b.x);
         const over = (RESCUE.patch.warn * 0.6 * 0.9) / Math.max(1, course.length);
         for (const l of this.lamps) l.coldAt = -1;
         course.forEach((l, i) => (l.coldAt = time + 0.25 + i * over));
+      } else if ((p.big ?? 0) > this.patchBig) {
+        // A swell begins: the lamps the wider lane takes in go cold at once.
+        this.patchBig = p.big!;
+        for (const l of this.lamps) if (l.coldAt < 0 && l.x > px && Math.abs(l.z - pz) <= wide + 1.2) l.coldAt = time + 0.1;
       }
+      this.patchN = p.n;
     } else {
       this.u.uPatchA.value = Math.max(0, this.u.uPatchA.value - 0.05);
       this.u.uLane.value = 0;
       this.patchN = 0;
     }
     const under = (x: number, z: number, grow = 0) => !!p && Math.hypot(x - px, z - pz) < pr + grow;
-    const onCourse = (x: number, z: number) => !!p && Math.abs(z - pz) <= pr + 0.6 && x > px;
+    const onCourse = (x: number, z: number) => !!p && !p.sit && Math.abs(z - pz) <= Math.max(pr, p.big ?? 0) + 0.6 && x > px;
 
     // Wisps: not seen under it, nor once it has had them; on its course they dim as it comes.
     const taken = r.taken ?? [];
@@ -450,18 +534,56 @@ export class RescueFx {
       l.glow.visible = l.core.visible = l.lit > 0.02;
     }
 
-    // Boats: each bank lights a pip, swells the lamp and seats two more of the crowd; a full lamp lifts its boat, and the next slides into the slip.
+    // Kes's stones.
+    if (r.drop && !this.stones) this.all.add((this.stones = this.makeStones(r.drop.x + 0.5 - f.half.w, r.drop.y + 0.5 - f.half.h, r.drop.r)));
+    if (this.stones) this.stones.visible = !!r.drop;
+
+    // The lamp's light on the planks: there while the docked lamp takes wisps, gone while it is dark; a wisp that went in flies from where it was.
+    const lampOn = !!r.lamp && !r.lamp.dark && r.ending === undefined;
+    this.poolLit += ((lampOn ? 1 : 0) - this.poolLit) * 0.12;
+    const poolPulse = Math.max(0, 1 - (time - this.poolPulse) / 0.7);
+    (this.pool.material as THREE.MeshBasicMaterial).opacity = this.poolLit * (L.poolShow * (0.9 + 0.1 * Math.sin(time * 2.4)) + 0.3 * poolPulse);
+    const docked = this.boats[Math.min(r.lifted, this.boats.length - 1)];
+    for (const o of r.flew ?? []) {
+      const key = `${o.tick}:${o.x}:${o.y}`;
+      if (this.flown.has(key)) continue;
+      this.flown.add(key);
+      const s = this.glow("#ffe2a0", 1.5, 1);
+      s.renderOrder = 8;
+      this.all.add(s);
+      this.flies.push({ s, from: new THREE.Vector3(o.x + 0.5 - f.half.w, 1.0, o.y + 0.5 - f.half.h), at: time });
+    }
+    if (!r.flew?.length && this.flown.size > 64) this.flown.clear();
+    this.flies = this.flies.filter((m) => {
+      const k = (time - m.at) / L.flySec;
+      if (k >= 1 || !docked) {
+        if (docked) (docked.pulse = time), (this.poolPulse = time);
+        return m.s.removeFromParent(), m.s.material.dispose(), false;
+      }
+      const to = docked.lamp.getWorldPosition(new THREE.Vector3()).sub(this.all.getWorldPosition(new THREE.Vector3())), e = k * k * (3 - 2 * k);
+      m.s.position.lerpVectors(m.from, to, e);
+      m.s.position.y += Math.sin(k * Math.PI) * 1.6;
+      m.s.scale.setScalar(1.5 - 0.7 * k);
+      return true;
+    });
+
+    // Boats: each bank lights a pip, swells the lamp and seats two more of the crowd; a full lamp lifts its boat, and the queue moves up, the next into the slip.
     if (r.lifted < this.lifted) this.reset(time);
     while (this.lifted < r.lifted) {
       const gone = this.boats[this.lifted];
       if (gone) gone.liftedAt = time;
       this.lifted++;
-      const next = this.boats[this.lifted];
-      if (next) (next.from.copy(next.at), next.to.copy(this.berth(0)), (next.movedAt = time + L.liftSec * 0.35));
+      this.boats.forEach((b, i) => {
+        if (i < this.lifted) return;
+        b.from.copy(b.at);
+        b.to.copy(this.berth(i - this.lifted));
+        b.rotFrom = b.rot;
+        b.rotTo = this.turn(i - this.lifted);
+        b.movedAt = time + L.liftSec * 0.35;
+      });
     }
     this.boats.forEach((b, i) => {
       const fill = r.boats[i] ?? 0;
-      if (fill > b.fill) b.pulse = time;
       b.fill = fill;
       const share = fill / r.perBoat, pulse = Math.max(0, 1 - (time - b.pulse) / 0.6);
       // Aboard: a share of the boatload at each bank, all of it once the boat has lifted.
@@ -471,16 +593,30 @@ export class RescueFx {
       b.lamp.scale.setScalar(1.2 + 3.6 * share + pulse * 1.4);
       // The boat being loaded shows a small light even empty, so it is seen which one takes the next bank.
       const mine = i === this.lifted && b.liftedAt < 0;
-      b.lamp.material.opacity = share > 0 ? 0.3 + 0.6 * share : mine ? 0.22 : 0;
+      // Under the patch the docked lamp is dark: nothing of its light is seen.
+      const out = mine && !!r.lamp?.dark && !!p && under(r.lamp.x + 0.5 - f.half.w, r.lamp.y + 0.5 - f.half.h, 0.5) ? 0 : 1;
+      b.lamp.material.opacity = (share > 0 ? 0.3 + 0.6 * share : mine ? 0.3 : 0) * out;
       b.core.scale.setScalar(0.5 + 0.8 * share + pulse * 0.4);
-      b.core.material.opacity = share > 0 ? 0.6 + 0.4 * share : mine ? 0.4 : 0;
-      ((b.root.userData.lampBox as THREE.Mesh).material as THREE.MeshStandardMaterial).emissiveIntensity = share * 2.2;
-      b.pips.forEach((pip, k) => ((pip.material as THREE.MeshStandardMaterial).emissiveIntensity = k < fill ? 2.4 : 0));
-      // Sliding into the slip.
+      b.core.material.opacity = (share > 0 ? 0.6 + 0.4 * share : mine ? 0.5 : 0) * out;
+      ((b.root.userData.lampBox as THREE.Mesh).material as THREE.MeshStandardMaterial).emissiveIntensity = (mine ? 0.5 : 0) + share * 2.2;
+      b.pips.forEach((pip, k) => {
+        const on = k < fill, newest = on && k === fill - 1 ? pulse : 0;
+        (pip.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? 2.6 + newest * 3 : 0;
+        (pip.material as THREE.MeshStandardMaterial).color.set(on ? "#ffe2a0" : mine ? "#cfc8ba" : "#5a554e");
+        b.pipGlows[k]!.material.opacity = on ? (0.75 + 0.25 * newest) * out : 0;
+        b.pipGlows[k]!.scale.setScalar(L.pip.glow * (1 + 0.9 * newest));
+      });
+      // A waiting boat is dark; it takes its colour as it comes into the slip.
+      b.lit += ((mine || b.liftedAt >= 0 ? 1 : 0) - b.lit) * 0.05;
+      const shade = L.waiting + (1 - L.waiting) * b.lit;
+      for (const q of b.paint) q.m.color.copy(q.base).multiplyScalar(shade);
+      // Moving up the queue, and into the slip.
       const s = Math.min(1, Math.max(0, (time - b.movedAt) / L.slideSec)), e = s * s * (3 - 2 * s);
       b.at.copy(b.from).lerp(b.to, e);
-      if (s >= 1) b.from.copy(b.to);
+      b.rot = b.rotFrom + (b.rotTo - b.rotFrom) * e;
+      if (s >= 1) b.from.copy(b.to), (b.rotFrom = b.rotTo);
       b.root.position.copy(b.at);
+      b.root.rotation.y = b.rot;
       b.root.position.y = Math.sin(time * 1.3 + i * 2) * 0.05;
       b.root.rotation.z = Math.sin(time * 0.9 + i) * 0.02;
       // Lifting away: up, and off south, over a few seconds.
@@ -504,6 +640,22 @@ export class RescueFx {
       if (mesh.geometry) mesh.geometry.dispose();
     });
   }
+}
+
+/** The lamp's light on the planks: a soft disc, brighter toward its rim so its edge can be seen. */
+function poolTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(64, 64, 2, 64, 64, 63);
+  grad.addColorStop(0, "rgba(255,255,255,0.75)");
+  grad.addColorStop(0.55, "rgba(255,255,255,0.4)");
+  grad.addColorStop(0.9, "rgba(255,255,255,0.6)");
+  grad.addColorStop(0.96, "rgba(255,255,255,1)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
 }
 
 /** The landing's wings, where the crowd waits: this far out from the slip each side, and these rows (tiles). */

@@ -1,8 +1,10 @@
 // Story run 9, the rescue: the low one, a neighbouring island already ankle-deep in cloud. Brief:
 // project files gameplay/runs9-10-prototype-brief.md; lines and stills: story/runs9-10-story-check.md.
-// Rook and Kes fill the lamps of three boats at the landing while the cloud closes from the north,
-// and a dark patch in the cloud crosses the board twice. Every number that sets the feel is in
-// RESCUE. Tiles: x east, y south, the origin at the landing's slip (the bank, and the board's centre).
+// Rook fills the lamps of three boats at the landing while the cloud closes from the north, Kes
+// strings wisps over from the far side and sets them down for him at the stones, and a dark patch
+// in the cloud crosses the board three times, each time over the most light left lying loose.
+// Reworked from Ladi's play notes (project files gameplay/run9-rework-brief.md). Every number that
+// sets the feel is in RESCUE. Tiles: x east, y south, the origin at the landing's slip (the bank, and the board's centre).
 // The island is wider than it is deep, so that all of it sits in a screen held sideways.
 
 export const RESCUE = {
@@ -18,8 +20,32 @@ export const RESCUE = {
   hers: 3,
   /** Ticks before another comes in the place of one of his that banked or was lost. */
   pause: 3,
-  /** Ticks after Kes's group is all banked before her next one comes. */
+  /** Ticks after Kes's group is all banked (or lost) before her next one comes up on the far side. */
   groupPause: 4,
+  /**
+   * The docked boat's lamp is the bank. It stands at the stern, `at` tiles from the slip, and any
+   * wisp he can pull that comes within `take` tiles of it flies in by itself. When a boat lifts,
+   * the lamp takes nothing for `swap` ticks while the next slides in; wisps left in its light wait.
+   */
+  lamp: { at: [0, -1] as readonly [number, number], take: 3.5, swap: 4 },
+  /**
+   * A try (off; the page's ?flare=1): heaping pays. When `of` wisps go into the lamp within
+   * `within` ticks of each other the lamp flares and gives one pip more. Without it nothing in the
+   * rules makes a heap faster than bringing each wisp straight in (measured, 25 Nov).
+   */
+  flare: { on: false as boolean, of: 3, within: 16, pips: 1 },
+  /**
+   * Kes's drop, a ring of stones on his side by the landing (tiles from the slip): she strings
+   * hers on the far strip, walks them over with the string trailing after her, and from `stand`
+   * sets it down loose at the stones. From then they are his to pull.
+   */
+  drop: { at: [5, -7] as readonly [number, number], stand: [4, -6] as readonly [number, number], r: 1.9 },
+  /** The goal and her part in it, said by Kes before it starts and held on the screen for `goalTicks` of play (story/run9-rework-lines.md). A line that must land is held as long. */
+  goal: "Fill the lamp and the boat lifts. Three boats, Rook. Then us.",
+  part: "I'll bring them to the stones. You put them in.",
+  goalTicks: 10,
+  /** The one still that stops play (Ladi, 24 Nov): when the first crossing's warning has `warnLeft` ticks to run, play holds for `ticks` on a full-screen picture. */
+  hold: { id: "r9-what-is-that", ticks: 5, warnLeft: 1, minTicks: 1 },
   /** How near the landing a wisp may arrive (tiles), how far inside the cloud's edge, and how loose one of her groups is. */
   arriveNear: 11,
   arriveInside: 3,
@@ -34,7 +60,8 @@ export const RESCUE = {
   /** The storm law's numbers, as in the race. */
   storm: { max: 3, reach: 2, link: 6, gap: 2 },
   /** Kes: how careful she is each tick, and ticks she stands and looks after the patch has crossed her. */
-  kes: { sloppiness: 0.05, shaken: 5 },
+  /** After a crossing breaks her string she stands with empty hands for `emptyHands` ticks. `banks` is the first build's Kes, who banked her own (the page's ?kes=banks). */
+  kes: { sloppiness: 0.05, shaken: 5, emptyHands: 20, banks: false as boolean },
   /**
    * The dark patch: a hard-edged stain `size` tiles across, moving `speed` tiles a tick on a
    * straight line (3 is the island in about 9 seconds). For `warn` ticks before its edge
@@ -47,14 +74,38 @@ export const RESCUE = {
    * with a string in hand: up to `lean` rows off her own row toward her string, and after `wait`
    * more ticks (or one more bank) wherever she has a string, and after twice that wherever she is.
    * `drag` is the other behaviour (the page's ?patch=drag): loose wisps under it are carried off with it.
+   *
+   * All of that is the fixed line (the page's ?patch=line). The rule now (`light`): it goes for
+   * light. Crossing k sets out once `at[k]` are in (or at tick `by[k]`), at `speeds[k]` tiles a
+   * tick, west to east along the row of the biggest gathering of loose light he could pull: loose
+   * wisps within `near` tiles of each other are one gathering, the one nearest the lamp on a tie.
+   * The second still waits for Kes with a string in hand, as above. While it is over the docked
+   * boat's lamp the lamp is dark and takes nothing. That much is "seek" (the page's ?patch=seek).
+   *
+   * On top of it, Ladi's idea to try (25 Nov, a brainstorm; "react", the default): it answers to
+   * how much light it is going for. `react.sizes` is how wide it is for a lone wisp, for two, and
+   * what it looms to over three or more; `react.speeds` its pace for one, two, three or more (the
+   * island in about 12, 9 and 7 seconds). Over a gathering of `loomAt` or more it swells over
+   * `loomTicks`, starting while its swollen edge is still `swellFrom` tiles short of them, stays
+   * over them for `linger` ticks, and shrinks as it moves on. If he has cleared them by then it
+   * passes at its own size. When the last lamp is full it is left sitting at `sit` (tiles from the
+   * slip) at its smallest, by the stones, and once the boat has lifted it slides off the rim
+   * toward home, `slide` tiles a tick (the story thread's last look: run 10 has him chasing it).
    */
-  patch: { size: 6, speed: 3, warn: 3, firstBanks: 4, firstBy: 110, secondBanks: 8, secondBy: 230, clearOfKes: 5, courseSouth: 3, nearCourse: 3, under: 3, gap: 30, lean: 2, wait: 20, smokeTicks: 4, drag: false as boolean },
+  patch: {
+    aim: "react" as "react" | "seek" | "line",
+    react: { sizes: [4, 6, 9] as readonly number[], speeds: [2.25, 3, 3.9] as readonly number[], loomAt: 3, swellFrom: 4, loomTicks: 2, linger: 3, sit: [8, -7] as readonly [number, number], slide: [1.3, 0.9] as readonly [number, number] },
+    at: [5, 7, 10] as readonly number[], by: [110, 200, 290] as readonly number[], speeds: [3, 3.4, 3.9] as readonly number[], near: 3, size: 6, speed: 3, warn: 3, firstBanks: 4, firstBy: 110, secondBanks: 8, secondBy: 230, clearOfKes: 5, courseSouth: 3, nearCourse: 3, under: 3, gap: 30, lean: 2, wait: 20, smokeTicks: 4, drag: false as boolean,
+  },
   /** The end: Kes runs to this tile by the slip (from the slip) and the boat lifts when she is there and the lines are said, or after `boardBy` ticks; then ticks the view holds on the boat before the usual end. */
   board: [3, 0] as const,
   boardBy: 26,
   holdTicks: 5,
   /** Measurements only: how the stand-in for the player plays. */
   stand: { pushy: 0, sloppiness: 0.08 },
+  /** The stand-ins that heap wisps up before bringing them in: within `heap` tiles of the lamp counts as heaped, and they bring a heap in once it is `heapOf`. */
+  heap: 8.5,
+  heapOf: 3,
   /** On a phone, how many tiles the short side of the screen shows. */
   phoneSpan: 22,
   /** Where Rook and Kes start, and where the old couple stand, in tiles from the slip. */

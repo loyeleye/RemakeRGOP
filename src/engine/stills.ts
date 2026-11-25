@@ -42,6 +42,8 @@ export interface StillCue {
   bubble?: boolean;
   /** The tile the event is about (a well), which the panel must not cover. */
   at?: { x: number; y: number };
+  /** The one still that fills the screen and stops play (run 9's "What is that"): the room holds while it is up. */
+  full?: boolean;
 }
 
 export const STILLS: Record<string, StillCard> = {
@@ -59,6 +61,7 @@ export const STILLS: Record<string, StillCard> = {
   "r8-11a": { who: "Tilda, straight at us", faces: "Asking: eyes on us, wet but no tears; brows up in the middle; mouth open." },
   "r8-11b": { who: "Rook, half turned to the skiff", faces: "No answer: eyes sliding away, brows down, mouth open with nothing coming." },
   // Run 9, the rescue (story/runs9-10-story-check.md). None is drawn yet: plain cards.
+  "r9-what-is-that": { who: "The strip of the low one running away from us, its path lamps going out one after another toward us, the nearest still lit. In the cloud at the far end, a dark stain with a hard edge, already wider than the path. Kes in the foreground at one side, turned three-quarters away to look at it, her string of wisps slack in her hand", faces: "Her eyes wide and fixed on it, brows drawn together and up, mouth a little open. She is not screaming. She does not know what it is yet." },
   "r9-0": { who: "Sefa's grandmother at the landing, her husband's shoulder behind her, boats and lamps beyond", faces: "Her eyes steady on Rook, brows level, mouth set, a small nod." },
   "r9-1": { who: "Kes looking straight up, a dark band of cloud round her boots", faces: "Eyes wide, brows pulled together, mouth a little open." },
   "r9-2": { who: "Kes and Rook side by side. Her glow is gone and she is looking at her empty hands", faces: "Kes: eyes wide, brows up in the middle, mouth open. Rook: brows down, eyes on her, mouth shut." },

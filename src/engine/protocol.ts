@@ -142,7 +142,24 @@ export interface StoryView {
    * whether it drags); players whose glow is dark under it; and, once the last lamp is full, the
    * ticks since the boat lifted (-1 before it has) and who went aboard.
    */
-  rescue?: { kes: number; boats: number[]; perBoat: number; lifted: number; cloud: number; patch?: { x: number; y: number; dx: number; dy: number; r: number; warn: number; n: number; drag?: boolean }; dark?: number[]; /** Wisps it has covered, not seen again; and where each went out (tiles) and on which tick. */ taken?: number[]; outs?: { x: number; y: number; tick: number }[]; ending?: number; aboard?: number[] };
+  rescue?: {
+    kes: number; boats: number[]; perBoat: number; lifted: number; cloud: number;
+    /** The docked boat's lamp (the bank): its tile, how near a wisp must come, and whether it is dark just now (the patch over it, or no boat docked). */
+    lamp?: { x: number; y: number; take: number; dark?: boolean };
+    /** Banks still wanted, the cloud's edge at the start and where it ends the run (tiles from the slip). */
+    left?: number; from?: number; reach?: number;
+    /** Kes's drop, the ring of stones: its tile and size. */
+    drop?: { x: number; y: number; r: number };
+    /** Wisps the lamp has just taken: where each flew in from. */
+    flew?: { x: number; y: number; tick: number }[];
+    /** The lamp has just flared (the tick): a pip more. */
+    flare?: number;
+    /** Lines held on the screen: the goal at the start, and any line that must land. */
+    caption?: string[];
+    /** The full-screen still that stops play, while it is up. */
+    hold?: { id: string; left: number; of: number; line: string };
+    patch?: { x: number; y: number; dx: number; dy: number; r: number; warn: number; n: number; drag?: boolean; /** React: the size it is swelling to. Sitting still at the end. */ big?: number; sit?: boolean }; dark?: number[]; /** Wisps it has covered, not seen again; and where each went out (tiles) and on which tick. */ taken?: number[]; outs?: { x: number; y: number; tick: number }[]; ending?: number; aboard?: number[];
+  };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */
   /** kitchen: how many times Rook has gone in his door this walk (from walk 2); a rise opens the kitchen still. */
   pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "night" | "dusk"; kitchen?: number };
@@ -159,6 +176,8 @@ export type ClientMsg =
   | { t: "start" }
   | { t: "act"; action?: Action; toggleRun?: boolean; toggleMode?: boolean }
   | { t: "lobby" }
+  /** Story run 9: go on from the full-screen still. */
+  | { t: "on" }
   /** Story run 2: call the partner to a tile. */
   | { t: "call"; x: number; y: number }
   | { t: "ping"; at: number };

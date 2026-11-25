@@ -7,7 +7,10 @@ export const MOODS: Record<string, readonly string[]> = {
   Lumi: ["neutral", "calling", "delighted", "grudging", "smug", "unimpressed", "delight-flash"],
   Rook: ["neutral", "warm", "proud", "baffled"],
   Nell: ["neutral", "curious", "delighted", "determined", "sheepish", "worried"],
-  Kes: ["neutral", "smug", "challenging", "wistful", "gracious"],
+  Kes: ["neutral", "smug", "challenging", "wistful", "gracious", "alarmed", "bereft"],
+  // The two old people on the low one (run 9). First drafts from the cast thread, not approved by Ladi; he has no line yet.
+  "Sefa's grandmother": ["talking", "steady", "soft"],
+  "Sefa's grandfather": ["neutral"],
   Sefa: ["neutral", "awed", "eager", "grin", "impatient", "indignant", "sheepish"],
   Tilda: ["neutral", "tired", "lost", "asking", "watching"],
 };
@@ -34,6 +37,12 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Kes", /^(Rosie would have|Constantly\.)/, "wistful"],
   ["Kes", /^You worked for that\./, "gracious"],
   ["Kes", /^(Whatever you say|Good\.|There he is\.|I pulled\.|Did you see that\?|They like company|You hold on too long|I know\. It's annoying\.|Same time next week|Nice\.|Don't get used to it)/, "smug"],
+  // Run 9, the rescue (the gameplay thread checks this mapping; the two Kes faces are placeholders being re-framed).
+  ["Kes", /^(Rook\. What is that\.|There's nothing up there\.|It's coming back|Again! Clear the stones!|The lamp's gone dark|It went for the heap)/, "alarmed"],
+  ["Kes", /^(My string|They're gone\.|I'm all right\.)/, "bereft"],
+  ["Sefa's grandmother", /^Little ones on the first boat/, "steady"],
+  ["Sefa's grandmother", /^You keep looking over there/, "soft"],
+  ["Sefa's grandmother", /./, "talking"],
   ["Rook", /^(That's it\.|Just like that\.)/, "proud"],
   ["Rook", /^How did you do that\?/, "baffled"],
   ["Rook", /^(Yes, ma'am\.|See\?|Now you're the boss|Let's call it)/, "warm"],
@@ -53,11 +62,14 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
  */
 export const FACE_STANDIN: Record<string, string> = {};
 
+/** Speakers whose portrait files go by a shorter name than the one over their lines. */
+const FACE_NAME: Record<string, string> = { "Sefa's grandmother": "grandmother", "Sefa's grandfather": "grandfather" };
+
 /** The portrait file's name for a line ("lumi-smug"), or null if the speaker has none. */
 export function faceOf(who: string, text: string, mood?: string): string | null {
   const m = moodOf(who, text, mood);
   if (!m) return null;
-  const f = `${who.toLowerCase()}-${m}`;
+  const f = `${FACE_NAME[who] ?? who.toLowerCase()}-${m}`;
   return FACE_STANDIN[f] ?? f;
 }
 
@@ -67,5 +79,5 @@ export function moodOf(who: string, text: string, mood?: string): string | null 
   if (!moods) return null;
   if (mood && moods.includes(mood)) return mood;
   for (const [w, re, m] of RULES) if (w === who && re.test(text)) return m;
-  return "neutral";
+  return moods.includes("neutral") ? "neutral" : moods[0]!;
 }

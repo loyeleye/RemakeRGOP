@@ -649,6 +649,65 @@ export function feedChime(points: number) {
   for (let i = 0; i < Math.min(3, points); i++) strike(note(4 + i * 2), 0.11, 0, GLASS, undefined, s.c.currentTime + 0.05 + i * 0.13);
 }
 
+/** Run 9: a wisp goes into the boat's lamp. The note climbs with the pips, so the fourth is heard as the top. */
+export function pipChime(pip: number) {
+  const s = out();
+  if (!s) return;
+  strike(note(4 + Math.max(0, Math.min(5, pip)) * 2), 0.13, 0, GLASS, undefined, s.c.currentTime + 0.3);
+}
+
+/** Run 9: a boat lifts. One long horn note and the fifth under it, soft at both ends. */
+export function boatHorn() {
+  const s = out();
+  if (!s) return;
+  const { c, o } = s, t = c.currentTime + 0.15, len = 1.9;
+  for (const [f, g] of [[147, 0.2], [98, 0.14], [294, 0.035]] as const) {
+    const osc = c.createOscillator(), gn = c.createGain(), lp = c.createBiquadFilter();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(f * 0.985, t);
+    osc.frequency.linearRampToValueAtTime(f, t + 0.25);
+    lp.type = "lowpass";
+    lp.frequency.value = 620;
+    env(c, gn, g, 0.22, len, t);
+    osc.connect(lp).connect(gn).connect(o);
+    osc.start(t);
+    osc.stop(t + len + 0.4);
+  }
+}
+
+/**
+ * Run 9: the patch is on the board. The music thins to almost nothing and one low note stands
+ * under everything; when it has gone the note stops and the music comes back a beat late. No beat
+ * and no repeat in it (a repeating sound means an emergency here).
+ */
+let patchNote: { osc: OscillatorNode; gain: GainNode } | null = null;
+export function patchDrone(on: boolean) {
+  const s = out();
+  if (on === !!patchNote) return;
+  if (!on) {
+    const n = patchNote!;
+    patchNote = null;
+    if (ctx) {
+      n.gain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.25);
+      n.osc.stop(ctx.currentTime + 1.5);
+    }
+    window.setTimeout(() => duckMusic(1, 1.2), 600);
+    return;
+  }
+  duckMusic(0.12, 0.8);
+  if (!s) return;
+  const { c, o } = s, osc = c.createOscillator(), gain = c.createGain(), lp = c.createBiquadFilter();
+  osc.type = "triangle";
+  osc.frequency.value = 49;
+  lp.type = "lowpass";
+  lp.frequency.value = 180;
+  gain.gain.setValueAtTime(0.0001, c.currentTime);
+  gain.gain.setTargetAtTime(0.2, c.currentTime, 0.6);
+  osc.connect(lp).connect(gain).connect(o);
+  osc.start();
+  patchNote = { osc, gain };
+}
+
 /** Everything drops out for `sec` seconds, at once, then comes back. (Run 8's pull.) */
 export function hush(sec: number) {
   if (!ctx || !master || muted) return;

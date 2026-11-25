@@ -22,6 +22,7 @@ import { SIEVE } from "../engine/sieve.js";
 import { RescueFx } from "./rescue-dress.js";
 import { SHIP_LOOK, ShipFx } from "./ship-dress.js";
 import { SHIP, SHIP_DECK } from "../engine/shiphome.js";
+import { RESCUE } from "../engine/rescue.js";
 import { ambientParticles, LIGHTS, makeTileProp, themeFor, type PropKind, type Theme } from "./themes.js";
 
 export const GUILD_COLORS: readonly string[] = ["#ffcf5a", "#b07cff", "#4fd6ff", "#6fe07a"];
@@ -1308,6 +1309,7 @@ export class World {
   /** The pond's lantern (see DrawState.lantern). */
   private lantern: THREE.Group | null = null;
   private wisps = new Map<number, WispRig>();
+  private wispGuild = new Map<number, number>();
   /** Pulls stopped at the bank (the laws of water), by wisp: when, by whom, and the water tile it met. */
   private stopFx = new Map<number, { at: number; player: number; x: number; y: number }>();
   private stopSnap: GameSnapshot | null = null;
@@ -3858,9 +3860,15 @@ export class World {
     for (const w of st.snap.wisps) {
       seenW.add(w.id);
       let rig = this.wisps.get(w.id);
+      // A wisp that has changed hands (run 9: Kes sets hers down for him) is made again in its new colour.
+      if (rig && this.wispGuild.get(w.id) !== w.guild) {
+        rig.root.removeFromParent();
+        rig = undefined;
+      }
       if (!rig) {
         rig = this.makeWisp(w.guild);
         this.wisps.set(w.id, rig);
+        this.wispGuild.set(w.id, w.guild);
       }
       const pw = st.prev?.wisps.find((q) => q.id === w.id);
       const jump = !pw || Math.abs(pw.x - w.x) > 2 || Math.abs(pw.y - w.y) > 2;
@@ -4230,6 +4238,152 @@ export class World {
 
 // ------------------------------------------------------------------ 2D overlay (names, mini-map)
 
+/** How run 9's strip at the top looks. */
+const RESCUE_HUD = {
+  /** A boat's cell: its width and the hull's size, a pip's radius, and the gap between cells (px, before fitting to the screen). */
+  cell: 62, hull: [44, 13] as const, pip: 5, gap: 10,
+  /** The cloud's bar, to the left of the boats: its length. */
+  bar: 96,
+  lit: "#ffc860", unlit: "rgba(255,236,200,0.2)", line: "rgba(255,236,200,0.75)", cloud: "#dfe5f4",
+  /** The first-wisp hint: the ring's size on the wisp and the dashes of the line to the lamp. */
+  ring: 20, dash: [7, 7] as [number, number],
+};
+
+/**
+ * Run 9, the rescue: what Ladi could not tell (24 Nov). A strip at the top for the whole run: the
+ * cloud closing, as a pale bar creeping toward the boats; three boats, each with its four pips and
+ * its eight people; the one being filled outlined, a lifted one ticked. Under it, any line that
+ * must land (the goal at the start). And until his first wisp is in, a ring on the nearest loose
+ * one and a dotted line from it to the docked boat's lamp.
+ */
+function drawRescueHud(g: CanvasRenderingContext2D, cam: Camera, st: DrawState, r: NonNullable<DrawState["rescue"]>) {
+  const H = RESCUE_HUD, n = r.boats.length;
+  // Fitted between the corner buttons (and clear of the little map on a small screen).
+  const room = cam.w - (cam.compact ? 230 : 150), wide = H.bar + 18 + n * H.cell + (n - 1) * H.gap + 24;
+  const k = Math.max(0.62, Math.min(1.02, room / wide)), W = wide * k, x0 = Math.max(60, (cam.w - W) / 2 - (cam.compact && cam.w > cam.h ? 30 : 0)), y0 = 4, hgt = 57 * k;
+  g.save();
+  g.fillStyle = "rgba(10,8,20,0.6)";
+  roundRect(g, x0, y0, W, hgt, 12 * k);
+  g.fill();
+  // The cloud: a track with the landing at its right end, and the pale bar closing on it.
+  const from = r.from ?? RESCUE.cloud.start, reach = r.reach ?? RESCUE.cloud.landing, near = Math.max(0, Math.min(1, (from - r.cloud) / Math.max(1, from - reach)));
+  const bx = x0 + 12 * k, by = y0 + hgt / 2, bw = H.bar * k, bh = 9 * k;
+  g.fillStyle = "rgba(255,255,255,0.12)";
+  roundRect(g, bx, by - bh / 2, bw, bh, bh / 2);
+  g.fill();
+  g.fillStyle = near > 0.75 ? "#ffd0c0" : H.cloud;
+  g.globalAlpha = 0.9;
+  roundRect(g, bx, by - bh / 2, Math.max(bh, bw * (0.08 + 0.92 * near)), bh, bh / 2);
+  g.fill();
+  g.globalAlpha = 1;
+  g.font = `600 ${Math.round(10 * k)}px system-ui, sans-serif`;
+  g.textAlign = "left";
+  g.fillStyle = "rgba(223,229,244,0.8)";
+  g.fillText("cloud", bx, by - bh / 2 - 5 * k);
+  g.textAlign = "right";
+  g.fillText("landing", bx + bw, by + bh / 2 + 12 * k);
+  // The boats.
+  const flare = r.flare !== undefined;
+  for (let i = 0; i < n; i++) {
+    const cx = bx + bw + 18 * k + i * (H.cell + H.gap) * k + (H.cell * k) / 2, fill = r.boats[i] ?? 0, lifted = i < r.lifted || (r.ending !== undefined && r.ending >= 0), mine = i === r.lifted && !lifted;
+    const top = y0 + 9 * k;
+    // Four pips.
+    for (let p = 0; p < r.perBoat; p++) {
+      const px = cx + (p - (r.perBoat - 1) / 2) * (H.pip * 2 + 3) * k, on = p < fill || lifted;
+      g.beginPath();
+      g.arc(px, top + H.pip * k, H.pip * k, 0, Math.PI * 2);
+      g.fillStyle = on ? H.lit : H.unlit;
+      g.globalAlpha = lifted ? 0.5 : mine && r.lamp?.dark && on ? 0.45 : 1;
+      if (on && mine && !r.lamp?.dark) (g.shadowColor = H.lit), (g.shadowBlur = (flare ? 16 : 7) * k);
+      g.fill();
+      g.shadowBlur = 0;
+      if (!on) (g.strokeStyle = mine ? H.line : "rgba(255,236,200,0.3)"), (g.lineWidth = 1), g.stroke();
+    }
+    g.globalAlpha = lifted ? 0.45 : mine ? 1 : 0.6;
+    // The hull, seen from the side: a shallow bowl.
+    const hw = (H.hull[0] * k) / 2, hh = H.hull[1] * k, hy = top + H.pip * 2 * k + 7 * k;
+    g.beginPath();
+    g.moveTo(cx - hw, hy);
+    g.lineTo(cx + hw, hy);
+    g.quadraticCurveTo(cx + hw * 0.8, hy + hh, cx + hw * 0.45, hy + hh);
+    g.lineTo(cx - hw * 0.45, hy + hh);
+    g.quadraticCurveTo(cx - hw * 0.8, hy + hh, cx - hw, hy);
+    g.closePath();
+    g.fillStyle = mine ? "#b98a58" : "#7b6248";
+    g.fill();
+    if (mine) (g.strokeStyle = H.lit), (g.lineWidth = 1.6), g.stroke();
+    // Its eight people: on the landing under it until they are aboard, two more with each pip.
+    const per = 8, aboard = lifted ? per : Math.floor((fill / r.perBoat) * per);
+    for (let q = 0; q < per; q++) {
+      const on = q < aboard, qx = cx + (q - (per - 1) / 2) * 5 * k, qy = on ? hy - 2.5 * k : hy + hh + 8 * k;
+      g.beginPath();
+      g.arc(qx, qy, 1.9 * k, 0, Math.PI * 2);
+      g.fillStyle = on ? "#ffe9c4" : "#c9d2ea";
+      g.fill();
+    }
+    if (lifted) {
+      g.globalAlpha = 1;
+      g.strokeStyle = "#bff0c0";
+      g.lineWidth = 2.4 * k;
+      g.lineCap = "round";
+      g.beginPath();
+      g.moveTo(cx - 7 * k, hy + 3 * k);
+      g.lineTo(cx - 2 * k, hy + 9 * k);
+      g.lineTo(cx + 9 * k, hy - 5 * k);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+  }
+  // Lines that must land, under the strip.
+  let cy = y0 + hgt + 8;
+  const fs = Math.max(13, Math.min(18, cam.w / 44));
+  for (const [i, text] of (r.caption ?? []).entries()) {
+    g.font = `${i === 0 ? 700 : 500} ${fs}px system-ui, sans-serif`;
+    g.textAlign = "center";
+    // Wrapped to the screen.
+    const words = text.split(" "), rows: string[] = [];
+    for (const w of words) {
+      const last = rows[rows.length - 1];
+      if (last !== undefined && g.measureText(`${last} ${w}`).width <= cam.w - 60) rows[rows.length - 1] = `${last} ${w}`;
+      else rows.push(w);
+    }
+    const tw = Math.max(...rows.map((t) => g.measureText(t).width)) + 26, th = rows.length * (fs + 5) + 10;
+    g.fillStyle = "rgba(10,8,20,0.72)";
+    roundRect(g, cam.w / 2 - tw / 2, cy, tw, th, 10);
+    g.fill();
+    g.fillStyle = i === 0 ? "#ffe9c4" : "#d9cfff";
+    rows.forEach((t, j) => g.fillText(t, cam.w / 2, cy + 6 + (j + 1) * (fs + 5) - 6));
+    cy += th + 6;
+  }
+  // Until his first wisp is in: which one, and where it goes.
+  const none = r.lifted === 0 && (r.boats[0] ?? 0) === 0 && r.lamp && r.ending === undefined && !r.hold;
+  if (none) {
+    const me = st.snap.players.find((p) => p.id === st.me);
+    const loose = st.snap.wisps.filter((w) => w.guild === 0 && !w.away);
+    if (me && loose.length) {
+      const held = me.beam != null ? loose.find((w) => w.id === me.beam) : undefined;
+      const w = held ?? loose.reduce((a, b) => (Math.hypot(b.x - me.x, b.y - me.y) < Math.hypot(a.x - me.x, a.y - me.y) ? b : a));
+      const t = Math.min(1, st.t), a = cam.toScreen(w.px + (w.x - w.px) * t + 0.5, w.py + (w.y - w.py) * t + 0.5, 0.9), b = cam.toScreen(r.lamp!.x + 0.5, r.lamp!.y + 0.5, 0.4);
+      const beat = 0.5 + 0.5 * Math.sin(st.now / 380);
+      g.strokeStyle = `rgba(255,226,160,${0.55 + 0.3 * beat})`;
+      g.lineWidth = 2.2;
+      g.beginPath();
+      g.arc(a.x, a.y, H.ring + 3 * beat, 0, Math.PI * 2);
+      g.stroke();
+      g.setLineDash(H.dash);
+      g.lineDashOffset = -st.now / 60;
+      g.strokeStyle = "rgba(255,226,160,0.7)";
+      const d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      g.beginPath();
+      g.moveTo(a.x + ((b.x - a.x) / d) * (H.ring + 4), a.y + ((b.y - a.y) / d) * (H.ring + 4));
+      g.lineTo(b.x, b.y);
+      g.stroke();
+      g.setLineDash([]);
+    }
+  }
+  g.restore();
+}
+
 export function drawOverlay(g: CanvasRenderingContext2D, cam: Camera, st: DrawState) {
   g.clearRect(0, 0, cam.w, cam.h);
   const lerp = (a: number, z: number) => a + (z - a) * Math.min(1, st.t);
@@ -4249,6 +4403,8 @@ export function drawOverlay(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     g.fillText(label, p.x, p.y);
   }
   for (const pl of st.snap.players) {
+    // Run 9: inside the patch her name is not seen either. His always is: it does nothing to him.
+    if (pl.id !== st.me && st.rescue?.dark?.includes(pl.id)) continue;
     const x = lerp(pl.px, pl.x) + 0.5;
     const y = lerp(pl.py, pl.y) + 0.5;
     const p = cam.toScreen(x, y, 2.05);
@@ -4263,6 +4419,7 @@ export function drawOverlay(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     g.fillStyle = GUILD_COLORS[pl.guild]!;
     g.fillText(label, p.x, p.y);
   }
+  if (st.rescue) drawRescueHud(g, cam, st, st.rescue);
   // Run 10: a cloud bank is coming down one side (Ladi, 24 Nov: "the affordance at the top is fine").
   // A pale swell with arrows at the top edge on its side, on every screen, from the moment it is on
   // its way until its front reaches the bow, growing as it nears.

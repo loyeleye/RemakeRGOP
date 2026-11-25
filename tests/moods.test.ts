@@ -41,7 +41,7 @@ describe("portrait moods", () => {
 
   it("has a portrait file for every mood", () => {
     for (const [who, moods] of Object.entries(MOODS))
-      for (const m of moods) expect(existsSync(`public/faces/${who.toLowerCase()}-${m}.webp`), `${who}-${m}`).toBe(true);
+      for (const m of moods) expect(existsSync(`public/${`faces/${faceOf(who, "", m)}.webp`}`), `${who}-${m}`).toBe(true);
   });
 });
 

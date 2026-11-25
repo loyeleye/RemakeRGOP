@@ -210,6 +210,8 @@ let typing: { l: StoryLine; shown: number; at: number } | null = null;
 interface Bark {
   el: HTMLElement;
   until: number;
+  /** Run 9: when its speaker went into the patch, for holding its time over. */
+  darkAt?: number;
   /** What it points at: a wisp, Hesta's ring, or nothing (the corner chip). */
   wisp?: number;
   ring?: boolean;
@@ -250,6 +252,13 @@ function releaseBarks(now: number) {
 }
 
 function sayLine(l: StoryLine, released = false) {
+  // The one still that fills the screen and stops play: up until the room goes on (rescueSound takes it down). A tap goes on.
+  if (l.still?.full) {
+    stills.full(l.still.id, l.who, l.text, () => link?.send({ t: "on" }));
+    sound.paper();
+    if (l.text && l.who) sound.speak(l.who, l.text);
+    return;
+  }
   if (l.still && !l.talk) {
     stillLine(l);
     if (!l.still.bubble || !l.text) return;
@@ -283,6 +292,15 @@ function placeBarks(now: number) {
   for (const k of ["bark", "chip"] as const) {
     const b = barks[k];
     if (!b) continue;
+    // Run 9: inside the patch her bubble is not seen, and what she was saying waits until she is out.
+    const dark = k === "bark" && b.player != null && !!room?.story?.rescue?.dark?.includes(b.player);
+    b.el.style.visibility = dark ? "hidden" : "";
+    if (dark) {
+      b.until += now - (b.darkAt ?? now);
+      b.darkAt = now;
+      continue;
+    }
+    b.darkAt = undefined;
     if (now > b.until) {
       b.el.classList.add("fade");
       if (now > b.until + 350) {
@@ -886,11 +904,22 @@ function sieveRoom() {
   return r;
 }
 
-/** Run 9, the rescue: the patch as the story thread wrote it, or ?patch=drag for the first sketch's; ?nostills leaves the pictures out. */
+/**
+ * Run 9, the rescue, reworked from Ladi's notes. Switches: ?patch=react (the default: the patch
+ * goes for light and swells over a heap), ?patch=seek (goes for light at one size), ?patch=line
+ * (the first build's fixed lines), ?patch=drag (the first sketch's carrying-off); ?kes=banks (the
+ * first build's Kes, who banked her own); ?flare=1 (a try: three in quick succession give a pip
+ * more); ?nostills leaves the pictures out, the one that stops play too.
+ */
 function rescueRoom() {
   const r = new RescueRoom();
   const q = new URLSearchParams(location.search);
-  if (q.get("patch") === "drag") r.patchMode = "drag";
+  const aim = q.get("patch");
+  if (aim === "drag") r.patchMode = "drag";
+  if (aim === "react" || aim === "seek" || aim === "line") r.patchAim = aim;
+  if (q.get("kes") === "banks") r.kesMode = "banks";
+  if (q.get("flare") === "1") r.flareOn = true;
+  rescueHeard = { flew: "", lifted: 0, fill: 0 };
   if (q.has("nostills")) r.stillsOn = false;
   else stills.preload("r9-");
   patchHeard = 0;
@@ -976,10 +1005,26 @@ function shipDone() {
   }, 1600);
 }
 
-/** Run 9's sounds: the wind, and one low sound as the lamps on the patch's course begin to gutter. */
+/**
+ * Run 9's sounds: a chime as each wisp goes into the lamp (climbing with the pips), a horn as a
+ * boat lifts, the wind and one low sound as the lamps on the patch's course begin to gutter, and
+ * while it is on the board the music thinned to one low note. Also takes the full-screen still down
+ * when the room goes on.
+ */
 let patchHeard = 0;
+let rescueHeard = { flew: "", lifted: 0, fill: 0 };
 function rescueSound(r: NonNullable<StoryView["rescue"]>) {
-  if (!r.patch) return void (patchHeard = 0);
+  if (stills.fullUp && !r.hold) stills.fullOff();
+  const last = r.flew?.[r.flew.length - 1], key = last ? `${last.tick}:${last.x}:${last.y}` : "";
+  const fill = r.boats.reduce((a, b) => a + b, 0);
+  if (fill < rescueHeard.fill) rescueHeard = { flew: "", lifted: 0, fill: 0 };
+  if (key && key !== rescueHeard.flew) sound.pipChime(((fill - 1) % r.perBoat + r.perBoat) % r.perBoat);
+  rescueHeard.flew = key || rescueHeard.flew;
+  rescueHeard.fill = fill;
+  if (r.lifted > rescueHeard.lifted || (r.ending !== undefined && r.ending >= 0 && rescueHeard.lifted < r.boats.length)) sound.boatHorn(), (rescueHeard.lifted = r.ending !== undefined && r.ending >= 0 ? r.boats.length : r.lifted);
+  // On the board (not in its warning, not sitting at the end): the low note.
+  sound.patchDrone(!!r.patch && r.patch.warn <= 0 && !r.patch.sit && !r.hold);
+  if (!r.patch || r.patch.sit) return void (patchHeard = 0);
   if (patchHeard === r.patch.n) return;
   patchHeard = r.patch.n;
   sound.lurchGroan();

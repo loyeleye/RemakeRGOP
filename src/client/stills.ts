@@ -71,6 +71,52 @@ export class StillsPanel {
     return this.card !== null && performance.now() < this.until;
   }
 
+  private whole: HTMLDivElement | null = null;
+
+  /** The one still that fills the screen (run 9's "What is that"): up until `fullOff`. A tap anywhere on it calls `onTap`. */
+  full(id: string, who: string, caption: string, onTap: () => void) {
+    this.fullOff(0);
+    const el = document.createElement("div");
+    el.id = "still-full";
+    const info = STILLS[id];
+    const ph = document.createElement("div");
+    ph.className = "ph";
+    ph.innerHTML = `<small>${esc(id)}</small><b>${esc(info?.who ?? id)}</b><span>${esc(info?.faces ?? "")}</span>`;
+    el.append(ph);
+    const got = fetchStill(this.base, id);
+    if (got) {
+      const img = new Image();
+      img.alt = "";
+      const put = () => ((ph.hidden = true), el.prepend(img));
+      img.src = got.src;
+      if (got.complete && got.naturalWidth) put();
+      else img.onload = put;
+    }
+    const cap = document.createElement("p");
+    cap.className = "cap";
+    cap.innerHTML = who ? `<b>${esc(who)}</b> ${esc(caption)}` : esc(caption);
+    el.append(cap);
+    el.addEventListener("pointerdown", (e) => (e.preventDefault(), e.stopPropagation(), onTap()));
+    document.body.append(el);
+    this.whole = el;
+    requestAnimationFrame(() => el.classList.add("in"));
+  }
+
+  get fullUp() {
+    return this.whole !== null;
+  }
+
+  /** Play goes on: it eases away over `ms`. */
+  fullOff(ms = 500) {
+    const el = this.whole;
+    if (!el) return;
+    this.whole = null;
+    el.style.setProperty("--out", `${ms}ms`);
+    el.classList.remove("in");
+    el.classList.add("gone");
+    window.setTimeout(() => el.remove(), ms + 50);
+  }
+
   /**
    * Shows a still. `from` is the screen point it should keep away from (the wisp on his staff, or
    * else the event): the panel takes the upper corner farther from it. A sequence cross-fades in
