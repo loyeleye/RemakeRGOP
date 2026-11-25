@@ -30,6 +30,8 @@ export class JobRoom {
   private send: ((m: ServerMsg) => void) | null = null;
   private phase: Phase = "countdown";
   private stopN = 0;
+  /** The reaction still (?nostills in the page leaves it out). */
+  stillsOn = true;
   private countdown = 0;
   private game!: Game;
   private rng: Rng;
@@ -232,7 +234,8 @@ export class JobRoom {
   private opening() {
     const S = this.S;
     this.say(HESTA, S.lines.route, { talk: true });
-    for (const l of S.lines.greet) this.say(S.keeper, l, { player: KEEPER_ID });
+    // Still 4.1 at Moss Hollow, under Garrick's greeting (talk, so it waits its turn after Hesta's line).
+    S.lines.greet.forEach((l, i) => this.say(S.keeper, l, { player: KEEPER_ID, ...(this.stillsOn && this.stopN === 0 ? { talk: true, still: { id: "r4-1", ...(i > 0 ? { seq: true } : {}) } } : {}) }));
     if (this.stopN === 0) {
       this.say(LUMI, JOB.stops[0].lines.lumiGreet, { player: LUMI_ID });
       this.say(LUMI, JOB.lines.lumiStart, { player: LUMI_ID });

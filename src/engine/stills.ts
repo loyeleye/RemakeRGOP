@@ -47,6 +47,12 @@ export interface StillCue {
 }
 
 export const STILLS: Record<string, StillCard> = {
+  // Runs 1 to 5 (story/runs1-5-stills.md): each run's first still, at a pause. Approved by Ladi (25 Nov).
+  "r1-1": { who: "Hesta at the foot of the north steps, between the foot lamps, one hand cupped to call", faces: "Eyes creased and bright. Brows up. Mouth open, calling." },
+  // Over Rook's line and Lumi's answer: the same picture, the caption changing.
+  "r2-0": { who: "Lumi holding his staff, too long for her, at the pond's edge. Rook crouched beside her, hands off", faces: "Lumi: eyes on the water, brows down, mouth shut, chin up. Rook: eyes on her, brows up, a small closed smile." },
+  // Moss Hollow only, over Garrick's two greeting lines.
+  "r4-1": { who: "Garrick, half length, a working keeper on his own ground", faces: "Eyes level. Brows flat. Mouth shut, easy." },
   // Run 8, the Sieve. Faces in the cutscene thread's terms: eyes, brows, mouth.
   "r8-1": { who: "Tilda, half length", faces: "Steady. Eyes level, a little narrowed; brows flat; mouth shut." },
   "r8-2": { who: "Tilda in front, Rook beside her, looking down at the far well", faces: "She is tired, eyes half lidded. He frowns at the well, brows pulled together." },

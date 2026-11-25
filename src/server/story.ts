@@ -45,6 +45,8 @@ export class StoryRoom {
   private send: ((m: ServerMsg) => void) | null = null;
   private name = "Rook";
   private phase: Phase = "countdown";
+  /** The reaction still (?nostills in the page leaves it out). */
+  stillsOn = true;
   private movement = 0;
   private countdown = 0;
   private game!: Game;
@@ -274,7 +276,7 @@ export class StoryRoom {
 
   /** Lines as play begins in each movement. */
   private opening() {
-    if (this.movement === 0) this.say(HESTA, "One at a time tonight, Rook. Stand in the ring and pull.", { talk: true });
+    if (this.movement === 0) this.say(HESTA, "One at a time tonight, Rook. Stand in the ring and pull.", { talk: true, ...(this.stillsOn ? { still: { id: "r1-1" } } : {}) });
     if (this.movement === 1) this.say(HESTA, `Hold your side, Rook. ${KINDLING.relay.crew[0]} brings them in, and ${KINDLING.relay.crew[1]} has your back, across the fire.`, { talk: true });
     if (this.movement === 2) this.say(HESTA, "It's yours, Rook. I'll be quiet now.", { talk: true });
   }
