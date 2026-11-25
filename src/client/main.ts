@@ -37,7 +37,7 @@ import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
-import { DREAM, EVENING, GLOW, MENU_RUNS, MORNING, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
+import { DREAM, EVENING, GLOW, HELD, MENU_RUNS, MORNING, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
 import { card as storyCard, ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import { buildTesting } from "./testing.js";
 import * as sound from "./sound.js";
@@ -295,6 +295,8 @@ function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "p
   const r = run === "o3a" ? mossRoom() : run === "o3b" ? tidepoolRoom() : run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   // ?nostills: every run's reaction stills off (runs 8 to 10 also read it where they are built).
   if ("stillsOn" in r && new URLSearchParams(location.search).has("nostills")) r.stillsOn = false;
+  if (run === 5 && skiffSaid) (r as RaceRoom).openSaid = true;
+  skiffSaid = false;
   storyRoom = r;
   runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
@@ -2000,7 +2002,7 @@ function playPiece(i: number) {
   savePlace(i);
   renderPart1();
   $("chain-card").hidden = true;
-  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : p.scene === "supper" ? supperScene(p) : p.scene === "evening" ? eveningScene(p) : p.scene === "glow" ? glowScene(p) : p.scene === "dream" ? dreamScene(p) : chainCard(p);
+  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : p.scene === "supper" ? supperScene(p) : p.scene === "evening" ? eveningScene(p) : p.scene === "glow" ? glowScene(p) : p.scene === "dream" ? dreamScene(p) : p.scene === "held" && HELD[p.id] ? heldScene(p) : chainCard(p);
   if (p.kind === "walk") return connectStory(playerName(), "pond", p.walk);
   connectStory(playerName(), p.run!);
 }
@@ -2178,6 +2180,79 @@ function eveningScene(p: Piece) {
   at(t, () => el.classList.add("out"));
   at(t + M.fade, () => {
     if (!here()) return el.remove();
+    chainOn();
+    window.setTimeout(() => (el.classList.remove("on"), window.setTimeout(() => el.remove(), 700)), 100);
+  });
+  el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
+    timers.forEach((x) => clearTimeout(x));
+    el.remove();
+    leave();
+  };
+}
+
+/** Run 5 follows the skiff home, which has said the first two lines of its challenge. */
+let skiffSaid = false;
+
+/**
+ * A scene that is only held pictures (HELD in client/part1.ts, by piece id): each cross-fades in, its
+ * lines as captions with faces and voices, no taps, then on. Tagged with what Ladi has not seen.
+ */
+function heldScene(p: Piece) {
+  const H = HELD[p.id]!, el = document.createElement("div");
+  el.id = "gap-scene";
+  el.className = "morning";
+  el.innerHTML = `<div class="tags"><span class="nb">Draft</span><span>${esc(H.tag)}</span></div><p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
+  const pics = H.pictures.map((m) => storyCard(m.slot, "pic"));
+  el.prepend(...pics);
+  document.body.appendChild(el);
+  const timers: number[] = [];
+  const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
+  const here = () => chainAt === pieceIndex(p.id);
+  const caption = el.querySelector<HTMLElement>(".creed")!;
+  // A shaking picture: its layer flicked between nothing and about 60 percent, a few pixels off, every
+  // 90 to 120 ms, while it is up (none with reduced motion).
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let shaking = 0;
+  const shake = (i: number) => {
+    window.clearTimeout(shaking);
+    const m = H.pictures[i]!;
+    if (!m.shake || still) return;
+    const layer = storyCard(m.shake, "glow shake");
+    pics[i]!.appendChild(layer);
+    const flick = () => {
+      if (!pics[i]!.classList.contains("on")) return layer.remove();
+      const on = Math.random() < 0.6;
+      layer.style.opacity = on ? String(0.35 + Math.random() * 0.25) : "0";
+      layer.style.transform = on ? `translate(${(Math.random() < 0.5 ? -1 : 1) * (2 + Math.random())}px, ${(Math.random() - 0.5) * 2}px)` : "";
+      shaking = window.setTimeout(flick, 90 + Math.random() * 30);
+    };
+    flick();
+  };
+  const show = (i: number) => {
+    const m = H.pictures[i]!;
+    if (m.cut) for (const x of [pics[i - 1]!, pics[i]!]) x.style.transition = "none";
+    pics[i - 1]?.classList.remove("on");
+    pics[i]!.classList.add("on");
+    if (m.cut) requestAnimationFrame(() => requestAnimationFrame(() => [pics[i - 1]!, pics[i]!].forEach((x) => (x.style.transition = ""))));
+    shake(i);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(() => (el.classList.add("on"), show(0))));
+  let t = H.fade + H.lead;
+  H.pictures.forEach((m, i) => {
+    if (i > 0) at(t, () => show(i));
+    t += i > 0 && !m.cut ? H.fade : 0;
+    for (const line of m.lines ?? []) {
+      at(t + H.gap, () => sceneLine(caption, line));
+      at(t + H.gap + H.line, () => caption.classList.remove("on"));
+      t += H.gap + H.line;
+    }
+    t += m.hold;
+  });
+  at(t, () => el.classList.add("out"));
+  at(t + H.fade, () => {
+    if (!here()) return el.remove();
+    window.clearTimeout(shaking);
+    if (p.id === "4-5") skiffSaid = true;
     chainOn();
     window.setTimeout(() => (el.classList.remove("on"), window.setTimeout(() => el.remove(), 700)), 100);
   });

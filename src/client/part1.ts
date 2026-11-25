@@ -23,7 +23,8 @@ export interface Piece {
    * picture, then Lumi's unlit lantern, then on. The gameplay thread's call, not Ladi's: the pictures
    * are his, the scene's content is draft, so it carries a DRAFT mark.
    */
-  scene?: "kitchen" | "supper" | "evening" | "glow" | "dream";
+  scene?: "kitchen" | "supper" | "evening" | "glow" | "dream" | "held";
+  /** A "held" scene: its pictures, captions and tag (HELD below, by piece id). */
 }
 
 /**
@@ -62,6 +63,59 @@ export const EVENING = {
   gap: 0.6,
   /** Seconds the first picture holds before anyone speaks. */
   lead: 1.5,
+};
+
+/** A scene of held pictures one after another, with captions and voices, then on (heldScene in main.ts). */
+export interface Held {
+  /** The tag in the corner: what Ladi has not seen. */
+  tag: string;
+  /**
+   * `shake`: a layer (the same picture, alpha only where it moves) flicked on and off with a small
+   * offset while the picture is up; `cut`: in without a cross-fade.
+   */
+  pictures: { slot: string; hold: number; lines?: { who: string[]; text: string }[]; shake?: string; cut?: true }[];
+  /** Seconds: the cross-fade, the hold before anyone speaks, each line, the pause before it. */
+  fade: number;
+  lead: number;
+  line: number;
+  gap: number;
+}
+
+/**
+ * The scenes that are only held pictures, by piece id. 4-5, the skiff home: the cutscene thread's set
+ * (production/story/part1/skiff-home/final/README.md, 25 Nov), all three its picks, not seen by Ladi.
+ * Kes's and Rook's lines are the first two of run 5's challenge (story/run5-race-lines.md, section A),
+ * so run 5 leaves them out when it follows this scene.
+ */
+export const HELD: Record<string, Held> = {
+  "4-5": {
+    tag: "Pictures not seen by Ladi",
+    fade: 0.7,
+    lead: 1,
+    line: 2.6,
+    gap: 0.4,
+    pictures: [
+      { slot: "skiff-1-kes-waiting", hold: 1.5, lines: [{ who: ["Kes"], text: "You took my pupil on a job." }, { who: ["Rook"], text: "She's my daughter." }] },
+      { slot: "skiff-2-maudie", hold: 3 },
+      { slot: "skiff-3-leaving", hold: 4 },
+    ],
+  },
+  // 7-8b, Hesta's hands at night, then the morning (production/story/part1/hands/final/README.md, 25
+  // Nov): the cutscene thread's picks; Ladi was sent an earlier draft on 23 Nov and has not ruled.
+  // Wordless: no line is written for her laughing it off.
+  "7-8b": {
+    tag: "Pictures not seen by Ladi",
+    fade: 0.7,
+    lead: 0,
+    line: 2.6,
+    gap: 0.4,
+    pictures: [
+      { slot: "hands-1-burnt", hold: 4, shake: "hands-1-shake-layer" },
+      { slot: "hands-2-caught", hold: 2 },
+      { slot: "hands-3-laugh", hold: 3.5 },
+      { slot: "hands-4-morning-door", hold: 3.5, cut: true },
+    ],
+  },
 };
 
 /**
@@ -160,7 +214,8 @@ export const PART1: Piece[] = [
   { id: "3-4a", name: "The evening", kind: "card", scene: "evening", card: { heading: "Evening", summary: "Two pictures: honey drops at the pond; the kitchen table at night.", ruled: DRAFT } },
   { id: "3-4", name: "Walk 2, the morning of the job", kind: "walk", walk: 2 },
   { id: "4", name: "Run 4, the job", kind: "run", run: 4 },
-  { id: "4-5", name: "The skiff home", kind: "card", card: { heading: "The skiff home", summary: "The skiff comes back to the home landing. Kes is waiting and challenges him. Maudie watches the three of them leave. The skiff crosses to Kite Fell.", ruled: "Part ruled: the race being on Kite Fell is Ladi's. The scene is draft." } },
+  // Shown as its three pictures (HELD["4-5"]); take `scene` off and it is its card again.
+  { id: "4-5", name: "The skiff home", kind: "card", scene: "held", card: { heading: "The skiff home", summary: "The skiff comes back to the home landing. Kes is waiting and challenges him. Maudie watches the three of them leave. The skiff crosses to Kite Fell.", ruled: "Part ruled: the race being on Kite Fell is Ladi's. The scene is draft." } },
   { id: "5", name: "Run 5, the race", kind: "run", run: 5 },
   // Walk 3's first state, walk number 6 in engine/walks.ts. Its old card is kept in case it is ever wanted again.
   { id: "5-6a", name: "Walk 3, an ordinary morning", kind: "walk", walk: 6, card: { heading: "Walk 3, first state: an ordinary morning", summary: "Nell, Kes and Moth offer the optional runs. Tapping Maudie at his door turns it into the festival morning and closes them for good.", ruled: "Part ruled: the two states, Maudie's tap and talking to the person are Ladi's. The lines are to be judged in game.", optional: true } },
@@ -170,7 +225,8 @@ export const PART1: Piece[] = [
   { id: "6", name: "Runs 6 and 7, the dying brazier", kind: "run", run: 6 },
   { id: "7-8a", name: "Supper", kind: "card", scene: "supper", card: { heading: "Supper", summary: "One picture: Rook and Lumi say Dawn's creed, Lumi on the bench beside him.", ruled: "Ruled: the supper is in the bible, and the picture, Lumi's seat and the creed's four lines are Ladi's." } },
   { id: "7-8", name: "Walk 4, night", kind: "walk", walk: 4 },
-  { id: "7-8b", name: "Hesta's hands, and morning", kind: "card", card: { heading: "Hesta's hands, and morning", summary: "Hesta on the terrace is shaking, her hands burned, and laughs it off. Cut to morning: Lumi at the door with the staff and no bag.", ruled: "Part ruled: Hesta's hands are in the bible. The rest is draft." } },
+  // Shown as its four pictures (HELD["7-8b"]); take `scene` off and it is its card again.
+  { id: "7-8b", name: "Hesta's hands, and morning", kind: "card", scene: "held", card: { heading: "Hesta's hands, and morning", summary: "Hesta on the terrace is shaking, her hands burned, and laughs it off. Cut to morning: Lumi at the door with the staff and no bag.", ruled: "Part ruled: Hesta's hands are in the bible. The rest is draft." } },
   { id: "8", name: "Run 8, the Sieve", kind: "run", run: 8 },
   { id: "8-9", name: "Walk 5, dusk", kind: "walk", walk: 5 },
   { id: "8-9b", name: "The beacon and the send-off", kind: "card", card: { heading: "The beacon and the send-off", summary: "The beacon lights on the low one. At the landing Hesta plots the course, Kes goes, Lumi stays, and Hesta lights the unfinished lantern.", ruled: "Part ruled: the send-off is in the bible. The lines and the lantern being lit are draft. A storyboard only." } },
