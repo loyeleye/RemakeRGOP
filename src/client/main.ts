@@ -1295,8 +1295,10 @@ function renderHud() {
       return renderPad(s);
     }
     // The dying brazier: nothing to count and no clock.
-    if (story.dying || story.sieve || story.rescue || story.ship) {
+    // (An optional run counts on its own strip, which is drawn over the board.)
+    if (story.dying || story.sieve || story.rescue || story.ship || story.opt) {
       $("score-0").hidden = true;
+      if (story.opt) $("score-1").hidden = true;
       $("ticks").textContent = "";
       return renderPad(s);
     }

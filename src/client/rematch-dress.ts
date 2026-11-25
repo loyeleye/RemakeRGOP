@@ -17,6 +17,10 @@ export const WALL_LOOK = {
   at: [15, 8] as const,
   size: [3.4, 1.15, 0.5] as const,
   stone: "#8d877c",
+  /** The slate the score is chalked on: how wide and how tall, its colour, and how far it leans back from upright. */
+  slate: [3.6, 1.5] as const,
+  slateColor: "#3b4046",
+  lean: 0.95,
   chalk: "#f6f3ea",
   /** A score rubbed out under the new one: how much of it still shows. */
   ghost: 0.16,
@@ -44,9 +48,17 @@ export class RematchFx {
     this.canvas.height = 176;
     this.map = new THREE.CanvasTexture(this.canvas);
     this.map.colorSpace = THREE.SRGBColorSpace;
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.3, h - 0.2), new THREE.MeshBasicMaterial({ map: this.map, transparent: true, depthWrite: false }));
-    face.position.set(L.at[0], h / 2, L.at[1] + d / 2 + 0.02);
-    this.all.add(wall, face);
+    // The chalked face is a slate leaning against the wall's south side, tipped back so that it is read from above.
+    const [sw, sh] = L.slate, lean = L.lean;
+    const slate = new THREE.Group();
+    const back = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, 0.08), new THREE.MeshStandardMaterial({ color: L.slateColor, roughness: 1 }));
+    back.castShadow = true;
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(sw - 0.16, sh - 0.12), new THREE.MeshBasicMaterial({ map: this.map, transparent: true, depthWrite: false }));
+    face.position.z = 0.045;
+    slate.add(back, face);
+    slate.rotation.x = -lean;
+    slate.position.set(L.at[0], (sh / 2) * Math.cos(lean) + 0.05, L.at[1] + d / 2 + (sh / 2) * Math.sin(lean) + 0.06);
+    this.all.add(wall, slate);
   }
 
   /** The score as it stands on the wall: the best before this rematch, and the new one once it is chalked up. */

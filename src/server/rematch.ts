@@ -682,7 +682,7 @@ export class RematchRoom {
     this.end = {
       banked: kids,
       kes: hers,
-      summary: `Granny's rematch: the children ${kids}, Hesta ${hers}. ${won ? `A new best on the wall: ${kids}.` : `The wall still says ${was}.`}`,
+      summary: `The children ${kids}, Granny ${hers}. ${won ? `A new best on the wall: ${kids}.` : `The wall still says ${was}.`}`,
       lines: won
         ? [{ who: NELL, text: `${kids}! That's the most!` }, { who: HESTA, text: "Closer. Don't tell the others." }]
         : [{ who: NELL, text: `Still ${was}.` }, { who: HESTA, text: "One more. There's always one more." }],
@@ -749,7 +749,7 @@ export class RematchRoom {
         strip: [
           { label: "The children", n: g.scores[0]!, of: T, tone: "us", ...(this.napping() ? { badge: "x2" } : {}) },
           { label: "Granny", n: g.scores[1]!, of: T, tone: "her", ...(this.napping() ? { badge: "zzz" } : {}) },
-          { label: "The wall", n: this.record?.was ?? this.wall, of: T - 1, tone: "chalk" },
+          { label: "The wall", n: this.record?.best ?? this.wall, of: T - 1, tone: "chalk" },
         ],
         ...(caption.length ? { caption } : {}),
         ...(this.eye !== null ? { eye: { wisp: this.eye, from: HESTA_ID } } : {}),

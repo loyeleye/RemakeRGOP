@@ -16,7 +16,7 @@ export const OPT_HUD = {
   cell: 112, gap: 8, pip: 5.4,
   us: "#ffd98a", her: "#d7c4ff", chalk: "#f3f1e8", unlit: "rgba(255,255,255,0.14)",
   /** Her eye on a wisp: the line's colour and dashes, and the ring's size on the wisp. */
-  eye: { line: "rgba(215,196,255,0.9)", dash: [3, 6] as [number, number], ring: 19 },
+  eye: { line: "rgba(226,212,255,0.98)", under: "rgba(30,16,60,0.75)", dash: [3, 7] as [number, number], ring: 19 },
   /** A moved goal: while it is being told, and once it counts. */
   goal: { tell: "rgba(215,196,255,0.85)", live: "rgba(255,217,138,0.95)", track: "rgba(255,255,255,0.18)" },
   nap: "rgba(215,196,255,0.95)",
@@ -79,19 +79,23 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
     if (w && from && !w.away) {
       const a0 = at(from), b0 = at(w), a = cam.toScreen(a0.x, a0.y, 1.7), b = cam.toScreen(b0.x, b0.y, 0.9);
       const d = Math.hypot(b.x - a.x, b.y - a.y) || 1, beat = 0.5 + 0.5 * Math.sin(now / 420);
-      g.strokeStyle = H.eye.line;
-      g.lineWidth = 1.8;
-      g.setLineDash(H.eye.dash);
       g.lineCap = "round";
-      g.beginPath();
-      g.moveTo(a.x, a.y);
-      g.lineTo(b.x - ((b.x - a.x) / d) * (H.eye.ring + 3), b.y - ((b.y - a.y) / d) * (H.eye.ring + 3));
-      g.stroke();
-      g.setLineDash([]);
-      g.lineWidth = 2.2;
-      g.beginPath();
-      g.arc(b.x, b.y, H.eye.ring + 2 * beat, 0, Math.PI * 2);
-      g.stroke();
+      // Dark under pale, so that it reads on the pale paving and on the water alike.
+      for (const [color, more] of [[H.eye.under, 2.6], [H.eye.line, 0]] as const) {
+        g.strokeStyle = color;
+        g.lineWidth = 2.2 + more;
+        g.setLineDash(H.eye.dash);
+        g.lineDashOffset = -now / 70;
+        g.beginPath();
+        g.moveTo(a.x, a.y);
+        g.lineTo(b.x - ((b.x - a.x) / d) * (H.eye.ring + 3), b.y - ((b.y - a.y) / d) * (H.eye.ring + 3));
+        g.stroke();
+        g.setLineDash([]);
+        g.lineWidth = 2.4 + more;
+        g.beginPath();
+        g.arc(b.x, b.y, H.eye.ring + 2 * beat, 0, Math.PI * 2);
+        g.stroke();
+      }
       // An eye over it: a lid and a pupil.
       const ex = b.x, ey = b.y - H.eye.ring - 13;
       g.beginPath();
@@ -195,7 +199,7 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
   // Lines that must land, under the strip: who, and what they said.
   let cy = y0 + hgt + 8;
   const tall = cam.compact && cam.h > cam.w, midX = tall ? (cam.w - 132) / 2 : cam.w / 2, maxW = tall ? cam.w - 160 : cam.w - 60;
-  const fs = Math.max(13, Math.min(18, cam.w / 44));
+  const fs = cam.compact ? 14 : Math.max(13, Math.min(18, cam.w / 44));
   for (const [i, c] of (o.caption ?? []).entries()) {
     g.font = `${i === 0 ? 700 : 500} ${fs}px system-ui, sans-serif`;
     g.textAlign = "center";
