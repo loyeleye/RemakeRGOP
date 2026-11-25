@@ -2230,6 +2230,7 @@ function heldScene(p: Piece) {
   };
   const show = (i: number) => {
     const m = H.pictures[i]!;
+    if (m.fade) for (const x of [pics[i - 1]!, pics[i]!]) x.style.transitionDuration = `${m.fade}s`;
     if (m.cut) for (const x of [pics[i - 1]!, pics[i]!]) x.style.transition = "none";
     pics[i - 1]?.classList.remove("on");
     pics[i]!.classList.add("on");
@@ -2240,7 +2241,7 @@ function heldScene(p: Piece) {
   let t = H.fade + H.lead;
   H.pictures.forEach((m, i) => {
     if (i > 0) at(t, () => show(i));
-    t += i > 0 && !m.cut ? H.fade : 0;
+    t += i > 0 && !m.cut ? m.fade ?? H.fade : 0;
     for (const line of m.lines ?? []) {
       // Long enough to read, and to hear its clip out.
       const len = Math.max(H.line, line.text.length * 0.055, (VOICE_SECONDS[`${line.who[0]}|${line.text}`] ?? 0) + 0.5);
@@ -2255,6 +2256,15 @@ function heldScene(p: Piece) {
     if (!here()) return el.remove();
     window.clearTimeout(shaking);
     if (p.id === "4-5") skiffSaid = true;
+    // The end of Part 1: its name on the black, then the menu.
+    if (p.card?.end) {
+      caption.classList.remove("stay");
+      caption.innerHTML = `<span>End of Part 1</span>`;
+      caption.classList.add("on", "fin");
+      at(3.5, () => caption.classList.remove("on"));
+      at(4.3, () => (el.remove(), leave()));
+      return;
+    }
     chainOn();
     window.setTimeout(() => (el.classList.remove("on"), window.setTimeout(() => el.remove(), 700)), 100);
   });

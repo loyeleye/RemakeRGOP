@@ -387,6 +387,7 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 @media (prefers-reduced-motion: reduce) { #gap-scene .glow.real { animation: none; } }
 #gap-scene .creed { position: absolute; left: 50%; bottom: max(28px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(92vw, 640px); margin: 0; text-align: center; font: italic 500 clamp(17px, 2.6vw, 23px)/1.4 Georgia, serif; color: #f6ead2; text-shadow: 0 1px 2px #000, 0 0 14px #000c, 0 0 28px #000a; opacity: 0; transition: opacity 0.7s; }
 #gap-scene .creed.on { opacity: 1; }
+#gap-scene.out .creed.fin.on { opacity: 1; bottom: 50%; transform: translate(-50%, 50%); font-style: normal; letter-spacing: 0.2em; text-transform: uppercase; font-size: 15px; }
 #gap-scene .creed { display: grid; gap: 6px; justify-items: center; }
 #gap-scene .creed .who { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd9a0; }
 #gap-scene .creed .who .face { width: 34px; height: 34px; border-radius: 50%; box-shadow: 0 0 0 2px #0009; }

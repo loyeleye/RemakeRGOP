@@ -73,9 +73,9 @@ export interface Held {
   shape?: "four3";
   /**
    * `shake`: a layer (the same picture, alpha only where it moves) flicked on and off with a small
-   * offset while the picture is up; `cut`: in without a cross-fade.
+   * offset while the picture is up; `cut`: in without a cross-fade; `fade`: its own cross-fade, in seconds.
    */
-  pictures: { slot: string; hold: number; lines?: { who: string[]; text: string; quiet?: true }[]; shake?: string; cut?: true }[];
+  pictures: { slot: string; hold: number; lines?: { who: string[]; text: string; quiet?: true }[]; shake?: string; cut?: true; fade?: number }[];
   /** Seconds: the cross-fade, the hold before anyone speaks, each line, the pause before it. */
   fade: number;
   lead: number;
@@ -167,6 +167,46 @@ export const HELD: Record<string, Held> = {
       { slot: "handoff-6-rook", hold: 0.6, lines: [{ who: ["Rook"], text: "...", quiet: true }] },
       { slot: "handoff-7-kes-nod", hold: 1, lines: [{ who: ["Kes"], text: "Go. I'm right behind you." }] },
       { slot: "handoff-8-boarding", hold: 3.5 },
+    ],
+  },
+  // 11, the Offering (production/story/offering/final/README.md, 25 Nov): the cutscene thread's rough
+  // first draft, 25 pictures in the order of story/part1-offering.md's table, whose lines these are.
+  // None of it is seen by Ladi, and the write-up is itself a story-thread draft he has not judged, so
+  // every line is a caption until he has read it (the story thread's advice: its voiced lines are the
+  // peak of Part 1). Picture 24 is 23 with the light gone. The end of Part 1.
+  "11": {
+    tag: "Rough first draft. Pictures and story not seen by Ladi",
+    shape: "four3",
+    fade: 0.6,
+    lead: 0.5,
+    line: 2.4,
+    gap: 0.4,
+    pictures: [
+      { slot: "offering-01", hold: 3 },
+      { slot: "offering-02", hold: 3 },
+      { slot: "offering-03", hold: 1.7, lines: [{ who: ["The village"], text: "The sun gave light, and light is owed.", quiet: true }] },
+      { slot: "offering-04", hold: 0.9, lines: [{ who: ["The village"], text: "The bright were born to carry it. The rest were born to carry them.", quiet: true }] },
+      { slot: "offering-05", hold: 3 },
+      { slot: "offering-06", hold: 0.6, lines: [{ who: ["Rook"], text: "Lumi!", quiet: true }] },
+      { slot: "offering-07", hold: 3.5 },
+      { slot: "offering-08", hold: 1.5, lines: [{ who: ["The village"], text: "What the dark asks for, we give with open hands.", quiet: true }] },
+      { slot: "offering-09", hold: 3 },
+      { slot: "offering-10", hold: 0.7, lines: [{ who: ["Rook"], text: "Granny. That's Lumi out there.", quiet: true }] },
+      { slot: "offering-11", hold: 1.2, lines: [{ who: ["Hesta"], text: "You were meant to come round with the boats.", quiet: true }] },
+      { slot: "offering-12", hold: 1.2, lines: [{ who: ["Rook"], text: "They'll listen to you. Stop it. Granny, she's eight.", quiet: true }] },
+      { slot: "offering-13", hold: 1.4, lines: [{ who: ["Hesta"], text: "I sent you the long way so you'd be spared this. I spared your life, Rook. Run along.", quiet: true }] },
+      { slot: "offering-14", hold: 0.7, lines: [{ who: ["Rook"], text: "Then me. Put me out there.", quiet: true }] },
+      { slot: "offering-15", hold: 1.2, lines: [{ who: ["Hesta"], text: "You? There's no light in you to give.", quiet: true }] },
+      { slot: "offering-16", hold: 0.6, lines: [{ who: ["Rook"], text: "Please.", quiet: true }] },
+      { slot: "offering-17", hold: 1.2, lines: [{ who: ["Hesta"], text: "Now you're getting on my nerves.", quiet: true }] },
+      { slot: "offering-18", hold: 2.5 },
+      { slot: "offering-19", hold: 2.5 },
+      { slot: "offering-20", hold: 2 },
+      { slot: "offering-21", hold: 0.6, lines: [{ who: ["Lumi"], text: "Dad!", quiet: true }] },
+      { slot: "offering-22", hold: 3.5 },
+      { slot: "offering-23", hold: 1.2, lines: [{ who: ["The village"], text: "No light goes out alone.", quiet: true }] },
+      { slot: "offering-24", hold: 2, fade: 2 },
+      { slot: "offering-25", hold: 3 },
     ],
   },
 };
@@ -288,7 +328,8 @@ export const PART1: Piece[] = [
   // Shown as its eight pictures (HELD["9-10"]); take `scene` off and it is its card again.
   { id: "9-10", name: "The stranger's ship", kind: "card", scene: "held", card: { heading: "Eight pictures, before the ship", summary: "The shadow heading for home. Kes: \"Then come on.\" The dream, one beat. The stranger: \"I know a shorter way.\" Kes: \"Race you home, then.\" Rook: \"...\" Kes: \"Go. I'm right behind you.\" His back as he boards.", ruled: "Part ruled: the shadow as his reason and Kes's line after the joke are Ladi's. The wording and the pictures are draft." } },
   { id: "10", name: "Run 10, the ship home", kind: "run", run: 10 },
-  { id: "11", name: "The Offering", kind: "card", card: { heading: "The Offering, at first light", summary: "The end of Part 1.", ruled: "Part ruled: in the bible, and \"at first light\" is Ladi's. A storyboard only.", end: true } },
+  // Shown as its 25 pictures (HELD["11"]); take `scene` off and it is its card again.
+  { id: "11", name: "The Offering", kind: "card", scene: "held", card: { heading: "The Offering, at first light", summary: "The end of Part 1.", ruled: "Part ruled: in the bible, and \"at first light\" is Ladi's. A storyboard only.", end: true } },
 ];
 
 export const pieceIndex = (id: string) => PART1.findIndex((p) => p.id === id);
