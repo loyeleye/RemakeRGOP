@@ -13,10 +13,12 @@ import { VOICE_LINES, VOICE_STOCK } from "../src/client/voice-lines.js";
 import { STILLS } from "../src/engine/stills.js";
 import { CoveRoom } from "../src/server/cove.js";
 import { KiteRoom } from "../src/server/kite.js";
+import { MossRoom } from "../src/server/mosshollow.js";
 import { RematchRoom } from "../src/server/rematch.js";
 import { RescueRoom } from "../src/server/rescue.js";
 import { ShipRoom } from "../src/server/shiphome.js";
 import { SieveRoom } from "../src/server/sieve.js";
+import { TidepoolRoom } from "../src/server/tidepool.js";
 
 const out = process.argv[2] ?? "/mnt/project-files/gameplay/voice/unvoiced-lines.json", seeds = Number(process.argv[3] ?? 12);
 const root = new URL("..", import.meta.url).pathname;
@@ -27,6 +29,8 @@ interface Run { run: string; name: string; file: string; engine: string; make: (
 
 const clock = { every: () => () => {} };
 const RUNS: Run[] = [
+  // Run 4 (src/server/job.ts) is not here: its lines are data in src/engine/job.ts (JOB.lines), which
+  // this reader cannot follow, and it has no stand-in to play it. Read its lines from that file.
   { run: "run8", name: "A harder job (the Sieve)", file: "sieve", engine: "sieve", stands: ["juggle", "hold"], make: (s, st) => new SieveRoom(clock, s, st as never) },
   { run: "run9", name: "The rescue", file: "rescue", engine: "rescue", stands: ["heap", "hold", "wary", "bait"], make: (s, st) => new RescueRoom(clock, s, st as never) },
   { run: "run10", name: "The ship home", file: "shiphome", engine: "shiphome", stands: ["hold", "rails", "port"], make: (s, st) => new ShipRoom(clock, s, st as never) },
@@ -35,7 +39,9 @@ const RUNS: Run[] = [
     make: (s, st, n) => Object.assign(new RematchRoom(clock, s), { stand: st, cheatPick: ["hold", "goal", "nap"][n % 3] }),
   },
   { run: "optional-o2", name: "Lumi's lesson with Kes", file: "cove", engine: "cove", stands: ["smart", "near", "stay", "wander"], make: (s, st) => Object.assign(new CoveRoom(clock, s), { stand: st }) },
-  { run: "optional-o3c", name: "Kes's rematch on Kite Fell (built, not yet published)", file: "kite", engine: "kite", stands: ["smart", "stay", "wander"], make: (s, st) => Object.assign(new KiteRoom(clock, s), { stand: st }) },
+  { run: "optional-o3c", name: "Kes's rematch on Kite Fell", file: "kite", engine: "kite", stands: ["smart", "stay", "wander"], make: (s, st) => Object.assign(new KiteRoom(clock, s), { stand: st }) },
+  { run: "optional-o3a", name: "Moss Hollow", file: "mosshollow", engine: "mosshollow", stands: ["smart", "singles", "thick", "idle"], make: (s, st) => Object.assign(new MossRoom(clock, s), { stand: st }) },
+  { run: "optional-o3b", name: "Tidepool Steps", file: "tidepool", engine: "tidepool", stands: ["smart", "low", "climb", "idle"], make: (s, st) => Object.assign(new TidepoolRoom(clock, s), { stand: st }) },
 ];
 
 // ---------------------------------------------------------------- reading a room's lines

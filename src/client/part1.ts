@@ -29,7 +29,7 @@ export interface Piece {
 const DRAFT = "Draft: not ruled by Ladi yet.";
 
 export const PART1: Piece[] = [
-  { id: "0", name: "Before run 1", kind: "card", card: { heading: "Before run 1: the dream", summary: "The dream, then he wakes to Lumi. Cut to the Kindling ground at night.", ruled: "Part ruled: the dream is in the bible. How he wakes is still open. Pictures are a storyboard only." } },
+  { id: "0", name: "Before run 1", kind: "card", card: { heading: "Before run 1: the dream", summary: "The dream. Then Rook wakes to Lumi standing over him with his staff: \"You're late.\" Cut to the Kindling ground at night.", ruled: "Part ruled: the dream is in the bible, and how he wakes is Ladi's. The dream's pictures are not painted yet." } },
   { id: "1", name: "Run 1, the Kindling", kind: "run", run: 1 },
   { id: "1-2", name: "The kitchen, morning", kind: "card", scene: "kitchen", card: { heading: "The kitchen, morning", summary: "Rosalind's cup. Lumi at the door with his staff. (Lumi's unlit lantern, the first picture, opens run 2.)", ruled: "Part ruled: the lantern picture and Rosalind's portrait are Ladi's. The rest is draft." } },
   { id: "2", name: "Run 2, Lumi's lesson", kind: "run", run: 2 },
