@@ -52,6 +52,11 @@ export const STILLS: Record<string, StillCard> = {
   // Over Rook's line and Lumi's answer: the same picture, the caption changing.
   "r2-0": { who: "Lumi holding his staff, too long for her, at the pond's edge. Rook crouched beside her, hands off", faces: "Lumi: eyes on the water, brows down, mouth shut, chin up. Rook: eyes on her, brows up, a small closed smile." },
   "r3-0": { who: "Lumi in front, pointing back at Rook without looking, Rook behind her. Nell and Sefa shoulders at the edges", faces: "Lumi: eyes ahead, brows level, mouth shut, certain. Rook: brows up, a small smile." },
+  "r3-2": { who: "Hesta looking across at Rook. The back of Lumi's head between them, tipped up toward her father", faces: "Hesta: eyes warm and on him, brows level, mouth shut in a smile. Rook: eyes down at his staff, one corner of his mouth up." },
+  // 3.2, 4.2, 5.1 and 5.2 are the cutscene thread's pick, on Ladi's word to finish the set on its own judgment (25 Nov, 3:17 AM).
+  "r4-2": { who: "Garrick turned to his fire, pleased. Lumi beside Rook, standing very straight", faces: "Garrick: eyes on the fire, creased, mouth open, talking. Lumi: eyes ahead, brows up, mouth pressed shut so as not to grin." },
+  "r5-1": { who: "Kes and Rook facing each other. Lumi's hand and bell held up between them", faces: "Kes: chin up, one brow up, mouth shut in a smirk. Rook: eyes on Kes, brows level, mouth shut." },
+  "r5-2": { who: "Kes looking at Lumi, and Lumi looking back. Rook a shoulder behind them, turned a little away", faces: "Kes: eyes soft, brows up in the middle, a small closed smile. Lumi: eyes wide, brows up, mouth shut." },
   // Moss Hollow only, over Garrick's two greeting lines.
   "r4-1": { who: "Garrick, half length, a working keeper on his own ground", faces: "Eyes level. Brows flat. Mouth shut, easy." },
   // Run 8, the Sieve. Faces in the cutscene thread's terms: eyes, brows, mouth.

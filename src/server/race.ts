@@ -23,6 +23,8 @@ export type Stand = "hold" | "juggle";
 export class RaceRoom {
   private send: ((m: ServerMsg) => void) | null = null;
   private phase: Phase = "countdown";
+  /** The reaction stills (?nostills in the page leaves them out). */
+  stillsOn = true;
   private countdown = 0;
   private game!: Game;
   private rng: Rng;
@@ -170,8 +172,9 @@ export class RaceRoom {
     if (this.heat === 0) {
       this.say(KES, "You took my pupil on a job.", talk);
       this.say(ROOK, "She's my daughter.", talk);
-      this.say(KES, "She was going to be my pupil. Race you for her.", talk);
-      this.say(LUMI, "I'm not a prize. I'm the referee.", talk);
+      // Still 5.1 under the challenge and Lumi's answer, the same picture with the caption changing.
+      this.say(KES, "She was going to be my pupil. Race you for her.", { ...talk, ...(this.stillsOn ? { still: { id: "r5-1" } } : {}) });
+      this.say(LUMI, "I'm not a prize. I'm the referee.", { ...talk, ...(this.stillsOn ? { still: { id: "r5-1", seq: true } } : {}) });
       this.say(LUMI, "First to six. No shoving.", talk);
       this.say(KES, "Whatever you say, Captain.", talk);
     } else {
@@ -203,9 +206,11 @@ export class RaceRoom {
 
   private rosie(how: Omit<StoryLine, "who" | "text"> | null) {
     this.said.add("rosie");
-    this.say(KES, "Rosie would have tripped me by now.", how ?? { player: KES_ID }, "key");
-    this.say(LUMI, "Mum cheated?", how ?? { player: LUMI_ID }, "key");
-    this.say(KES, "Constantly.", how ?? { player: KES_ID }, "key");
+    // Still 5.2 under all three lines, in play or at the talk between heats.
+    const st = (seq: boolean) => (this.stillsOn ? { still: { id: "r5-2", ...(seq ? { seq: true } : {}) } } : {});
+    this.say(KES, "Rosie would have tripped me by now.", { ...(how ?? { player: KES_ID }), ...st(false) }, "key");
+    this.say(LUMI, "Mum cheated?", { ...(how ?? { player: LUMI_ID }), ...st(true) }, "key");
+    this.say(KES, "Constantly.", { ...(how ?? { player: KES_ID }), ...st(true) }, "key");
   }
 
   onTick() {

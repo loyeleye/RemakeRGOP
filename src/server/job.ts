@@ -284,7 +284,8 @@ export class JobRoom {
     const S = this.S;
     if (this.banked() >= S.goal) {
       if (this.stopN === 0) {
-        this.say(S.keeper, JOB.stops[0].lines.done, { player: KEEPER_ID });
+        // Still 4.2 (talk, so it comes before the next stop's route line rather than over it).
+        this.say(S.keeper, JOB.stops[0].lines.done, { player: KEEPER_ID, ...(this.stillsOn ? { talk: true, still: { id: "r4-2" } } : {}) });
         this.startStop(1, false);
       } else this.outro();
     } else if (g.tick >= S.ticks) this.again();

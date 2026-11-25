@@ -484,8 +484,9 @@ export class GrannyRoom {
           this.say(SEFA, "That's cheating!", { player: KID_IDS[1] }, "key");
           this.say(LUMI, "You can't do that!", { talk: true });
           this.say(HESTA, "You did it on the pond. Yours is water. Mine's rock.", { talk: true });
-          this.say(LUMI, "Dad hasn't got one.", { talk: true });
-          this.say(HESTA, "No. Your father does it the hard way.", { talk: true });
+          // Still 3.2 under the pair: the second cross-fades the same picture in place.
+          this.say(LUMI, "Dad hasn't got one.", { talk: true, ...(this.stillsOn ? { still: { id: "r3-2" } } : {}) });
+          this.say(HESTA, "No. Your father does it the hard way.", { talk: true, ...(this.stillsOn ? { still: { id: "r3-2", seq: true } } : {}) });
         }
       }
     }
