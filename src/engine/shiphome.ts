@@ -48,7 +48,17 @@ export const SHIP = {
    * goes `speed` tiles a tick, and is first seen `warn` ticks before its front reaches the cloud
    * the wisps are in. There is never more than one over that cloud at a time.
    */
-  bank: { first: 10, every: [17, 22] as readonly [number, number], swap: 0.7, len: 24, speed: 4, warn: 8 },
+  bank: {
+    first: 10, every: [17, 22] as readonly [number, number], swap: 0.7, len: 24, speed: 4, warn: 8,
+    /**
+     * The sign that one is coming, at the top edge of the screen on its side: a pale swell (its
+     * colour as r,g,b) with arrows sliding down toward the deck, shown from the moment the bank is
+     * on its way until its front reaches the bow. It is `size[0]` times its plain size at first and
+     * `size[1]` when the front is at the bow, having grown over the last `rows` tiles of the way;
+     * the arrows slide `rate[0]` to `rate[1]` times a second.
+     */
+    tell: { rgb: "214,224,244", size: [1.3, 2] as readonly [number, number], rows: 44, rate: [0.9, 1.8] as readonly [number, number] },
+  },
   /**
    * Hauls. Small ones come down the `small` share of the lanes nearest each rail, big ones down
    * the lanes from `bigFrom` of the way out; `bigShare` of all of them are big. Each kind is worth

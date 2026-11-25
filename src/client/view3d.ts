@@ -4263,29 +4263,41 @@ export function drawOverlay(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     g.fillStyle = GUILD_COLORS[pl.guild]!;
     g.fillText(label, p.x, p.y);
   }
-  // Run 10: a cloud bank whose front is still above the top of the screen. A pale swell at the top edge on its side, growing as it nears, so that it is seen coming on a small screen too.
+  // Run 10: a cloud bank is coming down one side (Ladi, 24 Nov: "the affordance at the top is fine").
+  // A pale swell with arrows at the top edge on its side, on every screen, from the moment it is on
+  // its way until its front reaches the bow, growing as it nears.
   const bank = st.ship?.bank;
   if (bank && st.ship!.gutter === undefined) {
-    const c = st.shrine.board.center, front = bank.front - bank.speed * (1 - Math.min(1, st.t));
-    const p = cam.toScreen(c.x + bank.side * (SHIP_DECK.hw + 7) + 0.5, c.y + front + 0.5, 2);
-    if (p.y < 70) {
-      const near = Math.max(0.3, Math.min(1, 1 - (-SHIP_DECK.hl - front) / 44)), x = Math.max(60, Math.min(cam.w - 60, p.x)), y = 58, r = 46 + 34 * near;
-      const glow = g.createRadialGradient(x, y - 20, 4, x, y - 20, r);
-      glow.addColorStop(0, `rgba(214,222,240,${0.75 * near})`);
-      glow.addColorStop(1, "rgba(214,222,240,0)");
+    const c = st.shrine.board.center, W = SHIP.bank, front = bank.front - bank.speed * (1 - Math.min(1, st.t));
+    if (front < -SHIP_DECK.hl) {
+      const p = cam.toScreen(c.x + bank.side * (SHIP_DECK.hw + 7) + 0.5, c.y - SHIP_DECK.hl + 0.5, 2);
+      const near = Math.max(0, Math.min(1, 1 - (-SHIP_DECK.hl - front) / W.tell.rows)), k = W.tell.size[0] + (W.tell.size[1] - W.tell.size[0]) * near;
+      // Clear of the corner buttons, and of the little map on a small screen.
+      const x = Math.max(70, Math.min(cam.w - (cam.compact ? 160 : 70), p.x)), y = 56, r = 70 * k;
+      const glow = g.createRadialGradient(x, y - 18, 4, x, y - 18, r);
+      glow.addColorStop(0, `rgba(${W.tell.rgb},${0.35 + 0.5 * near})`);
+      glow.addColorStop(1, `rgba(${W.tell.rgb},0)`);
       g.fillStyle = glow;
-      g.fillRect(x - r, y - 20 - r, r * 2, r * 2);
-      g.strokeStyle = `rgba(240,244,255,${0.5 + 0.5 * near})`;
-      g.lineWidth = 3;
+      g.fillRect(x - r, y - 18 - r, r * 2, r * 2);
+      const pale = `rgba(244,247,255,${0.8 + 0.2 * near})`, lw = 2.5 + 1.5 * k;
       g.lineCap = g.lineJoin = "round";
-      const bob = Math.sin(st.now / 160) * 3;
-      for (const dy of [0, 11]) {
-        g.beginPath();
-        g.moveTo(x - 10, y + dy + bob);
-        g.lineTo(x, y + 8 + dy + bob);
-        g.lineTo(x + 10, y + dy + bob);
-        g.stroke();
+      // They slide down toward the deck, over and over, a little quicker as it nears.
+      const half = 13 * k, gap = 12 * k, slide = ((st.now / 1000) * (W.tell.rate[0] + (W.tell.rate[1] - W.tell.rate[0]) * near)) % 1;
+      for (let i = 0; i < 3; i++) {
+        const at = i + slide, yy = y + (at - 0.5) * gap;
+        g.globalAlpha = Math.max(0, Math.min(1, at, 3 - at));
+        // A thin dark edge under each, so that they show against the pale bank itself.
+        for (const [ink, wide] of [["rgba(16,22,44,0.6)", lw + 3.5], [pale, lw]] as const) {
+          g.strokeStyle = ink;
+          g.lineWidth = wide;
+          g.beginPath();
+          g.moveTo(x - half, yy);
+          g.lineTo(x, yy + half * 0.7);
+          g.lineTo(x + half, yy);
+          g.stroke();
+        }
       }
+      g.globalAlpha = 1;
     }
   }
 }
