@@ -123,6 +123,64 @@ describe("Run 9: the rescue, on the low one", () => {
     }
   });
 
+  it("the lamp does not keep its light: left unfed its newest pip flickers and goes out, then another; a wisp in time keeps it, a lifted boat is safe, and the switch turns it off", () => {
+    const { room, lines, toPlay } = open(11, null);
+    toPlay();
+    const g = room.state.game, c = g.board.center, L = RESCUE.lamp;
+    const view = () => room.storyView().rescue!;
+    const feed = () => {
+      let w = g.wisps.find((q) => q.guild === 0 && !g.away.has(q.id));
+      while (!w) room.onTick(), (w = g.wisps.find((q) => q.guild === 0 && !g.away.has(q.id)));
+      w.pos = w.prev = pt(c.x + L.at[0], c.y + L.at[1] - 3);
+      w.target = w.holder = null;
+      room.onTick();
+    };
+    feed();
+    feed();
+    expect(room.state.fill[0]).toBe(2);
+    // Quiet until the last few ticks, then the newest pip flickers.
+    for (let n = 0; n < L.hold - L.flicker - 1; n++) room.onTick();
+    expect(view().lamp!.gutter).toBeUndefined();
+    room.onTick();
+    expect(view().lamp!.gutter).toBe(L.flicker);
+    for (let n = 0; n < L.flicker; n++) room.onTick();
+    // It goes out, and Kes says why, once, as a line that stays up.
+    expect(room.state.fill[0]).toBe(1);
+    expect(room.pipsLost).toBe(1);
+    expect(view().lamp!.went).toBe(g.tick);
+    expect(view().left).toBe(RESCUE.boats * RESCUE.perBoat - 1);
+    for (let n = 0; n < L.drip; n++) room.onTick();
+    expect(room.state.fill[0]).toBe(0);
+    expect(lines().filter((l) => l.text === "It won't keep in this cloud! Fill it in one go!")).toHaveLength(1);
+    // Empty, it has nothing to lose.
+    for (let n = 0; n < L.hold + L.drip; n++) room.onTick();
+    expect(room.pipsLost).toBe(2);
+    // A wisp in time starts its clock again.
+    feed();
+    for (let n = 0; n < L.hold - 2; n++) room.onTick();
+    feed();
+    for (let n = 0; n < L.hold - 2; n++) room.onTick();
+    expect(room.state.fill[0]).toBe(2);
+    expect(room.pipsLost).toBe(2);
+    // Filled, the boat lifts, and a lifted boat keeps what it has.
+    feed();
+    feed();
+    expect(room.state.lifted).toBe(1);
+    for (let n = 0; n < L.hold + 2 * L.drip; n++) room.onTick();
+    expect(room.state.fill[0]).toBe(RESCUE.perBoat);
+    expect(room.pipsLost).toBe(2);
+    // On its switch the lamp keeps its light, as in the build before.
+    const held = open(11, null, (r) => (r.lampMode = "holds"));
+    held.toPlay();
+    const hg = held.room.state.game, w = hg.wisps.find((q) => q.guild === 0)!;
+    w.pos = w.prev = pt(hg.board.center.x + L.at[0], hg.board.center.y + L.at[1] - 3);
+    held.room.onTick();
+    for (let n = 0; n < L.hold + 2 * L.drip; n++) held.room.onTick();
+    expect(held.room.state.fill[0]).toBe(1);
+    expect(held.room.pipsLost).toBe(0);
+    expect(held.room.storyView().rescue!.lamp!.gutter).toBeUndefined();
+  });
+
   it("Kes strings hers on the far side, walks them to the stones and sets them down for him: they are his to pull from then, and she never banks", () => {
     const { room, lines, toPlay } = open(7919, "idle");
     toPlay();
@@ -139,9 +197,9 @@ describe("Run 9: the rescue, on the low one", () => {
       expect(Math.hypot(w.pos.x - c.x - RESCUE.lamp.at[0], w.pos.y - c.y - RESCUE.lamp.at[1])).toBeGreaterThan(RESCUE.lamp.take);
     }
     expect(g.string).toEqual([]);
-    expect(lines().map((l) => l.text)).toContain("Three at the stones, Rook!");
+    expect(lines().map((l) => l.text)).toContain("Two at the stones, Rook!");
     expect(room.storyView().rescue!.drop).toEqual({ x: c.x + D.at[0], y: c.y + D.at[1], r: D.r });
-    // With nobody to put them in she brings no more: the same three wait, and nothing is banked.
+    // With nobody to put them in she brings no more: the same two wait, and nothing is banked.
     for (let n = 0; n < 60; n++) room.onTick();
     expect(room.setDowns).toBe(RESCUE.hers);
     expect(room.kesBanks).toBe(0);

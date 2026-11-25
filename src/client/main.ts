@@ -919,7 +919,9 @@ function rescueRoom() {
   if (aim === "react" || aim === "seek" || aim === "line") r.patchAim = aim;
   if (q.get("kes") === "banks") r.kesMode = "banks";
   if (q.get("flare") === "1") r.flareOn = true;
-  rescueHeard = { flew: "", lifted: 0, fill: 0 };
+  const lamp = q.get("lamp");
+  if (lamp === "holds" || lamp === "leaks") r.lampMode = lamp;
+  rescueHeard = { flew: "", lifted: 0, fill: 0, gutter: false, went: -9 };
   if (q.has("nostills")) r.stillsOn = false;
   else stills.preload("r9-");
   patchHeard = 0;
@@ -1012,12 +1014,18 @@ function shipDone() {
  * when the room goes on.
  */
 let patchHeard = 0;
-let rescueHeard = { flew: "", lifted: 0, fill: 0 };
+let rescueHeard = { flew: "", lifted: 0, fill: 0, gutter: false, went: -9 };
 function rescueSound(r: NonNullable<StoryView["rescue"]>) {
   if (stills.fullUp && !r.hold) stills.fullOff();
   const last = r.flew?.[r.flew.length - 1], key = last ? `${last.tick}:${last.x}:${last.y}` : "";
   const fill = r.boats.reduce((a, b) => a + b, 0);
-  if (fill < rescueHeard.fill) rescueHeard = { flew: "", lifted: 0, fill: 0 };
+  // A restart (the boats empty again), not a pip guttering out.
+  if (r.lifted < rescueHeard.lifted || (fill === 0 && rescueHeard.fill > 1)) rescueHeard = { flew: "", lifted: 0, fill: 0, gutter: false, went: -9 };
+  // The lamp does not keep its light: a sputter as the newest pip starts to flicker, and a small falling note as it goes.
+  const gutter = r.lamp?.gutter !== undefined;
+  if (gutter && !rescueHeard.gutter) sound.lampGutter();
+  rescueHeard.gutter = gutter;
+  if (r.lamp?.went !== undefined && r.lamp.went !== rescueHeard.went) (rescueHeard.went = r.lamp.went), sound.pipOut();
   if (key && key !== rescueHeard.flew) sound.pipChime(((fill - 1) % r.perBoat + r.perBoat) % r.perBoat);
   rescueHeard.flew = key || rescueHeard.flew;
   rescueHeard.fill = fill;

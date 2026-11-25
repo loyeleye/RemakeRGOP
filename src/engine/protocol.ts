@@ -145,7 +145,7 @@ export interface StoryView {
   rescue?: {
     kes: number; boats: number[]; perBoat: number; lifted: number; cloud: number;
     /** The docked boat's lamp (the bank): its tile, how near a wisp must come, and whether it is dark just now (the patch over it, or no boat docked). */
-    lamp?: { x: number; y: number; take: number; dark?: boolean };
+    lamp?: { x: number; y: number; take: number; dark?: boolean; gutter?: number; went?: number };
     /** Banks still wanted, the cloud's edge at the start and where it ends the run (tiles from the slip). */
     left?: number; from?: number; reach?: number;
     /** Kes's drop, the ring of stones: its tile and size. */

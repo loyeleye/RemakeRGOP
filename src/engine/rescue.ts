@@ -17,7 +17,7 @@ export const RESCUE = {
   perBoat: 4,
   /** Wisps out at a time: Rook's on the near side (the west and middle strips), Kes's on the far side (the east strip). */
   his: 3,
-  hers: 3,
+  hers: 2,
   /** Ticks before another comes in the place of one of his that banked or was lost. */
   pause: 3,
   /** Ticks after Kes's group is all banked (or lost) before her next one comes up on the far side. */
@@ -26,8 +26,15 @@ export const RESCUE = {
    * The docked boat's lamp is the bank. It stands at the stern, `at` tiles from the slip, and any
    * wisp he can pull that comes within `take` tiles of it flies in by itself. When a boat lifts,
    * the lamp takes nothing for `swap` ticks while the next slides in; wisps left in its light wait.
+   *
+   * The lamp does not keep its light in this cloud (`leaks`; the page's ?lamp=holds turns it off):
+   * a docked boat's lamp keeps its pips for `hold` ticks after the last wisp went in, then loses
+   * one, and one more every `drip` ticks until it is fed again. The newest pip flickers for the
+   * last `flicker` ticks before it goes. A lifted boat is safe for good. So a boat is filled by
+   * pouring its wisps in close together, which means having them near first: the heap the patch
+   * goes for. The clock stands still while the lamp is dark under the patch or between boats.
    */
-  lamp: { at: [0, -1] as readonly [number, number], take: 3.5, swap: 4 },
+  lamp: { at: [0, -1] as readonly [number, number], take: 3.5, swap: 4, leaks: true as boolean, hold: 14, drip: 8, flicker: 5 },
   /**
    * A try (off; the page's ?flare=1): heaping pays. When `of` wisps go into the lamp within
    * `within` ticks of each other the lamp flares and gives one pip more. Without it nothing in the
@@ -56,7 +63,7 @@ export const RESCUE = {
    * `stepIn` tiles every `every` ticks. A wisp it covers fades over `dimTicks` and is lost. When the
    * edge is within `landing` tiles of the slip with a boat still tied, the run starts again.
    */
-  cloud: { start: 35, stepIn: 3, firstAt: 36, every: 58, dimTicks: 8, landing: 8 },
+  cloud: { start: 35, stepIn: 3, firstAt: 36, every: 64, dimTicks: 8, landing: 8 },
   /** The storm law's numbers, as in the race. */
   storm: { max: 3, reach: 2, link: 6, gap: 2 },
   /** Kes: how careful she is each tick, and ticks she stands and looks after the patch has crossed her. */
@@ -102,9 +109,9 @@ export const RESCUE = {
   boardBy: 26,
   holdTicks: 5,
   /** Measurements only: how the stand-in for the player plays. */
-  stand: { pushy: 0, sloppiness: 0.08 },
-  /** The stand-ins that heap wisps up before bringing them in: within `heap` tiles of the lamp counts as heaped, and they bring a heap in once it is `heapOf`. */
-  heap: 8.5,
+  /** `byLamp` is where it stands to pour wisps in (tiles from the slip); one that heaps gathers them round `heapAt`, the stones, where a wisp within `heapR` tiles counts as heaped. */
+  stand: { pushy: 0, sloppiness: 0.08, byLamp: [0, -2] as readonly [number, number], heapAt: [5, -7] as readonly [number, number], heapR: 2.5 },
+  /** With a lamp that holds (?lamp=holds), the stand-ins that heap bring a heap in once it is `heapOf`; with one that leaks, once it is what the docked boat still needs. */
   heapOf: 3,
   /** On a phone, how many tiles the short side of the screen shows. */
   phoneSpan: 22,

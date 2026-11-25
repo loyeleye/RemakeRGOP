@@ -4242,6 +4242,8 @@ export class World {
 const RESCUE_HUD = {
   /** A boat's cell: its width and the hull's size, a pip's radius, and the gap between cells (px, before fitting to the screen). */
   cell: 62, hull: [44, 13] as const, pip: 5, gap: 10,
+  /** How much larger the strip is drawn on a desktop than on a phone (the gameplay thread, 25 Nov: half again). */
+  desk: 1.5,
   /** The cloud's bar, to the left of the boats: its length. */
   bar: 96,
   lit: "#ffc860", unlit: "rgba(255,236,200,0.2)", line: "rgba(255,236,200,0.75)", cloud: "#dfe5f4",
@@ -4260,7 +4262,7 @@ function drawRescueHud(g: CanvasRenderingContext2D, cam: Camera, st: DrawState, 
   const H = RESCUE_HUD, n = r.boats.length;
   // Fitted between the corner buttons (and clear of the little map on a small screen).
   const room = cam.w - (cam.compact ? 230 : 150), wide = H.bar + 18 + n * H.cell + (n - 1) * H.gap + 24;
-  const k = Math.max(0.62, Math.min(1.02, room / wide)), W = wide * k, x0 = Math.max(52, Math.min((cam.w - W) / 2 - (cam.compact && cam.w > cam.h ? 30 : 0), cam.w - 112 - W)), y0 = 4, hgt = 57 * k;
+  const k = Math.max(0.62, Math.min(cam.compact ? 1.02 : H.desk, room / wide)), W = wide * k, x0 = Math.max(52, Math.min((cam.w - W) / 2 - (cam.compact && cam.w > cam.h ? 30 : 0), cam.w - 112 - W)), y0 = 4, hgt = 57 * k;
   g.save();
   g.fillStyle = "rgba(10,8,20,0.6)";
   roundRect(g, x0, y0, W, hgt, 12 * k);
@@ -4293,7 +4295,9 @@ function drawRescueHud(g: CanvasRenderingContext2D, cam: Camera, st: DrawState, 
       g.beginPath();
       g.arc(px, top + H.pip * k, H.pip * k, 0, Math.PI * 2);
       g.fillStyle = on ? H.lit : H.unlit;
-      g.globalAlpha = lifted ? 0.5 : mine && r.lamp?.dark && on ? 0.45 : 1;
+      // The newest pip of a lamp that is about to lose it flickers.
+      const gut = mine && on && p === fill - 1 && r.lamp?.gutter !== undefined ? 0.25 + 0.75 * Math.abs(Math.sin(st.now / 65) * Math.sin(st.now / 173)) : 1;
+      g.globalAlpha = (lifted ? 0.5 : mine && r.lamp?.dark && on ? 0.45 : 1) * gut;
       if (on && mine && !r.lamp?.dark) (g.shadowColor = H.lit), (g.shadowBlur = (flare ? 16 : 7) * k);
       g.fill();
       g.shadowBlur = 0;

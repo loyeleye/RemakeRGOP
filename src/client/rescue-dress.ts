@@ -39,6 +39,13 @@ export const RESCUE_LOOK = {
   waiting: 0.42,
   /** The pips, on a yard across the lamp post so they read from above: how big, how far apart, how high, and the size of a lit one's glow. */
   pip: { r: 0.27, gap: 0.72, top: 2.5, glow: 1.7 },
+  /**
+   * The lamp does not keep its light: before the newest pip goes it flickers (`hz` at first, quicker
+   * as its time runs out, down to `low` of its light), and the cloud laps at the foot of the lamp
+   * post, so the cloud reads as the cause: pale wisps of it, their size and how solid, climbing the
+   * post to `rise`, and staying `after` seconds once the pip is out.
+   */
+  gutter: { hz: 15, low: 0.12, mist: "#e4e9f6", size: 2.1, opacity: 0.62, rise: 1.5, after: 2.2 },
   /** The lamp's light on the planks (where a wisp flies in from): its colour and how strong, and seconds a wisp takes to fly in. */
   pool: "#ffc070",
   poolShow: 0.34,
@@ -113,7 +120,7 @@ void main() {
 }`;
 
 interface Lamp { x: number; z: number; glow: THREE.Sprite; core: THREE.Sprite; box: THREE.MeshStandardMaterial; lit: number; seed: number; coldAt: number; size: number; warm: THREE.Color }
-interface Boat { root: THREE.Group; lamp: THREE.Sprite; core: THREE.Sprite; pips: THREE.Mesh[]; pipGlows: THREE.Sprite[]; riders: THREE.Object3D[]; paint: { m: THREE.MeshStandardMaterial; base: THREE.Color }[]; at: THREE.Vector3; from: THREE.Vector3; to: THREE.Vector3; rot: number; rotFrom: number; rotTo: number; movedAt: number; liftedAt: number; fill: number; pulse: number; lit: number }
+interface Boat { root: THREE.Group; lamp: THREE.Sprite; core: THREE.Sprite; pips: THREE.Mesh[]; pipGlows: THREE.Sprite[]; mist: THREE.Sprite[]; mistOn: number; wentAt: number; seated: number; riders: THREE.Object3D[]; paint: { m: THREE.MeshStandardMaterial; base: THREE.Color }[]; at: THREE.Vector3; from: THREE.Vector3; to: THREE.Vector3; rot: number; rotFrom: number; rotTo: number; movedAt: number; liftedAt: number; fill: number; pulse: number; lit: number }
 interface Fly { s: THREE.Sprite; from: THREE.Vector3; at: number }
 interface Body { root: THREE.Group; glow: THREE.Sprite; group: number; seat: number; gone: number }
 interface Smoke { s: THREE.Sprite; x: number; z: number; at: number }
@@ -166,6 +173,8 @@ export class RescueFx {
   private smoked = new Set<string>();
   private smokeMap = smokeTexture();
   private lifted = 0;
+  /** The last pip that guttered out, as the room's tick. */
+  private wentSeen = -9;
   private patchN = 0;
   private cloud = RESCUE.cloud.start as number;
   private ember = new THREE.Color(RESCUE_LOOK.ember);
@@ -276,6 +285,8 @@ export class RescueFx {
       b.from.copy(b.at);
       b.to.copy(b.at);
       b.rot = b.rotFrom = b.rotTo = this.turn(i);
+      b.seated = 0;
+      b.wentAt = -9;
       b.lit = i === 0 ? 1 : 0;
       b.root.position.copy(b.at);
       this.boats.push(b);
@@ -408,7 +419,14 @@ export class RescueFx {
       pg.renderOrder = 7;
       pipGlows.push(pg);
     }
-    root.add(mast, yard, lampBox, lamp, core, ...pips, ...pipGlows);
+    // The cloud at the foot of the post, seen only while a pip gutters.
+    const mist = [0, 1, 2].map(() => {
+      const sp = this.glow(K.gutter.mist, K.gutter.size, 0);
+      sp.position.set(0, 0.6, sz);
+      sp.renderOrder = 6;
+      return sp;
+    });
+    root.add(mast, yard, lampBox, lamp, core, ...pips, ...pipGlows, ...mist);
     root.traverse((o) => (o as THREE.Mesh).isMesh && ((o as THREE.Mesh).castShadow = true));
     root.userData.lampBox = lampBox;
     // Its own colours, kept so a waiting boat can be drawn dark.
@@ -417,7 +435,7 @@ export class RescueFx {
       const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
       if (m?.isMeshStandardMaterial && !pips.includes(o as THREE.Mesh) && o !== lampBox) paint.push({ m, base: m.color.clone() });
     });
-    return { root, lamp, core, pips, pipGlows, riders, paint, at: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), rot: 0, rotFrom: 0, rotTo: 0, movedAt: -9, liftedAt: -1, fill: 0, pulse: -9, lit: 0 };
+    return { root, lamp, core, pips, pipGlows, mist, mistOn: 0, wentAt: -9, seated: 0, riders, paint, at: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), rot: 0, rotFrom: 0, rotTo: 0, movedAt: -9, liftedAt: -1, fill: 0, pulse: -9, lit: 0 };
   }
 
   /** From the top again (a restart): the boats back at their berths, everyone back on the landing. */
@@ -428,6 +446,8 @@ export class RescueFx {
       b.from.copy(b.at);
       b.to.copy(b.at);
       b.rot = b.rotFrom = b.rotTo = this.turn(i);
+      b.seated = 0;
+      b.wentAt = -9;
       b.liftedAt = -1;
       b.movedAt = time - 9;
       b.fill = 0;
@@ -593,7 +613,8 @@ export class RescueFx {
       b.fill = fill;
       const share = fill / r.perBoat, pulse = Math.max(0, 1 - (time - b.pulse) / 0.6);
       // Aboard: a share of the boatload at each bank, all of it once the boat has lifted.
-      const seated = b.liftedAt >= 0 ? L.perBoat : Math.floor(share * L.perBoat);
+      // (Nobody gets off again when a pip gutters out.)
+      const seated = (b.seated = Math.max(b.seated, b.liftedAt >= 0 ? L.perBoat : Math.floor(share * L.perBoat)));
       b.riders.forEach((rd, k) => (rd.visible = k < seated));
       for (const body of this.bodies) if (body.group === i && body.seat < seated && body.gone < 0) body.gone = time;
       b.lamp.scale.setScalar(1.2 + 3.6 * share + pulse * 1.4);
@@ -605,11 +626,24 @@ export class RescueFx {
       b.core.scale.setScalar(0.5 + 0.8 * share + pulse * 0.4);
       b.core.material.opacity = (share > 0 ? 0.6 + 0.4 * share : mine ? 0.5 : 0) * out;
       ((b.root.userData.lampBox as THREE.Mesh).material as THREE.MeshStandardMaterial).emissiveIntensity = (mine ? 0.5 : 0) + share * 2.2;
+      // The lamp does not keep its light: its newest pip flickers before it goes, and the cloud laps at the post.
+      const gut = mine && r.lamp?.gutter !== undefined ? r.lamp.gutter : -1, G = L.gutter;
+      if (mine && r.lamp?.went !== undefined && r.lamp.went !== this.wentSeen) (this.wentSeen = r.lamp.went), (b.wentAt = time);
+      const near = gut >= 0 ? 1 - gut / Math.max(1, RESCUE.lamp.flicker) : 0;
+      const flick = gut >= 0 ? G.low + (1 - G.low) * Math.max(0, Math.sin(time * G.hz * (1 + near)) * Math.sin(time * 7.3 + 1.1)) ** 0.6 : 1;
+      b.mistOn += ((mine && (gut >= 0 || time - b.wentAt < G.after) ? 1 : 0) - b.mistOn) * 0.08;
+      b.mist.forEach((sp, k) => {
+        const a = time * (0.9 + k * 0.23) + k * 2.1;
+        sp.position.x = Math.sin(a) * 0.55;
+        sp.position.y = 0.45 + (k / 2) * G.rise * (0.35 + 0.65 * Math.max(near, time - b.wentAt < G.after ? 1 : 0)) + Math.sin(a * 1.7) * 0.08;
+        sp.material.opacity = G.opacity * b.mistOn * (0.75 + 0.25 * Math.sin(a * 2.3)) * out;
+        sp.scale.setScalar(G.size * (0.8 + 0.25 * Math.sin(a * 1.3 + 1)));
+      });
       b.pips.forEach((pip, k) => {
-        const on = k < fill, newest = on && k === fill - 1 ? pulse : 0;
-        (pip.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? 2.6 + newest * 3 : 0;
+        const on = k < fill, newest = on && k === fill - 1 ? pulse : 0, fl = on && k === fill - 1 ? flick : 1;
+        (pip.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? (2.6 + newest * 3) * fl : 0;
         (pip.material as THREE.MeshStandardMaterial).color.set(on ? "#ffe2a0" : mine ? "#cfc8ba" : "#5a554e");
-        b.pipGlows[k]!.material.opacity = on ? (0.75 + 0.25 * newest) * out : 0;
+        b.pipGlows[k]!.material.opacity = on ? (0.75 + 0.25 * newest) * out * fl : 0;
         b.pipGlows[k]!.scale.setScalar(L.pip.glow * (1 + 0.9 * newest));
       });
       // A waiting boat is dark; it takes its colour as it comes into the slip.

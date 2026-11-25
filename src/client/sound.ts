@@ -656,6 +656,28 @@ export function pipChime(pip: number) {
   strike(note(4 + Math.max(0, Math.min(5, pip)) * 2), 0.13, 0, GLASS, undefined, s.c.currentTime + 0.3);
 }
 
+/** Run 9: the lamp's newest pip starts to gutter. A few uneven sputters, once (a sound that kept repeating would mean an emergency). */
+export function lampGutter() {
+  if (!out()) return;
+  for (const [ms, g, f] of [[0, 0.05, 2400], [140, 0.035, 3100], [330, 0.045, 2000], [470, 0.025, 3600], [760, 0.04, 2300]] as const) window.setTimeout(() => noise(g, "bandpass", f, 0.05, 0.1), ms);
+}
+
+/** Run 9: a pip goes out. The chime's note falling away, and a breath of air. */
+export function pipOut() {
+  const s = out();
+  if (!s) return;
+  const { c, o } = s, t = c.currentTime + 0.05;
+  const osc = c.createOscillator(), gn = c.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(note(6), t);
+  osc.frequency.exponentialRampToValueAtTime(note(6) * 0.5, t + 0.5);
+  env(c, gn, 0.09, 0.02, 0.5, t);
+  osc.connect(gn).connect(o);
+  osc.start(t);
+  osc.stop(t + 0.7);
+  noise(0.04, "lowpass", 900, 0.3);
+}
+
 /** Run 9: a boat lifts. One long horn note and the fifth under it, soft at both ends. */
 export function boatHorn() {
   const s = out();
