@@ -66,6 +66,15 @@ export interface StoryLine {
   still?: StillCue;
 }
 
+/** One cell of an optional run's strip: a label over `of` pips with `n` lit, in a tone, and a small badge beside it (e.g. "x2"). */
+export interface OptCell {
+  label: string;
+  n: number;
+  of: number;
+  tone: "us" | "her" | "chalk";
+  badge?: string;
+}
+
 export interface StoryView {
   /** The run's name, e.g. "The Grand Kindling". */
   run: string;
@@ -92,6 +101,25 @@ export interface StoryView {
   halfway?: { x: number; y: number } | null;
   /** The tile the partner was last called to, while he's on his way or standing there. */
   called?: { x: number; y: number } | null;
+  /**
+   * The optional runs of Part 1 (gameplay/optional-runs-prototype-brief.md). `strip`: what the top
+   * of the screen shows for the whole run, cell by cell. `caption`: lines held on the screen (the
+   * goal at the start, and any line that names the choice). The rest are marks a run draws on the
+   * board. O1, Granny's rematch: `eye` (the wisp she is looking at), `goal` (where she has moved
+   * the goal to: `live` once it has moved, with ticks left of `of`), `nap` (she dozes), `wall` (the
+   * chalked best, and the score now). `record` comes with the end: the best to keep, whether it
+   * was beaten, and how many times the run has been played.
+   */
+  opt?: {
+    id: string;
+    strip: OptCell[];
+    caption?: { who: string; text: string }[];
+    eye?: { wisp: number; from: number };
+    goal?: { x: number; y: number; r: number; live: boolean; left: number; of: number };
+    nap?: { who: number; left: number; of: number };
+    wall?: { best: number; now: number; hers: number };
+    record?: { id: string; best: number; won: boolean; count: number };
+  };
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };
   /**

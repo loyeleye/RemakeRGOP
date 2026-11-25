@@ -710,7 +710,7 @@ export function lineTicks(l: StoryLine) {
   return Math.ceil((Math.max(voice + 0.4, read) * 1000) / TICK_MS);
 }
 
-function moveWisp(w: Wisp, at: Pt) {
+export function moveWisp(w: Wisp, at: Pt) {
   w.pos = w.prev = at;
   w.target = null;
   w.holder = null;
@@ -719,7 +719,7 @@ function moveWisp(w: Wisp, at: Pt) {
   w.rimTicks = 0;
 }
 
-function cleanAction(raw: unknown, game: Game): Action | undefined {
+export function cleanAction(raw: unknown, game: Game): Action | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const a = raw as Record<string, unknown>;
   if (a.kind === "idle") return { kind: "idle" };

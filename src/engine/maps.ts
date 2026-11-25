@@ -1379,6 +1379,18 @@ export const STORY_SHRINES: Shrine[] = [
     spawnBand: [15, 21],
     rows: homePondRows(1.5),
   }),
+  // Granny's rematch (optional run 1): the same big pond, in the afternoon (its look is the theme's).
+  buildShrine({
+    id: "home-pond-afternoon",
+    name: "Home pond",
+    blurb: "Lumi's island in the afternoon: the brazier in the middle and a pool to the east.",
+    full: true,
+    scale: 1,
+    isle: { radius: 14.5 * 1.5, squareness: 2.1, coves: 0.06, heads: 0.05, seed: 5, stretch: [1.08, 0.95] },
+    rings: [],
+    spawnBand: [15, 21],
+    rows: homePondRows(1.5),
+  }),
   // Run 5, the race with Kes, on her island (see kitefell.ts).
   kiteFell(),
   // The free walk between runs: the home island as a horseshoe round its lake (see horseshoe.ts).
