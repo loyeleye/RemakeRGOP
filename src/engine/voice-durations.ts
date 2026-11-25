@@ -357,4 +357,5 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Rook|Next Kindling. We light it together.": 2.34,
   "Lumi|If you're not late.": 0.87,
   "Lumi|You're late.": 0.5,
+  "Hesta|Grabbed the hot end. At my age.": 2.54,
 };
