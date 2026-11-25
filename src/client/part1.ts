@@ -75,7 +75,9 @@ export interface Held {
    * `shake`: a layer (the same picture, alpha only where it moves) flicked on and off with a small
    * offset while the picture is up; `cut`: in without a cross-fade; `fade`: its own cross-fade, in seconds.
    */
-  pictures: { slot: string; hold: number; lines?: { who: string[]; text: string; quiet?: true }[]; shake?: string; cut?: true; fade?: number }[];
+  pictures: { slot: string; hold: number; lines?: { who: string[]; text: string; quiet?: true }[]; shake?: string; cut?: true; fade?: number; hush?: true }[];
+  /** A sound under the whole scene: "falls", the falls, until a picture with `hush` drops it out. */
+  bed?: "falls";
   /** Seconds: the cross-fade, the hold before anyone speaks, each line, the pause before it. */
   fade: number;
   lead: number;
@@ -186,6 +188,8 @@ export const HELD: Record<string, Held> = {
   "11": {
     tag: "Redrawn set, the art thread's picks. Pictures and story not seen by Ladi",
     shape: "four3",
+    // Ladi, 25 Nov: "Yes a falls sound should play under the pictures scene".
+    bed: "falls",
     fade: 0.6,
     lead: 0.5,
     line: 2.4,
@@ -209,7 +213,8 @@ export const HELD: Record<string, Held> = {
       { slot: "offering-16", hold: 0.6, lines: [{ who: ["Rook"], text: "Please.", quiet: true }] },
       { slot: "offering-17", hold: 1.2, lines: [{ who: ["Hesta"], text: "You never did know when to stop, Rook." }] },
       { slot: "offering-18", hold: 2.5 },
-      { slot: "offering-19", hold: 2.5 },
+      // The rim goes, and he with it: the falls drop out of the sound (story/part1-offering.md, 19).
+      { slot: "offering-19", hold: 2.5, hush: true },
       { slot: "offering-20", hold: 2 },
       { slot: "offering-21", hold: 0.6, lines: [{ who: ["Lumi"], text: "Dad!", quiet: true }] },
       { slot: "offering-22", hold: 3.5 },

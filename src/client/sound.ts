@@ -1073,6 +1073,52 @@ export function alarmFalls(sec: number) {
   rush(sec, "bandpass", 900, 0.05, 0.4, 0.8, 0.5);
 }
 
+/**
+ * The falls as a bed under a picture scene (the Offering, Ladi 25 Nov): the alarm's roar, held
+ * until `fallsBedOff`, which drops it out in `sec` (quick, so it reads as the sound going).
+ */
+let fallsStop: ((sec: number) => void) | null = null;
+export function fallsBed(rise = 1.5) {
+  fallsBedOff(0.05);
+  const s = out();
+  if (!s) return;
+  const { c, o } = s;
+  const len = Math.ceil(c.sampleRate * 2);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  let b = 0, peak = 0;
+  for (let i = 0; i < len; i++) (d[i] = b = (b + 0.03 * (Math.random() * 2 - 1)) / 1.03), (peak = Math.max(peak, Math.abs(b)));
+  for (let i = 0; i < len; i++) d[i]! /= peak || 1;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  const g = c.createGain(), t = c.currentTime;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(1, t + rise);
+  for (const [type, freq, gain, q] of [["lowpass", 340, 0.32, 0.7], ["bandpass", 900, 0.05, 0.5]] as const) {
+    const f = c.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = freq;
+    f.Q.value = q;
+    const v = c.createGain();
+    v.gain.value = gain;
+    src.connect(f).connect(v).connect(g);
+  }
+  g.connect(o);
+  src.start(t);
+  fallsStop = (sec) => {
+    const n = c.currentTime;
+    g.gain.cancelScheduledValues(n);
+    g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), n);
+    g.gain.exponentialRampToValueAtTime(0.0001, n + sec);
+    src.stop(n + sec + 0.05);
+  };
+}
+export function fallsBedOff(sec = 0.15) {
+  fallsStop?.(sec);
+  fallsStop = null;
+}
+
 /** The waterfall heard from off the island: a thin hiss that goes as the island goes under. */
 export function alarmHiss(sec: number) {
   rush(sec, "bandpass", 2600, 0.05, 0.3, sec * 0.65, 0.6);

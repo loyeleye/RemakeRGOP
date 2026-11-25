@@ -2232,8 +2232,10 @@ function heldScene(p: Piece) {
     pics[i - 1]?.classList.remove("on");
     pics[i]!.classList.add("on");
     if (m.cut) requestAnimationFrame(() => requestAnimationFrame(() => [pics[i - 1]!, pics[i]!].forEach((x) => (x.style.transition = ""))));
+    if (m.hush) sound.fallsBedOff();
     shake(i);
   };
+  if (H.bed === "falls") sound.fallsBed();
   requestAnimationFrame(() => requestAnimationFrame(() => (el.classList.add("on"), show(0))));
   let t = H.fade + H.lead;
   H.pictures.forEach((m, i) => {
@@ -2250,6 +2252,7 @@ function heldScene(p: Piece) {
   });
   at(t, () => el.classList.add("out"));
   at(t + H.fade, () => {
+    sound.fallsBedOff(1);
     if (!here()) return el.remove();
     window.clearTimeout(shaking);
     // The end of Part 1: its name on the black, then the menu.
@@ -2266,6 +2269,7 @@ function heldScene(p: Piece) {
   });
   el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
     timers.forEach((x) => clearTimeout(x));
+    sound.fallsBedOff(0.3);
     el.remove();
     leave();
   };
