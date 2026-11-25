@@ -470,6 +470,46 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(room.storyView().rescue!.patch).toBeUndefined();
   });
 
+  it("the second visit is bent over Kes once a run: she calls it, is cut off a tick later, and it goes on to what it came for", () => {
+    for (const seed of [7919, 15838, 23757]) {
+      const { room, lines, toPlay } = open(seed, "heap");
+      toPlay();
+      const g = room.state.game, kes = g.players.find((p) => p.id !== 1)!;
+      type Bent = { x: number; y: number; n: number; bent?: boolean; via?: string; called?: boolean };
+      const patch = () => room.state.patch as unknown as Bent | null;
+      while (!(patch()?.n === 2) && room.state.phase === "playing" && g.tick < 400) room.onTick();
+      const p = patch()!;
+      expect(p.bent).toBe(true);
+      // No word of hers at the tell: it is kept for when it reaches her.
+      expect(lines().filter((l) => l.text === "It's coming back!")).toHaveLength(0);
+      let called = -1, dark = -1, out = -1, darks = 0, was = false;
+      const before = lines().length;
+      let heardUnder = 0;
+      for (let n = 0; n < 80 && patch(); n++) {
+        const had = lines().length;
+        room.onTick();
+        if (called < 0 && patch()?.called) called = g.tick;
+        const now = room.state.kesDark;
+        if (now && !was) (darks++, dark < 0 && (dark = g.tick));
+        if (!now && was && out < 0) out = g.tick;
+        // Under it nothing of hers is said (the line she was on is the one that is cut off).
+        if (now && was) heardUnder += lines().slice(had).filter((l) => l.who === "Kes").length;
+        was = now;
+      }
+      expect(called).toBeGreaterThan(0);
+      expect(lines().slice(before).map((l) => l.text)).toContain("It's coming back!");
+      expect(dark - called).toBeGreaterThanOrEqual(1);
+      expect(dark - called).toBeLessThanOrEqual(2);
+      expect(out).toBeGreaterThan(dark);
+      expect(darks).toBe(1);
+      expect(heardUnder).toBe(0);
+      // She is where she was, and unharmed; and the visits after it are left to chance (not bent).
+      expect(g.players).toContain(kes);
+      while (!patch() && room.state.phase === "playing" && g.tick < 900) room.onTick();
+      if (patch()) expect(patch()!.bent).toBeUndefined();
+    }
+  });
+
   it("the pause is three pictures with static between the second and third, and they fit the time play is held", () => {
     const H = RESCUE.hold, ms = H.frames.reduce((n, f) => n + f.ms, 0) + H.static.ms;
     expect(H.frames.map((f) => f.id)).toEqual(["r9-what-is-that-1", "r9-what-is-that-2", "r9-what-is-that-3"]);

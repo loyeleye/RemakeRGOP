@@ -40,6 +40,12 @@ type Patch = {
   speed: number; r0: number; aim?: { x: number; loom?: boolean; /** It is going for the docked lamp: it stops on the boat. */ lamp?: boolean }; phase: "run" | "loom" | "linger" | "leave"; left: number; big?: number;
   /** Left sitting at the landing's edge at the end: it does not move. */
   sit?: boolean;
+  /**
+   * The visit bent to pass over Kes: "to" while it makes for her, "on" while it is over her, "turn"
+   * while it goes on to what it came for (on the row `row`); `bent` once it has. `called`: she has
+   * said her line at it.
+   */
+  via?: "to" | "on" | "turn"; row?: number; bent?: boolean; called?: boolean;
 };
 
 export class RescueRoom {
@@ -71,6 +77,10 @@ export class RescueRoom {
   private kesDark = false;
   private kesShaken = -1;
   private kesHold = false;
+  /** The second visit has been bent over her once this run (so the static over her is heard once for certain). */
+  private bentOnce = false;
+  /** The patch reached her in the middle of a line: when she is out, there is a moment for her to say it again. */
+  private cutMidLine = false;
   private brokeString = false;
   private emptyHanded = false;
   /** The heaping stand-ins: bringing a heap in. And the wisp a stand-in is bringing: where it was when it started, last tick, how long it has not moved, and tiles it would not come to. */
@@ -728,6 +738,16 @@ export class RescueRoom {
       this.say(KES, "They're all right. They're all right. The lamp's cold. Again!", { player: KES_ID }, this.said.has("cold") ? "quip" : "key");
       this.said.add("cold");
     }
+    // The visit bent over her: a tick before it covers her she calls it, and stands where she is.
+    if (p.via === "to" && !p.called && Math.hypot(kes.pos.x + 0.5 - p.x, kes.pos.y + 0.5 - p.y) - p.r <= p.speed) {
+      p.called = true;
+      this.kesHold = true;
+      const line: StoryLine = { who: KES, text: "It's coming back!", player: KES_ID };
+      this.queue = this.queue.filter((q) => q.key);
+      this.lines.push(line);
+      this.busyUntil = g.tick + lineTicks(line);
+      this.cutMidLine = true;
+    }
     // Over Kes: her glow goes dark and her string drops, every wisp on it loose where it was.
     if (!this.kesDark && this.covers(kes.pos)) {
       this.kesDark = true;
@@ -748,6 +768,8 @@ export class RescueRoom {
     } else if (this.kesDark && !this.covers(kes.pos)) {
       // Her glow comes back the moment it has passed. She stands a moment, and with her string gone a long one, her hands empty.
       this.kesDark = false;
+      // Cut off in the middle of a line, she says it again now: nothing else is said over it.
+      if (this.cutMidLine) (this.cutMidLine = false), (this.busyUntil = Math.max(this.busyUntil, g.tick + 2));
       this.kesShaken = g.tick + (this.kesMode === "supply" && this.brokeString ? RESCUE.kes.emptyHands : RESCUE.kes.shaken);
       this.emptyHanded = this.kesMode === "supply" && this.brokeString;
       this.brokeString = false;
@@ -830,7 +852,8 @@ export class RescueRoom {
       this.skimp = this.rng.next() < 0.5;
       // The pair she keeps back is at the stones again for each visit.
       for (const id of this.kept) if (g.away.has(id)) g.away.set(id, g.tick + 1);
-      if (k > 0 && (!bait || k === 1)) this.say(KES, k === 1 ? "It's coming back!" : "Again! Clear the stones!", { player: KES_ID }, "key");
+      // (Bait: the second visit's word is hers as it reaches her, see overKes; if that has been, it is said here.)
+      if (k > 0 && (!bait || (k === 1 && this.bentOnce))) this.say(KES, k === 1 ? "It's coming back!" : "Again! Clear the stones!", { player: KES_ID }, "key");
       return;
     }
     const t = this.tell;
@@ -901,6 +924,7 @@ export class RescueRoom {
     const pace = A.speeds[Math.min(many, A.speeds.length) - 1] ?? P.speed, size = A.sizes[many >= 2 ? 1 : 0]!;
     this.target = null;
     this.spared = t.kind === "heap" && !!t.stones && this.fill[this.lifted]! > 0;
+    if (n === 2 && !this.bentOnce) return this.overKes(t, pace, size);
     if (t.kind === "none") return this.launch(n, t.row, pace, size);
     // For the lamp it comes up the boat itself, two rows south of the lamp, and is never smaller than a boat is wide.
     if (t.kind === "lamp") return this.launch(n, t.row + 2, pace, Math.max(size, A.sizes[1]!), { x: t.x + 0.5, lamp: true, loom: many >= A.loomAt });
@@ -908,9 +932,64 @@ export class RescueRoom {
     if (t.kind === "string") this.kesHold = true;
   }
 
+  /**
+   * The second visit, once a run (the gameplay thread, 24 Nov): whatever it is going for, its way
+   * is bent to pass over Kes first, so that the static over her is heard once for certain. It
+   * sets out on her row and makes straight for her; she calls "It's coming back!" a tick before
+   * it covers her (the burst cuts the line off, and she says it again when she is out); it stays
+   * over her a tick and then goes on to what it came for. Her next pair comes up as it sets out,
+   * if it was due, so that she has it in hand.
+   */
+  private overKes(t: Bright, pace: number, size: number) {
+    const A = RESCUE.patch.react, g = this.game, kes = this.player(KES_ID), lamp = t.kind === "lamp";
+    this.bentOnce = true;
+    const aim = t.kind === "heap" || lamp ? { x: t.x + 0.5, ...(lamp ? { lamp: true } : {}), ...(lamp && t.n >= A.loomAt ? { loom: true } : {}) } : undefined;
+    this.launch(2, kes.pos.y, pace, lamp ? Math.max(size, A.sizes[1]!) : size, aim);
+    const p = this.patch!;
+    p.via = "to";
+    p.bent = true;
+    p.row = (lamp ? t.row + 2 : t.row) + 0.5;
+    for (const w of g.wisps) if (this.hers.has(w.id) && this.groupDue && g.away.has(w.id) && g.away.get(w.id)! < 1e8) g.away.set(w.id, g.tick + 1);
+  }
+
+  /** One tick of the visit bent over Kes, until it is on its own row again. */
+  private moveVia(p: Patch) {
+    const A = RESCUE.patch.react, kes = this.player(KES_ID);
+    const toward = (x: number, y: number) => {
+      const d = Math.hypot(x - p.x, y - p.y), k = d <= p.speed ? 1 : p.speed / d;
+      p.dx = (x - p.x) * k;
+      p.dy = (y - p.y) * k;
+      p.x += p.dx;
+      p.y += p.dy;
+      return d <= p.speed;
+    };
+    if (p.via === "to") {
+      if (toward(kes.pos.x + 0.5, kes.pos.y + 0.5)) (p.via = "on"), (p.left = 1);
+    } else if (p.via === "on") {
+      p.dx = p.dy = 0;
+      if (--p.left >= 0) return;
+      // On: to what it came for, or with nothing to go for, straight off east.
+      if (p.aim) p.via = "turn";
+      else (delete p.via), (p.dx = p.speed);
+    }
+    if (p.via !== "turn" || !p.aim) return;
+    // It swells on the way if there is enough there to swell for.
+    const big = A.sizes[2]! / 2, d = Math.hypot(p.aim.x - p.x, p.row! - p.y);
+    const g = this.game, rook = this.player(YOU), near = RESCUE.patch.near + 2;
+    const pile = g.wisps.filter((w) => w.guild === 0 && !g.away.has(w.id) && rook.beam !== w.id && Math.abs(w.pos.x + 0.5 - p.aim!.x) <= near && Math.abs(w.pos.y + 0.5 - p.row!) <= near).length;
+    const swell = p.aim.loom || (!p.aim.lamp && pile >= A.loomAt);
+    if (swell) (p.big = big), (p.r += (big - p.r) / Math.max(1, Math.ceil(d / p.speed)));
+    if (!toward(p.aim.x, p.row!)) return;
+    delete p.via;
+    // There: over a gathering big enough, or on the boat, it stays; over less it goes on as it always does.
+    if (swell || p.aim.lamp) (p.phase = "linger"), (p.left = A.linger);
+    else (p.phase = "leave"), (p.left = 0);
+  }
+
   /** One tick of its going. React: it swells as it nears a gathering, stays over it a moment, and shrinks as it goes on. */
   private movePatch(p: Patch) {
     const A = RESCUE.patch.react;
+    if (p.via) return this.moveVia(p);
     if (!this.reacts() || !p.aim) {
       p.x += p.dx;
       p.y += p.dy;
@@ -942,7 +1021,7 @@ export class RescueRoom {
       p.r += (p.big! - p.r) / p.left;
       if (--p.left <= 0) (p.phase = "linger"), (p.left = A.linger);
     } else if (p.phase === "linger") {
-      p.dx = 0;
+      p.dx = p.dy = 0;
       // On the boat it stays until the lamp is empty: a pip goes out every `drink` ticks. Nothing is seen or heard of it but the strip.
       const g = this.game, pips = this.lifted < RESCUE.boats && g.tick >= this.dockAt ? this.fill[this.lifted]! : 0;
       if (p.aim.lamp && pips > 0) {
@@ -958,7 +1037,14 @@ export class RescueRoom {
       if (--p.left <= 0) (p.phase = "leave"), (p.left = A.loomTicks);
     } else {
       p.dx = p.speed;
+      p.dy = 0;
+      if (p.bent) {
+        // It has been over her once: on its way off it keeps clear of her.
+        const kes = this.player(KES_ID), off = p.y - (kes.pos.y + 0.5), clear = Math.max(p.r, p.r0) + 1.5;
+        if (kes.pos.x + 0.5 > p.x - clear && Math.abs(off) < clear) p.dy = (off >= 0 ? 1 : -1) * Math.min(1.5, clear - Math.abs(off));
+      }
       p.x += p.dx;
+      p.y += p.dy;
       if (p.left > 0) (p.r += (p.r0 - p.r) / p.left), p.left--;
       if (p.left <= 0) delete p.big;
     }
@@ -1338,10 +1424,13 @@ export class RescueRoom {
   private due() {
     const now = this.game.tick;
     while (this.queue.length && now >= this.busyUntil) {
-      const q = this.queue[0]!;
+      // Under the patch Kes is not heard: her lines wait until she is out, and others go ahead of them.
+      const i = this.kesDark ? this.queue.findIndex((o) => o.line.player !== KES_ID) : 0;
+      if (i < 0) break;
+      const q = this.queue[i]!;
       // A still too soon after the last: its line still plays, as a bubble, without the picture.
       if (q.line.still && !this.stillReady()) delete q.line.still;
-      this.queue.shift();
+      this.queue.splice(i, 1);
       if (!q.key && now - q.trigger > 4) continue;
       this.shown(q.line);
       if (q.land) this.captions.push({ text: q.line.text, until: now + q.land });
