@@ -2547,6 +2547,8 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   tap: (x: number, y: number) => targetAt(x, y),
   /** The story run in the page, for jumping to its end in tests. */
   story: () => storyRoom,
+  /** The camera (for pictures: set follow false and cx, cy to look somewhere). */
+  cam: () => cam,
 };
 
 // ------------------------------------------------------------------ debug overlay
