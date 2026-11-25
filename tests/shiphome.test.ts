@@ -229,7 +229,7 @@ describe("Run 10: the ship home", () => {
       expect(room.stillsShown).toEqual(["r10-0", "r10-1", "r10-2"]);
       for (const id of room.stillsShown) expect(STILLS[id]).toBeDefined();
       const said = lines().filter((l) => l.text);
-      expect(said.map((l) => l.text)).toEqual(["Faster.", "That's her lantern. Why is it on the water?"]);
+      expect(said.map((l) => l.text)).toEqual(["Faster.", "That's Lumi's lantern. Why is it on the water?"]);
       expect(said.every((l) => l.who === "Rook")).toBe(true);
       // A careful hand ends closer to the patch than he started, and is never nearer than it can be.
       expect(room.nearest).toBeGreaterThanOrEqual(SHIP.patch.nearest);

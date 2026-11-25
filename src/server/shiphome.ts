@@ -527,7 +527,7 @@ export class ShipRoom {
     }
     if (!this.said.has("last") && g.tick >= this.len - Math.ceil((S.stills.lastSec * 1000) / TICK_MS)) {
       this.said.add("last");
-      this.say(ROOK, "That's her lantern. Why is it on the water?", { player: YOU, ...this.still("r10-2") }, "key");
+      this.say(ROOK, "That's Lumi's lantern. Why is it on the water?", { player: YOU, ...this.still("r10-2") }, "key");
     }
   }
 

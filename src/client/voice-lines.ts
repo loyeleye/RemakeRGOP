@@ -267,7 +267,6 @@ export const VOICE_LINES: Record<string, string> = {
   "Sefa's grandmother|You keep looking over there. Go on.": "voice/run9.mp3#t=95.27,97.99",
   // Run 10, the ship home (gameplay/voice/final/run10, 25 Nov).
   "Rook|Faster.": "voice/run10.mp3#t=0.22,1.27",
-  "Rook|That's her lantern. Why is it on the water?": "voice/run10.mp3#t=2.17,6.06",
   // The optional runs: Granny's rematch, Lumi's lesson with Kes, Kes's rematch on the Fell (gameplay/voice/final/optional, 25 Nov).
   "Hesta|First to five, and I start on one. Old lady's rules.": "voice/optional.mp3#t=0.22,4.41",
   "Lumi|Leave that one. She's looking at it.": "voice/optional.mp3#t=5.31,7.38",

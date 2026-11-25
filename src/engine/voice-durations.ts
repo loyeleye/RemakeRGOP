@@ -257,7 +257,6 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Sefa's grandmother|Little ones on the first boat. We'll keep.": 2.8,
   "Sefa's grandmother|You keep looking over there. Go on.": 2.52,
   "Rook|Faster.": 0.85,
-  "Rook|That's her lantern. Why is it on the water?": 3.69,
   "Hesta|First to five, and I start on one. Old lady's rules.": 3.99,
   "Lumi|Leave that one. She's looking at it.": 1.87,
   "Hesta|Rock's allowed. I checked.": 2.12,
