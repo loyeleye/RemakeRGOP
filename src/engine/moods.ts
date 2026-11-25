@@ -40,7 +40,7 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Kes", /^You worked for that\./, "gracious"],
   ["Kes", /^(Whatever you say|Good\.|There he is\.|I pulled\.|Did you see that\?|They like company|You hold on too long|I know\. It's annoying\.|Same time next week|Nice\.|Don't get used to it)/, "smug"],
   // Run 9, the rescue (the gameplay thread checks this mapping; the two Kes faces are placeholders being re-framed).
-  ["Kes", /^(Rook\. What is that\.|There's nothing up there\.|It's coming back|Again. Clear the stones.|(The l|L)amp's gone dark|It went for the heap|It won't keep in this cloud|It goes for the brightest thing|Too few at the stones|It's on the boat|It took the stones|These two stay at the stones)/, "alarmed"],
+  ["Kes", /^(Rook\. What is that\.|There's nothing up there\.|It's coming back|(The l|L)amp's gone dark|It went for the heap|It won't keep in this cloud|It goes for the brightest thing|Too few at the stones|It's on the boat|It took the stones|These two stay at the stones)/, "alarmed"],
   ["Kes", /^(My string|They're gone\.|I'm all right\.|They're all right\.)/, "bereft"],
   ["Sefa's grandmother", /^Little ones on the first boat/, "steady"],
   ["Sefa's grandmother", /^You keep looking over there/, "soft"],

@@ -442,25 +442,18 @@ export class RescueRoom {
   }
 
   /**
-   * A boat has lifted out from under a patch on its way to it: it turns for the next brightest
-   * thing there is (the next boat is not docked yet, so it is loose light or her string, or nothing).
+   * A boat has lifted out from under a patch on its way to it: it carries on east as a crossing
+   * does, and does not turn for anything else (the gameplay thread, 25 Nov: turning for the next
+   * brightest thing let pouring alone win more often).
    */
   private turnFromBoat() {
     const p = this.patch;
     if (!p || !p.aim?.lamp || p.phase === "linger" || p.phase === "leave") return;
-    const t = this.brightest();
-    if (t.kind === "heap" || t.kind === "string") {
-      p.aim = { x: t.x + 0.5, ...(t.kind === "string" && t.n >= RESCUE.patch.react.loomAt ? { loom: true } : {}) };
-      if (p.via !== "to") (p.via = "turn"), (p.phase = "run");
-      p.row = t.row + 0.5;
-      if (t.kind === "string") this.kesHold = true;
-    } else {
-      delete p.aim;
-      if (p.via !== "to") delete p.via;
-      p.phase = "run";
-      p.dx = p.speed;
-      p.dy = 0;
-    }
+    delete p.aim;
+    if (p.via !== "to") delete p.via;
+    p.phase = "run";
+    p.dx = p.speed;
+    p.dy = 0;
   }
 
   /**
@@ -895,7 +888,7 @@ export class RescueRoom {
     }
     const at = this.gathering(), many = Math.max(1, at?.n ?? 1);
     this.launch((k + 1) as 1 | 2 | 3, at ? at.row : this.course(), pace(many), size(many), react && at ? { x: at.x + 0.5 } : undefined);
-    if (k > 0 && !clock) this.say(KES, k === 1 ? "It's coming back." : "Again. Clear the stones.", { player: KES_ID }, "key");
+    if (k > 0 && !clock) this.say(KES, "It's coming back.", { player: KES_ID }, "key");
   }
 
   /** "react", or "clock", which is react on a clock. */
@@ -921,7 +914,7 @@ export class RescueRoom {
       // The pair she keeps back is at the stones again for each visit.
       for (const id of this.kept) if (g.away.has(id)) g.away.set(id, g.tick + 1);
       // (Bait: the second visit's word is hers as it reaches her, see overKes; if that has been, it is said here.)
-      if (k > 0 && (!bait || (k === 1 && this.bentOnce))) this.say(KES, k === 1 ? "It's coming back." : "Again. Clear the stones.", { player: KES_ID }, "key");
+      if (k > 0 && (!bait || (k === 1 && this.bentOnce))) this.say(KES, "It's coming back.", { player: KES_ID }, "key");
       return;
     }
     const t = this.tell;

@@ -711,8 +711,10 @@ describe("Run 9: the rescue, on the low one", () => {
           expect(b.room.lostToPatch / (b.room.wispsIn + b.room.lost)).toBeGreaterThan(0.4);
         }
       }
-      expect(poured).toBe(0);
-      // 27 of 30 over the measurements (tools/rescue-sim.ts 30 bait).
+      // Pouring can beat the patch to the boat now that the last wisp goes in under its edge: 5 of 60
+      // over the measurements (tools/rescue-sim.ts 60 hold), which the gameplay thread took (25 Nov).
+      expect(poured).toBeLessThanOrEqual(1);
+      // 54 of 60 over the measurements (tools/rescue-sim.ts 60 bait).
       expect(left).toBeGreaterThanOrEqual(4);
     });
   });
