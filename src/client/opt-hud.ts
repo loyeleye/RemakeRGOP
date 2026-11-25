@@ -70,6 +70,37 @@ function ground(g: CanvasRenderingContext2D, cam: Cam, tx: number, ty: number, r
   g.stroke();
 }
 
+/**
+ * A count over a place on the board: that many pips in a dark pill, gold-edged and beating when it
+ * is the one worth going to. A place off the screen has its pill at the edge, with an arrow to it.
+ */
+function pill(g: CanvasRenderingContext2D, cam: Cam, tx: number, ty: number, n: number, best: boolean, now: number, high = 1.6) {
+  const mx = cam.compact ? 150 : 60, top = 96, bot = cam.compact ? 110 : 70, s0 = cam.toScreen(tx, ty, high);
+  const x = Math.max(mx, Math.min(cam.w - mx, s0.x)), y = Math.max(top, Math.min(cam.h - bot, s0.y)), off = x !== s0.x || y !== s0.y;
+  const r = 5, wide = n * (r * 2 + 3) + 11, beat = best ? 0.5 + 0.5 * Math.sin(now / 260) : 0;
+  g.fillStyle = "rgba(10,8,20,0.74)";
+  box(g, x - wide / 2, y - 11, wide, 22, 11);
+  g.fill();
+  g.strokeStyle = best ? `rgba(255,217,138,${0.55 + 0.4 * beat})` : "rgba(255,255,255,0.25)";
+  g.lineWidth = 1.5;
+  g.stroke();
+  for (let i = 0; i < n; i++) {
+    g.beginPath();
+    g.arc(x - wide / 2 + 7 + r + i * (r * 2 + 3), y, r, 0, Math.PI * 2);
+    g.fillStyle = OPT_HUD.us;
+    g.fill();
+  }
+  if (!off) return;
+  const a = Math.atan2(s0.y - y, s0.x - x), ax = x + Math.cos(a) * (wide / 2 + 9), ay = y + Math.sin(a) * 20;
+  g.fillStyle = OPT_HUD.us;
+  g.beginPath();
+  g.moveTo(ax + Math.cos(a) * 8, ay + Math.sin(a) * 8);
+  g.lineTo(ax + Math.cos(a + 2.4) * 7, ay + Math.sin(a + 2.4) * 7);
+  g.lineTo(ax + Math.cos(a - 2.4) * 7, ay + Math.sin(a - 2.4) * 7);
+  g.closePath();
+  g.fill();
+}
+
 export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: Snapshot, t: number, now: number, bank: { x: number; y: number }) {
   const H = OPT_HUD, n = o.strip.length, k1 = Math.min(1, t);
   const at = (p: { x: number; y: number; px: number; py: number }) => ({ x: p.px + (p.x - p.px) * k1 + 0.5, y: p.py + (p.y - p.py) * k1 + 0.5 });
@@ -179,36 +210,12 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
 
   // The Cove, with the tide out: how many are in each pool, so that the next place to stand can be
   // chosen with the whole cove not in sight. A pool off the screen has its count at the edge, with an arrow.
-  if (o.pools && o.tide && !o.tide.in) {
-    const mx = cam.compact ? 150 : 60, top = 96, bot = cam.compact ? 110 : 70;
-    for (const p of o.pools) {
-      if (!p.n) continue;
-      const s0 = cam.toScreen(p.x + 0.5, p.y + 0.5, 1.6);
-      const x = Math.max(mx, Math.min(cam.w - mx, s0.x)), y = Math.max(top, Math.min(cam.h - bot, s0.y)), off = x !== s0.x || y !== s0.y;
-      const r = 5, wide = p.n * (r * 2 + 3) + 11, beat = p.n >= 2 ? 0.5 + 0.5 * Math.sin(now / 260) : 0;
-      g.fillStyle = "rgba(10,8,20,0.74)";
-      box(g, x - wide / 2, y - 11, wide, 22, 11);
-      g.fill();
-      g.strokeStyle = p.n >= 2 ? `rgba(255,217,138,${0.55 + 0.4 * beat})` : "rgba(255,255,255,0.25)";
-      g.lineWidth = 1.5;
-      g.stroke();
-      for (let i = 0; i < p.n; i++) {
-        g.beginPath();
-        g.arc(x - wide / 2 + 7 + r + i * (r * 2 + 3), y, r, 0, Math.PI * 2);
-        g.fillStyle = H.us;
-        g.fill();
-      }
-      if (off) {
-        const a = Math.atan2(s0.y - y, s0.x - x), ax = x + Math.cos(a) * (wide / 2 + 9), ay = y + Math.sin(a) * 20;
-        g.fillStyle = H.us;
-        g.beginPath();
-        g.moveTo(ax + Math.cos(a) * 8, ay + Math.sin(a) * 8);
-        g.lineTo(ax + Math.cos(a + 2.4) * 7, ay + Math.sin(a + 2.4) * 7);
-        g.lineTo(ax + Math.cos(a - 2.4) * 7, ay + Math.sin(a - 2.4) * 7);
-        g.closePath();
-        g.fill();
-      }
-    }
+  if (o.pools && o.tide && !o.tide.in) for (const p of o.pools) if (p.n) pill(g, cam, p.x + 0.5, p.y + 0.5, p.n, p.n >= 2, now);
+  // Kite Fell: how many are coming down each arm, over the mark by its vane, so that the vane to
+  // stand at can be chosen from anywhere on the Fell. The mark itself is chalked on the ground (kite-dress.ts).
+  if (o.vanes) {
+    const most = Math.max(...o.vanes.map((v) => v.n));
+    for (const v of o.vanes) if (v.n) pill(g, cam, v.x + 0.5, v.y + 0.5, v.n, v.n === most && o.vanes.some((q) => q.n < most), now, 2.6);
   }
 
   // The strip, fitted between the corner buttons.
@@ -315,7 +322,8 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
     g.font = `${i === 0 ? 700 : 500} ${fs}px system-ui, sans-serif`;
     g.textAlign = "center";
     const rows: string[] = [];
-    for (const w of `${c.who}: ${c.text}`.split(" ")) {
+    // A line with no speaker is the interface's own.
+    for (const w of (c.who ? `${c.who}: ${c.text}` : c.text).split(" ")) {
       const last = rows[rows.length - 1];
       if (last !== undefined && g.measureText(`${last} ${w}`).width <= maxW) rows[rows.length - 1] = `${last} ${w}`;
       else rows.push(w);

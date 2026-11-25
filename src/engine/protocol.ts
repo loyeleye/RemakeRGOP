@@ -125,6 +125,8 @@ export interface StoryView {
     nap?: { who: number; left: number; of: number };
     wall?: { best: number; now: number; hers: number };
     record?: { id: string; best: number; won: boolean; count: number };
+    /** No pushing in this run: the button that changes pull to push is not shown. */
+    noPush?: boolean;
     /** The Cove (optional run 2): the tide (how high the water stands over the flats, 0 to 1, and whether it is in), how far the pull reaches now, how much light is left (1 to 0), and the wisps left on wet stone. */
     tide?: { level: number; in: boolean; left: number; of: number; n: number };
     reach?: number;

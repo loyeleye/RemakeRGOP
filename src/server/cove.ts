@@ -462,6 +462,7 @@ export class CoveRoom {
       end: this.end,
       opt: {
         id: COVE.id,
+        noPush: true,
         strip: [
           { label: "Kes's strings", n: Math.min(need, this.landed), of: need, tone: "us", group: COVE.perString },
           { label: tide.in ? "Tide in" : soon ? "Tide coming" : "Tide out", n: 0, of: 0, tone: "water", tide: { level, in: tide.in, share: tide.left / tide.of, soon } },

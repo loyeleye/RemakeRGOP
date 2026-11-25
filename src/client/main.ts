@@ -27,6 +27,8 @@ import { RematchRoom } from "../server/rematch.js";
 import { REMATCH } from "../engine/rematch.js";
 import { CoveRoom } from "../server/cove.js";
 import { COVE } from "../engine/cove.js";
+import { KiteRoom } from "../server/kite.js";
+import { KITE } from "../engine/kite.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
@@ -140,7 +142,7 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | null = null;
 
 /** The walkable map, at the speed on trial: ?walkspeed=1.5, 2 or 2.5 shortens the map's beat; with &only=rook only his stride is longer. */
 function pondRoom(walk: number) {
@@ -191,6 +193,26 @@ function coveRoom() {
   return r;
 }
 
+/**
+ * Optional run 3c, Kes's rematch on the Fell. His best (wisps taken in one rematch) and how many
+ * there have been are kept in this browser. Any number in KITE can be set from the link to judge
+ * it by feel: ?kite=wind:1.2,gust.every:36,reach:8 and so on.
+ */
+function kiteRoom() {
+  const q = new URLSearchParams(location.search), rec = loadOpt(KITE.id);
+  for (const part of (q.get("kite") ?? "").split(",").filter(Boolean)) {
+    const [k, v] = part.split(":"), path = (k ?? "").split("."), last = path.pop()!;
+    let at = KITE as unknown as Record<string, unknown>;
+    for (const step of path) at = (at?.[step] ?? {}) as Record<string, unknown>;
+    if (typeof at[last] === "number" && Number.isFinite(Number(v))) at[last] = Number(v);
+  }
+  const r = new KiteRoom();
+  r.best = rec.best;
+  r.count = rec.count;
+  optSeen = null;
+  return r;
+}
+
 /** Which playing of an optional run has had its record kept (its count), so that each is kept once. */
 let optSeen: number | null = null;
 
@@ -215,11 +237,11 @@ function noteOpt() {
 }
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" | "o3c" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
@@ -1408,6 +1430,7 @@ function renderPad(s: GameSnapshot | null) {
   staff.classList.toggle("push", p?.mode === "push");
   $("mode").textContent = p?.mode === "push" ? "→ Pull" : "→ Push";
   if (!document.body.classList.contains("touch")) $("mode").textContent = p?.mode === "push" ? "Push" : "Pull";
+  $("mode").style.display = room?.story?.opt?.noPush ? "none" : "";
 }
 
 const fmtTime = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -1440,6 +1463,7 @@ let minimapRect = { x: 0, y: 0, w: 0, h: 0 };
 
 function act(m: Omit<Extract<ClientMsg, { t: "act" }>, "t">) {
   if (room?.phase !== "playing") return;
+  if (m.toggleMode && room.story?.opt?.noPush) return;
   link?.send({ t: "act", ...m });
   // Optimistic HUD for the toggles; the next tick confirms.
   const p = snap?.players.find((q) => q.id === me);
@@ -1826,6 +1850,7 @@ $("story9").onclick = () => connectStory(playerName(), 9);
 $("story10").onclick = () => connectStory(playerName(), 10);
 $("story-o1").onclick = () => connectStory(playerName(), "o1");
 $("story-o2").onclick = () => connectStory(playerName(), "o2");
+$("story-o3c").onclick = () => connectStory(playerName(), "o3c");
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Saved progress: continue from where this browser got to, jump to any walk, or start over.
 function renderProgress() {

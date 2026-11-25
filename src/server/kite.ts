@@ -533,6 +533,7 @@ export class KiteRoom {
       end: this.end,
       opt: {
         id: KITE.id,
+        noPush: true,
         strip: [
           { label: ROOK, n: this.score[0], of: KITE.target, tone: "us" },
           { label: KES, n: this.score[1], of: KITE.target, tone: "her" },

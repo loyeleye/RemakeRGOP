@@ -23,6 +23,7 @@ import { RESCUE_LOOK, RescueFx, type VillagerRig } from "./rescue-dress.js";
 import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villagers.js";
 import { RematchFx } from "./rematch-dress.js";
 import { CoveFx } from "./cove-dress.js";
+import { KiteFx } from "./kite-dress.js";
 import { drawOptHud } from "./opt-hud.js";
 import { SHIP_LOOK, ShipFx } from "./ship-dress.js";
 import { SHIP, SHIP_DECK } from "../engine/shiphome.js";
@@ -3062,6 +3063,19 @@ export class World {
     this.sun.intensity = this.dayLight.sun * (0.5 + 0.5 * light);
   }
 
+  /** Optional run 3c, Kes's rematch on the Fell: the wind's course, its streaks and stakes, and the marks by the vanes (kite-dress.ts). */
+  private kiteFx: KiteFx | null = null;
+  private stepKite(st: DrawState, time: number) {
+    const o = st.opt?.id === "o3c" ? st.opt : undefined;
+    if (!o) {
+      this.kiteFx?.dispose();
+      this.kiteFx = null;
+      return;
+    }
+    if (!this.kiteFx) this.scene.add((this.kiteFx = new KiteFx()).all);
+    this.kiteFx.step(o, time);
+  }
+
   /** Run 9, the rescue: the cloud sea and its wall, the patch, the landing, the boats and the lamps (rescue-dress.ts). */
   private rescueFx: RescueFx | null = null;
   private stepRescue(st: DrawState, time: number) {
@@ -4156,6 +4170,7 @@ export class World {
     this.stepRescue(st, time);
     this.stepRematch(st);
     this.stepCove(st, time);
+    this.stepKite(st, time);
     this.stepShip(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
