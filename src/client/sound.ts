@@ -344,6 +344,27 @@ let babbling: { who: string; g: GainNode } | null = null;
 let cutWho: string | null = null;
 const voiceBusy = () => voicing != null && !voicing.ended && (!voicing.paused || cutWho === voicingWho);
 
+/** The joined voice files (tools/voice-sprites.py), fetched once each and kept in the page. */
+const joinedFiles = new Map<string, Promise<string>>();
+function joined(file: string): Promise<string> {
+  let p = joinedFiles.get(file);
+  if (!p) {
+    p = fetch(file).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status))))).then((b) => URL.createObjectURL(new Blob([b], { type: "audio/mpeg" })));
+    p.catch(() => joinedFiles.delete(file));
+    joinedFiles.set(file, p);
+  }
+  return p;
+}
+/** Fetch every joined voice file now, so the first line of a run is not kept waiting. */
+export function preloadVoices() {
+  const files = new Set<string>();
+  for (const src of [...Object.values(VOICE_LINES), ...Object.values(VOICE_STOCK).flatMap((l) => l.map((c) => c.src))]) {
+    const m = /^(.*)#t=/.exec(src);
+    if (m) files.add(m[1]!);
+  }
+  for (const f of files) void joined(f).catch(() => {});
+}
+
 /** The last stock sound each speaker made, so the next is another. */
 const lastStock = new Map<string, string>();
 /** One of a speaker's stock sounds (VOICE_STOCK): one that suits the line if any does, not the one before; none if they have none. */
@@ -365,7 +386,9 @@ export function speak(who: string, text: string, now = false) {
   const src = VOICE_LINES[`${who}|${text}`] ?? VOICE.find((c) => c.who === who && c.match.test(text))?.src ?? stockFor(who, text);
   if (src) {
     if (!out()) return;
-    const a = new Audio(src);
+    // A time range of a joined file (voice/<group>.mp3#t=a,b, tools/voice-sprites.py): the page seeks to a itself and stops at b.
+    const range = /^(.*)#t=([\d.]+),([\d.]+)$/.exec(src);
+    const a = new Audio(range ? undefined : src);
     a.volume = SOUND.volume;
     a.muted = muted;
     voicing = a;
@@ -373,6 +396,31 @@ export function speak(who: string, text: string, now = false) {
     const done = () => { if (voicing === a) voicing = null; };
     a.addEventListener("ended", done);
     a.addEventListener("error", done);
+    if (range) {
+      const from = Number(range[2]), end = Number(range[3]);
+      let timer = 0;
+      const stop = () => {
+        window.clearTimeout(timer);
+        a.pause();
+        done();
+      };
+      // To the millisecond while it plays (timeupdate alone comes only every quarter second or so).
+      const arm = () => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => (a.currentTime >= end - 0.03 ? stop() : arm()), Math.max(10, (end - a.currentTime) * 1000));
+      };
+      a.addEventListener("playing", arm);
+      a.addEventListener("timeupdate", () => a.currentTime >= end - 0.02 && stop());
+      a.addEventListener("pause", () => window.clearTimeout(timer));
+      const go = () => {
+        a.currentTime = from;
+        if (cutWho !== who && voicing === a) void a.play().catch(done);
+      };
+      a.addEventListener("loadedmetadata", go, { once: true });
+      // The joined file is held whole in the page, so that it can be played from anywhere in it (a server need not answer range requests).
+      void joined(range[1]!).then((url) => (voicing === a ? (a.src = url) : undefined), done);
+      return;
+    }
     if (cutWho !== who) void a.play().catch(done);
     return;
   }

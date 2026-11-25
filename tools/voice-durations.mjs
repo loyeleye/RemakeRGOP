@@ -8,7 +8,9 @@ const src = readFileSync("src/client/voice-lines.ts", "utf8");
 const out = {};
 for (const m of src.matchAll(/^\s*("(?:[^"\\]|\\.)*"):\s*"([^"]+)"/gm)) {
   const key = JSON.parse(m[1]);
-  const sec = Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", `public/${m[2]}`]).toString().trim());
+  // A time range of a joined file (tools/voice-sprites.py): the clip runs from a to b, less the silence either side.
+  const part = /#t=([\d.]+),([\d.]+)$/.exec(m[2]);
+  const sec = part ? Number(part[2]) - Number(part[1]) - 0.2 : Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", `public/${m[2]}`]).toString().trim());
   if (sec > 0) out[key] = Math.round(sec * 100) / 100;
 }
 const body = Object.entries(out).map(([k, v]) => `  ${JSON.stringify(k)}: ${v},`).join("\n");
