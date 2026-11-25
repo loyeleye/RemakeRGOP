@@ -76,6 +76,8 @@ export class GrannyRoom {
   private holdTick = 0;
   /** When Hesta's match point line ends; the stones show then, after she has said it. */
   private plantEnds = Infinity;
+  /** When it starts: the line of earth crawls out from her lantern while she says it. */
+  private plantStarts = Infinity;
   private rushing = false;
   /** Lumi's tide pull, seen in front of Hesta (tick), or -1. */
   private tideSeen = -1;
@@ -180,7 +182,7 @@ export class GrannyRoom {
     this.busyUntil = 0;
     this.busyKey = false;
     this.playing = "";
-    this.plantEnds = Infinity;
+    this.plantEnds = this.plantStarts = Infinity;
     this.lastKey = -99;
     this.started = new Set();
     this.dropped = new Set();
@@ -477,6 +479,8 @@ export class GrannyRoom {
       this.said.add("match");
       const kid = this.scoreTurn++ % 2;
       this.say(kid ? SEFA : NELL, "One more!", { player: KID_IDS[kid] }, "key");
+      // Her line starts a beat after theirs, over it, so the held wisps never wait long for a reason.
+      if (this.playing === "One more!") this.busyUntil = Math.min(this.busyUntil, g.tick + 1);
       this.say(HESTA, MATCH_LINE, { player: HESTA_ID }, "key");
     }
     // Match point: their next wisp to reach the rim stops dead, held in the ground.
@@ -660,6 +664,7 @@ export class GrannyRoom {
       this.playing = q.line.text;
       this.busyUntil = now + lineTicks(q.line);
       if (q.line.text === MATCH_LINE) {
+        this.plantStarts = now;
         this.plantEnds = this.busyUntil;
         if (this.holdWisp !== null) this.holdTick = this.plantEnds;
       }
@@ -723,7 +728,11 @@ export class GrannyRoom {
     this.send?.({ t: "room", room: this.view() });
     const snap = this.game.snapshot();
     // Held but not yet shown: the wisps wait, unstoned, while Hesta finishes her line.
-    if (this.holdWisp !== null && this.game.tick < this.holdTick) snap.wisps = snap.wisps.map(({ rooted: _, ...w }) => w);
+    // From the start of her line the line of earth crawls out, and the stones land as it ends.
+    if (this.holdWisp !== null && this.game.tick < this.holdTick) {
+      if (this.game.tick < this.plantStarts) snap.wisps = snap.wisps.map(({ rooted: _, ...w }) => w);
+      else snap.earthLine = ((this.plantEnds - this.plantStarts) * TICK_MS) / 1000;
+    }
     this.send?.({ t: "tick", snap, tickMs: TICK_MS });
   }
 

@@ -4031,7 +4031,7 @@ export class World {
         this.scene.add(rig.stones);
       }
       if (rig.stones) {
-        rig.stones.visible = !!stoned && rig.rootedAt !== undefined && time - rig.rootedAt > EARTH_LINE;
+        rig.stones.visible = !!stoned && rig.rootedAt !== undefined && time - rig.rootedAt > (st.snap.earthLine ?? EARTH_LINE);
         rig.stones.position.set(this.worldX(b, w.x), 0, this.worldZ(b, w.y));
       }
       // The wisp turns from a light into a stone: a crust closes over it in about a second,
@@ -4042,7 +4042,7 @@ export class World {
         if (rig.rootedAt === undefined) this.stoneCast(stoned, time);
         rig.rootedAt ??= time;
         // A line of earth runs from her lantern to it first; the stone starts where it lands.
-        const since = time - rig.rootedAt;
+        const since = time - rig.rootedAt, crawl = st.snap.earthLine ?? EARTH_LINE;
         const holder = this.players.get(stoned);
         if (holder) {
           if (!rig.earth) {
@@ -4051,16 +4051,17 @@ export class World {
           }
           const from = holder.root.position.clone().add(holder.lantern.position);
           const to = new THREE.Vector3(this.worldX(b, w.x), 0.5, this.worldZ(b, w.y));
-          const grow = Math.min(1, since / EARTH_LINE);
+          const grow = Math.min(1, since / crawl);
           const end = from.clone().lerp(to, grow);
           rig.earth.position.copy(from).lerp(end, 0.5);
           rig.earth.scale.set(1, Math.max(0.001, from.distanceTo(end)), 1);
           rig.earth.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), end.clone().sub(from).normalize());
           // Strong while the stone closes, then gone by EARTH_FADE seconds (Ladi: five at most).
-          (rig.earth.material as THREE.MeshBasicMaterial).opacity = since < 1.5 ? 0.95 : Math.max(0, 0.95 * (1 - (since - 1.5) / (EARTH_FADE - 1.5)));
-          rig.earth.visible = since < EARTH_FADE;
+          const after = since - crawl + EARTH_LINE;
+          (rig.earth.material as THREE.MeshBasicMaterial).opacity = after < 1.5 ? 0.95 : Math.max(0, 0.95 * (1 - (after - 1.5) / (EARTH_FADE - 1.5)));
+          rig.earth.visible = after < EARTH_FADE;
         }
-        stone = Math.min(1, Math.max(0, since - EARTH_LINE) / 1.1);
+        stone = Math.min(1, Math.max(0, since - crawl) / 1.1);
         stone = stone * stone * (3 - 2 * stone);
         if (!rig.crust) {
           rig.crust = makeCrust(GUILD_COLORS[w.guild]!);
