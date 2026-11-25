@@ -20,7 +20,7 @@ import { DYING, crowdSpot, terraceHeight } from "../engine/dying.js";
 import { DRESS, dressVerge, quarryPit, sieveGrain, sieveMask, sievePaths, wellLoop } from "./sieve-dress.js";
 import { SIEVE } from "../engine/sieve.js";
 import { RESCUE_LOOK, RescueFx, type VillagerRig } from "./rescue-dress.js";
-import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villagers.js";
+import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager, type VillagerBase } from "./villagers.js";
 import { RematchFx } from "./rematch-dress.js";
 import { CoveFx } from "./cove-dress.js";
 import { KiteFx } from "./kite-dress.js";
@@ -1332,6 +1332,31 @@ class CastAnim {
     this.last = nowSec;
     this.mixer.update(dt);
   }
+}
+
+/** One of the village in run 9's villager base, at its height, lit and tinted as there, with its idle and walk. */
+function standBody(s: { base: string; skin: string; outfit: string; tall?: number }): THREE.Object3D | null {
+  loadVillagers();
+  const model = models[s.base], anims = clips[s.base];
+  if (!model || !anims?.length) return null;
+  const body = cloneSkinned(model);
+  body.scale.multiplyScalar(VILLAGERS.man * (VILLAGERS.heights[s.base as VillagerBase] ?? 1) * (s.tall ?? 1));
+  body.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    if ((m as THREE.SkinnedMesh).isSkinnedMesh) m.frustumCulled = false;
+    const c = (m.material as THREE.MeshStandardMaterial).clone();
+    if (c.map) {
+      c.emissiveMap = c.map;
+      c.emissive = new THREE.Color("#ffffff");
+      c.emissiveIntensity = VILLAGERS.flat;
+    }
+    m.material = c;
+  });
+  // Last: a later clone would drop the colours.
+  tintVillager(body, s.skin, s.outfit);
+  body.userData.anim = new CastAnim(body, anims);
+  return body;
 }
 
 function castBody(cast: string): THREE.Object3D | null {
@@ -3238,12 +3263,16 @@ export class World {
     const m = DYING.crowd[i]!;
     const cast = m.cast && models[m.cast] ? castBody(m.cast) : null;
     if (cast) return { body: cast, real: true };
+    // A stand-in: run 9's villager base, tinted to them.
+    const stand = m.stand ? standBody(m.stand) : null;
+    if (stand) return { body: stand, real: true };
     // No model of their own yet: the plain lamplighter figure, a little different in height from the next.
     const plain = models[i % 2 ? "dawn" : "dusk"];
     if (plain) {
       const body = plain.clone();
       body.scale.multiplyScalar(1.8 * (0.88 + (i % 3) * 0.06));
-      return { body, real: !m.cast };
+      // Final for those with no model coming; the cast and the stand-ins replace it when theirs is in.
+      return { body, real: !m.cast && !m.stand };
     }
     const body = new THREE.Group();
     const robe = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.2, 10), new THREE.MeshStandardMaterial({ color: "#4a4660", roughness: 0.8 }));
