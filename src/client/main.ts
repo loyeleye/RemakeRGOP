@@ -37,7 +37,7 @@ import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
-import { MENU_RUNS, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
+import { MENU_RUNS, MORNING, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
 import { card as storyCard, ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import { buildTesting } from "./testing.js";
 import * as sound from "./sound.js";
@@ -2047,34 +2047,67 @@ function chainCard(p: Piece) {
 
 /** Set by the kitchen scene as it hands on, so run 2 does not open on the lantern a second time. */
 let lanternShown = false;
-/** How long the kitchen picture holds before the lantern (seconds), and its fade in. */
-const KITCHEN_SCENE = { hold: 4.5, fade: 0.6 };
+/** One caption line of a gap scene: who says it (faces and names) and the words, spoken by each. */
+function sceneLine(el: HTMLElement, line: { who: string[]; text: string }) {
+  const faces = line.who.map((w) => faceHtml({ who: w, text: line.text })).join("");
+  el.innerHTML = `<span class="who">${faces}<b>${esc(line.who.join(" and "))}</b></span><span>${esc(line.text)}</span>`;
+  el.classList.add("on");
+  line.who.forEach((w, i) => sound.speak(w, line.text, false, i > 0));
+}
 
 /**
- * Gap 1-2 as pictures: the kitchen held with no taps and no words, then Lumi's unlit lantern (run 2's
- * opening picture, shown here in its place), then run 2. Rosalind's cup and Lumi at the door are draft
- * and stay out. Marked DRAFT: the pictures are Ladi's, the scene is not ruled.
+ * Gap 1-2, the morning after run 1, as its pictures (MORNING in client/part1.ts): Lumi's lantern on the
+ * table (run 2's opening picture, shown here in its place), then the kitchen pictures one after another,
+ * the first with Rook's and Lumi's two lines, no taps, then run 2 (which skips its own lantern).
  */
 function kitchenScene(p: Piece) {
+  const M = MORNING;
   const el = document.createElement("div");
   el.id = "gap-scene";
-  el.innerHTML = `<div class="tags"><span class="nb">Draft</span><span>${esc(p.card!.heading)}</span><span>Lines not in yet</span></div><button class="ghost small out" aria-label="Leave">✕</button>`;
-  el.prepend(storyCard("walk-kitchen", "pic"));
-  document.body.appendChild(el);
-  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("on")));
+  el.className = "morning";
+  el.innerHTML = `<p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
+  const pics = M.pictures.map((m) => storyCard(m.slot, "pic"));
+  el.prepend(...pics);
+  const timers: number[] = [];
+  const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
   let left = false;
-  const timer = window.setTimeout(() => {
-    // The lantern comes up over the kitchen as a cut; the kitchen goes once it is covered.
-    lanternCard(() => {
-      if (left || chainAt !== pieceIndex(p.id)) return;
+  const here = () => !left && chainAt === pieceIndex(p.id);
+  const caption = el.querySelector<HTMLElement>(".creed")!;
+  lanternCard(() => {
+    if (!here()) return;
+    // The lantern fades off the first kitchen picture, already up underneath it.
+    document.body.appendChild(el);
+    el.classList.add("on", "now");
+    pics[0]!.classList.add("on");
+    // Nothing is said until the lantern has gone.
+    let t = ENDING.lantern.fade;
+    M.pictures.forEach((m, i) => {
+      if (i > 0) at(t, () => (pics[i - 1]!.classList.remove("on"), pics[i]!.classList.add("on")));
+      t += i > 0 ? M.fade : 0;
+      for (const line of m.lines ?? []) {
+        at(t + M.gap, () => sceneLine(caption, line));
+        at(t + M.gap + M.line, () => caption.classList.remove("on"));
+        t += M.gap + M.line;
+      }
+      t += m.hold;
+    });
+    at(t, () => el.classList.add("out"));
+    at(t + M.fade, () => {
+      if (!here()) return el.remove();
       lanternShown = true;
       chainOn();
+      let n = 0;
+      const out = () => {
+        if (++n < 3) return void requestAnimationFrame(out);
+        el.classList.remove("on");
+        window.setTimeout(() => el.remove(), 700);
+      };
+      requestAnimationFrame(out);
     });
-    window.setTimeout(() => el.remove(), 200);
-  }, (KITCHEN_SCENE.fade + KITCHEN_SCENE.hold) * 1000);
+  });
   el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
     left = true;
-    clearTimeout(timer);
+    timers.forEach((x) => clearTimeout(x));
     el.remove();
     leave();
   };
@@ -2102,13 +2135,8 @@ function supperScene(p: Piece) {
   const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
   let t = S.fade + S.lead;
   for (const line of S.creed) {
-    at(t, () => {
-      // Each line with its speaker's face and name, like any other line; the last has both.
-      const faces = line.who.map((w) => faceHtml({ who: w, text: "" })).join("");
-      creed.innerHTML = `<span class="who">${faces}<b>${esc(line.who.join(" and "))}</b></span><span>${esc(line.text)}</span>`;
-      creed.classList.add("on");
-      line.who.forEach((w, i) => sound.speak(w, line.text, false, i > 0));
-    });
+    // Each line with its speaker's face and name, like any other line; the last has both.
+    at(t, () => sceneLine(creed, line));
     at(t + S.line, () => creed.classList.remove("on"));
     t += S.line + S.gap;
   }

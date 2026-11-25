@@ -361,7 +361,11 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #gap-scene .tags .nb { border-color: #ffb46a; color: #ffcf9a; }
 #gap-scene .out { position: absolute; right: 12px; top: 12px; }
 /* Supper (7-8): Lumi's glow breathes over the picture, and the creed's lines come one at a time. */
-#gap-scene.supper .pic { transition: opacity 0.8s; }
+#gap-scene.supper .pic, #gap-scene.morning .pic { transition: opacity 0.8s; }
+#gap-scene.now { transition: none; }
+#gap-scene.morning .pic { opacity: 0; }
+#gap-scene.morning .pic.on { opacity: 1; }
+#gap-scene.morning.out .pic, #gap-scene.morning.out .creed { opacity: 0; }
 #gap-scene.supper.out .pic, #gap-scene.supper.out .creed { opacity: 0; }
 #gap-scene .glow { display: block; position: absolute; inset: 0; background-size: cover; background-position: center; mix-blend-mode: screen; opacity: 0; }
 #gap-scene .glow.real { opacity: 1; animation: glow-breathe var(--glow-rise, 5s) ease-in-out infinite alternate; }

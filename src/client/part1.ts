@@ -27,6 +27,25 @@ export interface Piece {
 }
 
 /**
+ * The morning after run 1 (story/part1-cutscene-brief.md, 1a): Lumi's lantern on the table (run 2's
+ * old opening, the cut from the eye; that picture is still the early draft), then three pictures Ladi
+ * approved on 24 Nov: Lumi counting at the table with Rook at the stove, with the two lines he approved
+ * (25 Nov, 1:19 AM); Rosalind's cup straightened; Lumi at the door with his staff. Then run 2.
+ * How long each holds is the build's.
+ */
+export const MORNING = {
+  fade: 0.8,
+  pictures: [
+    { slot: "morning-2", hold: 3, lines: [{ who: ["Rook"], text: "Next Kindling. We light it together." }, { who: ["Lumi"], text: "If you're not late." }] },
+    { slot: "morning-3", hold: 4.5 },
+    { slot: "morning-4", hold: 4.5 },
+  ] as { slot: string; hold: number; lines?: { who: string[]; text: string }[] }[],
+  /** Seconds each line holds, and the pause after it. */
+  line: 3.5,
+  gap: 0.6,
+};
+
+/**
  * Supper, after run 7 (story/part1-cutscene-brief.md, 1c): one picture, Lumi's glow breathing on it,
  * and Dawn's creed said like grace. The picture is Ladi's ("Looks good", 25 Nov, 1:27 AM) and so are
  * the creed's four lines (25 Nov, 1:11 AM). The glow's breathing is his idea: about 60 to 100 percent
@@ -60,7 +79,7 @@ const DRAFT = "Draft: not ruled by Ladi yet.";
 export const PART1: Piece[] = [
   { id: "0", name: "Before run 1", kind: "card", card: { heading: "Before run 1: the dream", summary: "The dream. Then Rook wakes to Lumi standing over him with his staff: \"You're late.\" Cut to the Kindling ground at night.", ruled: "Part ruled: the dream is in the bible, and how he wakes is Ladi's. The dream's pictures are not painted yet." } },
   { id: "1", name: "Run 1, the Kindling", kind: "run", run: 1 },
-  { id: "1-2", name: "The kitchen, morning", kind: "card", scene: "kitchen", card: { heading: "The kitchen, morning", summary: "Rosalind's cup. Lumi at the door with his staff. (Lumi's unlit lantern, the first picture, opens run 2.)", ruled: "Part ruled: the lantern picture and Rosalind's portrait are Ladi's. The rest is draft." } },
+  { id: "1-2", name: "The kitchen, morning", kind: "card", scene: "kitchen", card: { heading: "The kitchen, morning", summary: "Lumi's lantern on the table. Lumi counting what it still needs, Rook at the stove: \"Next Kindling. We light it together.\" \"If you're not late.\" Rosalind's cup. Lumi at the door with his staff.", ruled: "Ruled: pictures 2 to 4 and the two lines are Ladi's. Picture 1, the lantern, is still the early draft." } },
   { id: "2", name: "Run 2, Lumi's lesson", kind: "run", run: 2 },
   { id: "2-3", name: "Walk 1, the pond", kind: "walk", walk: 1 },
   { id: "3", name: "Run 3, Granny's game", kind: "run", run: 3 },
