@@ -17,6 +17,8 @@ export const RESCUE_LOOK = {
   sea: 0.27,
   seaY: 0.22,
   wallY: 1.1,
+  /** How wide the bright line along the cloud's front is (tiles; 0 for none). */
+  front: 0.55,
   /** The cloud's colours (shade and light), and the stain's: its dark, and how much of the cloud's own texture shows in it. */
   pale: ["#8d98b4", "#d3d9e8"] as const,
   dark: "#04050a",
@@ -68,7 +70,7 @@ void main() {
 const FS = `
 precision highp float;
 varying vec2 vW;
-uniform float uTime, uCloud, uBase, uVeil, uPatchA, uRag, uShow, uLane, uLaneR;
+uniform float uTime, uCloud, uBase, uVeil, uPatchA, uRag, uShow, uLane, uLaneR, uEdge;
 uniform vec3 uCold;
 uniform vec3 uPatch, uLo, uHi, uDark;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -91,6 +93,10 @@ void main() {
   float lay = smoothstep(0.36, 0.66, n);
   float a = uVeil > 0.5 ? wall * 0.94 : mix(uBase * (0.22 + 1.7 * lay * (0.5 + n2)), 0.97, wall);
   vec3 col = mix(uLo, uHi, clamp(n * 1.3, 0.0, 1.0));
+  // The front of it: a pale, bright line along the wall's foot, so how far it has come can be read at a glance.
+  float front = (1.0 - smoothstep(0.0, uEdge, abs(length(vW) + (n - 0.5) * 2.4 - uCloud + 0.6))) * (1.0 - uVeil);
+  col = mix(col, vec3(1.0, 0.99, 0.96), front * 0.85);
+  a = max(a, front * 0.9);
   // The patch: a stain in the cloud with a hard, uneven edge. The cloud's own grain shows in it, faintly; the ground under it does not.
   vec2 d = vW - uPatch.xy;
   float ang = atan(d.y, d.x);
@@ -141,7 +147,7 @@ export class RescueFx {
   readonly all = new THREE.Group();
   private u = {
     uTime: { value: 0 }, uCloud: { value: RESCUE.cloud.start as number }, uBase: { value: RESCUE_LOOK.sea as number }, uVeil: { value: 0 }, uPatchA: { value: 0 },
-    uRag: { value: RESCUE_LOOK.ragged as number }, uShow: { value: RESCUE_LOOK.stainShow as number }, uLane: { value: 0 }, uLaneR: { value: 3 }, uCold: { value: new THREE.Color(RESCUE_LOOK.lane) },
+    uRag: { value: RESCUE_LOOK.ragged as number }, uShow: { value: RESCUE_LOOK.stainShow as number }, uLane: { value: 0 }, uLaneR: { value: 3 }, uEdge: { value: RESCUE_LOOK.front as number }, uCold: { value: new THREE.Color(RESCUE_LOOK.lane) },
     uPatch: { value: new THREE.Vector3(0, 0, 3) }, uLo: { value: new THREE.Color(RESCUE_LOOK.pale[0]) }, uHi: { value: new THREE.Color(RESCUE_LOOK.pale[1]) }, uDark: { value: new THREE.Color(RESCUE_LOOK.dark) },
   };
   private lamps: Lamp[] = [];
