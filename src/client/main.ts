@@ -2081,8 +2081,8 @@ function kitchenScene(p: Piece) {
 
 /**
  * Gap 7-8's supper as its picture: Lumi's glow drawn over it and breathing slowly (a screen blend,
- * which matches the painter's baked picture at full strength), the creed's four lines one at a time
- * as captions, no taps, then on to walk 4. Nothing is said aloud: the lines have no voices yet.
+ * which matches the painter's baked picture at full strength), the creed one line at a time as
+ * captions with who says it and their voices, no taps, then on to walk 4.
  */
 function supperScene(p: Piece) {
   const S = SUPPER, el = document.createElement("div");
@@ -2090,7 +2090,7 @@ function supperScene(p: Piece) {
   el.className = "supper";
   el.style.setProperty("--glow-low", String(S.glow.low));
   el.style.setProperty("--glow-rise", `${S.glow.rise}s`);
-  el.innerHTML = `<p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
+  el.innerHTML = `<div class="tags"><span class="nb">Draft</span><span>Who says each line</span></div><p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
   const pic = storyCard("supper", "pic");
   pic.appendChild(storyCard("supper-glow", "glow"));
   el.prepend(pic);
@@ -2101,7 +2101,13 @@ function supperScene(p: Piece) {
   const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
   let t = S.fade + S.lead;
   for (const line of S.creed) {
-    at(t, () => ((creed.textContent = line), creed.classList.add("on")));
+    at(t, () => {
+      // Each line with its speaker's face and name, like any other line; the last has both.
+      const faces = line.who.map((w) => faceHtml({ who: w, text: "" })).join("");
+      creed.innerHTML = `<span class="who">${faces}<b>${esc(line.who.join(" and "))}</b></span><span>${esc(line.text)}</span>`;
+      creed.classList.add("on");
+      line.who.forEach((w, i) => sound.speak(w, line.text, false, i > 0));
+    });
     at(t + S.line, () => creed.classList.remove("on"));
     t += S.line + S.gap;
   }

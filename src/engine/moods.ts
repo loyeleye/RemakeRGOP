@@ -15,6 +15,14 @@ export const MOODS: Record<string, readonly string[]> = {
   "Sefa's grandfather": ["neutral"],
   Sefa: ["neutral", "awed", "eager", "grin", "impatient", "indignant", "sheepish"],
   Tilda: ["neutral", "tired", "lost", "asking", "watching"],
+  // The neighbours on the walks and the two keepers (the cast thread's bubble faces, brought in on
+  // 25 Nov when Ladi asked why Orrin's bubble had none). "talking" is each one's open-mouth face:
+  // only a line that names it gets it.
+  Orrin: ["neutral", "talking", "amused", "grave"],
+  Maudie: ["neutral", "talking", "fond", "worried"],
+  Moth: ["neutral", "talking", "grave"],
+  Garrick: ["neutral", "talking", "pleased"],
+  Marit: ["neutral", "talking", "satisfied"],
 };
 
 const RULES: [who: string, match: RegExp, mood: string][] = [
@@ -56,6 +64,13 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Tilda", /^They('ve never done| don't do) that\./, "lost"],
   ["Tilda", /^(I can't do that\. I can only hold one\.|Is it me\?|Then what is it\?)/, "asking"],
   ["Tilda", /./, "tired"],
+  // The neighbours and the keepers. Which face goes with which line is the build's mapping, not ruled by Ladi.
+  ["Orrin", /^More panes in\./, "amused"],
+  ["Orrin", /^No jokes tonight/, "grave"],
+  ["Maudie", /^Hold still, your collar/, "fond"],
+  ["Maudie", /^Keep her close tonight/, "worried"],
+  ["Garrick", /^(That's the old patch\. Good\.|That's the jar I owe her|That'll hold till spring|And this is Rosalind's girl)/, "pleased"],
+  ["Marit", /^(Patience\. Good\.|As agreed|Thank you, Lumi\.|For the lamplighter, then\.)/, "satisfied"],
 ];
 
 /**

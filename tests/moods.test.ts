@@ -14,7 +14,15 @@ describe("portrait moods", () => {
     expect(moodOf("Hesta", "Clean.", "firm")).toBe("firm");
     expect(moodOf("Sefa", "How did you do that?")).toBe("awed");
     expect(moodOf("Nell", "No fair!")).toBe("determined");
-    expect(moodOf("Moth", "Here.")).toBeNull();
+    expect(moodOf("Mabry", "Here.")).toBeNull();
+    // The neighbours and the keepers: a face for the line, else neutral.
+    expect(faceOf("Orrin", "More panes in. She says they're crooked.")).toBe("orrin-amused");
+    expect(faceOf("Orrin", "No jokes tonight, Rook.")).toBe("orrin-grave");
+    expect(faceOf("Maudie", "Keep her close tonight.")).toBe("maudie-worried");
+    expect(faceOf("Moth", "Two islands called for you. Granny has the route.")).toBe("moth-neutral");
+    expect(faceOf("Garrick", "That's the old patch. Good.")).toBe("garrick-pleased");
+    expect(faceOf("Marit", "Rook. Lumi. The tide's in a mood.")).toBe("marit-neutral");
+    expect(faceOf("Marit", "Patience. Good.")).toBe("marit-satisfied");
     expect(faceOf("Lumi", "Dad. North one.")).toBe("lumi-calling");
   });
 

@@ -358,6 +358,13 @@ export const VOICE_LINES: Record<string, string> = {
   "Lumi|Last go, Dad.": "voice/optional.mp3#t=236.96,238.28",
   "Lumi|Moss is mine.": "voice/optional.mp3#t=239.18,240.31",
   "Lumi|They come to me.": "voice/optional.mp3#t=241.21,242.37",
+  // Supper, after run 7: Dawn's creed, split as the story thread drafted it (gameplay/voice/final/scenes, 25 Nov). The last line is said by both at once.
+  "Lumi|The sun gave light, and light is owed.": "voice/scenes.mp3#t=0.22,2.64",
+  "Lumi|The bright were born to carry it.": "voice/scenes.mp3#t=3.54,5.33",
+  "Rook|The rest were born to carry them.": "voice/scenes.mp3#t=6.23,7.80",
+  "Rook|What the dark asks for, we give with open hands.": "voice/scenes.mp3#t=8.70,11.68",
+  "Lumi|No light goes out alone.": "voice/scenes.mp3#t=12.58,14.01",
+  "Rook|No light goes out alone.": "voice/scenes.mp3#t=14.91,16.20",
 };
 
 /**

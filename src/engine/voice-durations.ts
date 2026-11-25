@@ -345,4 +345,10 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Lumi|Last go, Dad.": 1.12,
   "Lumi|Moss is mine.": 0.93,
   "Lumi|They come to me.": 0.96,
+  "Lumi|The sun gave light, and light is owed.": 2.22,
+  "Lumi|The bright were born to carry it.": 1.59,
+  "Rook|The rest were born to carry them.": 1.37,
+  "Rook|What the dark asks for, we give with open hands.": 2.78,
+  "Lumi|No light goes out alone.": 1.23,
+  "Rook|No light goes out alone.": 1.09,
 };

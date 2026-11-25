@@ -33,11 +33,22 @@ export interface Piece {
  * over four to six seconds. How long each line holds is the build's.
  */
 export const SUPPER = {
-  creed: ["The sun gave light, and light is owed.", "The bright were born to carry it. The rest were born to carry them.", "What the dark asks for, we give with open hands.", "No light goes out alone."],
+  /**
+   * Who says what is the story thread's DRAFT (25 Nov), not ruled by Ladi: Lumi leads, each says the
+   * half of line two that is about them, and they say the last line together. The words are the four
+   * he approved, unchanged; only line two is split at its full stop.
+   */
+  creed: [
+    { who: ["Lumi"], text: "The sun gave light, and light is owed." },
+    { who: ["Lumi"], text: "The bright were born to carry it." },
+    { who: ["Rook"], text: "The rest were born to carry them." },
+    { who: ["Rook"], text: "What the dark asks for, we give with open hands." },
+    { who: ["Rook", "Lumi"], text: "No light goes out alone." },
+  ],
   /** Seconds: the picture's fade, the hold before the first line, each line, the pause between lines, the hold after the last. */
   fade: 0.8,
   lead: 2.5,
-  line: 5,
+  line: 4.5,
   gap: 0.7,
   tail: 3,
   /** The glow: its low point (of 1) and the seconds from low to full. */

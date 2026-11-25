@@ -379,9 +379,10 @@ function stockFor(who: string, text: string): string | undefined {
 }
 
 /** A line appears: its clip if it has one, else Hesta's "Now" cue or the speaker's babble. */
-export function speak(who: string, text: string, now = false) {
-  // Someone is still talking: don't talk over them (the text still shows).
-  if (voiceBusy()) return;
+export function speak(who: string, text: string, now = false, together = false) {
+  // Someone is still talking: don't talk over them (the text still shows). `together` is for a line
+  // two people say at once (the creed's last line at supper): the second voice joins the first.
+  if (voiceBusy() && !together) return;
   // An exact whole-line clip wins; then a pattern; else the babble.
   const src = VOICE_LINES[`${who}|${text}`] ?? VOICE.find((c) => c.who === who && c.match.test(text))?.src ?? stockFor(who, text);
   if (src) {
