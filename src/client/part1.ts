@@ -90,17 +90,25 @@ export interface Held {
  * so run 5 leaves them out when it follows this scene.
  */
 export const HELD: Record<string, Held> = {
+  // 4-5 is now two pictures with two walks between them (story/gap4-5-walk-beats.md, Ladi's shape, 25
+  // Nov): the skiff coming in, then walks 7 and 8, then the skiff leaving. No words in either picture;
+  // Kes's challenge is said in walk 7. Both are to be redrawn by the cutscene thread from the personas
+  // (Ladi: Maudie off model and facing the camera, strangers in the boat); these are the old ones.
   "4-5": {
-    tag: "Pictures not seen by Ladi",
+    tag: "Old picture, being redrawn",
     fade: 0.7,
-    lead: 1,
+    lead: 0,
     line: 2.6,
     gap: 0.4,
-    pictures: [
-      { slot: "skiff-1-kes-waiting", hold: 1.5, lines: [{ who: ["Kes"], text: "You took my pupil on a job." }, { who: ["Rook"], text: "She's my daughter." }] },
-      { slot: "skiff-2-maudie", hold: 3 },
-      { slot: "skiff-3-leaving", hold: 4 },
-    ],
+    pictures: [{ slot: "skiff-1-kes-waiting", hold: 4 }],
+  },
+  "4-5b": {
+    tag: "Old picture, being redrawn",
+    fade: 0.7,
+    lead: 0,
+    line: 2.6,
+    gap: 0.4,
+    pictures: [{ slot: "skiff-3-leaving", hold: 4 }],
   },
   // 7-8b, Hesta's hands at night, then the morning (production/story/part1/hands/final/README.md, 25
   // Nov): the cutscene thread's picks; Ladi was sent an earlier draft on 23 Nov and has not ruled.
@@ -307,8 +315,11 @@ export const PART1: Piece[] = [
   { id: "3-4a", name: "The evening", kind: "card", scene: "evening", card: { heading: "Evening", summary: "Two pictures: honey drops at the pond; the kitchen table at night.", ruled: DRAFT } },
   { id: "3-4", name: "Walk 2, the morning of the job", kind: "walk", walk: 2 },
   { id: "4", name: "Run 4, the job", kind: "run", run: 4 },
-  // Shown as its three pictures (HELD["4-5"]); take `scene` off and it is its card again.
-  { id: "4-5", name: "The skiff home", kind: "card", scene: "held", card: { heading: "The skiff home", summary: "The skiff comes back to the home landing. Kes is waiting and challenges him. Maudie watches the three of them leave. The skiff crosses to Kite Fell.", ruled: "Part ruled: the race being on Kite Fell is Ladi's. The scene is draft." } },
+  // The skiff coming in (HELD["4-5"]), the evening and the next morning on the island, the skiff leaving (HELD["4-5b"]).
+  { id: "4-5", name: "The skiff home", kind: "card", scene: "held", card: { heading: "The skiff home", summary: "The skiff comes in to the home landing, Kes waiting.", ruled: "Ruled: walking the island after run 4 to talk to Kes, going home, and talking to her again the next day are Ladi's. The pictures and lines are draft." } },
+  { id: "4-5w", name: "Walk, sunset", kind: "walk", walk: 7 },
+  { id: "4-5m", name: "Walk, the next morning", kind: "walk", walk: 8 },
+  { id: "4-5b", name: "The skiff leaves", kind: "card", scene: "held", card: { heading: "The skiff leaves", summary: "The skiff leaves for Kite Fell with Rook, Kes and Lumi, Maudie watching.", ruled: "Draft: to be redrawn from the personas." } },
   { id: "5", name: "Run 5, the race", kind: "run", run: 5 },
   // Walk 3's first state, walk number 6 in engine/walks.ts. Its old card is kept in case it is ever wanted again.
   { id: "5-6a", name: "Walk 3, an ordinary morning", kind: "walk", walk: 6, card: { heading: "Walk 3, first state: an ordinary morning", summary: "Nell, Kes and Moth offer the optional runs. Tapping Maudie at his door turns it into the festival morning and closes them for good.", ruled: "Part ruled: the two states, Maudie's tap and talking to the person are Ladi's. The lines are to be judged in game.", optional: true } },

@@ -6,7 +6,7 @@
 /** Named places on the walking island. */
 export type Anchor = "door" | "falls" | "landing" | "stall" | "shrine" | "chair" | "pond" | "kindling" | "path";
 
-export type Light = "afternoon" | "morning" | "night" | "dusk";
+export type Light = "afternoon" | "morning" | "sunset" | "night" | "dusk";
 
 export interface WalkPerson {
   name: string;
@@ -25,6 +25,8 @@ export interface WalkPerson {
   offer?: { lines: { who: string; text: string }[]; ask: string; runs: { label: string; run: "o1" | "o2" | "o3a" | "o3b" | "o3c"; then?: { who: string; text: string }[] }[] };
   /** Said over their head now and then while he is not close (Maudie's "When you've finished playing."). */
   idle?: string;
+  /** An exchange said on the first tap, one line after another, who by who (Kes's challenge in walk 7); later taps say `lines`. */
+  talk?: { who: string; text: string }[];
 }
 
 export interface Walk {
@@ -43,6 +45,8 @@ export interface Walk {
   ask: string;
   /** Where Rook starts. */
   start: Anchor;
+  /** Someone to talk to before `go` is the way on (walk 7's Kes), with the goal shown until then. */
+  first?: { name: string; goal: string };
 }
 
 export const WALKS: Walk[] = [
@@ -74,6 +78,41 @@ export const WALKS: Walk[] = [
       { name: "Lumi", at: "falls", lines: ["Go on, Dad."] },
       { name: "Moth", at: "landing", stay: true, lines: ["Garrick says it's grown back. He says bring the small one."], offer: { lines: [{ who: "Moth", text: "Garrick says it's grown back. He says bring the small one." }, { who: "Moth", text: "And Marit says the tide owes her eight. Her words." }], ask: "Which job?", runs: [{ label: "Moss Hollow", run: "o3a" }, { label: "Tidepool Steps", run: "o3b" }] } },
       { name: "Orrin", at: "stall", stay: true, lines: ["Send the small one round with it. I need the frame."] },
+    ],
+  },
+  // Between runs 4 and 5 (story/gap4-5-walk-beats.md, 25 Nov): two walks with a night between them.
+  // The shape is Ladi's (talk to Kes at the landing, go home, talk to Kes again the next day); every
+  // line here but the first four of Kes's exchange is the story thread's draft, not seen by Ladi. Walk
+  // 7's sunset tint is Ladi's, to signal the end of the day.
+  {
+    n: 7, title: "Sunset", light: "sunset", after: 4, next: 5, go: "Lumi", start: "landing",
+    first: { name: "Kes", goal: "Talk to Kes" }, goal: "Go home", ask: "Turn in for the night?",
+    people: [
+      {
+        name: "Kes", at: "landing", stay: true, lines: ["Tomorrow, then. The Fell. Bring the referee."],
+        talk: [
+          { who: "Kes", text: "You took my pupil on a job." },
+          { who: "Rook", text: "She's my daughter." },
+          { who: "Kes", text: "She was going to be my pupil. Race you for her." },
+          { who: "Lumi", text: "I'm not a prize. I'm the referee." },
+          { who: "Kes", text: "Tomorrow, then. The Fell. Bring the referee." },
+        ],
+      },
+      { name: "Maudie", at: "path", stay: true, lines: ["Ten years that girl ate at my table. Her and Ros.", "I know that look on her.", "Go on in. That child's asleep on her feet."] },
+      { name: "Moth", at: "landing", lines: ["Both stops before supper. Granny will say she planned it."] },
+      { name: "Hesta", at: "chair", stay: true, lines: ["Back already? I'd barely shut my eyes."] },
+      { name: "Nell", at: "pond", lines: ["Did they pay you?"] },
+      { name: "Sefa", at: "pond", lines: ["Did you see a fish?"] },
+      { name: "Lumi", at: "door", stay: true, lines: ["Marit said 'Thank you, Lumi.' You heard her."], talk: [{ who: "Lumi", text: "Marit said 'Thank you, Lumi.' You heard her." }, { who: "Rook", text: "I heard her." }] },
+    ],
+  },
+  {
+    n: 8, title: "The next morning", light: "morning", after: 4, next: 5, go: "Kes", start: "door", goal: "Talk to Kes", ask: "Cross to Kite Fell?",
+    people: [
+      { name: "Kes", at: "landing", stay: true, lines: ["There he is. Get in. I'm steering."] },
+      { name: "Lumi", at: "landing", stay: true, lines: ["You're late."] },
+      { name: "Maudie", at: "path", stay: true, lines: ["Ros planted these the spring Lumi came.", "Wrong blue. She said so every year and never pulled them up.", "They came up the winter she was ill, too. In the snow. She laughed at that."] },
+      { name: "Hesta", at: "chair", stay: true, lines: ["..."] },
     ],
   },
   {

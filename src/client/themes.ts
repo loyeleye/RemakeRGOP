@@ -1341,6 +1341,17 @@ export const LIGHTS: Record<string, Partial<Theme>> = {
     sun: ["#ffe2b8", 2.6],
     exposure: 1,
   },
+  // The end of the day after run 4 (walk 7, Ladi: a sunset tint): warm orange and rose, brighter than
+  // dusk and with no stars, so it is not mistaken for walk 5's cold dusk.
+  sunset: {
+    sky: { zenith: "#5a5aa0", sky: "#f08a6a", haze: "#ffb070", below: "#b87a8a", stars: 0 },
+    fog: "#e89a80",
+    clouds: "#ffae88",
+    hemi: ["#ffb48a", "#5a3a44", 0.9],
+    sun: ["#ff9450", 2.5],
+    exposure: 0.98,
+    sunAt: [-60, 16, 12],
+  },
   dusk: {
     sky: { zenith: "#2a2f6a", sky: "#c8785a", haze: "#f0a070", below: "#5a4a7a", stars: 0.3 },
     fog: "#a07a7a",

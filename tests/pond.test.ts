@@ -143,3 +143,45 @@ describe("Walk 3's ordinary morning", () => {
     expect(r.done).toBe(true);
   });
 });
+
+describe("The walks between runs 4 and 5", () => {
+  const make = (n: number) => {
+    let s = 7;
+    const room = new PondRoom(manualClock(), () => (s = (s * 48271) % 2147483647), n);
+    room.chain = true;
+    const conn = room.connect(() => {});
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const r = room as unknown as { asking: { choices: string[] } | null; done: boolean; goal: () => string | null; answer: (t: { name: string; at: () => { x: number; y: number } }) => void };
+    const tap = (name: string) => r.answer({ name, at: () => ({ x: 0, y: 0 }) });
+    // Everything said, kept (the room sends its lines on and clears them).
+    const said: string[] = [];
+    const rs = room as unknown as { say: (who: string, text: string) => void };
+    const say = rs.say.bind(room);
+    rs.say = (who, text) => (said.push(text), say(who, text));
+    return { room, conn, r, tap, said };
+  };
+  it("walk 7: Lumi is not the way on until Kes has had her say; then home", () => {
+    const { room, conn, r, tap, said } = make(7);
+    expect(r.goal()).toBe("Talk to Kes");
+    tap("Lumi");
+    expect(r.asking).toBeNull();
+    tap("Kes");
+    for (let i = 0; i < 30; i++) room.onTick();
+    expect(said).toContain("Tomorrow, then. The Fell. Bring the referee.");
+    expect(r.asking).toBeNull();
+    expect(r.goal()).toBe("Go home");
+    tap("Lumi");
+    for (let i = 0; i < 12 && !r.asking; i++) room.onTick();
+    expect(said.at(-1)).toBe("I heard her.");
+    expect(r.asking).toBeTruthy();
+    conn.message(JSON.stringify({ t: "answer", yes: true }));
+    expect(r.done).toBe(true);
+  });
+  it("walk 8: Kes asks before the crossing", () => {
+    const { conn, r, tap } = make(8);
+    tap("Kes");
+    expect(r.asking).toBeTruthy();
+    conn.message(JSON.stringify({ t: "answer", yes: true }));
+    expect(r.done).toBe(true);
+  });
+});

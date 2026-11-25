@@ -466,7 +466,17 @@ export class PondRoom {
   /** Who to talk to next. Walk 1's waits until Hesta has come down to the pond. */
   private goal(): string | null {
     if (this.walkDef.n === 1 && this.gatheredAt < 0) return null;
+    const f = this.walkDef.first;
+    if (f && !this.taps.has(f.name)) return f.goal;
     return this.walkDef.goal;
+  }
+
+  /** An exchange, one line after another (POND.offerGap apart); `then` after the last. */
+  private exchange(lines: { who: string; text: string }[], then?: () => void) {
+    const g = this.game, gap = POND.offerGap;
+    this.later = [];
+    lines.forEach((l, i) => this.later.push({ at: g.tick + i * gap, f: () => this.say(l.who, l.text) }));
+    if (then) this.later.push({ at: g.tick + (lines.length - 1) * gap + 2, f: then });
   }
 
   /** Puts the question up; a yes comes back through answer(thing, true). */
@@ -534,7 +544,7 @@ export class PondRoom {
       return;
     }
     // A yes to the walk's question: on, without the line again.
-    if (sure && W.n !== 1 && thing.name === W.go && this.chain) {
+    if (sure && W.n !== 1 && thing.name === W.go && this.chain && !(W.first && !this.taps.has(W.first.name))) {
       this.done = true;
       this.broadcast();
       return;
@@ -542,12 +552,23 @@ export class PondRoom {
     const lines = this.walkLines.get(thing.name) ?? LINES[thing.name] ?? [];
     if (!lines.length) return;
     const n = this.taps.get(thing.name) ?? 0;
+    // Before the walk's first talk (walk 7's Kes), the way on is only a person to talk to.
+    const first = W.first && !this.taps.has(W.first.name) && thing.name === W.go;
+    if (first) return this.say(thing.name, lines[0]!);
     this.taps.set(thing.name, n + 1);
+    // An exchange on the first tap (then the question, if it is the way on).
+    const talk = W.people.find((p) => p.name === thing.name)?.talk;
+    if (talk && n === 0) {
+      const on = W.n !== 1 && thing.name === W.go && this.chain && !first;
+      this.exchange(talk, on ? () => this.ask(thing, W.ask, "Go on") : undefined);
+      this.broadcast();
+      return;
+    }
     // Lines about things are Rook's own; people say theirs over their heads.
     const person = this.game.players.some((p) => p.name === thing.name);
     this.say(person ? thing.name : "Rook", lines[n % lines.length]!);
     // What goes on from here isn't built yet: say so, once per tap.
-    if (W.n !== 1 && thing.name === W.go) {
+    if (W.n !== 1 && thing.name === W.go && !first) {
       // In Part 1's chain the page goes on from here; on its own, say that nothing is built after it.
       if (this.chain) {
         // Their line first, then the question.

@@ -25,7 +25,7 @@ export class RaceRoom {
   private phase: Phase = "countdown";
   /** The reaction stills (?nostills in the page leaves them out). */
   stillsOn = true;
-  /** Part 1 chain: the skiff home has just said the challenge's first two lines, so the heat-0 opening leaves them out. */
+  /** Part 1 chain: walk 7 has said the challenge (its first four lines), so the heat-0 opening leaves them out. */
   openSaid = false;
   private countdown = 0;
   private game!: Game;
@@ -172,13 +172,14 @@ export class RaceRoom {
     const talk = { talk: true };
     const before = this.lines.length;
     if (this.heat === 0) {
+      // In Part 1's chain the challenge was said on the island the evening before (walk 7).
       if (!this.openSaid) {
         this.say(KES, "You took my pupil on a job.", talk);
         this.say(ROOK, "She's my daughter.", talk);
+        // Still 5.1 under the challenge and Lumi's answer, the same picture with the caption changing.
+        this.say(KES, "She was going to be my pupil. Race you for her.", { ...talk, ...(this.stillsOn ? { still: { id: "r5-1" } } : {}) });
+        this.say(LUMI, "I'm not a prize. I'm the referee.", { ...talk, ...(this.stillsOn ? { still: { id: "r5-1", seq: true } } : {}) });
       }
-      // Still 5.1 under the challenge and Lumi's answer, the same picture with the caption changing.
-      this.say(KES, "She was going to be my pupil. Race you for her.", { ...talk, ...(this.stillsOn ? { still: { id: "r5-1" } } : {}) });
-      this.say(LUMI, "I'm not a prize. I'm the referee.", { ...talk, ...(this.stillsOn ? { still: { id: "r5-1", seq: true } } : {}) });
       this.say(LUMI, "First to six. No shoving.", talk);
       this.say(KES, "Whatever you say, Captain.", talk);
     } else {

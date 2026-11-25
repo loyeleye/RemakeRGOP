@@ -295,8 +295,8 @@ function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "p
   const r = run === "o3a" ? mossRoom() : run === "o3b" ? tidepoolRoom() : run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   // ?nostills: every run's reaction stills off (runs 8 to 10 also read it where they are built).
   if ("stillsOn" in r && new URLSearchParams(location.search).has("nostills")) r.stillsOn = false;
-  if (run === 5 && skiffSaid) (r as RaceRoom).openSaid = true;
-  skiffSaid = false;
+  // Run 5 after walk 7, where Kes's challenge was said: its opening leaves those lines out.
+  if (run === 5 && chainAt > 0 && PART1[chainAt - 1]?.id.startsWith("4-5")) (r as RaceRoom).openSaid = true;
   storyRoom = r;
   runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
@@ -2190,9 +2190,6 @@ function eveningScene(p: Piece) {
   };
 }
 
-/** Run 5 follows the skiff home, which has said the first two lines of its challenge. */
-let skiffSaid = false;
-
 /**
  * A scene that is only held pictures (HELD in client/part1.ts, by piece id): each cross-fades in, its
  * lines as captions with faces and voices, no taps, then on. Tagged with what Ladi has not seen.
@@ -2255,7 +2252,6 @@ function heldScene(p: Piece) {
   at(t + H.fade, () => {
     if (!here()) return el.remove();
     window.clearTimeout(shaking);
-    if (p.id === "4-5") skiffSaid = true;
     // The end of Part 1: its name on the black, then the menu.
     if (p.card?.end) {
       caption.classList.remove("stay");
