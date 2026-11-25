@@ -206,7 +206,7 @@ export const HELD: Record<string, Held> = {
       { slot: "offering-14", hold: 0.7, lines: [{ who: ["Rook"], text: "Then me. Put me out there.", quiet: true }] },
       { slot: "offering-15", hold: 1.2, lines: [{ who: ["Hesta"], text: "You? There's no light in you to give.", quiet: true }] },
       { slot: "offering-16", hold: 0.6, lines: [{ who: ["Rook"], text: "Please.", quiet: true }] },
-      { slot: "offering-17", hold: 1.2, lines: [{ who: ["Hesta"], text: "Now you're getting on my nerves.", quiet: true }] },
+      { slot: "offering-17", hold: 1.2, lines: [{ who: ["Hesta"], text: "You never did know when to stop, Rook.", quiet: true }] },
       { slot: "offering-18", hold: 2.5 },
       { slot: "offering-19", hold: 2.5 },
       { slot: "offering-20", hold: 2 },

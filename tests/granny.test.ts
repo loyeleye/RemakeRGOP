@@ -44,6 +44,11 @@ describe("Run 3: Granny's game", () => {
       expect(said.some((l) => l.text === "Dad hasn't got one.")).toBe(true);
       expect(said.some((l) => l.text === "Did you now.")).toBe(true);
       expect(said.some((l) => /element/i.test(l.text))).toBe(false);
+      // At nine: "One more!", then Hesta's plant, then the hold's "No fair!" (story thread, 25 Nov).
+      const at = (t: string) => said.findIndex((l) => l.text === t);
+      expect(at("One more!")).toBeGreaterThanOrEqual(0);
+      expect(at("You never know when to stop, Rook.")).toBeGreaterThan(at("One more!"));
+      expect(at("No fair!")).toBeGreaterThan(at("You never know when to stop, Rook."));
     }
   });
 
