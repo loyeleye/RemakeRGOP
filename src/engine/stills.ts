@@ -38,7 +38,7 @@ export interface StillCue {
   seq?: boolean;
   /** In a sequence: the still it follows, which gets its shortest hold first if it has a line. */
   after?: string;
-  /** The line stays a bubble over its speaker, and the picture comes alone, with no caption. Nothing uses it now: Ladi tried it on Rook's "Granny?" (24 Nov) and went back to the caption. */
+  /** The line stays a bubble over its speaker, and the picture comes alone, with no caption. Ladi tried it on Rook's "Granny?" (24 Nov) and went back to the caption; run 10's last picture uses it (25 Nov), because Rook is not in it. */
   bubble?: boolean;
   /** The tile the event is about (a well), which the panel must not cover. */
   at?: { x: number; y: number };
@@ -73,7 +73,8 @@ export const STILLS: Record<string, StillCard> = {
   // Run 10, the ship home: the view over the bow, three times. Rook's face in profile at the edge, lit by the ship's lamp. Plain cards.
   "r10-0": { who: "Rook in profile at the edge, the ship's lamp on his face. Beyond the bow, home far off: two glows side by side under one dark shape", faces: "Eyes fixed ahead, brows down and together, jaw set, mouth shut." },
   "r10-1": { who: "Rook in profile. Beyond the bow, the two tips of the horseshoe, both crowded with small glows. Not one lit window", faces: "Eyes wider, brows up in the middle, mouth a little open." },
-  "r10-2": { who: "Rook in profile. Beyond the bow, the mouth of the falls: one small warm light alone on the stone, water falling on both sides", faces: "Eyes wide, brows up, mouth open." },
+  // Approved by Ladi (25 Nov, 1:57 AM). No Rook in it: his line is a bubble with his face over it.
+  "r10-2": { who: "Close on Lumi's lit lantern on a wide flat stone, dark water all round, the lip of the falls along the bottom. No Rook", faces: "None. Rook's face is his bubble's portrait." },
 };
 
 /** How long a still is up, fade to fade (ms), given how long its line takes to say (0 for none). */

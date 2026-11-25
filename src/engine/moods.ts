@@ -55,6 +55,8 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Sefa's grandmother", /./, "talking"],
   ["Rook", /^(That's it\.|Just like that\.)/, "proud"],
   ["Rook", /^How did you do that\?/, "baffled"],
+  // Run 10's last line wants a shocked face (Ladi, 25 Nov); baffled stands in until there is one.
+  ["Rook", /^That's Lumi's lantern\./, "baffled"],
   ["Rook", /^(Yes, ma'am\.|See\?|Now you're the boss|Let's call it)/, "warm"],
   // Tilda (run 8, Ladi: "Tilda needs her face in her bark bubbles"). Which face goes with which line
   // is the gameplay thread's mapping, not ruled by Ladi; it all lives in these five rows. The count

@@ -553,7 +553,8 @@ export class ShipRoom {
     }
     if (!this.said.has("last") && g.tick >= this.len - Math.ceil((S.stills.lastSec * 1000) / TICK_MS)) {
       this.said.add("last");
-      this.say(ROOK, "That's Lumi's lantern. Why is it on the water?", { player: YOU, ...this.still("r10-2") }, "key");
+      // The picture has no Rook in it now (Ladi, 25 Nov, 1:52 AM): the line stays his bubble, with his face, over the picture.
+      this.say(ROOK, "That's Lumi's lantern. Why is it on the water?", { player: YOU, ...(this.stillsOn ? { still: { id: "r10-2", bubble: true } } : {}) }, "key");
     }
   }
 
