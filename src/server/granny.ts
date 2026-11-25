@@ -15,8 +15,6 @@ import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { realClock, type Clock } from "./room.js";
 
 // The player is always id 1: Rook or Lumi, as GRANNY.player says.
-/** Hesta at the children's match point; the Offering says "You never did know when to stop, Rook." */
-const MATCH_LINE = "You never know when to stop, Rook.";
 const PLAYER_IS_ROOK = GRANNY.player === "rook";
 const ROOK_ID = PLAYER_IS_ROOK ? 1 : 2;
 const LUMI_ID = PLAYER_IS_ROOK ? 2 : 1;
@@ -74,10 +72,6 @@ export class GrannyRoom {
   private started = new Set<number>();
   private dropped = new Set<number>();
   private holdTick = 0;
-  /** When Hesta's match point line ends; the stones show then, after she has said it. */
-  private plantEnds = Infinity;
-  /** When it starts: the line of earth crawls out from her lantern while she says it. */
-  private plantStarts = Infinity;
   private rushing = false;
   /** Lumi's tide pull, seen in front of Hesta (tick), or -1. */
   private tideSeen = -1;
@@ -182,7 +176,6 @@ export class GrannyRoom {
     this.busyUntil = 0;
     this.busyKey = false;
     this.playing = "";
-    this.plantEnds = this.plantStarts = Infinity;
     this.lastKey = -99;
     this.started = new Set();
     this.dropped = new Set();
@@ -473,15 +466,12 @@ export class GrannyRoom {
 
   private afterStep() {
     const g = this.game;
-    // Match point reached: "One more!" and Hesta's plant for the Offering (story thread, 25 Nov,
-    // Ladi: "I like the know when to stop."). Key lines, before the hold below, so they play every time.
+    // Match point reached: "One more!", a key line before the hold below, so it plays every time.
+    // (Hesta's "You never know when to stop, Rook." was here; Ladi, 25 Nov: odd said to Rook alone.)
     if (this.kidsScore() >= GRANNY.target - 1 && !this.said.has("match")) {
       this.said.add("match");
       const kid = this.scoreTurn++ % 2;
       this.say(kid ? SEFA : NELL, "One more!", { player: KID_IDS[kid] }, "key");
-      // Her line starts a beat after theirs, over it, so the held wisps never wait long for a reason.
-      if (this.playing === "One more!") this.busyUntil = Math.min(this.busyUntil, g.tick + 1);
-      this.say(HESTA, MATCH_LINE, { player: HESTA_ID }, "key");
     }
     // Match point: their next wisp to reach the rim stops dead, held in the ground.
     if (this.kidsScore() >= GRANNY.target - 1 && this.holdWisp === null) {
@@ -496,12 +486,11 @@ export class GrannyRoom {
         }
         {
           this.holdWisp = near.id;
-          // The wisps stop now, but the stones and their sound wait for her line (broadcastTick).
-          this.holdTick = Math.max(g.tick, this.plantEnds);
+          this.holdTick = g.tick;
           // Everything still waiting goes, so the hold plays clean: all but the tide exchange,
           // which must land (Hesta has to have seen the tide pull before she answers it with rock).
-          // The match point pair stays too, and isn't cut off if it is playing.
-          const KEEP = ["How did you do that?", "I pulled.", "Did you now.", "One more!", MATCH_LINE];
+          // "One more!" stays too, and isn't cut off if it is playing.
+          const KEEP = ["How did you do that?", "I pulled.", "Did you now.", "One more!"];
           this.queue = this.queue.filter((q) => KEEP.includes(q.line.text));
           if (!KEEP.includes(this.playing)) this.busyUntil = Math.min(this.busyUntil, g.tick + 2);
           this.say(NELL, "No fair!", { player: KID_IDS[0] }, "key");
@@ -663,11 +652,6 @@ export class GrannyRoom {
       this.lines.push(q.line);
       this.playing = q.line.text;
       this.busyUntil = now + lineTicks(q.line);
-      if (q.line.text === MATCH_LINE) {
-        this.plantStarts = now;
-        this.plantEnds = this.busyUntil;
-        if (this.holdWisp !== null) this.holdTick = this.plantEnds;
-      }
       this.busyKey = q.key;
       if (q.key) this.lastKey = now;
     }
@@ -726,14 +710,7 @@ export class GrannyRoom {
 
   private broadcastTick() {
     this.send?.({ t: "room", room: this.view() });
-    const snap = this.game.snapshot();
-    // Held but not yet shown: the wisps wait, unstoned, while Hesta finishes her line.
-    // From the start of her line the line of earth crawls out, and the stones land as it ends.
-    if (this.holdWisp !== null && this.game.tick < this.holdTick) {
-      if (this.game.tick < this.plantStarts) snap.wisps = snap.wisps.map(({ rooted: _, ...w }) => w);
-      else snap.earthLine = ((this.plantEnds - this.plantStarts) * TICK_MS) / 1000;
-    }
-    this.send?.({ t: "tick", snap, tickMs: TICK_MS });
+    this.send?.({ t: "tick", snap: this.game.snapshot(), tickMs: TICK_MS });
   }
 
   /** For tests. */

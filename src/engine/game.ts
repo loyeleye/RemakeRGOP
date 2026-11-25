@@ -199,8 +199,6 @@ export interface GameSnapshot {
   /** The falling law: wisps that fell away this tick, where, and whether over a well. */
   falls?: { tick: number; wisp: number; x: number; y: number; well: boolean }[];
   rootLit?: boolean;
-  /** Seconds the line of earth takes to reach a held wisp, when it isn't the usual quick cast (run 3's match point). */
-  earthLine?: number;
   /** Pulls stopped at the bank this tick (the laws of water): who, which wisp, and the water tile it met. */
   stops?: { player: number; wisp: number; x: number; y: number }[];
 }
