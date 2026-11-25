@@ -402,6 +402,47 @@ export class KindlingEnding {
   }
 }
 
+/**
+ * The one thing that moves in the lantern picture (cutscene brief, 1a): dust drifting in the morning
+ * sun, a few dozen soft motes, slow, thickest in the light from the upper left. Nothing with reduced motion.
+ * Returns a stop.
+ */
+function dust(el: HTMLElement): () => void {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {};
+  const cv = document.createElement("canvas");
+  cv.className = "dust";
+  el.appendChild(cv);
+  const ctx = cv.getContext("2d");
+  if (!ctx) return () => cv.remove();
+  const N = 46, motes = Array.from({ length: N }, () => ({ x: Math.random(), y: Math.random(), r: 0.6 + Math.random() * 1.6, vx: (Math.random() - 0.3) * 0.006, vy: (Math.random() - 0.6) * 0.004, ph: Math.random() * Math.PI * 2 }));
+  let raf = 0, last = performance.now();
+  const frame = (now: number) => {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    const w = (cv.width = cv.clientWidth * devicePixelRatio), h = (cv.height = cv.clientHeight * devicePixelRatio);
+    ctx.clearRect(0, 0, w, h);
+    for (const m of motes) {
+      m.ph += dt * 0.7;
+      m.x += (m.vx + Math.sin(m.ph) * 0.002) * dt * 3;
+      m.y += (m.vy + Math.cos(m.ph * 0.8) * 0.0015) * dt * 3;
+      if (m.x < -0.02) m.x = 1.02;
+      if (m.x > 1.02) m.x = -0.02;
+      if (m.y < -0.02) m.y = 1.02;
+      if (m.y > 1.02) m.y = -0.02;
+      // Brighter where the sun comes in (the upper left), and each one twinkles a little as it turns.
+      const sun = Math.max(0, 1 - Math.hypot(m.x - 0.25, m.y - 0.3) * 1.4);
+      const a = (0.15 + 0.55 * sun) * (0.6 + 0.4 * Math.sin(m.ph * 2.3));
+      ctx.fillStyle = `rgba(255, 240, 205, ${a.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(m.x * w, m.y * h, m.r * devicePixelRatio, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    raf = requestAnimationFrame(frame);
+  };
+  raf = requestAnimationFrame(frame);
+  return () => (cancelAnimationFrame(raf), cv.remove());
+}
+
 /** Run 2 opens on one picture: Lumi's unlit lantern on the kitchen table, where the eye was. */
 export function lanternCard(then: () => void) {
   const el = card("lesson-lantern", "lantern", `<div class="table"></div><div class="unlit"></div>`);
@@ -416,8 +457,10 @@ export function lanternCard(then: () => void) {
       el.style.transform = "scale(1)";
     }),
   );
+  const stopDust = dust(el);
   setTimeout(() => {
     then();
+    window.setTimeout(stopDust, ENDING.lantern.fade * 1000 + 50);
     el.style.transition = `opacity ${ENDING.lantern.fade}s`;
     el.style.transform = "scale(1)";
     el.style.opacity = "0";

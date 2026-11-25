@@ -216,6 +216,8 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #opening { z-index: 50; opacity: 1; background-color: #e9d2a6; background-image: linear-gradient(#f6e6c4, #e0c08c 58%, #8a5a34 58.5%, #6e4528); }
 #opening .unlit { position: absolute; left: 50%; top: 50%; width: 16vmin; height: 16vmin; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle at 38% 35%, #d8cdb8, #8a8070 60%, #4a4238); box-shadow: 0 2vmin 3vmin #0004; }
 #opening .ph { color: #00000080; }
+/* The dust in the morning sun over the lantern (ending.ts, dust): over the picture, in its square. */
+#opening .dust { display: block; position: absolute; left: 50%; top: 50%; width: var(--eye); height: var(--eye); transform: translate(-50%, -50%); z-index: 1; pointer-events: none; mix-blend-mode: screen; }
 /* The paintings, once they exist. The eye, its glint and the lantern share one size and centre, so
    the lantern's globe lands where the pupil was; black (or a blur of the picture) fills the rest. */
 #ending, #opening { --eye: min(100vmax, 130vmin); }
