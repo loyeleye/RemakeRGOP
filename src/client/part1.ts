@@ -102,17 +102,18 @@ export const HELD: Record<string, Held> = {
   },
   // 7-8b, Hesta's hands at night, then the morning (production/story/part1/hands/final/README.md, 25
   // Nov): the cutscene thread's picks; Ladi was sent an earlier draft on 23 Nov and has not ruled.
-  // Wordless: no line is written for her laughing it off.
+  // The lines are the story thread's drafts (25 Nov), not seen by Ladi; she never says where the burns
+  // came from, and no line may name a cause.
   "7-8b": {
-    tag: "Pictures not seen by Ladi",
+    tag: "Pictures and lines not seen by Ladi",
     fade: 0.7,
     lead: 0,
-    line: 2.6,
+    line: 3,
     gap: 0.4,
     pictures: [
       { slot: "hands-1-burnt", hold: 4, shake: "hands-1-shake-layer" },
-      { slot: "hands-2-caught", hold: 2 },
-      { slot: "hands-3-laugh", hold: 3.5 },
+      { slot: "hands-2-caught", hold: 0.6, lines: [{ who: ["Rook"], text: "Granny?" }] },
+      { slot: "hands-3-laugh", hold: 1, lines: [{ who: ["Hesta"], text: "Grabbed the hot end. At my age." }, { who: ["Hesta"], text: "Now don't tell Lumi how many honey drops I've had." }] },
       { slot: "hands-4-morning-door", hold: 3.5, cut: true },
     ],
   },
