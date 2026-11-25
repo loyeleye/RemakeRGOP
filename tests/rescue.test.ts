@@ -358,6 +358,35 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(r.dockAt - g.tick).toBeGreaterThan(RESCUE.lamp.swap);
   });
 
+  it("busy Kes (the default) is on her feet far more than still Kes, sets down no more per minute, and keeps her face to the patch while it is out", () => {
+    const play = (idle: "busy" | "still") => {
+      let moved = 0, ticks = 0, sets = 0, looked = 0, out = 0;
+      for (const seed of [7919, 15838, 23757]) {
+        const { room, toPlay } = open(seed, "bait", (r) => (r.kesIdle = idle));
+        toPlay();
+        const g = room.state.game, kes = g.players.find((p) => p.id !== 1)!;
+        let prev = { ...kes.pos };
+        for (let n = 0; n < 400 && room.state.phase === "playing"; n++) {
+          const s0 = room.setDowns;
+          room.onTick();
+          if (room.setDowns > s0) sets += room.setDowns - s0;
+          ticks++;
+          if (kes.pos.x !== prev.x || kes.pos.y !== prev.y) moved++;
+          prev = { ...kes.pos };
+          const p = room.state.patch, view = room.storyView().rescue!;
+          if (p && p.warn <= 0 && !room.state.kesDark && !(p as { sit?: boolean }).sit) (out++, view.kesLook && looked++);
+        }
+      }
+      return { moved: moved / ticks, rate: sets / ticks, looked, out };
+    };
+    const busy = play("busy"), still = play("still");
+    expect(busy.moved).toBeGreaterThan(still.moved + 0.15);
+    expect(busy.rate).toBeLessThanOrEqual(still.rate * 1.05);
+    // (Her look is set as she is steered, a step before the patch moves: a tick behind as it comes on and goes off.)
+    expect(busy.looked).toBeGreaterThan(busy.out * 0.85);
+    expect(still.looked).toBe(0);
+  });
+
   it("the first build's rules stay on their switches: Kes banks her own and the patch keeps to its two fixed lines", () => {
     const { room, lines, toPlay } = open(7919, "hold", (r) => ((r.kesMode = "banks"), (r.patchAim = "line")));
     toPlay();

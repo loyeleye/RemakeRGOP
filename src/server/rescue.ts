@@ -144,6 +144,20 @@ export class RescueRoom {
   private tell: { k: number; left: number } | null = null;
   /** Kes sets hers down at the stones for him (the rule), or banks them herself as in the first build (?kes=banks). */
   kesMode: "supply" | "banks" = RESCUE.kes.banks ? "banks" : "supply";
+  /**
+   * What Kes does with nothing to string or carry (Ladi, 25 Nov: "too idle", and calm, not
+   * panicky). busy: she paces her side while her next pair is due, walks to the stones and watches
+   * west through a warning, goes to the landing and waves the people aboard when a boat docks, and
+   * keeps her face to the patch while it is out. still: she waits where her next pair comes up.
+   */
+  kesIdle: "busy" | "still" = "busy";
+  /** Busy Kes: where she is looking (a tile), whether she is waving, and her errands. */
+  private kesLook: Pt | null = null;
+  private kesWave = false;
+  private paceOut = false;
+  private paceWait = 0;
+  private wave: { until: number } | null = null;
+  private waveFor = -1;
   /** The docked lamp loses its pips unless it is fed in time (the rule), or keeps them (?lamp=holds). */
   lampMode: "leaks" | "holds" = RESCUE.lamp.leaks ? "leaks" : "holds";
   /** Pips that guttered out. */
@@ -788,7 +802,8 @@ export class RescueRoom {
       this.said.add("cold");
     }
     // The visit bent over her: a tick before it covers her she calls it, and stands where she is.
-    if (p.via === "to" && !p.called && Math.hypot(kes.pos.x + 0.5 - p.x, kes.pos.y + 0.5 - p.y) - p.r <= p.speed) {
+    // (Her own step counts too: walking toward it, she meets it sooner.)
+    if (p.via === "to" && !p.called && Math.hypot(kes.pos.x + 0.5 - p.x, kes.pos.y + 0.5 - p.y) - p.r <= p.speed + (kes.action.kind === "walk" ? (kes.run ? 2 : 1) : 0)) {
       p.called = true;
       this.kesHold = true;
       const line: StoryLine = { who: KES, text: "It's coming back.", player: KES_ID };
@@ -1199,6 +1214,9 @@ export class RescueRoom {
     const g = this.game, me = this.player(KES_ID);
     const cmd = (c: Command | null) => c && g.command(KES_ID, c);
     const idle = () => cmd(me.action.kind === "idle" ? null : { action: { kind: "idle" } });
+    // Busy: while it is out and she is not under it she keeps her face to it (set again below by an errand).
+    this.kesWave = false;
+    this.kesLook = this.kesIdle === "busy" && this.patch && !this.patch.sit && this.patch.warn <= 0 && !this.kesDark ? pt(Math.floor(this.patch.x), Math.floor(this.patch.y)) : null;
     // Under it, and for a moment after, she does nothing.
     if (this.kesDark || g.tick < this.kesShaken) return idle();
     if (this.emptyHanded) {
@@ -1264,10 +1282,12 @@ export class RescueRoom {
     const fix = me.mode !== "pull" || undefined;
     const walk = (to: Pt) => (samePt(me.pos, to) ? cmd(me.action.kind === "idle" ? null : { action: { kind: "idle" } }) : me.action.kind === "walk" && samePt(me.action.to, to) ? cmd(fix ? { toggleMode: true } : null) : cmd({ action: { kind: "walk", to }, toggleMode: fix }));
     this.carrying = !!head;
-    // With a string in hand she walks; with empty hands she runs.
-    if (me.run === !!head) g.command(KES_ID, { toggleRun: true });
+    // With a string in hand she walks; with empty hands she runs (busy, she walks about her side: see busy()).
+    if (me.run === !!head && (head || this.kesIdle === "still")) g.command(KES_ID, { toggleRun: true });
     if (!head) {
       const wait = this.spots[0] ? this.besideWisp({ pos: this.spots[0] } as Wisp, me.pos) : null;
+      // Busy, her waiting tile is fixed by the spot alone (not by where she is), so that she can pace from it.
+      if (this.kesIdle === "busy") return this.busy(this.spots[0] ? this.besideWisp({ pos: this.spots[0] } as Wisp, this.spots[0]) : null, walk);
       return wait ? walk(wait) : undefined;
     }
     const stand = pt(c.x + D.stand[0], c.y + D.stand[1]);
@@ -1330,6 +1350,70 @@ export class RescueRoom {
     const call = full ? [`${n} at the stones, Rook.`, `${n} more at the stones.`, "More at the stones."][this.calls++ % 3]! : "More at the stones.";
     this.say(KES, call, { player: KES_ID }, this.said.has("stones") ? "quip" : "key");
     this.said.add("stones");
+  }
+
+  /**
+   * Busy Kes with empty hands (none of hers loose to string): an errand if there is one, else she
+   * paces her side by where her next pair comes up. Nothing here puts light anywhere, and she drops
+   * any of it the moment a pair of hers is loose (steerKes strings them first).
+   */
+  private busy(wait: Pt | null, walk: (to: Pt) => unknown) {
+    const g = this.game, me = this.player(KES_ID), c = g.board.center, B = RESCUE.kes.busy;
+    const at = (o: readonly [number, number]) => pt(c.x + o[0], c.y + o[1]);
+    const brisk = (to: Pt) => (me.run && g.command(KES_ID, { toggleRun: true }), walk(to));
+    const hurry = (to: Pt) => (!me.run && g.command(KES_ID, { toggleRun: true }), walk(to));
+    // A warning: she walks to the stones and watches west, where it comes from, till it sets out.
+    // Not before the visit that is bent over her: it would find her by his heap.
+    if (this.tell && !(this.patchAim === "bait" && this.tell.k === 1 && !this.bentOnce)) {
+      const watch = at(B.watch);
+      this.kesLook = pt(watch.x - 12, watch.y);
+      return brisk(watch);
+    }
+    // A boat has docked: she goes to the landing and waves its people aboard, then back to work.
+    if (g.tick >= this.dockAt && this.waveFor !== this.lifted && this.lifted > 0 && this.lifted < RESCUE.boats && !this.patch) (this.waveFor = this.lifted), (this.wave = { until: -1 });
+    if (this.wave) {
+      if (this.patch || this.tell) this.wave = null;
+      else {
+        const spot = at(B.wave);
+        if (!samePt(me.pos, spot)) return hurry(spot);
+        if (this.wave.until < 0) this.wave.until = g.tick + B.waveTicks;
+        this.kesLook = at(B.crowd);
+        this.kesWave = true;
+        if (g.tick < this.wave.until) return brisk(spot);
+        this.wave = null;
+      }
+    }
+    if (!wait) return;
+    // Back to her side from an errand she goes at a run, as before; about it, she walks.
+    if (cheb(me.pos, wait) > RESCUE.kes.busy.pace + 2) return hurry(wait);
+    // Pacing: out a few tiles toward the neck and back, a pause at each end.
+    const out = this.paceSpot(wait);
+    const to = this.paceOut && out ? out : wait;
+    if (samePt(me.pos, to)) {
+      if (++this.paceWait >= B.pause) (this.paceWait = 0), (this.paceOut = !this.paceOut);
+      return brisk(to);
+    }
+    this.paceWait = 0;
+    return brisk(to);
+  }
+
+  /**
+   * Where she paces out to from her waiting tile: `RESCUE.kes.busy.pace` tiles off it on her own
+   * strip, on open ground she can walk to, and no nearer the stones (so her trips are no shorter).
+   * Across the strip if it can be, else along it.
+   */
+  private paceSpot(from: Pt): Pt | null {
+    const g = this.game, b = g.board, c = b.center, n = RESCUE.kes.busy.pace, stones = pt(c.x + RESCUE.drop.at[0], c.y + RESCUE.drop.at[1]);
+    const far = Math.hypot(from.x - stones.x, from.y - stones.y) - 0.5;
+    for (let k = n; k >= 2; k--)
+      for (const [dx, dy] of [[1, 0], [-1, 0], [1, -1], [-1, -1], [0, -1], [1, 1], [-1, 1], [0, 1]] as const) {
+        const q = pt(from.x + dx * k, from.y + dy * k);
+        if (!b.inside(q) || b.tile(q) !== Tile.Floor || loStrip(q.x - c.x) !== loStrip(from.x - c.x) || Math.hypot(q.x - stones.x, q.y - stones.y) < far) continue;
+        if (g.wisps.some((o) => !g.away.has(o.id) && samePt(o.pos, q))) continue;
+        const path = b.walkPath(from, q);
+        if (path.length && path.length <= k + 1 && samePt(path[path.length - 1]!, q)) return q;
+      }
+    return null;
   }
 
   /** A tile to stand on within the string's reach of a wisp, the nearest to where she is. */
@@ -1554,6 +1638,7 @@ export class RescueRoom {
       run: RESCUE.run, movement: 0, title: "", ring: null, mark: null, kes: 0, rival: null, note: "", end: this.end,
       rescue: {
         kes: KES_ID,
+        ...(this.kesLook ? { kesLook: { x: this.kesLook.x, y: this.kesLook.y, ...(this.kesWave ? { wave: true } : {}) } } : {}),
         boats: [...this.fill],
         perBoat: RESCUE.perBoat,
         lifted: this.lifted,

@@ -77,7 +77,16 @@ export const RESCUE = {
   storm: { max: 3, reach: 2, link: 6, gap: 2 },
   /** Kes: how careful she is each tick, and ticks she stands and looks after the patch has crossed her. */
   /** After a crossing breaks her string she stands with empty hands for `emptyHands` ticks. `banks` is the first build's Kes, who banked her own (the page's ?kes=banks). */
-  kes: { sloppiness: 0.05, shaken: 5, emptyHands: 20, banks: false as boolean },
+  kes: {
+    sloppiness: 0.05, shaken: 5, emptyHands: 20, banks: false as boolean,
+    /**
+     * Busy Kes (?kes=busy, the default; ?kes=still is the build before): where she watches from
+     * through a warning (by the stones, east of them), where she waves a docked boat's people
+     * aboard from and the crowd she faces, for how long, and her pacing: this many tiles out toward
+     * the neck from where her next pair comes up, a pause of `pause` ticks at each end.
+     */
+    busy: { watch: [11, -9] as readonly [number, number], wave: [-3, -2] as readonly [number, number], crowd: [-1, -3] as readonly [number, number], waveTicks: 4, pause: 2, pace: 3 },
+  },
   /**
    * The dark patch: a hard-edged stain `size` tiles across, moving `speed` tiles a tick on a
    * straight line (3 is the island in about 9 seconds). For `warn` ticks before its edge

@@ -1091,6 +1091,7 @@ function rescueRoom() {
   const clock = (q.get("clock") ?? "").split(",").map(Number);
   if (clock.length === 3 && clock.every((n) => n > 0 && n < 1)) (RESCUE.patch.clock as { at: readonly number[] }).at = clock;
   if (q.get("kes") === "banks") r.kesMode = "banks";
+  if (q.get("kes") === "still") r.kesIdle = "still";
   if (q.get("flare") === "1") r.flareOn = true;
   const lamp = q.get("lamp");
   if (lamp === "holds" || lamp === "leaks") r.lampMode = lamp;

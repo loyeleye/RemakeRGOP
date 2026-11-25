@@ -4279,6 +4279,9 @@ export class World {
         const t = wispPos.get(p.beam)!;
         face = Math.atan2(t.x - wx, t.z - wz);
       } else if (moving) face = Math.atan2(p.x - p.px, p.y - p.py);
+      // Run 9, busy Kes standing: her face to what she is watching (the patch, the west, the people she waves aboard).
+      const look = st.rescue?.kes === p.id ? st.rescue.kesLook : undefined;
+      if (look && !moving && p.beam === null) face = Math.atan2(this.worldX(b, look.x) - wx, this.worldZ(b, look.y) - wz);
       rig.facing = lerpAngle(rig.facing, face, 0.18);
       const anim = rig.body?.userData.anim as CastAnim | undefined;
       if (anim) {
@@ -4287,7 +4290,9 @@ export class World {
         const lead = (st.snap.scores[p.guild] ?? 0) - Math.max(...st.snap.scores.filter((_, i) => i !== p.guild), 0);
         // Not in runs 6 and 7 (Ladi).
         const snack = rig.cast === "hesta" && lead >= 2 && !st.dying && anim.has("snack");
-        anim.set(p.beam !== null ? (p.mode === "push" ? "push" : "pull") : moving ? (p.run ? "run" : "walk") : snack ? "snack" : "idle");
+        // Waving the people aboard: her staff up toward them, the pull pose with no wisp on it.
+        const wave = !!look?.wave && !moving;
+        anim.set(p.beam !== null || wave ? (p.mode === "push" ? "push" : "pull") : moving ? (p.run ? "run" : "walk") : snack ? "snack" : "idle");
         anim.update(time);
         rig.root.position.set(wx, 0, wz);
         this.stepSnack(rig, anim.at("snack"));

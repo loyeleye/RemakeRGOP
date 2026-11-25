@@ -194,6 +194,8 @@ export interface StoryView {
    */
   rescue?: {
     kes: number; boats: number[]; perBoat: number; lifted: number; cloud: number;
+    /** Busy Kes: the tile she keeps her face to while standing, and whether she is waving the people aboard. */
+    kesLook?: { x: number; y: number; wave?: boolean };
     /** The docked boat's lamp (the bank): its tile, how near a wisp must come, and whether it is dark just now (the patch over it, or no boat docked). */
     lamp?: { x: number; y: number; take: number; dark?: boolean; gutter?: number; went?: number; /** The patch is sitting on the boat. */ sat?: boolean; /** Ticks since it moved off a boat it sat on (for a while after). */ cold?: number; /** Bait: the lamp is not ready for its next wisp: ticks left of how many, and how many wait in its light. */ sip?: { left: number; of: number; n: number } };
     /** Banks still wanted, the cloud's edge at the start and where it ends the run (tiles from the slip). */
