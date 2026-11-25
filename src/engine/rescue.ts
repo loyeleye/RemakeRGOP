@@ -34,7 +34,7 @@ export const RESCUE = {
    * pouring its wisps in close together, which means having them near first: the heap the patch
    * goes for. The clock stands still while the lamp is dark under the patch or between boats.
    */
-  lamp: { at: [0, -1] as readonly [number, number], take: 3.5, swap: 4, leaks: true as boolean, hold: 14, drip: 8, flicker: 5 },
+  lamp: { at: [0, -1] as readonly [number, number], take: 3.5, swap: 4, leaks: true as boolean, hold: 20, drip: 8, flicker: 5 },
   /**
    * A try (off; the page's ?flare=1): heaping pays. When `of` wisps go into the lamp within
    * `within` ticks of each other the lamp flares and gives one pip more. Without it nothing in the

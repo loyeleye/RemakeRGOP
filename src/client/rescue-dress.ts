@@ -30,6 +30,9 @@ export const RESCUE_LOOK = {
   slideSec: 1.6,
   /** A boat: half its width and half its length (tiles), and how far its middle lies south of the slip. */
   boat: { w: 1.7, l: 4.3, south: 3.1 },
+  /** Which of the three house models stands at each of LO_HOUSES, and where the boat model's lantern hangs (up, and from its middle toward the stern). */
+  houses: ["a", "b", "c", "c", "a"] as readonly string[],
+  lantern: [3.36, -3.43] as const,
   /**
    * The queue: where the next boat and the one after wait (tiles from the slip, and how far they
    * are turned, stern toward the slip), one behind the other off the east wing. They are dark
@@ -120,7 +123,7 @@ void main() {
 }`;
 
 interface Lamp { x: number; z: number; glow: THREE.Sprite; core: THREE.Sprite; box: THREE.MeshStandardMaterial; lit: number; seed: number; coldAt: number; size: number; warm: THREE.Color }
-interface Boat { root: THREE.Group; lamp: THREE.Sprite; core: THREE.Sprite; pips: THREE.Mesh[]; pipGlows: THREE.Sprite[]; mist: THREE.Sprite[]; mistOn: number; wentAt: number; seated: number; riders: THREE.Object3D[]; paint: { m: THREE.MeshStandardMaterial; base: THREE.Color }[]; at: THREE.Vector3; from: THREE.Vector3; to: THREE.Vector3; rot: number; rotFrom: number; rotTo: number; movedAt: number; liftedAt: number; fill: number; pulse: number; lit: number }
+interface Boat { root: THREE.Group; shell: THREE.Group; real: boolean; lamp: THREE.Sprite; core: THREE.Sprite; pips: THREE.Mesh[]; pipGlows: THREE.Sprite[]; mist: THREE.Sprite[]; mistOn: number; wentAt: number; seated: number; riders: THREE.Object3D[]; paint: { m: THREE.MeshStandardMaterial; base: THREE.Color; glow?: number }[]; at: THREE.Vector3; from: THREE.Vector3; to: THREE.Vector3; rot: number; rotFrom: number; rotTo: number; movedAt: number; liftedAt: number; fill: number; pulse: number; lit: number }
 interface Fly { s: THREE.Sprite; from: THREE.Vector3; at: number }
 interface Body { root: THREE.Group; glow: THREE.Sprite; group: number; seat: number; gone: number }
 interface Smoke { s: THREE.Sprite; x: number; z: number; at: number }
@@ -167,6 +170,8 @@ export class RescueFx {
   private poolLit = 0;
   private poolPulse = -9;
   private stones: THREE.Group | null = null;
+  /** The block-outs that the maps thread's models take the place of, once each has loaded: what, which model, and how it is turned. */
+  private swaps: { group: THREE.Group; name: string; turn: number }[] = [];
   /** The patch's size as drawn, eased toward what it is. */
   private pr = 3;
   private patchBig = 0;
@@ -179,7 +184,7 @@ export class RescueFx {
   private cloud = RESCUE.cloud.start as number;
   private ember = new THREE.Color(RESCUE_LOOK.ember);
 
-  constructor(private glow: Glow) {
+  constructor(private glow: Glow, private model: (name: string) => THREE.Object3D | undefined = () => undefined) {
     const std = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, ...extra });
     const K = RESCUE_LOOK;
     // The cloud on the ground, and the wall's body standing on it.
@@ -233,6 +238,7 @@ export class RescueFx {
     cold.traverse((o) => ((o as THREE.Mesh).castShadow = (o as THREE.Mesh).receiveShadow = true));
     cold.position.set(LO_BRAZIER.x, 0, LO_BRAZIER.y);
     this.all.add(cold);
+    this.swaps.push({ group: cold, name: "cold-brazier", turn: 0 });
 
     // Path lamps: a post and a lantern each. They go cold ahead of the patch and are dark under it.
     const iron = std("#2c2f38", { roughness: 0.7 });
@@ -275,6 +281,8 @@ export class RescueFx {
       h.traverse((o) => ((o as THREE.Mesh).castShadow = (o as THREE.Mesh).receiveShadow = true));
       h.position.set(x, 0, z);
       this.all.add(h);
+      // The maps thread's three houses, as it placed them; fronts to the south, toward the eye.
+      this.swaps.push({ group: h, name: `low-house-${K.houses[i % K.houses.length]}`, turn: 0 });
       light(x + 0.55, tall * 0.58, z + w / 2 + 0.25, pane, 2.2, "#ffb24a");
     });
 
@@ -328,7 +336,9 @@ export class RescueFx {
 
   /** Kes's drop: a low ring of pale stones, and a pale ring on the ground that shows through the cloud. A block-out until the maps thread's stones are in. */
   private makeStones(x: number, z: number, r: number) {
-    const K = RESCUE_LOOK, g = new THREE.Group();
+    const K = RESCUE_LOOK, g = new THREE.Group(), rocks = new THREE.Group();
+    g.add(rocks);
+    this.swaps.push({ group: rocks, name: "kes-drop", turn: 0 });
     for (let i = 0; i < K.stones; i++) {
       const a = (i / K.stones) * Math.PI * 2 + 0.3, k = 0.75 + ((i * 37) % 5) * 0.09;
       const st = new THREE.Mesh(new THREE.SphereGeometry(0.34 * k, 10, 8), new THREE.MeshStandardMaterial({ color: K.stone, roughness: 1 }));
@@ -336,7 +346,7 @@ export class RescueFx {
       st.rotation.y = a * 2.3;
       st.position.set(Math.cos(a) * r, 0.12, Math.sin(a) * r);
       st.castShadow = st.receiveShadow = true;
-      g.add(st);
+      rocks.add(st);
     }
     const ringGeo = new THREE.RingGeometry(r - 0.12, r + 0.12, 48);
     ringGeo.rotateX(-Math.PI / 2);
@@ -363,7 +373,9 @@ export class RescueFx {
     wale.rotation.x = Math.PI / 2;
     wale.scale.set(B.w, B.l, 1.6);
     wale.position.y = 0.76;
-    root.add(hull, deck, wale);
+    const shell = new THREE.Group();
+    root.add(shell);
+    shell.add(hull, deck, wale);
     // Benches across, two to a bench.
     const seats = K.perBoat / 2, gap = (B.l * 1.25) / seats, z0 = -((seats - 1) * gap) / 2 + 0.35;
     const riders: THREE.Object3D[] = [];
@@ -372,7 +384,7 @@ export class RescueFx {
       const z = z0 + k * gap, half = B.w * Math.sqrt(Math.max(0.05, 1 - (z / B.l) ** 2));
       const bench = new THREE.Mesh(new THREE.BoxGeometry(half * 1.8, 0.07, 0.34), std("#7d5c3c"));
       bench.position.set(0, 0.62, z);
-      root.add(bench);
+      shell.add(bench);
       for (const sx of [-1, 1]) {
         const r = new THREE.Group();
         const small = i === 0 && riders.length < 5;
@@ -426,7 +438,8 @@ export class RescueFx {
       sp.renderOrder = 6;
       return sp;
     });
-    root.add(mast, yard, lampBox, lamp, core, ...pips, ...pipGlows, ...mist);
+    shell.add(mast, yard, lampBox);
+    root.add(lamp, core, ...pips, ...pipGlows, ...mist);
     root.traverse((o) => (o as THREE.Mesh).isMesh && ((o as THREE.Mesh).castShadow = true));
     root.userData.lampBox = lampBox;
     // Its own colours, kept so a waiting boat can be drawn dark.
@@ -435,7 +448,51 @@ export class RescueFx {
       const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
       if (m?.isMeshStandardMaterial && !pips.includes(o as THREE.Mesh) && o !== lampBox) paint.push({ m, base: m.color.clone() });
     });
-    return { root, lamp, core, pips, pipGlows, mist, mistOn: 0, wentAt: -9, seated: 0, riders, paint, at: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), rot: 0, rotFrom: 0, rotTo: 0, movedAt: -9, liftedAt: -1, fill: 0, pulse: -9, lit: 0 };
+    return { root, shell, real: false, lamp, core, pips, pipGlows, mist, mistOn: 0, wentAt: -9, seated: 0, riders, paint, at: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), rot: 0, rotFrom: 0, rotTo: 0, movedAt: -9, liftedAt: -1, fill: 0, pulse: -9, lit: 0 };
+  }
+
+  /** The maps thread's models in place of the block-outs, each as soon as it has loaded. */
+  private dress() {
+    this.swaps = this.swaps.filter((sw) => {
+      const m = this.model(sw.name);
+      if (!m) return true;
+      sw.group.clear();
+      const real = m.clone();
+      real.rotation.y = sw.turn;
+      sw.group.add(real);
+      return false;
+    });
+    const hull = this.model("rescue-boat");
+    if (!hull) return;
+    for (const b of this.boats) {
+      if (b.real) continue;
+      b.real = true;
+      const old = new Set<THREE.Material>();
+      b.shell.traverse((o) => (o as THREE.Mesh).isMesh && old.add((o as THREE.Mesh).material as THREE.Material));
+      b.paint = b.paint.filter((q) => !old.has(q.m));
+      b.root.remove(b.shell);
+      const real = hull.clone();
+      // Its own paint (a waiting boat is drawn dark) and its own lantern glass, lit by the pips.
+      real.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const mat = (mesh.material = (mesh.material as THREE.MeshStandardMaterial).clone());
+        if (mat.name !== "lamp-glass") return;
+        mat.emissiveMap = null;
+        mat.emissive = new THREE.Color("#ffb65a");
+        mat.emissiveIntensity = 0;
+        b.root.userData.lampBox = mesh;
+      });
+      b.shell = real as THREE.Group;
+      b.root.add(real);
+      const [up, aft] = RESCUE_LOOK.lantern;
+      b.lamp.position.set(0, up, aft);
+      b.core.position.set(0, up, aft);
+      real.traverse((o) => {
+        const mat = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+        if (mat?.isMeshStandardMaterial && mat.name !== "lamp-glass") b.paint.push({ m: mat, base: mat.color.clone(), glow: mat.emissiveIntensity });
+      });
+    }
   }
 
   /** From the top again (a restart): the boats back at their berths, everyone back on the landing. */
@@ -459,6 +516,7 @@ export class RescueFx {
 
   step(f: RescueFrame) {
     const { r, time } = f, L = RESCUE_LOOK;
+    this.dress();
     this.u.uTime.value = time;
     // The cloud comes in a step at a time, quickly, and at the end closes over everything.
     this.cloud += (r.cloud - this.cloud) * (r.cloud < this.cloud ? 0.06 : 0.3);
@@ -649,7 +707,7 @@ export class RescueFx {
       // A waiting boat is dark; it takes its colour as it comes into the slip.
       b.lit += ((mine || b.liftedAt >= 0 ? 1 : 0) - b.lit) * 0.05;
       const shade = L.waiting + (1 - L.waiting) * b.lit;
-      for (const q of b.paint) q.m.color.copy(q.base).multiplyScalar(shade);
+      for (const q of b.paint) q.m.color.copy(q.base).multiplyScalar(shade), q.glow !== undefined && (q.m.emissiveIntensity = q.glow * shade * shade);
       // Moving up the queue, and into the slip.
       const s = Math.min(1, Math.max(0, (time - b.movedAt) / L.slideSec)), e = s * s * (3 - 2 * s);
       b.at.copy(b.from).lerp(b.to, e);

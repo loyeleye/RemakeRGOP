@@ -196,7 +196,7 @@ const plainLoader = new GLTFLoader().register((parser) => {
 });
 
 /** Story buildings, loaded as delivered: already placed (one unit a tile, feet at y=0, door to +X), never normalized. */
-const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "offering-stone", "offering-boat", "offering-mooring", "kes-house", "wind-vane", "bent-tree", "referee-stand", "sieve-well-pit", "sieve-cutters-hut-a", "sieve-cutters-hut-b", "sieve-block-stacks", "sieve-stone-cart", "sieve-hoist", "sieve-tally-table", "ship-hull", "ship-sail", "ship-lamp", "ship-rope-coil", "ship-tiller", "isle-kite-fell", "isle-orchard", "isle-mill", "isle-steps"];
+const PLACE_MODELS = ["rook-house", "rook-house-big", "fence", "washpost", "bench", "barrel", "woodpile", "flowerbed", "hesta-house", "hesta-chair", "skiff", "landing", "shrine", "kindling-brazier", "falls", "shrine-wall", "shade-tree", "lamp-pedestal", "spout-basin", "willing-girl", "willing-girl-ribbons", "statue-flowers", "lookout-post", "landing-rail", "maudie-house", "moth-house", "mabry-house", "orrin-house", "wick-house", "nell-house", "sefa-house", "path-lamp", "jarek-ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "offering-stone", "offering-boat", "offering-mooring", "kes-house", "wind-vane", "bent-tree", "referee-stand", "sieve-well-pit", "sieve-cutters-hut-a", "sieve-cutters-hut-b", "sieve-block-stacks", "sieve-stone-cart", "sieve-hoist", "sieve-tally-table", "ship-hull", "ship-sail", "ship-lamp", "ship-rope-coil", "ship-tiller", "isle-kite-fell", "isle-orchard", "isle-mill", "isle-steps", "low-house-a", "low-house-b", "low-house-c", "rescue-boat", "kes-drop", "cold-brazier"];
 
 export function loadModels() {
   for (const n of PLACE_MODELS) {
@@ -2967,7 +2967,7 @@ export class World {
       return;
     }
     if (!this.rescueFx) {
-      this.rescueFx = new RescueFx(glowSprite);
+      this.rescueFx = new RescueFx(glowSprite, (n) => models[n]);
       this.scene.add(this.rescueFx.all);
     }
     // No fire burns at the slip.
@@ -4260,9 +4260,9 @@ const RESCUE_HUD = {
  */
 function drawRescueHud(g: CanvasRenderingContext2D, cam: Camera, st: DrawState, r: NonNullable<DrawState["rescue"]>) {
   const H = RESCUE_HUD, n = r.boats.length;
-  // Fitted between the corner buttons (and clear of the little map on a small screen).
+  // Fitted between the corner buttons (and clear of the little map on a small screen). Before play starts it keeps to its small size, above the talk box.
   const room = cam.w - (cam.compact ? 230 : 150), wide = H.bar + 18 + n * H.cell + (n - 1) * H.gap + 24;
-  const k = Math.max(0.62, Math.min(cam.compact ? 1.02 : H.desk, room / wide)), W = wide * k, x0 = Math.max(52, Math.min((cam.w - W) / 2 - (cam.compact && cam.w > cam.h ? 30 : 0), cam.w - 112 - W)), y0 = 4, hgt = 57 * k;
+  const k = Math.max(0.62, Math.min(cam.compact || st.snap.tick < 1 ? 1.02 : H.desk, room / wide)), W = wide * k, x0 = Math.max(52, Math.min((cam.w - W) / 2 - (cam.compact && cam.w > cam.h ? 30 : 0), cam.w - 112 - W)), y0 = 4, hgt = 57 * k;
   g.save();
   g.fillStyle = "rgba(10,8,20,0.6)";
   roundRect(g, x0, y0, W, hgt, 12 * k);
