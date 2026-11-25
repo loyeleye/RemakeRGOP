@@ -3,6 +3,7 @@
 // a folder's clips are joined in one file (tools/voice-sprites.py) and a clip is a time range of it.
 export const VOICE_LINES: Record<string, string> = {
   "Hesta|You never know when to stop, Rook.": "voice/hesta-never-know-when-to-stop.mp3",
+  "Hesta|That'll do, Rook. You never know when to stop.": "voice/hesta-thatll-do-never-know-when-to-stop.mp3",
   "Hesta|That's the where of it. Stand across from it, and it comes home.": "voice/hesta-where-of-it.mp3",
   "Hesta|Good. You heard the crew and you finished. That's the when.": "voice/hesta-the-when.mp3",
   "Hesta|One at a time tonight, Rook. Stand in the ring and pull.": "voice/hesta-one-at-a-time.mp3",

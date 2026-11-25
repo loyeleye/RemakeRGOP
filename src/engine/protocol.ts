@@ -66,6 +66,8 @@ export interface StoryLine {
   still?: StillCue;
   /** Shown but not voiced (Nell and Sefa in Granny's game, Ladi 25 Nov). */
   quiet?: boolean;
+  /** A thought, not said aloud: a thought bubble over its player, never voiced (Rook in run 7, Ladi 25 Nov). */
+  thought?: boolean;
   /** Its voice may start while another is still speaking (Nell and Sefa's "Granny!" as Hesta lands). */
   over?: boolean;
 }

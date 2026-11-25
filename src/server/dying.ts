@@ -20,6 +20,10 @@ import { realClock, type Clock } from "./room.js";
 
 const YOU = 1, HESTA_ID = 2;
 const ROOK = "Rook", HESTA = "Hesta", LUMI = "Lumi";
+/** Hesta as the last wisp banks: the fond one, before the Offering's "You never did know when to stop, Rook." */
+/** Rook's repeats while he leaves the last wisp, in turn. */
+const REPEATS = ["One more. Just in case.", "One left out there. Not leaving it."];
+const LAST_LINE = "That'll do, Rook. You never know when to stop.";
 
 /** How a stand-in for the player plays, in tests and measurements. */
 export type Stand = "juggle" | "hold" | "idle";
@@ -354,9 +358,14 @@ export class DyingRoom {
     this.touchedAt = new Map();
     this.lastHold = -99;
     this.faltered = false;
+    this.nextThought = this.thoughts = 0;
   }
 
   // ---------------------------------------------------------------- run 7
+
+  /** When Rook next thinks "One more. Just in case." */
+  private nextThought = 0;
+  private thoughts = 0;
 
   /** Banks still needed for a full fire. */
   private needed() {
@@ -432,12 +441,36 @@ export class DyingRoom {
         const which = bankLine(n);
         if (which) this.say(HESTA, S.bank[which], { player: HESTA_ID }, which === "first" || which === "stars" ? "key" : "quip");
       }
+    // The last wisp (Ladi, 25 Nov): "That'll hold" comes a bank early, and the fire waits for him
+    // to bring one more in by his own hand; nothing brings it in for him. He thinks it, he doesn't
+    // say it: once about a second after her line, then again each 7 seconds he isn't pulling one
+    // (the gameplay thread's spacing, inside Ladi's 6 to 8); a pull starts the 7 seconds again.
+    // Wording: Ladi, 25 Nov, the trimmed first line and two repeats in turn.
+    if (g.flame! < 100 && this.needed() === 1 && !this.said.has("eighth")) {
+      this.said.add("eighth");
+      this.say(HESTA, "There. That'll hold.", { player: HESTA_ID }, "key");
+    }
+    if (g.flame! < 100 && this.said.has("eighth")) {
+      const think = (text: string) => {
+        const line = { who: ROOK, text, player: YOU, thought: true, quiet: true };
+        this.say(ROOK, text, { player: YOU, thought: true, quiet: true }, "key");
+        this.nextThought = g.tick + lineTicks(line) + S.thinkEvery;
+      };
+      if (!this.said.has("thought")) {
+        if (this.talking()) this.nextThought = g.tick + S.thinkAfter;
+        else if (g.tick >= this.nextThought) (this.said.add("thought"), think("There's one still out there. Just in case."));
+      } else if (rook.action.kind === "staff") this.nextThought = Math.max(this.nextThought, g.tick + S.thinkEvery);
+      // The two repeats take turns (Ladi: "cycled between").
+      else if (g.tick >= this.nextThought && !this.talking()) think(REPEATS[this.thoughts++ % REPEATS.length]!);
+    }
     if (g.flame! >= 100 && g.scores[0]! > before) {
       this.part = "lifted";
       this.since = g.tick;
       g.dimTicks = 0;
       g.rooted.clear();
-      this.say(HESTA, "There. That'll hold.", { player: HESTA_ID }, "key");
+      // The fire is full: while the board holds for her line, nothing more banks.
+      for (const w of g.wisps) g.noBank.add(w.id);
+      this.say(HESTA, LAST_LINE, { player: HESTA_ID }, "key");
     }
   }
 
@@ -446,7 +479,8 @@ export class DyingRoom {
     const g = this.game, S = DYING.seven;
     if (this.part === "lifted") {
       g.step();
-      if (g.tick - this.since >= S.hold) (this.part = "risen"), (this.stillTick = 0);
+      // Held until her line is done, so the picture doesn't cut it off.
+      if (g.tick - this.since >= S.hold && !this.talking()) (this.part = "risen"), (this.stillTick = 0);
     } else if (this.part === "risen") {
       if (++this.stillTick >= DYING.risen.ticks) (this.part = "after"), (this.since = g.tick), (this.queue = []);
     } else {

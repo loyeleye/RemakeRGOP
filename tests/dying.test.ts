@@ -225,11 +225,13 @@ describe("runs 6 and 7, the dying brazier", () => {
     expect(said[0]).toBe("It's low, Rook. Feed it. Nearest first.");
     expect(said).toContain("Budge up, Rook.");
     expect(said).toContain("That one's yours, Rook. At my age?");
-    expect(said.slice(-3)).toEqual(["There. That'll hold.", "Nine seconds from the terrace. I counted.", "Slow. I used to be quick."]);
+    expect(said).toContain("There. That'll hold.");
+    expect(said.slice(-3)).toEqual(["That'll do, Rook. You never know when to stop.", "Nine seconds from the terrace. I counted.", "Slow. I used to be quick."]);
     // The first sound from the crowd is two children.
     expect(lines.filter((l) => l.text === "Granny!").map((l) => l.who)).toEqual(["Nell", "Sefa"]);
     // Rook has no line, nobody calls once Hesta's voice has cut off, and nothing is ever said about losing or sinking.
-    expect(lines.some((l) => l.who === "Rook")).toBe(false);
+    // Rook only thinks: his lines are thoughts, never voiced.
+    expect(lines.filter((l) => l.who === "Rook").every((l) => l.thought && l.quiet)).toBe(true);
     const cut = said.indexOf("North one. Then the..."), budge = said.indexOf("Budge up, Rook.");
     expect(cut).toBeGreaterThan(0);
     expect(budge).toBe(cut + 1);
@@ -435,7 +437,34 @@ describe("runs 6 and 7, the dying brazier", () => {
     expect(room.state.game.rooted.size).toBe(0);
     const i = lines.findIndex((l) => l.text.startsWith("That one's yours"));
     expect(i).toBeGreaterThan(0);
-    expect(lines.slice(i + 1).map((l) => l.text)).toEqual(["There. That'll hold.", "Nine seconds from the terrace. I counted.", "Slow. I used to be quick."]);
+    expect(lines.slice(i + 1).filter((l) => !l.thought).map((l) => l.text)).toEqual(["There. That'll hold.", "That'll do, Rook. You never know when to stop.", "Nine seconds from the terrace. I counted.", "Slow. I used to be quick."]);
+  });
+
+  it("after eight banks the fire waits for him: he thinks it, again every 7 s he leaves it, and her last line comes when he banks it", () => {
+    let s = 2024;
+    const room = new DyingRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "hold");
+    const lines: StoryLine[] = [];
+    const conn = room.connect((m: ServerMsg) => void (m.t === "say" && lines.push(...m.lines)));
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    for (let n = 0; n < 3000 && !lines.some((l) => l.text === "There. That'll hold."); n++) room.onTick();
+    const g = room.state.game;
+    expect(g.flame).toBe(90);
+    // He stops: nothing brings the last one in, and he thinks it, then again and again.
+    (room as unknown as { stand: string }).stand = "idle";
+    const from = lines.length;
+    for (let n = 0; n < 120; n++) (g.command(1, { action: { kind: "idle" } }), room.onTick());
+    expect(g.flame).toBe(90);
+    expect(room.state.part).toBe("seven");
+    const thoughts = lines.slice(from).filter((l) => l.who === "Rook");
+    expect(thoughts[0]!.text).toBe("There's one still out there. Just in case.");
+    expect(thoughts.slice(1, 5).map((l) => l.text)).toEqual(["One more. Just in case.", "One left out there. Not leaving it.", "One more. Just in case.", "One left out there. Not leaving it."]);
+    expect(thoughts.length).toBeGreaterThanOrEqual(5);
+    expect(thoughts.every((l) => l.thought && l.quiet && l.player === 1)).toBe(true);
+    // He goes back to it: it banks, she says the fond line, and the run ends as before.
+    (room as unknown as { stand: string }).stand = "hold";
+    for (let n = 0; n < 3000 && room.state.phase !== "results"; n++) room.onTick();
+    expect(room.state.phase).toBe("results");
+    expect(lines.filter((l) => !l.thought).map((l) => l.text).slice(-3)[0]).toBe("That'll do, Rook. You never know when to stop.");
   });
 
   it("she remarks on the fire only if he kept it alive a long time", () => {

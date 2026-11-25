@@ -423,7 +423,7 @@ function sayLine(l: StoryLine, released = false) {
   const speaker = l.wisp == null && !l.ring && l.player == null ? speakerAt(l.who) && l.who.toLowerCase() : undefined;
   const anchored = l.wisp != null || l.ring || l.player != null || !!speaker;
   const el = $(anchored ? "bark" : "chip");
-  el.className = `bark${anchored ? "" : " chip"} ${l.who.toLowerCase()}`;
+  el.className = `bark${anchored ? "" : " chip"}${l.thought ? " thought" : ""} ${l.who.toLowerCase()}`;
   const img = el.querySelector("img")!;
   const face = faceOf(l);
   if (face) img.src = face;
@@ -435,7 +435,7 @@ function sayLine(l: StoryLine, released = false) {
   void el.offsetWidth;
   el.style.animation = "";
   barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60, (VOICE_SECONDS[`${l.who}|${l.text}`] ?? 0) * 1000 + 400), wisp: l.wisp, ring: l.ring, player: l.player, speaker: speaker || undefined, who: l.who, text: l.text };
-  if (!l.quiet) sound.speak(l.who, l.text, l.who === "Hesta" && l.wisp != null, !!l.over);
+  if (!l.quiet && !l.thought) sound.speak(l.who, l.text, l.who === "Hesta" && l.wisp != null, !!l.over);
   if (!anchored) placeBarks(performance.now());
 }
 

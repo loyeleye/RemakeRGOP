@@ -187,6 +187,9 @@ export const DYING = {
     /** Ticks held on the board after the last bank, before the picture; and ticks on the board after it before the closing lines. */
     hold: 3,
     gather: 4,
+    /** The last wisp: Rook's first thought this many ticks after her line ends (about a second), then one each `thinkEvery` (7 s) he isn't pulling. */
+    thinkAfter: 2,
+    thinkEvery: 12,
   },
   /**
    * The village: small figures with lamps, who stand just inside the cloud's edge and back in

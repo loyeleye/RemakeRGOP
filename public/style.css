@@ -151,6 +151,11 @@ b.kes, .bark.kes span b { color: #c9a2ff; }
 .bark.hesta { border-color: #9fd8ff88; }
 .bark.kes { border-color: #c9a2ff88; }
 .bark.fade { opacity: 0; }
+/* A thought, not said (Rook in run 7): a soft cloud in italics, with two small bubbles down to his head. */
+.bark.thought { border-radius: 20px; border: 1px dashed #ffffff66; background: #1c1830d8; font-style: italic; color: #e8e4f4; padding-right: 14px; }
+.bark.thought::before, .bark.thought::after { content: ""; position: absolute; border-radius: 50%; background: #1c1830d8; border: 1px dashed #ffffff66; }
+.bark.thought::before { width: 12px; height: 12px; left: calc(50% - 6px); bottom: -16px; }
+.bark.thought::after { width: 7px; height: 7px; left: calc(50% + 3px); bottom: -27px; }
 /* Run 9: the shadow cuts Kes off. Her bubble breaks up in static for the burst, and is then gone. */
 .bark.static { background-color: #8a8a94; background-image: url(stills/r9-static-tile.png), var(--static); background-size: 128px 128px, 64px 64px; border-color: #ffffff77; animation: static-jump 0.09s steps(1) infinite; }
 .bark.static img, .bark.static span { opacity: 0.22; filter: grayscale(1) contrast(2.4); }
