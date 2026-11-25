@@ -183,7 +183,7 @@ export const HELD: Record<string, Held> = {
   // every line is a caption until he has read it (the story thread's advice: its voiced lines are the
   // peak of Part 1). Picture 24 is 23 with the light gone. The end of Part 1.
   "11": {
-    tag: "Rough first draft, being redrawn. Pictures and story not seen by Ladi",
+    tag: "Redrawn set, the art thread's picks. Pictures and story not seen by Ladi",
     shape: "four3",
     fade: 0.6,
     lead: 0.5,
