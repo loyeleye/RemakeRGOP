@@ -442,3 +442,4 @@ label.t-text { cursor: pointer; }
 #walk-ask p { margin: 0; font-size: 18px; }
 #walk-ask .btns { display: flex; gap: 10px; justify-content: center; }
 #walk-ask .btns button { flex: 1; white-space: nowrap; }
+#walk-ask .btns.many { flex-direction: column; }

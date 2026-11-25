@@ -233,7 +233,7 @@ export interface StoryView {
     /** Who to talk to next, shown on screen (Ladi, 25 Nov). */
     goal?: string;
     /** A tap that would start a run asks first (Ladi, 25 Nov): the question and its two buttons. */
-    ask?: { text: string; yes: string; no: string } };
+    ask?: { text: string; choices: string[]; no: string } };
 }
 
 export type ClientMsg =
@@ -252,7 +252,7 @@ export type ClientMsg =
   /** Story run 2: call the partner to a tile. */
   | { t: "call"; x: number; y: number }
   /** A walk: the answer to its "Play ...?" question. */
-  | { t: "answer"; yes: boolean }
+  | { t: "answer"; yes: boolean; pick?: number }
   | { t: "ping"; at: number };
 
 export type ServerMsg =

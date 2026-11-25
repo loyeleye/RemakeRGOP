@@ -1454,15 +1454,25 @@ function renderWalkGoal(pond: NonNullable<RoomView["story"]>["pond"] | undefined
   const box = $("walk-ask");
   const a = pond?.ask;
   box.hidden = !a;
-  const key = a ? `${a.text}|${a.yes}|${a.no}` : "";
+  const key = a ? `${a.text}|${a.choices.join("|")}|${a.no}` : "";
   if (!a || key === askShown) return void (askShown = key);
   askShown = key;
   box.querySelector("p")!.textContent = a.text;
-  const yes = box.querySelector<HTMLButtonElement>(".yes")!, no = box.querySelector<HTMLButtonElement>(".no")!;
-  yes.textContent = a.yes;
+  const btns = box.querySelector(".btns")!;
+  btns.replaceChildren();
+  a.choices.forEach((c, i) => {
+    const b = document.createElement("button");
+    b.className = "big yes";
+    b.textContent = c;
+    b.onclick = () => link?.send({ t: "answer", yes: true, pick: i });
+    btns.append(b);
+  });
+  const no = document.createElement("button");
+  no.className = "ghost no";
   no.textContent = a.no;
-  yes.onclick = () => link?.send({ t: "answer", yes: true });
   no.onclick = () => link?.send({ t: "answer", yes: false });
+  btns.append(no);
+  btns.classList.toggle("many", a.choices.length > 1);
 }
 
 function renderHud() {

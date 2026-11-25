@@ -18,6 +18,13 @@ export interface WalkPerson {
    * Everyone else wanders about near it. The walk's `go` person always stays.
    */
   stay?: true;
+  /**
+   * Offers optional runs (walk 3's ordinary morning): a tap says `lines`, then asks `ask` with one
+   * button for each run, and a "Not now". The pick says its `then` lines and opens its run.
+   */
+  offer?: { lines: { who: string; text: string }[]; ask: string; runs: { label: string; run: "o1" | "o2" | "o3a" | "o3b" | "o3c"; then?: { who: string; text: string }[] }[] };
+  /** Said over their head now and then while he is not close (Maudie's "When you've finished playing."). */
+  idle?: string;
 }
 
 export interface Walk {
@@ -48,6 +55,25 @@ export const WALKS: Walk[] = [
       { name: "Hesta", at: "chair", stay: true, lines: ["I was resting my eyes.", "East, then the long way round the reef. Don't argue."] },
       { name: "Nell", at: "pond", lines: ["Rematch? Lumi says no rocks this time."] },
       { name: "Sefa", at: "pond", lines: ["Is it the best of three now?"] },
+    ],
+  },
+  // Walk 3's first state (story/part1-optional-runs-lines.md, "State 1" and "Each optional run starts
+  // and stops with a person"): an ordinary morning, Rook alone in work clothes, the optional runs on
+  // offer from the people they belong to, and Maudie at his door as the way on, which closes them for
+  // good (Ladi, 24 Nov). Its own number (6) so it is a walk of its own in Part 1's chain; it is not a
+  // sixth time of day. All the lines are the story thread's drafts, unvoiced.
+  {
+    n: 6, title: "An ordinary morning", light: "morning", after: 5, next: 6, go: "Maudie", start: "door",
+    goal: "Talk to Maudie at your door when you're ready", ask: "Get ready for the festival? Nobody will offer a game after this.",
+    people: [
+      { name: "Maudie", at: "door", stay: true, idle: "When you've finished playing.", lines: ["It's time. Hold still."] },
+      { name: "Nell", at: "pond", lines: ["Granny said only if you say yes."], offer: { lines: [{ who: "Sefa", text: "Rematch!" }, { who: "Nell", text: "Granny said only if you say yes." }], ask: "Play Granny's rematch?", runs: [{ label: "Play", run: "o1", then: [{ who: "Hesta", text: "If I must. Bring the bag." }] }] } },
+      { name: "Sefa", at: "pond", lines: ["Rematch!"], offer: { lines: [{ who: "Sefa", text: "Rematch!" }, { who: "Nell", text: "Granny said only if you say yes." }], ask: "Play Granny's rematch?", runs: [{ label: "Play", run: "o1", then: [{ who: "Hesta", text: "If I must. Bring the bag." }] }] } },
+      { name: "Hesta", at: "pond", stay: true, lines: [] },
+      { name: "Kes", at: "falls", lines: ["A lesson for the Captain? Or shall I beat you on the Fell. Wind's up."], offer: { lines: [{ who: "Kes", text: "A lesson for the Captain? Or shall I beat you on the Fell. Wind's up." }], ask: "Which one?", runs: [{ label: "Lumi's lesson with Kes", run: "o2", then: [{ who: "Kes", text: "Off you go, Rook, you're busy." }, { who: "Lumi", text: "Go on, Dad." }] }, { label: "Race Kes on the Fell", run: "o3c" }] } },
+      { name: "Lumi", at: "falls", lines: ["Go on, Dad."] },
+      { name: "Moth", at: "landing", stay: true, lines: ["Garrick says it's grown back. He says bring the small one."], offer: { lines: [{ who: "Moth", text: "Garrick says it's grown back. He says bring the small one." }, { who: "Moth", text: "And Marit says the tide owes her eight. Her words." }], ask: "Which job?", runs: [{ label: "Moss Hollow", run: "o3a" }, { label: "Tidepool Steps", run: "o3b" }] } },
+      { name: "Orrin", at: "stall", stay: true, lines: ["Send the small one round with it. I need the frame."] },
     ],
   },
   {

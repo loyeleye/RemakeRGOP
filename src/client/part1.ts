@@ -108,7 +108,8 @@ export const PART1: Piece[] = [
   { id: "4", name: "Run 4, the job", kind: "run", run: 4 },
   { id: "4-5", name: "The skiff home", kind: "card", card: { heading: "The skiff home", summary: "The skiff comes back to the home landing. Kes is waiting and challenges him. Maudie watches the three of them leave. The skiff crosses to Kite Fell.", ruled: "Part ruled: the race being on Kite Fell is Ladi's. The scene is draft." } },
   { id: "5", name: "Run 5, the race", kind: "run", run: 5 },
-  { id: "5-6a", name: "Walk 3, an ordinary morning", kind: "card", card: { heading: "Walk 3, first state: an ordinary morning", summary: "Nell, Kes and Moth offer the optional runs. Tapping Maudie at his door turns it into the festival morning and closes them for good.", ruled: "Part ruled: the two states, Maudie's tap and talking to the person are Ladi's. The lines are to be judged in game.", optional: true } },
+  // Walk 3's first state, walk number 6 in engine/walks.ts. Its old card is kept in case it is ever wanted again.
+  { id: "5-6a", name: "Walk 3, an ordinary morning", kind: "walk", walk: 6, card: { heading: "Walk 3, first state: an ordinary morning", summary: "Nell, Kes and Moth offer the optional runs. Tapping Maudie at his door turns it into the festival morning and closes them for good.", ruled: "Part ruled: the two states, Maudie's tap and talking to the person are Ladi's. The lines are to be judged in game.", optional: true } },
   { id: "5-6", name: "Walk 3, the festival morning", kind: "walk", walk: 3 },
   { id: "5-6b", name: "The glow test", kind: "card", card: { heading: "The glow test", summary: "Mabry's shrine: the glow test. Then the alarm at night (its pictures open run 6).", ruled: "Part ruled: the glow test is in the bible; its pictures are being settled with Ladi. The island going down into cloud is Ladi's pick." } },
   { id: "6", name: "Runs 6 and 7, the dying brazier", kind: "run", run: 6 },

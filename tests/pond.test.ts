@@ -121,3 +121,25 @@ describe("The later walks", () => {
     expect(kitchenAfterDoor(1)).toBe(0);
   });
 });
+
+describe("Walk 3's ordinary morning", () => {
+  it("offers Moth's two jobs after his lines, opens the one picked, and Maudie's yes goes on", () => {
+    let s = 7;
+    const room = new PondRoom(manualClock(), () => (s = (s * 48271) % 2147483647), 6);
+    room.chain = true;
+    const conn = room.connect(() => {});
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const r = room as unknown as { asking: { choices: string[] } | null; optional?: { id: string }; done: boolean; answer: (t: { name: string; at: () => { x: number; y: number } }) => void };
+    r.answer({ name: "Moth", at: () => ({ x: 0, y: 0 }) });
+    expect(r.asking).toBeNull();
+    for (let i = 0; i < 12 && !r.asking; i++) room.onTick();
+    expect(r.asking!.choices).toEqual(["Moss Hollow", "Tidepool Steps"]);
+    conn.message(JSON.stringify({ t: "answer", yes: true, pick: 1 }));
+    for (let i = 0; i < 6 && !r.optional; i++) room.onTick();
+    expect(r.optional!.id).toBe("o3b");
+    r.answer({ name: "Maudie", at: () => ({ x: 0, y: 0 }) });
+    expect(r.asking).toBeTruthy();
+    conn.message(JSON.stringify({ t: "answer", yes: true }));
+    expect(r.done).toBe(true);
+  });
+});

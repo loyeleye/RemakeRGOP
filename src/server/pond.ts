@@ -12,7 +12,7 @@ import type { ClientMsg, RoomView, ServerMsg, StoryLine, StoryView } from "../en
 import { GrannyRoom } from "./granny.js";
 import { JobRoom } from "./job.js";
 import { realClock, type Clock } from "./room.js";
-import { walkByN, type Anchor, type Walk } from "../engine/walks.js";
+import { walkByN, type Anchor, type Walk, type WalkPerson } from "../engine/walks.js";
 
 // Same ids as Granny's game, so the handover keeps everyone where they stand.
 const ROOK_ID = 1, LUMI_ID = 2, NELL_ID = 3, SEFA_ID = 4, HESTA_ID = 5;
@@ -20,6 +20,9 @@ const [NELL, SEFA] = GRANNY.children;
 
 export const POND = {
   title: "The pond",
+  /** Ticks between the lines of an offer (walk 3's first state), and between an idle line's first time and the next. */
+  offerGap: 4,
+  idleEvery: [6, 28] as [number, number],
   /** Ticks before Hesta and the children start walking in, and before Lumi runs over. */
   enterAt: 4,
   lumiAt: 12,
@@ -124,7 +127,11 @@ export class PondRoom {
   /** What Rook is walking up to, after a tap from afar. */
   private going: Thing | null = null;
   /** A tap that would start a run, waiting on his answer (the page asks "Play ...?"). Walking off is a no. */
-  private asking: { thing: Thing; text: string; yes: string; no: string } | null = null;
+  private asking: { text: string; choices: string[]; no: string; then: (pick: number) => void } | null = null;
+  /** Things to do on a later tick: lines said one after another, a question after its lines. */
+  private later: { at: number; f: () => void }[] = [];
+  /** When each person with an idle line next says it. */
+  private idleNext = new Map<string, number>();
   private taps = new Map<string, number>();
   private gatheredAt = -1;
   private lastSefa = -99;
@@ -203,7 +210,7 @@ export class PondRoom {
       case "answer": {
         const a = this.asking;
         this.asking = null;
-        if (a && msg.yes && !this.granny && this.leavingAt < 0) this.answer(a.thing, true);
+        if (a && msg.yes && !this.granny && this.leavingAt < 0) a.then(Math.max(0, Math.min(a.choices.length - 1, Math.floor(Number(msg.pick) || 0))));
         return this.broadcast();
       }
     }
@@ -377,6 +384,7 @@ export class PondRoom {
       this.wander();
       g.step();
       this.arrive();
+      this.due();
       return this.broadcast();
     }
     if (t === POND.enterAt) {
@@ -463,12 +471,44 @@ export class PondRoom {
 
   /** Puts the question up; a yes comes back through answer(thing, true). */
   private ask(thing: Thing, text: string, yes = "Play", no = "Not yet") {
-    this.asking = { thing, text, yes, no };
+    this.asking = { text, choices: [yes], no, then: () => this.answer(thing, true) };
     this.broadcast();
+  }
+
+  /** Walk 3's first state: their lines one after another, then which run (or not now). A pick says its lines and opens it. */
+  private offer(o: NonNullable<WalkPerson["offer"]>) {
+    const g = this.game, gap = POND.offerGap;
+    this.later = [];
+    o.lines.forEach((l, i) => this.later.push({ at: g.tick + i * gap, f: () => this.say(l.who, l.text) }));
+    this.later.push({ at: g.tick + (o.lines.length - 1) * gap + 2, f: () => (this.asking = { text: o.ask, choices: o.runs.map((r) => r.label), no: "Not now", then: (i) => this.take(o.runs[i]!) }) });
+  }
+
+  private take(r: NonNullable<WalkPerson["offer"]>["runs"][number]) {
+    const g = this.game, gap = POND.offerGap, then = r.then ?? [];
+    then.forEach((l, i) => this.later.push({ at: g.tick + i * gap, f: () => this.say(l.who, l.text) }));
+    this.later.push({ at: g.tick + Math.max(0, then.length - 1) * gap + 1, f: () => (this.optional = { id: r.run, n: (this.optional?.n ?? 0) + 1 }) });
+  }
+
+  /** Runs what is due, and the idle lines (Maudie's, while he is not close). */
+  private due() {
+    const g = this.game, rook = this.player(ROOK_ID);
+    const now = this.later.filter((l) => l.at <= g.tick);
+    this.later = this.later.filter((l) => l.at > g.tick);
+    for (const l of now) l.f();
+    this.walkDef.people.forEach((p, i) => {
+      if (!p.idle) return;
+      const next = this.idleNext.get(p.name) ?? g.tick + POND.idleEvery[0];
+      if (g.tick < next) return void this.idleNext.set(p.name, next);
+      if (near(rook.pos, this.player(10 + i).pos, 4) || this.asking) return;
+      this.say(p.name, p.idle);
+      this.idleNext.set(p.name, g.tick + POND.idleEvery[1]);
+    });
   }
 
   private answer(thing: Thing, sure = false) {
     const W = this.walkDef;
+    const offers = W.people.find((p) => p.name === thing.name)?.offer;
+    if (offers && !sure) return this.offer(offers);
     if (W.n === 1 && thing.name === "Hesta") return sure ? this.startGame() : this.ask(thing, W.ask);
     // Walk 2's skiff: off to the first job (run 4), with Lumi's "I won. So I'm coming." behind it.
     if (W.n === 2 && thing.name === W.go && W.next === 4) {
@@ -608,7 +648,7 @@ export class PondRoom {
   }
 
   storyView(): StoryView {
-    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.kitchen ? { kitchen: this.kitchen } : {}), ...(this.leavingAt >= 0 ? { leaving: true } : {}), ...(this.done ? { done: true } : {}), ...(this.optional ? { optional: this.optional } : {}), ...(this.goal() ? { goal: this.goal()! } : {}), ...(this.asking ? { ask: { text: this.asking.text, yes: this.asking.yes, no: this.asking.no } } : {}) } };
+    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.kitchen ? { kitchen: this.kitchen } : {}), ...(this.leavingAt >= 0 ? { leaving: true } : {}), ...(this.done ? { done: true } : {}), ...(this.optional ? { optional: this.optional } : {}), ...(this.goal() ? { goal: this.goal()! } : {}), ...(this.asking ? { ask: { text: this.asking.text, choices: this.asking.choices, no: this.asking.no } } : {}) } };
   }
 
   view(): RoomView {
