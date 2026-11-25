@@ -266,9 +266,17 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
       if (f > 0.01) {
         g.fillStyle = c.steady ? color : f > 0.25 ? "#ffcf7a" : "#ff8a5c";
         g.globalAlpha = c.steady || f > 0.25 ? 1 : 0.75 + 0.25 * Math.sin(now / 200);
+        // Below its mark the bar is dimmed: short of what it takes (run 10's lamp, short of keeping pace).
+        if (c.mark !== undefined && f < c.mark) g.globalAlpha *= 0.5;
         box(g, bx, by, Math.max(bh, bw * f), bh, 4 * k);
         g.fill();
         g.globalAlpha = 1;
+      }
+      if (c.mark !== undefined) {
+        // The notch: a bright tick across the bar where the mark stands.
+        const mx = bx + bw * Math.max(0, Math.min(1, c.mark));
+        g.fillStyle = "#ffffff";
+        g.fillRect(mx - 1 * k, by - 2.5 * k, 2 * k, bh + 5 * k);
       }
     } else if (c.tone === "chalk") tallies(g, cx + 3 * k, py - 9 * k, c.n, 17 * k, color);
     else if (c.group) {

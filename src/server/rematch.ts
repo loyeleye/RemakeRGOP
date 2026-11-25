@@ -691,8 +691,8 @@ export class RematchRoom {
       lines: won
         ? [{ who: NELL, text: `${kids}! That's the most!` }, { who: HESTA, text: "Closer. Don't tell the others." }]
         : again
-          ? // Placeholder line (the gameplay thread's), until the story thread writes it.
-            [{ who: NELL, text: `Four again! That's ${this.fours} times!` }, { who: HESTA, text: "One more. There's always one more." }]
+          ? // The story thread's (25 Nov): the count as a word, and alone the first time.
+            [{ who: NELL, text: this.fours >= 2 ? `Four again! That's ${timesWord(this.fours)} times, Granny!` : "Four again!" }, { who: HESTA, text: "I can count, thank you." }]
           : [{ who: NELL, text: `Still ${was}.` }, { who: HESTA, text: "One more. There's always one more." }],
     };
     // The next rematch starts from this one's wall, and has her next cheat.
@@ -798,4 +798,10 @@ export class RematchRoom {
   get state() {
     return { phase: this.phase, game: this.game, end: this.end, cheat: this.cheat, stage: this.stage, outcome: this.outcome, lead: this.lead, eye: this.eye, held: this.held, over: this.over, napping: this.phase === "playing" && this.napping(), doubled: this.doubled, pushes: this.pushes, record: this.record };
   }
+}
+
+/** A count as Nell says it: "three", not "3" (past twenty, the digits). */
+function timesWord(n: number) {
+  const W = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"];
+  return W[n] ?? String(n);
 }

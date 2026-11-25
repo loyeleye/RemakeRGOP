@@ -425,6 +425,25 @@ describe("Run 10: the ship home", () => {
     expect(lines().slice(said).filter((l) => l.text)).toHaveLength(0);
   });
 
+  it("the top meters: Progress fills as the run goes, and the lamp's notch is where it keeps pace, higher the nearer the patch", () => {
+    const { room, toPlay } = open(5, "idle");
+    toPlay();
+    const cells = () => room.storyView().opt!.strip;
+    expect(cells().map((c) => c.label)).toEqual(["Progress", "Lamp"]);
+    const was = cells()[0]!.bar!;
+    for (let i = 0; i < 20; i++) room.onTick();
+    expect(cells()[0]!.bar!).toBeGreaterThan(was);
+    expect(cells()[0]!.bar!).toBeCloseTo(room.state.game.tick / room.storyView().ship!.ticks, 5);
+    // Below the notch the patch draws away; above it he gains (or holds).
+    const lamp = cells()[1]!, lead = room.state.lead;
+    expect(lamp.mark).toBeGreaterThan(SHIP.speed.even - 1e-9);
+    room.onTick();
+    if (room.state.gutterAt < 0 && room.state.lead > SHIP.patch.nearest) expect(room.state.lead > lead).toBe(lamp.bar! < lamp.mark!);
+    const far = lamp.mark!;
+    inner(room).lead = SHIP.patch.nearest + 1;
+    expect(cells()[1]!.mark!).toBeGreaterThan(far);
+  });
+
   it("once home is in sight the patch cannot be lost, and his last ticks are the rail", () => {
     const { room, conn, toPlay } = open(8, "idle");
     toPlay();

@@ -392,6 +392,13 @@ export class ShipRoom {
     this.torn++;
   }
 
+  /** The fire that keeps pace with the patch from here (with speed on): nearer it, it takes more. */
+  private pace() {
+    const P = SHIP.patch, Sp = SHIP.speed;
+    const nearness = Math.max(0, Math.min(1, (P.gone - this.lead) / (P.gone - P.nearest)));
+    return Math.min(1, Sp.even + Sp.near * nearness);
+  }
+
   /** How much of the run is done (0 to 1). */
   private share() {
     return this.game.tick / this.len;
@@ -676,15 +683,17 @@ export class ShipRoom {
         ...(this.gutterAt >= 0 ? { gutter: t - this.gutterAt } : {}),
         ...(this.over() ? { over: t - (this.len - S.railTicks) } : {}),
       },
-      // Two meters along the top (Ladi, 24 Nov): how far home still is, and how much light the lamp
-      // has, which is how fast the ship goes. Gone once he is over the rail.
+      // Two meters along the top (Ladi, 24 Nov): how far along the way home he is (Progress, filling
+      // up: Ladi, 24 Nov late), and how much light the lamp has, which is how fast the ship goes. The
+      // lamp's notch is what it takes to keep pace with the patch from here: below it the patch draws
+      // away, and out of sight it is the bow again, lamp or no lamp. Gone once he is over the rail.
       ...(this.phase === "playing" && !this.over()
         ? {
             opt: {
               id: "r10",
               strip: [
-                { label: "To home", n: 0, of: 0, tone: "chalk" as const, bar: Math.max(0, 1 - t / this.len), steady: true },
-                ...(this.speedOn ? [{ label: "Lamp", n: 0, of: 0, tone: "us" as const, bar: this.fire }] : []),
+                { label: "Progress", n: 0, of: 0, tone: "chalk" as const, bar: Math.min(1, t / this.len), steady: true },
+                ...(this.speedOn ? [{ label: "Lamp", n: 0, of: 0, tone: "us" as const, bar: this.fire, ...(t >= this.len - home ? {} : { mark: this.pace() }) }] : []),
               ],
             },
           }

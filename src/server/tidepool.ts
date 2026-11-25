@@ -386,8 +386,9 @@ export class TidepoolRoom {
     this.sentTo = spot;
     this.sentFlood = this.floods;
     this.tally.sends++;
-    // The first time, she says she can go only so often. [placeholder line, the build thread's, for the story thread]
-    if (this.tally.sends === 1 && TIDEPOOL.lumiSends < 99) this.say(LUMI, "Two goes, Rook. A tide each.", { player: LUMI_ID }, true, TIDEPOOL.landTicks);
+    // The first time, she says she can go only so often; the last time, that it is the last (story thread, 25 Nov).
+    if (this.tally.sends === 1 && TIDEPOOL.lumiSends < 99) this.say(LUMI, "Two goes, Dad. A tide each. Then it's your turn.", { player: LUMI_ID }, true, TIDEPOOL.landTicks);
+    else if (this.tally.sends === TIDEPOOL.lumiSends && TIDEPOOL.lumiSends > 1) this.say(LUMI, "Last go, Dad.", { player: LUMI_ID }, true, TIDEPOOL.landTicks);
     g.command(LUMI_ID, { action: { kind: "walk", to: spot } });
     this.flush();
     this.broadcastRoom();

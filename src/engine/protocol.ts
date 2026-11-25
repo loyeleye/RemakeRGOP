@@ -79,6 +79,8 @@ export interface OptCell {
   bar?: number;
   /** The bar keeps the cell's own colour all the way down, with no warning at the last (run 10's distance home). */
   steady?: boolean;
+  /** A notch across the bar at this share (0 to 1); below it the bar is dimmed (run 10: where the lamp keeps pace with the patch). */
+  mark?: number;
   /** A tide mark instead of pips: how high the water stands (0 to 1), whether the tide is in, how much of this tide is left (1 to 0), and whether it is about to turn. */
   tide?: { level: number; in: boolean; share: number; soon: boolean };
 }

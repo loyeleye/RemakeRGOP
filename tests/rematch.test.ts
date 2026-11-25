@@ -118,7 +118,7 @@ describe("Optional run 1: Granny's rematch", () => {
     // Four again: the wall's tally of times at four goes up, and Nell says so.
     if (second.game.scores[0] === REMATCH.target - 1) {
       expect(second.record).toMatchObject({ fours: 2 });
-      expect(room.storyView().end!.lines[0]!.text).toBe("Four again! That's 2 times!");
+      expect(room.storyView().end!.lines[0]!.text).toBe("Four again! That's two times, Granny!");
       expect(room.storyView().opt!.strip[2]!.badge).toBe("2x");
     }
     // Nothing the player reads says "lost" or "sink".
