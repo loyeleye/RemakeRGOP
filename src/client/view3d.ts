@@ -4244,6 +4244,8 @@ const RESCUE_HUD = {
   cell: 62, hull: [44, 13] as const, pip: 5, gap: 10,
   /** How much larger the strip is drawn on a desktop than on a phone (the gameplay thread, 25 Nov: half again). */
   desk: 1.5,
+  /** The dark mark on the cloud's bar while a crossing is told: its radius. */
+  mark: 6.5,
   /** The cloud's bar, to the left of the boats: its length. */
   bar: 96,
   lit: "#ffc860", unlit: "rgba(255,236,200,0.2)", line: "rgba(255,236,200,0.75)", cloud: "#dfe5f4",
@@ -4278,6 +4280,17 @@ function drawRescueHud(g: CanvasRenderingContext2D, cam: Camera, st: DrawState, 
   roundRect(g, bx, by - bh / 2, Math.max(bh, bw * (0.08 + 0.92 * near)), bh, bh / 2);
   g.fill();
   g.globalAlpha = 1;
+  // The patch, told on its clock: a small dark mark sliding along the bar toward the boats.
+  if (r.tell) {
+    const at = Math.max(0, Math.min(1, 1 - (r.tell.left - Math.min(1, st.t)) / r.tell.of)), mx = bx + bw * at;
+    g.beginPath();
+    g.arc(mx, by, H.mark * k, 0, Math.PI * 2);
+    g.fillStyle = "#0c0a14";
+    g.fill();
+    g.strokeStyle = "rgba(200,190,235,0.85)";
+    g.lineWidth = 1.4 * k;
+    g.stroke();
+  }
   g.font = `600 ${Math.round(10 * k)}px system-ui, sans-serif`;
   g.textAlign = "left";
   g.fillStyle = "rgba(223,229,244,0.8)";

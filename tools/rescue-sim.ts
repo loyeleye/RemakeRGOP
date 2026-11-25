@@ -1,7 +1,7 @@
 // Measurements for run 9: stand-ins play Rook on a few seeds.
 //   npx tsx tools/rescue-sim.ts [seeds] [stand] [key=value ...]
 // stand: hold (brings each wisp straight in), heap (heaps three near the lamp first), wary (heaps
-// only while the patch is away), idle. Keys: patch=react|seek|line, kes=supply|banks, sloppy=0.08,
+// only while the patch is away), spread (four near the lamp, apart), idle. Keys: patch=clock|react|seek|line, kes=supply|banks, sloppy=0.08,
 // log=1 (what was said), lamp=leaks|holds, and any path into RESCUE (cloud.every=50).
 import { RESCUE } from "../src/engine/rescue.js";
 import { RescueRoom, type Stand } from "../src/server/rescue.js";
@@ -20,7 +20,7 @@ let first = 0, ticks = 0, restarts = 0, lost = 0, toPatch = 0, via = 0, set = 0,
 for (let k = 1; k <= seeds; k++) {
   let s = k * 7919;
   const room = new RescueRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), stand);
-  if (opts.patch) room.patchAim = opts.patch as "react" | "seek" | "line";
+  if (opts.patch) room.patchAim = opts.patch as "clock" | "react" | "seek" | "line";
   if (opts.kes) room.kesMode = opts.kes as "supply" | "banks";
   if (opts.flare) room.flareOn = opts.flare === "1";
   if (opts.lamp) room.lampMode = opts.lamp as "leaks" | "holds";

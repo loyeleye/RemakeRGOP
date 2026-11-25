@@ -33,6 +33,8 @@ export const RESCUE_LOOK = {
   /** Which of the three house models stands at each of LO_HOUSES, and where the boat model's lantern hangs (up, and from its middle toward the stern). */
   houses: ["a", "b", "c", "c", "a"] as readonly string[],
   lantern: [3.36, -3.43] as const,
+  /** Where the eight sit in the boat model (the maps thread's measure, 25 Nov): across, the seat's top, and along; from the stern thwart forward. */
+  seats: [[-0.55, 1.35, -3.0], [0.55, 1.35, -3.0], [-1.2, 1.35, -1.0], [1.2, 1.35, -1.0], [-1.2, 1.35, 0.7], [1.2, 1.35, 0.7], [-0.5, 1.35, 2.85], [0.5, 1.35, 2.85]] as readonly (readonly [number, number, number])[],
   /**
    * The queue: where the next boat and the one after wait (tiles from the slip, and how far they
    * are turned, stern toward the slip), one behind the other off the east wing. They are dark
@@ -180,6 +182,9 @@ export class RescueFx {
   private lifted = 0;
   /** The last pip that guttered out, as the room's tick. */
   private wentSeen = -9;
+  /** The crossing whose tell the lamps have gone cold for, and the lamps in the order they go: the farthest from the landing first. */
+  private toldN = 0;
+  private farFirst: Lamp[] = [];
   private patchN = 0;
   private cloud = RESCUE.cloud.start as number;
   private ember = new THREE.Color(RESCUE_LOOK.ember);
@@ -485,6 +490,10 @@ export class RescueFx {
       });
       b.shell = real as THREE.Group;
       b.root.add(real);
+      b.riders.forEach((rd, k) => {
+        const seat = RESCUE_LOOK.seats[k % RESCUE_LOOK.seats.length]!;
+        rd.position.set(seat[0], seat[1], seat[2]);
+      });
       const [up, aft] = RESCUE_LOOK.lantern;
       b.lamp.position.set(0, up, aft);
       b.core.position.set(0, up, aft);
@@ -545,8 +554,9 @@ export class RescueFx {
         this.u.uLaneR.value = wide;
         const course = this.lamps.filter((l) => Math.abs(l.z - pz) <= wide + 1.2).sort((a, b) => a.x - b.x);
         const over = (RESCUE.patch.warn * 0.6 * 0.9) / Math.max(1, course.length);
-        for (const l of this.lamps) l.coldAt = -1;
-        course.forEach((l, i) => (l.coldAt = time + 0.25 + i * over));
+        // (Told on its clock, every lamp is cold already and stays so until it has passed.)
+        if (this.toldN !== p.n) for (const l of this.lamps) l.coldAt = -1;
+        course.forEach((l, i) => l.coldAt < 0 && (l.coldAt = time + 0.25 + i * over));
       } else if ((p.big ?? 0) > this.patchBig) {
         // A swell begins: the lamps the wider lane takes in go cold at once.
         this.patchBig = p.big!;
@@ -597,12 +607,23 @@ export class RescueFx {
       rig.lantern.visible = !(r.dark?.includes(id) || under(rig.root.position.x, rig.root.position.z));
     }
 
+    // Told on its clock: the far lamps go cold one by one toward the landing, all of them by the time it sets out.
+    const tell = r.tell;
+    if (tell) {
+      if (this.toldN !== tell.n) {
+        this.toldN = tell.n;
+        for (const l of this.lamps) l.coldAt = -1;
+        this.farFirst = [...this.lamps].sort((a, b) => Math.hypot(b.x, b.z) - Math.hypot(a.x, a.z));
+      }
+      const upTo = Math.ceil((1 - (tell.left - 1) / tell.of) * this.farFirst.length);
+      this.farFirst.forEach((l, i) => i < upTo && l.coldAt < 0 && (l.coldAt = time + 0.15 + (i % 3) * 0.12));
+    } else if (!p) this.toldN = 0;
     // Lamps and windows: cold in a line ahead of it, one after the next, and cold until it has passed; dark under it; dark under the cloud.
     for (const l of this.lamps) {
       let want = 1, ember = false;
       const inCloud = Math.hypot(l.x, l.z) > this.cloud - 0.5;
       if (inCloud || under(l.x, l.z, 0.4)) want = 0;
-      else if (p && l.coldAt >= 0 && px - pr < l.x + 1) {
+      else if ((p || tell) && l.coldAt >= 0 && (!p || px - pr < l.x + 1)) {
         // A last flare, then an ember.
         if (time >= l.coldAt) (want = L.emberLit), (ember = true);
         else if (time >= l.coldAt - 0.14) want = 1.9;

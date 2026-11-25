@@ -916,12 +916,14 @@ function rescueRoom() {
   const q = new URLSearchParams(location.search);
   const aim = q.get("patch");
   if (aim === "drag") r.patchMode = "drag";
-  if (aim === "react" || aim === "seek" || aim === "line") r.patchAim = aim;
+  if (aim === "clock" || aim === "react" || aim === "seek" || aim === "line") r.patchAim = aim;
+  const clock = (q.get("clock") ?? "").split(",").map(Number);
+  if (clock.length === 3 && clock.every((n) => n > 0 && n < 1)) (RESCUE.patch.clock as { at: readonly number[] }).at = clock;
   if (q.get("kes") === "banks") r.kesMode = "banks";
   if (q.get("flare") === "1") r.flareOn = true;
   const lamp = q.get("lamp");
   if (lamp === "holds" || lamp === "leaks") r.lampMode = lamp;
-  rescueHeard = { flew: "", lifted: 0, fill: 0, gutter: false, went: -9 };
+  rescueHeard = { flew: "", lifted: 0, fill: 0, gutter: false, went: -9, told: false };
   if (q.has("nostills")) r.stillsOn = false;
   else stills.preload("r9-");
   patchHeard = 0;
@@ -1014,13 +1016,13 @@ function shipDone() {
  * when the room goes on.
  */
 let patchHeard = 0;
-let rescueHeard = { flew: "", lifted: 0, fill: 0, gutter: false, went: -9 };
+let rescueHeard = { flew: "", lifted: 0, fill: 0, gutter: false, went: -9, told: false };
 function rescueSound(r: NonNullable<StoryView["rescue"]>) {
   if (stills.fullUp && !r.hold) stills.fullOff();
   const last = r.flew?.[r.flew.length - 1], key = last ? `${last.tick}:${last.x}:${last.y}` : "";
   const fill = r.boats.reduce((a, b) => a + b, 0);
   // A restart (the boats empty again), not a pip guttering out.
-  if (r.lifted < rescueHeard.lifted || (fill === 0 && rescueHeard.fill > 1)) rescueHeard = { flew: "", lifted: 0, fill: 0, gutter: false, went: -9 };
+  if (r.lifted < rescueHeard.lifted || (fill === 0 && rescueHeard.fill > 1)) rescueHeard = { flew: "", lifted: 0, fill: 0, gutter: false, went: -9, told: false };
   // The lamp does not keep its light: a sputter as the newest pip starts to flicker, and a small falling note as it goes.
   const gutter = r.lamp?.gutter !== undefined;
   if (gutter && !rescueHeard.gutter) sound.lampGutter();
@@ -1030,6 +1032,13 @@ function rescueSound(r: NonNullable<StoryView["rescue"]>) {
   rescueHeard.flew = key || rescueHeard.flew;
   rescueHeard.fill = fill;
   if (r.lifted > rescueHeard.lifted || (r.ending !== undefined && r.ending >= 0 && rescueHeard.lifted < r.boats.length)) sound.boatHorn(), (rescueHeard.lifted = r.ending !== undefined && r.ending >= 0 ? r.boats.length : r.lifted);
+  // Told on its clock: the music thins from the first cold lamp (the low note takes over when it is on the board).
+  const told = !!r.tell;
+  if (told !== rescueHeard.told) {
+    rescueHeard.told = told;
+    if (told) sound.duckMusic(0.4, 1.5);
+    else if (!r.patch) sound.duckMusic(1, 1.2);
+  }
   // On the board (not in its warning, not sitting at the end): the low note.
   sound.patchDrone(!!r.patch && r.patch.warn <= 0 && !r.patch.sit && !r.hold);
   if (!r.patch || r.patch.sit) return void (patchHeard = 0);

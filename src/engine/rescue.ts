@@ -98,9 +98,19 @@ export const RESCUE = {
    * passes at its own size. When the last lamp is full it is left sitting at `sit` (tiles from the
    * slip) at its smallest, by the stones, and once the boat has lifted it slides off the rim
    * toward home, `slide` tiles a tick (the story thread's last look: run 10 has him chasing it).
+   *
+   * And over that, the rule now ("clock", the gameplay thread, 25 Nov): it comes on a clock he can
+   * read, never on how many are in. Crossing k is told when the cloud's own clock (its ticks from
+   * the start to the landing) has run `clock.at[k]` of its way: for `clock.tell` ticks the far
+   * lamps go cold one by one toward the landing, the music thins, and a dark mark slides along the
+   * cloud's bar in the strip. Then it sets out as "react" does, at the biggest gathering there is
+   * at that moment (the second through Kes if she has a string in hand). The tell is longer than
+   * pouring four in takes, so "pour before it comes, gather after it has gone" is a plan. The
+   * full-screen still comes `clock.hold` ticks into the first tell.
    */
   patch: {
-    aim: "react" as "react" | "seek" | "line",
+    aim: "clock" as "clock" | "react" | "seek" | "line",
+    clock: { at: [0.12, 0.25, 0.4] as readonly number[], tell: 18, hold: 2 },
     react: { sizes: [4, 6, 9] as readonly number[], speeds: [2.25, 3, 3.9] as readonly number[], loomAt: 3, swellFrom: 4, loomTicks: 2, linger: 3, sit: [8, -7] as readonly [number, number], slide: [1.3, 0.9] as readonly [number, number] },
     at: [5, 7, 10] as readonly number[], by: [110, 200, 290] as readonly number[], speeds: [3, 3.4, 3.9] as readonly number[], near: 3, size: 6, speed: 3, warn: 3, firstBanks: 4, firstBy: 110, secondBanks: 8, secondBy: 230, clearOfKes: 5, courseSouth: 3, nearCourse: 3, under: 3, gap: 30, lean: 2, wait: 20, smokeTicks: 4, drag: false as boolean,
   },
@@ -109,8 +119,9 @@ export const RESCUE = {
   boardBy: 26,
   holdTicks: 5,
   /** Measurements only: how the stand-in for the player plays. */
+  /** `spread` is where the one that spreads its wisps out sets them: near the lamp, more than `patch.near` tiles apart, so the patch sees four single wisps. */
   /** `byLamp` is where it stands to pour wisps in (tiles from the slip); one that heaps gathers them round `heapAt`, the stones, where a wisp within `heapR` tiles counts as heaped. */
-  stand: { pushy: 0, sloppiness: 0.08, byLamp: [0, -2] as readonly [number, number], heapAt: [5, -7] as readonly [number, number], heapR: 2.5 },
+  stand: { pushy: 0, sloppiness: 0.08, byLamp: [0, -2] as readonly [number, number], heapAt: [5, -7] as readonly [number, number], heapR: 2.5, spread: [[-7, -7], [-3, -7], [1, -7], [5, -7]] as readonly (readonly [number, number])[] },
   /** With a lamp that holds (?lamp=holds), the stand-ins that heap bring a heap in once it is `heapOf`; with one that leaks, once it is what the docked boat still needs. */
   heapOf: 3,
   /** On a phone, how many tiles the short side of the screen shows. */
@@ -199,3 +210,6 @@ export function lowOneRows(): string[] {
   put(RESCUE.kesAt[0], RESCUE.kesAt[1], "2", "Kes's start");
   return g.map((r) => r.join(""));
 }
+
+/** The cloud's own clock: ticks from the start until its edge is at the landing. */
+export const rescueCloudTicks = () => RESCUE.cloud.firstAt + (Math.ceil((RESCUE.cloud.start - RESCUE.cloud.landing) / RESCUE.cloud.stepIn) - 1) * RESCUE.cloud.every;

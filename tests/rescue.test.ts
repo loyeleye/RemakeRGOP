@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Tile, pt } from "../src/engine/board.js";
 import { shrineById } from "../src/engine/maps.js";
 import type { ServerMsg } from "../src/engine/protocol.js";
-import { LO_POOLS, RESCUE, loStrip } from "../src/engine/rescue.js";
+import { LO_POOLS, RESCUE, loStrip, rescueCloudTicks } from "../src/engine/rescue.js";
 import { RescueRoom, type Stand } from "../src/server/rescue.js";
 
 function open(seed: number, stand: Stand | null = "hold", setup?: (room: RescueRoom) => void) {
@@ -55,8 +55,8 @@ describe("Run 9: the rescue, on the low one", () => {
       expect(room.state.phase).toBe("results");
       expect(lifts).toBe(RESCUE.boats);
       expect(room.state.fill).toEqual([RESCUE.perBoat, RESCUE.perBoat, RESCUE.perBoat]);
-      // Two or three times, and once more at the end to sit by the stones.
-      expect(crossings).toBeGreaterThanOrEqual(3);
+      // It comes on its clock, so a quick hand meets it once or twice and a slower one three times; and once more at the end to sit by the stones.
+      expect(crossings).toBeGreaterThanOrEqual(2);
       expect(crossings).toBeLessThanOrEqual(4);
       // Kes never banks; what she set down, he put in.
       expect(room.kesBanks).toBe(0);
@@ -207,7 +207,7 @@ describe("Run 9: the rescue, on the low one", () => {
   });
 
   it("the patch goes for the biggest gathering of loose light, swells over it and stays a moment; play stops once on the full-screen still before the first", () => {
-    const { room, conn, lines, toPlay } = open(4321, null);
+    const { room, conn, lines, toPlay } = open(4321, null, (r) => (r.patchAim = "react"));
     toPlay();
     const g = room.state.game, c = g.board.center, P = RESCUE.patch;
     const mine = g.wisps.filter((w) => w.guild === 0);
@@ -250,6 +250,55 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(lingered).toBe(P.react.linger);
     expect(room.lostToPatch).toBe(3);
     expect(lines().map((l) => l.text)).toContain("It went for the heap. Don't let mine sit!");
+  });
+
+  it("the patch comes on the cloud's clock, never on how many are in: each crossing is told for a while first, the still comes early in the first tell, and it aims at the gathering as it sets out", () => {
+    const { room, conn, lines, toPlay } = open(4321, null);
+    toPlay();
+    const g = room.state.game, c = g.board.center, C = RESCUE.patch.clock;
+    const mine = g.wisps.filter((w) => w.guild === 0);
+    const put = (w: (typeof g.wisps)[number], x: number, y: number) => ((w.pos = w.prev = pt(c.x + x, c.y + y)), (w.target = null), (w.holder = null));
+    put(mine[0]!, -1, -12);
+    put(mine[1]!, 1, -13);
+    put(mine[2]!, 0, -14);
+    for (const w of g.wisps) if (w.guild === 1) g.away.set(w.id, 1e9);
+    // However many are in, nothing comes before its time.
+    inside(room).bankedN = 11;
+    const due = Math.round(C.at[0]! * rescueCloudTicks());
+    while (g.tick < due - 1) {
+      room.onTick();
+      expect(room.state.patch).toBeNull();
+      expect(room.storyView().rescue!.tell).toBeUndefined();
+    }
+    room.onTick();
+    expect(room.storyView().rescue!.tell).toEqual({ left: C.tell, of: C.tell, n: 1 });
+    expect(room.state.patch).toBeNull();
+    // The still, a couple of ticks into the tell: play holds, and a tap goes on.
+    for (let n = 0; n < C.hold; n++) room.onTick();
+    expect(room.state.holdLeft).toBeGreaterThan(0);
+    expect(lines().find((l) => l.text === "Rook. What is that.")!.still).toEqual({ id: RESCUE.hold.id, full: true });
+    const held = g.tick;
+    room.onTick();
+    expect(g.tick).toBe(held);
+    conn.message(JSON.stringify({ t: "on" }));
+    // He moves them while it is told: it goes for where they are when it sets out.
+    put(mine[0]!, -1, -19);
+    put(mine[1]!, 1, -20);
+    put(mine[2]!, 0, -21);
+    let ticks = 0;
+    while (!room.state.patch && ticks++ < 40) room.onTick();
+    expect(g.tick - due).toBeGreaterThanOrEqual(C.tell);
+    expect(g.tick - due).toBeLessThanOrEqual(C.tell + 2);
+    expect(room.storyView().rescue!.tell).toBeUndefined();
+    expect(room.state.patch!.y).toBe(c.y - 20 + 0.5);
+    expect(room.state.patch!.n).toBe(1);
+    // The second is told at its own time, with her word at the first cold lamp.
+    while (room.state.patch) room.onTick();
+    const next = Math.round(C.at[1]! * rescueCloudTicks());
+    while (g.tick <= next) room.onTick();
+    expect(room.storyView().rescue!.tell!.n).toBe(2);
+    for (let n = 0; n < 8; n++) room.onTick();
+    expect(lines().map((l) => l.text)).toContain("It's coming back!");
   });
 
   it("while the patch is over the docked boat its lamp is dark and takes nothing", () => {

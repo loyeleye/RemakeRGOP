@@ -158,6 +158,8 @@ export interface StoryView {
     caption?: string[];
     /** The full-screen still that stops play, while it is up. */
     hold?: { id: string; left: number; of: number; line: string };
+    /** A crossing being told (the patch on a clock): ticks until it sets out, of how many, and which crossing. */
+    tell?: { left: number; of: number; n: number };
     patch?: { x: number; y: number; dx: number; dy: number; r: number; warn: number; n: number; drag?: boolean; /** React: the size it is swelling to. Sitting still at the end. */ big?: number; sit?: boolean }; dark?: number[]; /** Wisps it has covered, not seen again; and where each went out (tiles) and on which tick. */ taken?: number[]; outs?: { x: number; y: number; tick: number }[]; ending?: number; aboard?: number[];
   };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */
