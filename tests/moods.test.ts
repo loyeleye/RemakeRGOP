@@ -68,8 +68,9 @@ describe("voice clips", () => {
 describe("Hesta and Lumi voice clips", () => {
   it("every clip exists, and every plain Hesta or Lumi line has one", async () => {
     const { readFileSync } = await import("node:fs");
-    const { VOICE_LINES } = await import("../src/client/voice-lines.js");
-    for (const f of Object.values(VOICE_LINES)) expect(existsSync(`public/${f}`), f).toBe(true);
+    const { VOICE_LINES, VOICE_STOCK } = await import("../src/client/voice-lines.js");
+    // A clip may be a time range of a joined file (voice/<group>.mp3#t=a,b).
+    for (const f of [...Object.values(VOICE_LINES), ...Object.values(VOICE_STOCK).flatMap((l) => l.map((c) => c.src))]) expect(existsSync(`public/${f.replace(/#t=.*$/, "")}`), f).toBe(true);
     const src = readFileSync("src/server/story.ts", "utf8") + readFileSync("src/server/lesson.ts", "utf8");
     for (const m of src.matchAll(/say\((HESTA|LUMI), "([^"]+)"/g)) {
       const who = m[1] === "HESTA" ? "Hesta" : "Lumi";
