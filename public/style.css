@@ -385,3 +385,45 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #chain-card .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .chain-row { display: flex; gap: 8px; }
 .chain-row > button:first-child { flex: 1; }
+
+/* The testing panel on the home screen (client/testing.ts builds the run sections). */
+.testing { padding-bottom: 0; }
+.testing > summary { padding-bottom: 10px; }
+.testing:not([open]) { padding-bottom: 0; }
+.t-body { display: flex; flex-direction: column; gap: 12px; }
+.t-intro, .t-note, .t-status { margin: 0; }
+.t-sec { border-top: 1px solid #ffffff1a; padding-top: 10px; }
+.t-fixed { display: flex; flex-direction: column; gap: 10px; }
+.t-sec h3, .t-sec > summary { margin: 0; color: var(--ink); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.t-sec > summary { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; }
+.t-sec > summary::before { content: "▸"; color: var(--muted); font-size: 11px; width: 10px; flex: none; }
+.t-sec[open] > summary::before { content: "▾"; }
+.t-sec > summary::-webkit-details-marker { display: none; }
+.t-sec > summary { list-style: none; }
+.t-count { margin-left: auto; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: #1b1208; font-size: 11px; letter-spacing: 0; text-transform: none; }
+.t-count:empty { display: none; }
+.t-rows { display: flex; flex-direction: column; gap: 12px; padding: 6px 0 12px; }
+.t-row { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.t-flag { flex-direction: row; align-items: flex-start; gap: 10px; }
+.t-flag input { width: 20px; height: 20px; min-height: 0; margin: 1px 0 0; padding: 0; flex: none; accent-color: var(--accent); cursor: pointer; }
+.t-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.t-text { color: var(--ink); font-size: 14px; line-height: 1.35; }
+label.t-text { cursor: pointer; }
+.t-key { margin-left: 4px; color: var(--muted); font: 12px ui-monospace, Menlo, Consolas, monospace; opacity: 0.8; overflow-wrap: anywhere; }
+.t-hint { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.t-row select, .t-row input:not([type="checkbox"]) { min-height: 40px; padding: 8px 10px; min-width: 0; }
+.t-row input:invalid { border-color: #ff7070; }
+.t-row input::placeholder { color: #ffffff52; }
+.t-pair { display: flex; gap: 8px; }
+.t-pair select { flex: 1; }
+.t-pair button { flex: none; min-width: 64px; }
+.t-tune { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.t-tune label { display: flex; flex-direction: column; gap: 3px; min-width: 0; color: var(--muted); font: 12px ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.t-tune input { min-height: 36px !important; padding: 6px 8px !important; }
+/* The link and its buttons stay in view at the foot of the panel while it scrolls. */
+.t-link { position: sticky; bottom: 0; z-index: 1; display: flex; flex-direction: column; gap: 8px; margin: 0 -14px; padding: 10px 14px max(12px, env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid #ffffff2a; border-radius: 0 0 12px 12px; box-shadow: 0 -8px 16px -8px #0008; }
+#t-url { width: 100%; resize: none; background: #0e0c14; color: var(--ink); border: 1px solid #ffffff2a; border-radius: 10px; padding: 8px 10px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; word-break: break-all; }
+.t-actions { display: flex; gap: 8px; }
+.t-actions button { flex: 1; }
+#t-apply.ready { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--dawn); }
+.t-status { min-height: 1.3em; color: var(--muted); font-size: 12.5px; }

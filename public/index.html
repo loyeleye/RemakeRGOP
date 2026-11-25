@@ -37,14 +37,36 @@
     <button id="story-o3c" class="ghost">Optional: Kes's rematch on the Fell <span class="soon">prototype</span></button>
     <button id="story-continue" class="ghost">Story: start</button>
     <button id="story-pond" class="ghost">Story: the pond, between runs <span class="soon">test</span></button>
-    <details class="how" id="progress">
-      <summary>Story progress (testing)</summary>
-      <p id="progress-note"></p>
-      <p><select id="walk-pick"></select> <button id="walk-go" class="ghost">Go to walk</button></p>
-      <p><label>Run 1 ending <select id="ending-pick"></select></label></p>
-      <p><label><input type="checkbox" id="walk-round" /> Tapping a wisp across water walks you round it</label></p>
-      <p><label><input type="checkbox" id="show-runs" /> Show every run on the menu, even ones Part 1 has not reached</label></p>
-      <p><button id="progress-reset" class="ghost">Reset progress</button></p>
+    <!-- Testing: built from OPTIONS in src/client/testing.ts, which adds the run sections into #t-runs. -->
+    <details class="how testing" id="progress">
+      <summary>Testing <span class="soon">for testers</span></summary>
+      <div class="t-body">
+        <p class="t-intro">Every option the page can be opened with. Set them here, then press Apply to reload with them, or copy the link.</p>
+        <section class="t-sec t-fixed" id="t-jump" aria-labelledby="t-jump-h">
+          <h3 id="t-jump-h">Jump to</h3>
+          <div class="t-row">
+            <label class="t-text" for="walk-pick">A walk on its own, outside Part 1</label>
+            <div class="t-pair"><select id="walk-pick"></select><button id="walk-go" type="button" class="small">Go</button></div>
+          </div>
+        </section>
+        <section class="t-sec t-fixed" aria-labelledby="t-progress-h">
+          <h3 id="t-progress-h">Story progress</h3>
+          <p id="progress-note" class="t-note"></p>
+          <div class="t-row t-flag"><input type="checkbox" id="show-runs" /><label class="t-text" for="show-runs">Show every run on the menu, even ones Part 1 has not reached</label></div>
+          <div><button id="progress-reset" type="button" class="ghost small">Reset progress</button></div>
+        </section>
+        <div id="t-runs"></div>
+        <div class="t-link">
+          <label class="t-text" for="t-url">Link with these options</label>
+          <textarea id="t-url" rows="2" readonly spellcheck="false"></textarea>
+          <div class="t-actions">
+            <button id="t-apply" type="button" class="small">Apply</button>
+            <button id="t-copy" type="button" class="ghost small">Copy link</button>
+            <button id="t-clear" type="button" class="ghost small">Clear</button>
+          </div>
+          <p id="t-status" class="t-status" aria-live="polite"></p>
+        </div>
+      </div>
     </details>
     <details class="how">
       <summary>How to play</summary>

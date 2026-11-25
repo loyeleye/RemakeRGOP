@@ -38,7 +38,8 @@ import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
 import { MENU_RUNS, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
-import { card as storyCard, ENDING, ENDING_CUTS, endingCut, KindlingEnding, lanternCard, setEndingCut } from "./ending.js";
+import { card as storyCard, ENDING, KindlingEnding, lanternCard } from "./ending.js";
+import { buildTesting } from "./testing.js";
 import * as sound from "./sound.js";
 import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
@@ -2157,6 +2158,8 @@ function renderPart1() {
 $("part1").onclick = () => playPiece(Math.max(0, loadPlace()));
 $("part1-again").onclick = () => playPiece(0);
 renderPart1();
+// The testing panel: every option the address can carry, as controls (client/testing.ts).
+buildTesting((id) => playPiece(pieceIndex(id)));
 {
   // ?part1=<piece>: straight into Part 1 at that piece (its id in client/part1.ts, such as 5-6 or 9-10).
   const at = new URLSearchParams(location.search).get("part1");
@@ -2176,30 +2179,7 @@ $("walk-go").onclick = () => {
   // A jump to test a walk doesn't move saved progress on.
   jumped = true;
 };
-{
-  const pick = $<HTMLSelectElement>("ending-pick");
-  pick.replaceChildren(
-    ...ENDING_CUTS.map((c) => Object.assign(document.createElement("option"), { value: c.id, textContent: c.name })),
-  );
-  pick.value = endingCut();
-  pick.onchange = () => setEndingCut(pick.value);
-}
-{
-  // Testing: walk round water when a wisp is tapped across it (Ladi, judging by feel). Saved per browser.
-  const box = $<HTMLInputElement>("walk-round");
-  const KEY = "lanternfall.walkRound";
-  try {
-    const v = new URLSearchParams(location.search).get("walkround") ?? localStorage.getItem(KEY);
-    if (v !== null) Game.walkRound = v !== "0";
-  } catch {}
-  box.checked = Game.walkRound;
-  box.onchange = () => {
-    Game.walkRound = box.checked;
-    try {
-      localStorage.setItem(KEY, box.checked ? "1" : "0");
-    } catch {}
-  };
-}
+// (The ending's cut and walking round water are in the testing panel's table, client/testing.ts.)
 $("progress-reset").onclick = () => {
   resetProgress();
   resetOpts();
