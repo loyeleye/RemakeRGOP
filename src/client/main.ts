@@ -167,6 +167,7 @@ function rematchRoom() {
   const q = new URLSearchParams(location.search), rec = loadOpt(REMATCH.id);
   r.wall = Math.max(REMATCH.wallStart, rec.best);
   r.count = rec.count;
+  r.fours = rec.fours ?? 0;
   const cheat = q.get("cheat");
   if (cheat === "hold" || cheat === "goal" || cheat === "nap") r.cheatPick = cheat;
   if (q.get("granny") === "beatable") r.beatable = true;
@@ -234,7 +235,7 @@ function noteOpt() {
   const rec = room?.story?.opt?.record;
   if (!rec || rec.count === optSeen || room!.phase !== "results") return;
   optSeen = rec.count;
-  if (saveOpt(rec.id, { best: rec.best, won: rec.won, count: rec.count })) rewardEarned(rec.id);
+  if (saveOpt(rec.id, { best: rec.best, won: rec.won, count: rec.count, fours: rec.fours })) rewardEarned(rec.id);
 }
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */

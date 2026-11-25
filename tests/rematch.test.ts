@@ -105,8 +105,8 @@ describe("Optional run 1: Granny's rematch", () => {
     const first = play();
     const kids = first.game.scores[0]!;
     expect(kids).toBe(REMATCH.target - 1);
-    expect(first.record).toEqual({ best: kids, was: REMATCH.wallStart, won: true, count: 1 });
-    expect(room.storyView().opt!.record).toEqual({ id: "o1", best: kids, won: true, count: 1 });
+    expect(first.record).toEqual({ best: kids, was: REMATCH.wallStart, won: true, count: 1, fours: 1 });
+    expect(room.storyView().opt!.record).toEqual({ id: "o1", best: kids, won: true, count: 1, fours: 1 });
     expect(room.storyView().end!.summary).toContain(`A new best on the wall: ${kids}.`);
     expect(room.wall).toBe(kids);
     // Again: the second cheat, the wall where it was left, and no new best to be had.
@@ -115,6 +115,12 @@ describe("Optional run 1: Granny's rematch", () => {
     const second = play();
     expect(second.record).toMatchObject({ was: kids, won: false, count: 2 });
     expect(room.storyView().end!.summary).toContain(`The wall still says ${kids}.`);
+    // Four again: the wall's tally of times at four goes up, and Nell says so.
+    if (second.game.scores[0] === REMATCH.target - 1) {
+      expect(second.record).toMatchObject({ fours: 2 });
+      expect(room.storyView().end!.lines[0]!.text).toBe("Four again! That's 2 times!");
+      expect(room.storyView().opt!.strip[2]!.badge).toBe("2x");
+    }
     // Nothing the player reads says "lost" or "sink".
     for (const l of room.storyView().end!.lines) expect(l.text).not.toMatch(/\b(lost|lose|sink)/i);
   });

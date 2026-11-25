@@ -51,6 +51,8 @@ export interface OptRecord {
   won: boolean;
   /** Times played. */
   count: number;
+  /** Granny's rematch: times the children reached four. */
+  fours?: number;
 }
 
 const OPT_KEY = "lanternfall.optional";
@@ -67,13 +69,13 @@ function loadOpts(): Record<string, OptRecord> {
 
 export function loadOpt(id: string): OptRecord {
   const r = loadOpts()[id];
-  return r && Number.isFinite(r.best) && Number.isFinite(r.count) ? { best: r.best, won: !!r.won, count: r.count } : { best: 0, won: false, count: 0 };
+  return r && Number.isFinite(r.best) && Number.isFinite(r.count) ? { best: r.best, won: !!r.won, count: r.count, fours: Number.isFinite(r.fours) ? r.fours : 0 } : { best: 0, won: false, count: 0, fours: 0 };
 }
 
 /** A run has ended: keep the better score. True if this was its first win. */
-export function saveOpt(id: string, now: { best: number; won: boolean; count: number }): boolean {
+export function saveOpt(id: string, now: { best: number; won: boolean; count: number; fours?: number }): boolean {
   const all = loadOpts(), was = loadOpt(id);
-  all[id] = { best: Math.max(was.best, now.best), won: was.won || now.won, count: Math.max(was.count, now.count) };
+  all[id] = { best: Math.max(was.best, now.best), won: was.won || now.won, count: Math.max(was.count, now.count), fours: Math.max(was.fours ?? 0, now.fours ?? 0) };
   try {
     localStorage.setItem(OPT_KEY, JSON.stringify(all));
   } catch {

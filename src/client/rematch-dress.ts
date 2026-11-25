@@ -63,7 +63,7 @@ export class RematchFx {
 
   /** The score as it stands on the wall: the best before this rematch, and the new one once it is chalked up. */
   step(o: Opt) {
-    const best = o.record?.best ?? o.wall?.best ?? 0, was = o.record && o.record.won ? o.wall?.best ?? 0 : -1, key = `${best}:${was}`;
+    const best = o.record?.best ?? o.wall?.best ?? 0, was = o.record && o.record.won ? o.wall?.best ?? 0 : -1, fours = best >= 4 ? o.record?.fours ?? o.wall?.fours ?? 0 : 0, key = `${best}:${was}:${fours}`;
     if (key === this.drawn) return;
     this.drawn = key;
     const g = this.canvas.getContext("2d")!, L = WALL_LOOK, W = this.canvas.width, H = this.canvas.height;
@@ -116,6 +116,12 @@ export class RematchFx {
       g.globalAlpha = 1;
     }
     tallies(g, 352, 30, best, 52, L.chalk);
+    // Once it says four: a small tally beside it of the times they have got there, five to a row.
+    if (fours > 0) {
+      g.globalAlpha = 0.9;
+      for (let row = 0; row * 5 < fours && row < 3; row++) tallies(g, 444, 24 + row * 30, Math.min(5, fours - row * 5), 22, L.chalk);
+      g.globalAlpha = 1;
+    }
     // A line under the lot, chalked in one go.
     g.lineWidth = 3;
     g.globalAlpha = 0.7;

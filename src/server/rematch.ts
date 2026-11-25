@@ -26,6 +26,8 @@ export class RematchRoom {
   wall = REMATCH.wallStart;
   /** Rematches played before this one: it picks her cheat and her age. */
   count = 0;
+  /** Times the children have reached four, the most she lets them (the gameplay thread, 25 Nov): once the wall says 4, it keeps a tally of these. The page keeps it between visits. */
+  fours = 0;
   /** A cheat picked by hand (?cheat=hold, goal or nap); otherwise they take turns. */
   cheatPick: Cheat | null = null;
   /** ?granny=beatable: she plays it straight and can lose, for comparison. */
@@ -73,7 +75,7 @@ export class RematchRoom {
   private napUntil = -1;
   private doubled = false;
   /** The record at the end. */
-  private record: { best: number; was: number; won: boolean; count: number } | null = null;
+  private record: { best: number; was: number; won: boolean; count: number; fours: number } | null = null;
   /** Ticks each held wisp has not moved. */
   private still = new Map<number, number>();
   private benched = new Map<number, number>();
@@ -677,15 +679,21 @@ export class RematchRoom {
     this.queue = [];
     this.phase = "results";
     const g = this.game, kids = g.scores[0]!, hers = g.scores[1]!;
-    const was = this.wall, won = kids > was;
-    this.record = { best: Math.max(was, kids), was, won, count: this.count + 1 };
+    const was = this.wall, won = kids > was, most = REMATCH.target - 1;
+    // Four again: the wall's tally of times at four goes up by one.
+    if (kids >= most) this.fours++;
+    const again = !won && kids >= most && was >= most;
+    this.record = { best: Math.max(was, kids), was, won, count: this.count + 1, fours: this.fours };
     this.end = {
       banked: kids,
       kes: hers,
       summary: `The children ${kids}, Granny ${hers}. ${won ? `A new best on the wall: ${kids}.` : `The wall still says ${was}.`}`,
       lines: won
         ? [{ who: NELL, text: `${kids}! That's the most!` }, { who: HESTA, text: "Closer. Don't tell the others." }]
-        : [{ who: NELL, text: `Still ${was}.` }, { who: HESTA, text: "One more. There's always one more." }],
+        : again
+          ? // Placeholder line (the gameplay thread's), until the story thread writes it.
+            [{ who: NELL, text: `Four again! That's ${this.fours} times!` }, { who: HESTA, text: "One more. There's always one more." }]
+          : [{ who: NELL, text: `Still ${was}.` }, { who: HESTA, text: "One more. There's always one more." }],
     };
     // The next rematch starts from this one's wall, and has her next cheat.
     this.wall = this.record.best;
@@ -749,14 +757,14 @@ export class RematchRoom {
         strip: [
           { label: "The children", n: g.scores[0]!, of: T, tone: "us", ...(this.napping() ? { badge: "x2" } : {}) },
           { label: "Granny", n: g.scores[1]!, of: T, tone: "her", ...(this.napping() ? { badge: "zzz" } : {}) },
-          { label: "The wall", n: this.record?.best ?? this.wall, of: T - 1, tone: "chalk" },
+          { label: "The wall", n: this.record?.best ?? this.wall, of: T - 1, tone: "chalk", ...((this.record?.best ?? this.wall) >= T - 1 && this.fours ? { badge: `${this.fours}x` } : {}) },
         ],
         ...(caption.length ? { caption } : {}),
         ...(this.eye !== null ? { eye: { wisp: this.eye, from: HESTA_ID } } : {}),
         ...(this.over ? { goal: { x: this.over.x, y: this.over.y, r: REMATCH.goal.r, live: now >= this.moveAt, left: now >= this.moveAt ? this.backAt - now : this.moveAt - now, of: now >= this.moveAt ? REMATCH.goal.ticks : REMATCH.goal.tell } } : {}),
         ...(this.napping() ? { nap: { who: HESTA_ID, left: this.napUntil - now, of: REMATCH.nap.ticks } } : {}),
-        wall: { best: this.record?.was ?? this.wall, now: g.scores[0]!, hers: g.scores[1]! },
-        ...(this.record ? { record: { id: REMATCH.id, best: this.record.best, won: this.record.won, count: this.record.count } } : {}),
+        wall: { best: this.record?.was ?? this.wall, now: g.scores[0]!, hers: g.scores[1]!, fours: this.fours },
+        ...(this.record ? { record: { id: REMATCH.id, best: this.record.best, won: this.record.won, count: this.record.count, fours: this.record.fours } } : {}),
       },
     };
   }
