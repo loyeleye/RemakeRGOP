@@ -2242,9 +2242,11 @@ function heldScene(p: Piece) {
     if (i > 0) at(t, () => show(i));
     t += i > 0 && !m.cut ? H.fade : 0;
     for (const line of m.lines ?? []) {
+      // Long enough to read, and to hear its clip out.
+      const len = Math.max(H.line, line.text.length * 0.055, (VOICE_SECONDS[`${line.who[0]}|${line.text}`] ?? 0) + 0.5);
       at(t + H.gap, () => sceneLine(caption, line));
-      at(t + H.gap + H.line, () => caption.classList.remove("on"));
-      t += H.gap + H.line;
+      at(t + H.gap + len, () => caption.classList.remove("on"));
+      t += H.gap + len;
     }
     t += m.hold;
   });

@@ -117,6 +117,33 @@ export const HELD: Record<string, Held> = {
       { slot: "hands-4-morning-door", hold: 3.5, cut: true },
     ],
   },
+  // 8-9b, the beacon and the send-off (production/story/part1/send-off/final/README.md, 25 Nov): the
+  // cutscene thread's thirteen pictures, not seen by Ladi, in the order of story/part1-send-off.md,
+  // whose Words column is the lines. Ladi approved the scene's shape and four details (Hesta never on
+  // the landing, "Dad?" and "Go on.", her bandaged hands, the kitchen promise); the other wording is
+  // the story thread's draft. Only Hesta's two marked lines are voiced.
+  "8-9b": {
+    tag: "Pictures and most lines not seen by Ladi",
+    fade: 0.6,
+    lead: 0.5,
+    line: 2.4,
+    gap: 0.4,
+    pictures: [
+      { slot: "sendoff-01", hold: 4 },
+      { slot: "sendoff-02", hold: 1, lines: [{ who: ["Manu"], text: "My mother won't get in a boat before the children do. Make her." }] },
+      { slot: "sendoff-03", hold: 1, lines: [{ who: ["Hesta"], text: "The low one's going under, Rook. Get them onto their boats, and bring the boats home the long way round. Don't cut across open cloud in the dark." }] },
+      { slot: "sendoff-04", hold: 2.5 },
+      { slot: "sendoff-05", hold: 1, lines: [{ who: ["Kes"], text: "Keep the island up till we're back, Captain." }, { who: ["Lumi"], text: "I will." }] },
+      { slot: "sendoff-06", hold: 1, lines: [{ who: ["Lumi"], text: "Don't chip it." }] },
+      { slot: "sendoff-07", hold: 1, lines: [{ who: ["Rook"], text: "Leave the last pane. We light it together, remember." }, { who: ["Lumi"], text: "Next Kindling. I know." }] },
+      { slot: "sendoff-08", hold: 1, lines: [{ who: ["Hesta"], text: "He'll want something to steer home by, Sparkbug. Let me." }] },
+      { slot: "sendoff-09", hold: 0.8, lines: [{ who: ["Lumi"], text: "Dad?" }] },
+      { slot: "sendoff-10", hold: 0.8, lines: [{ who: ["Rook"], text: "Go on." }] },
+      { slot: "sendoff-11", hold: 3 },
+      { slot: "sendoff-12", hold: 1.5, lines: [{ who: ["Hesta"], text: "Stay put, Sparkbug. Keep that lantern lit." }] },
+      { slot: "sendoff-13", hold: 4.5 },
+    ],
+  },
 };
 
 /**
@@ -230,7 +257,8 @@ export const PART1: Piece[] = [
   { id: "7-8b", name: "Hesta's hands, and morning", kind: "card", scene: "held", card: { heading: "Hesta's hands, and morning", summary: "Hesta on the terrace is shaking, her hands burned, and laughs it off. Cut to morning: Lumi at the door with the staff and no bag.", ruled: "Part ruled: Hesta's hands are in the bible. The rest is draft." } },
   { id: "8", name: "Run 8, the Sieve", kind: "run", run: 8 },
   { id: "8-9", name: "Walk 5, dusk", kind: "walk", walk: 5 },
-  { id: "8-9b", name: "The beacon and the send-off", kind: "card", card: { heading: "The beacon and the send-off", summary: "The beacon lights on the low one. At the landing Hesta plots the course, Kes goes, Lumi stays, and Hesta lights the unfinished lantern.", ruled: "Part ruled: the send-off is in the bible. The lines and the lantern being lit are draft. A storyboard only." } },
+  // Shown as its thirteen pictures (HELD["8-9b"]); take `scene` off and it is its card again.
+  { id: "8-9b", name: "The beacon and the send-off", kind: "card", scene: "held", card: { heading: "The beacon and the send-off", summary: "The beacon lights on the low one. At the landing Hesta plots the course, Kes goes, Lumi stays, and Hesta lights the unfinished lantern.", ruled: "Part ruled: the send-off is in the bible. The lines and the lantern being lit are draft. A storyboard only." } },
   { id: "9", name: "Run 9, the rescue", kind: "run", run: 9 },
   { id: "9-10", name: "The stranger's ship", kind: "card", card: { heading: "Eight pictures, before the ship", summary: "The shadow heading for home. Kes: \"Then come on.\" The dream, one beat. The stranger: \"I know a shorter way.\" Kes: \"Race you home, then.\" Rook: \"...\" Kes: \"Go. I'm right behind you.\" His back as he boards.", ruled: "Part ruled: the shadow as his reason and Kes's line after the joke are Ladi's. The wording and the pictures are draft." } },
   { id: "10", name: "Run 10, the ship home", kind: "run", run: 10 },

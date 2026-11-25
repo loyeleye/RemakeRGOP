@@ -358,4 +358,6 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Lumi|If you're not late.": 0.87,
   "Lumi|You're late.": 0.5,
   "Hesta|Grabbed the hot end. At my age.": 2.54,
+  "Hesta|The low one's going under, Rook. Get them onto their boats, and bring the boats home the long way round. Don't cut across open cloud in the dark.": 9.74,
+  "Hesta|Stay put, Sparkbug. Keep that lantern lit.": 3.79,
 };

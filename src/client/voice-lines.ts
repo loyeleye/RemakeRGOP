@@ -373,6 +373,8 @@ export const VOICE_LINES: Record<string, string> = {
   "Lumi|If you're not late.": "voice/scenes.mp3#t=20.54,21.61",
   "Lumi|You're late.": "voice/lumi.mp3#t=231.07,231.77",
   "Hesta|Grabbed the hot end. At my age.": "voice/hesta-hot-end.mp3",
+  "Hesta|The low one's going under, Rook. Get them onto their boats, and bring the boats home the long way round. Don't cut across open cloud in the dark.": "voice/hesta-low-one-route.mp3",
+  "Hesta|Stay put, Sparkbug. Keep that lantern lit.": "voice/hesta-stay-put.mp3",
 };
 
 /**
