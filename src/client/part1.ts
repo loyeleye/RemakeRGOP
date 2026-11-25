@@ -177,11 +177,12 @@ export const HELD: Record<string, Held> = {
       { slot: "handoff-8-boarding", hold: 3.5 },
     ],
   },
-  // 11, the Offering (production/story/offering/final/README.md, 25 Nov): the cutscene thread's rough
-  // first draft, 25 pictures in the order of story/part1-offering.md's table, whose lines these are.
-  // None of it is seen by Ladi, and the write-up is itself a story-thread draft he has not judged, so
-  // every line is a caption until he has read it (the story thread's advice: its voiced lines are the
-  // peak of Part 1). Picture 24 is 23 with the light gone. The end of Part 1.
+  // 11, the Offering (production/story/offering/final-2/README.md, 25 Nov): the cutscene thread's
+  // rebuilt set, 25 pictures in the order of story/part1-offering.md's table, whose lines these are.
+  // The pictures are not seen by Ladi as a set, and the write-up is a story-thread draft Ladi has not
+  // judged, so every line is a caption until Ladi has read it (the story thread's advice: its voiced
+  // lines are the peak of Part 1). The one exception is Hesta's at 17, which Ladi wrote and asked to
+  // be voiced on Gemini. Picture 24 is 23 with the light gone. The end of Part 1.
   "11": {
     tag: "Redrawn set, the art thread's picks. Pictures and story not seen by Ladi",
     shape: "four3",
@@ -206,7 +207,7 @@ export const HELD: Record<string, Held> = {
       { slot: "offering-14", hold: 0.7, lines: [{ who: ["Rook"], text: "Then me. Put me out there.", quiet: true }] },
       { slot: "offering-15", hold: 1.2, lines: [{ who: ["Hesta"], text: "You? There's no light in you to give.", quiet: true }] },
       { slot: "offering-16", hold: 0.6, lines: [{ who: ["Rook"], text: "Please.", quiet: true }] },
-      { slot: "offering-17", hold: 1.2, lines: [{ who: ["Hesta"], text: "You never did know when to stop, Rook.", quiet: true }] },
+      { slot: "offering-17", hold: 1.2, lines: [{ who: ["Hesta"], text: "You never did know when to stop, Rook." }] },
       { slot: "offering-18", hold: 2.5 },
       { slot: "offering-19", hold: 2.5 },
       { slot: "offering-20", hold: 2 },
