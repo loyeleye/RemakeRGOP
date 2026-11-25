@@ -77,8 +77,12 @@ export class SieveRoom {
   private tugEndedAt = -1;
   /** Which stills have been shown, in order (for tests). */
   stillsShown: string[] = [];
-  /** Picture 4 (the tug itself, no face) is off by default: the board already shows it in his hand (gameplay thread). ?still4 in the page. */
-  stillFour = false;
+  /**
+   * Picture 4 (the tug itself, no face), at the first tug. Off until 25 Nov because the board already
+   * shows it in his hand (gameplay thread); on now as a trial, so Ladi can judge the painted panel in
+   * play and drop it if it does not fit. ?still4=0 in the page turns it off.
+   */
+  stillFour = true;
   /** All the stills off (?nostills in the page). */
   stillsOn = true;
   /** For the measurements: wisps lost (the first not counted), how many of those over a well, restarts, and the ticks the last try took. */

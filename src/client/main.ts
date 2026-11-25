@@ -1109,7 +1109,7 @@ function sieveRoom() {
   else if (q.get("pull") === "1") r.pullMode = "quiet";
   else if (q.get("pull") === "2") r.pullMode = "loud";
   // Reaction stills: picture 4 (the tug itself) is off unless asked for; all of them off with ?nostills.
-  if (q.has("still4")) r.stillFour = true;
+  if (q.get("still4") === "0") r.stillFour = false;
   if (q.has("nostills")) r.stillsOn = false;
   else stills.preload("r8-");
   return r;

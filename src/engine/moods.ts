@@ -7,7 +7,8 @@ export const MOODS: Record<string, readonly string[]> = {
   Hesta: ["neutral", "approving", "firm", "grinning", "dozing"],
   // "proud" is the optional run's (Lumi's lesson with Kes), as "teaching" is Kes's: only a line that names them gets them.
   Lumi: ["neutral", "calling", "delighted", "grudging", "smug", "unimpressed", "delight-flash", "proud"],
-  Rook: ["neutral", "warm", "proud", "baffled"],
+  // "shocked" is run 10's (a draft face, 25 Nov): only the line that names it gets it.
+  Rook: ["neutral", "warm", "proud", "baffled", "shocked"],
   Nell: ["neutral", "curious", "delighted", "determined", "sheepish", "worried"],
   Kes: ["neutral", "smug", "challenging", "wistful", "gracious", "alarmed", "bereft", "teaching"],
   // The two old people on the low one (run 9). First drafts from the cast thread, not approved by Ladi; he has no line yet.
@@ -55,8 +56,8 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Sefa's grandmother", /./, "talking"],
   ["Rook", /^(That's it\.|Just like that\.)/, "proud"],
   ["Rook", /^How did you do that\?/, "baffled"],
-  // Run 10's last line wants a shocked face (Ladi, 25 Nov); baffled stands in until there is one.
-  ["Rook", /^That's Lumi's lantern\./, "baffled"],
+  // Run 10's last line: his shocked face (Ladi asked for it, 25 Nov; the face itself is a draft he has not judged).
+  ["Rook", /^That's Lumi's lantern\./, "shocked"],
   ["Rook", /^(Yes, ma'am\.|See\?|Now you're the boss|Let's call it)/, "warm"],
   // Tilda (run 8, Ladi: "Tilda needs her face in her bark bubbles"). Which face goes with which line
   // is the gameplay thread's mapping, not ruled by Ladi; it all lives in these five rows. The count

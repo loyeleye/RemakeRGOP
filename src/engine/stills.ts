@@ -51,6 +51,7 @@ export const STILLS: Record<string, StillCard> = {
   "r8-1": { who: "Tilda, half length", faces: "Steady. Eyes level, a little narrowed; brows flat; mouth shut." },
   "r8-2": { who: "Tilda in front, Rook beside her, looking down at the far well", faces: "She is tired, eyes half lidded. He frowns at the well, brows pulled together." },
   "r8-3": { who: "Tilda, a hand held flat at a wisp's height", faces: "Matter-of-fact, almost bored." },
+  // Approved with the rest (25 Nov); shown at the first tug as a trial Ladi will judge in play.
   "r8-4": { who: "The event: his wisp at the end of a thin, shaking beam, over a black pit", faces: "No face." },
   "r8-5": { who: "Tilda near, Rook behind her braced on his staff", faces: "She is lost: eyes wide, brows up, mouth open. He looks back at her, eyes wide, mouth just open.", untilNextMs: 6000 },
   "r8-6": { who: "The same two, turned", faces: "She looks at him, waiting, mouth shut tight. He looks down at his staff, brows pulled hard together." },
@@ -71,8 +72,9 @@ export const STILLS: Record<string, StillCard> = {
   "r9-2": { who: "Kes and Rook side by side. Her glow is gone and she is looking at her empty hands", faces: "Kes: eyes wide, brows up in the middle, mouth open. Rook: brows down, eyes on her, mouth shut." },
   "r9-3": { who: "The grandmother at the rail, one hand on her husband's arm, looking past us at Rook", faces: "Her eyes soft, brows a little up, mouth closed, chin lifted toward home." },
   // Run 10, the ship home: the view over the bow, three times. Rook's face in profile at the edge, lit by the ship's lamp. Plain cards.
-  "r10-0": { who: "Rook in profile at the edge, the ship's lamp on his face. Beyond the bow, home far off: two glows side by side under one dark shape", faces: "Eyes fixed ahead, brows down and together, jaw set, mouth shut." },
-  "r10-1": { who: "Rook in profile. Beyond the bow, the two tips of the horseshoe, both crowded with small glows. Not one lit window", faces: "Eyes wider, brows up in the middle, mouth a little open." },
+  // r10-0 and r10-1 approved by Ladi (25 Nov, 2:04 AM).
+  "r10-0": { who: "Rook at the rail. Home far off: two glows under a storm cloud, the stain on the cloud between", faces: "Eyes fixed ahead, brows down and together, jaw set, mouth shut." },
+  "r10-1": { who: "The home island from the boat: a small stone and light in the falls' mouth, the stain on the cloud below. Rook alarmed", faces: "Alarmed." },
   // Approved by Ladi (25 Nov, 1:57 AM). No Rook in it: his line is a bubble with his face over it.
   "r10-2": { who: "Close on Lumi's lit lantern on a wide flat stone, dark water all round, the lip of the falls along the bottom. No Rook", faces: "None. Rook's face is his bubble's portrait." },
 };
