@@ -229,7 +229,13 @@ describe("Run 10: the ship home", () => {
       expect(room.stillsShown).toEqual(["r10-0", "r10-1", "r10-2"]);
       for (const id of room.stillsShown) expect(STILLS[id]).toBeDefined();
       const said = lines().filter((l) => l.text);
-      expect(said.map((l) => l.text)).toEqual(["Faster.", "That's Lumi's lantern. Why is it on the water?"]);
+      // The opening and the end; between them only his warning, taking turns, and why it began again.
+      const texts = said.map((l) => l.text);
+      expect(texts[0]).toBe("Faster.");
+      expect(texts[texts.length - 1]).toBe("That's Lumi's lantern. Why is it on the water?");
+      const mid = texts.slice(1, -1).filter((t) => t !== SHIP.lostLine);
+      for (const t of mid) expect(SHIP.warn.lines).toContain(t);
+      for (let i = 1; i < mid.length; i++) expect(mid[i]).not.toBe(mid[i - 1]);
       expect(said.every((l) => l.who === "Rook")).toBe(true);
       // A careful hand ends closer to the patch than he started, and is never nearer than it can be.
       expect(room.nearest).toBeGreaterThanOrEqual(SHIP.patch.nearest);
@@ -421,8 +427,11 @@ describe("Run 10: the ship home", () => {
     expect(room.state.lead).toBe(SHIP.patch.start);
     expect(room.state.game.tick).toBe(0);
     expect(room.state.phase).toBe("playing");
-    // No line for a restart, and "Faster." is not said again.
-    expect(lines().slice(said).filter((l) => l.text)).toHaveLength(0);
+    // His warning first, while it drew away, and then why it is the bow again.
+    const after = lines().slice(said).filter((l) => l.text).map((l) => l.text);
+    expect(after[0]).toBe(SHIP.warn.lines[0]);
+    expect(after[after.length - 1]).toBe(SHIP.lostLine);
+    expect(after.every((t) => SHIP.warn.lines.includes(t) || t === SHIP.lostLine)).toBe(true);
   });
 
   it("the top meters: Progress fills as the run goes, and the lamp's notch is where it keeps pace, higher the nearer the patch", () => {

@@ -130,6 +130,14 @@ export const SHIP = {
   bell: { from: 0.5, gaps: [15, 19, 16, 20, 17] as readonly number[] },
   /** The stills over the bow: the second at this share of the run, the third this many seconds from the end (inside the last fifteen, and once home is coming into view). */
   stills: { half: 0.5, lastSec: 8 },
+  /**
+   * Rook's warning as the patch draws away (Ladi, 25 Nov: he alternates "Faster." with "It's getting
+   * too far ahead!"). Said once the patch is within `lead` tiles of going out of sight and still
+   * drawing away; again only after it has come back `rearm` tiles, and no sooner than `gap` ticks.
+   */
+  warn: { lead: 3.5, rearm: 1.5, gap: 20, lines: ["It's getting too far ahead!", "Faster."] as readonly string[] },
+  /** His line when the run begins again after the patch is lost (the story thread's suggestion, 25 Nov): so the player knows why. "" for none. */
+  lostLine: "I've lost sight of it.",
   /** The end: home comes in over the top of the screen in the last this many seconds, and he goes over the rail in the last `railTicks` ticks. */
   endSec: 10,
   railTicks: 3,

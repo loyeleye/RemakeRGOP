@@ -35,6 +35,11 @@ export class ShipRoom {
   private lines: StoryLine[] = [];
   private end: StoryView["end"];
   private said = new Set<string>();
+  /** The warning: how many said, whether it may be said again, and the tick it last was. */
+  private warns = 0;
+  private warnArmed = true;
+  private warnedAt = -99;
+  private wasLead = 0;
   private queue: Pending[] = [];
   private busyUntil = 0;
   /** How far ahead of the bow the patch is (tiles). */
@@ -155,6 +160,7 @@ export class ShipRoom {
     this.end = undefined;
     this.rng = new Rng(this.seed());
     this.said = new Set();
+    this.warns = 0;
     this.lines = [];
     this.restarts = 0;
     this.clockTicks = 0;
@@ -181,7 +187,9 @@ export class ShipRoom {
     g.respawnPause = g.outPause = S.pause;
     this.queue = [];
     this.busyUntil = 0;
-    this.lead = S.patch.start;
+    this.lead = this.wasLead = S.patch.start;
+    this.warnArmed = true;
+    this.warnedAt = -99;
     this.fire = S.speed.start;
     this.showOwed = 0;
     this.bank = null;
@@ -469,6 +477,8 @@ export class ShipRoom {
         this.restarts++;
         this.queue = [];
         this.start(false);
+        // Why it is the bow again, in his own mouth.
+        if (S.lostLine) this.say(ROOK, S.lostLine, { player: YOU }, "key");
       }
       return;
     }
@@ -515,6 +525,15 @@ export class ShipRoom {
     this.lead = Math.max(P.nearest, last ? Math.min(this.lead, P.gone - 1) : this.lead);
     this.nearest = Math.min(this.nearest, this.lead);
     this.farthest = Math.max(this.farthest, this.lead);
+    // Drawing away and near out of sight: his warning, taking turns.
+    const W = S.warn, edge = P.gone - W.lead;
+    if (this.lead < edge - W.rearm) this.warnArmed = true;
+    if (!last && this.warnArmed && this.lead >= edge && this.lead < P.gone && this.lead > this.wasLead && g.tick - this.warnedAt >= W.gap) {
+      this.warnArmed = false;
+      this.warnedAt = g.tick;
+      this.say(ROOK, W.lines[this.warns++ % W.lines.length]!, { player: YOU });
+    }
+    this.wasLead = this.lead;
     if (this.lead >= P.gone) {
       this.gutterAt = g.tick;
       this.bank = null;
