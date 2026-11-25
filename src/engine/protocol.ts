@@ -143,6 +143,9 @@ export interface StoryView {
     vanes?: { x: number; y: number; r: number; n: number; you?: boolean; her?: boolean }[];
     /** Tidepool Steps (optional run 3b): how high the water stands over each step's strips, 0 (stone) to 1, by step (0 the court, unused). */
     terraces?: number[];
+    /** Moss Hollow (optional run 3a): the moss over each covered wisp (its tile from the brazier, the strokes left in it and what it began with, and its patch), and the last stroke (where, and on which tick). */
+    moss?: { x: number; y: number; hp: number; of: number; patch: number }[];
+    chip?: { x: number; y: number; tick: number; by: "rook" | "lumi" };
   };
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };

@@ -3931,10 +3931,15 @@ export class World {
         this.mists[i]!.rotation.y = time * 0.05 * (i % 2 ? 1 : -1);
       });
     }
-    if (st.snap.moss) {
+    // Moss Hollow (optional run 3a): the moss is on the wisps, kept by the room; drawn as the same tufts, thicker the more strokes it takes.
+    const optMoss = st.opt?.id === "o3a" ? (st.opt.moss ?? []).flatMap((m) => [(b.center.y + m.y) * b.width + b.center.x + m.x, m.hp]) : null;
+    const mossList = optMoss ?? st.snap.moss;
+    const mossedWisps = optMoss ? new Set(st.snap.wisps.filter((w) => !w.away && optMoss.some((_, k) => k % 2 === 0 && optMoss[k] === w.y * b.width + w.x)).map((w) => w.id)) : null;
+    const mossFull = optMoss ? 4 : MOSS_HP;
+    if (mossList) {
       const seen = new Set<number>();
-      for (let k = 0; k < st.snap.moss.length; k += 2) {
-        const i = st.snap.moss[k]!, hp = st.snap.moss[k + 1]!;
+      for (let k = 0; k < mossList.length; k += 2) {
+        const i = mossList[k]!, hp = mossList[k + 1]!;
         seen.add(i);
         let rig = this.mossRigs.get(i);
         if (!rig) {
@@ -3950,11 +3955,11 @@ export class World {
           this.shedMoss(rig, time, 4);
         }
         this.mossHp.set(i, { hp, hit: was && hp < was.hp ? time : was?.hit ?? -99 });
-        const torn = 1 - hp / MOSS_HP;
+        const torn = Math.max(0, Math.min(1, 1 - hp / mossFull));
         const mat = (rig.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
-        mat.color.set("#4f8a3a").lerp(new THREE.Color("#9a8443"), torn);
+        mat.color.set(optMoss ? "#3f7a30" : "#4f8a3a").lerp(new THREE.Color("#9a8443"), optMoss ? torn * 0.6 : torn);
         // It springs up when it grows, and shrinks as it's torn at.
-        const goal = 0.55 + 0.45 * (hp / MOSS_HP);
+        const goal = optMoss ? 1.05 + 0.2 * Math.min(hp, 4) : 0.55 + 0.45 * (hp / MOSS_HP);
         rig.scale.setScalar(rig.scale.x + (goal - rig.scale.x) * 0.15);
         const since = time - this.mossHp.get(i)!.hit;
         const shake = since < 0.4 ? Math.sin(since * 60) * 0.12 * (1 - since / 0.4) : 0;
@@ -4150,7 +4155,9 @@ export class World {
         const n = Math.sin(time * sp + ph) * 0.5 + Math.sin(time * sp * 2.71 + ph * 1.7) * 0.3 + Math.sin(time * sp * 0.43 + ph * 0.6) * 0.2;
         flick = 1 + (0.07 + 0.33 * tired * tired) * n - (tired > 0.75 && Math.sin(time * 31 + ph) > 0.6 ? 0.35 : 0);
       }
-      const low = h === undefined ? 1 : flick;
+      // Moss Hollow: one under moss glows low through it, so the moss reads and the wisps can still be counted.
+      const mossed = mossedWisps?.has(w.id) ? 0.4 : 1;
+      const low = (h === undefined ? 1 : flick) * mossed;
       rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1) * (h === undefined ? 1 : (0.8 + 0.3 * h) * FALL.big * (0.92 + 0.08 * flick)));
       rig.halo.material.opacity = Math.min(1, 0.85 * s * dim * dim * low);
       rig.light.intensity = 6 * s * dim * low;

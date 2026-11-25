@@ -30,6 +30,8 @@ import { COVE } from "../engine/cove.js";
 import { KiteRoom } from "../server/kite.js";
 import { TidepoolRoom } from "../server/tidepool.js";
 import { TIDEPOOL } from "../engine/tidepool.js";
+import { MossRoom } from "../server/mosshollow.js";
+import { MOSS } from "../engine/mosshollow.js";
 import { KITE } from "../engine/kite.js";
 import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
@@ -145,7 +147,7 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | TidepoolRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | TidepoolRoom | MossRoom | null = null;
 
 /** The walkable map, at the speed on trial: ?walkspeed=1.5, 2 or 2.5 shortens the map's beat; with &only=rook only his stride is longer. */
 function pondRoom(walk: number) {
@@ -237,6 +239,26 @@ function tidepoolRoom() {
   return r;
 }
 
+/**
+ * Optional run 3a, Moss Hollow, Garrick's moss job. His best and how many there have been are kept
+ * in this browser. Any number in MOSS can be set from the link to judge it by feel:
+ * ?moss=strokes:10,creep:14,rise.every:12 and so on (the lists of patches and singles are not).
+ */
+function mossRoom() {
+  const q = new URLSearchParams(location.search), rec = loadOpt(MOSS.id);
+  for (const part of (q.get("moss") ?? "").split(",").filter(Boolean)) {
+    const [k, v] = part.split(":"), path = (k ?? "").split("."), last = path.pop()!;
+    let at = MOSS as unknown as Record<string, unknown>;
+    for (const step of path) at = (at?.[step] ?? {}) as Record<string, unknown>;
+    if (typeof at[last] === "number" && Number.isFinite(Number(v))) at[last] = Number(v);
+  }
+  const r = new MossRoom();
+  r.best = rec.best;
+  r.count = rec.count;
+  optSeen = null;
+  return r;
+}
+
 /** Which playing of an optional run has had its record kept (its count), so that each is kept once. */
 let optSeen: number | null = null;
 
@@ -261,12 +283,12 @@ function noteOpt() {
 }
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" | "o3b" | "o3c" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" | "o3a" | "o3b" | "o3c" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
   sound.preloadVoices();
-  const r = run === "o3b" ? tidepoolRoom() : run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "o3a" ? mossRoom() : run === "o3b" ? tidepoolRoom() : run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
@@ -1881,6 +1903,7 @@ $("story-o1").onclick = () => connectStory(playerName(), "o1");
 $("story-o2").onclick = () => connectStory(playerName(), "o2");
 $("story-o3c").onclick = () => connectStory(playerName(), "o3c");
 $("story-o3b").onclick = () => connectStory(playerName(), "o3b");
+$("story-o3a").onclick = () => connectStory(playerName(), "o3a");
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Saved progress: continue from where this browser got to, jump to any walk, or start over.
 function renderProgress() {
