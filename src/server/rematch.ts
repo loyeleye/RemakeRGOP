@@ -145,7 +145,8 @@ export class RematchRoom {
     // "I start on one."
     g.scores[1] = REMATCH.head;
     g.onReturn = (w) => {
-      const spot = w.guild === 1 ? (this.rushing ? this.nearAltar(w) : this.nearHer(w)) : this.nearMiddle(w);
+      // (Playing it straight, on her switch, hers come back as far out as theirs do: one walker against four.)
+      const spot = w.guild === 1 && !this.beatable ? (this.rushing ? this.nearAltar(w) : this.nearHer(w)) : this.nearMiddle(w);
       if (spot) moveWisp(w, spot);
     };
     for (const w of g.wisps) g.onReturn(w);

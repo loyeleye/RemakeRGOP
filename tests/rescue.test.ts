@@ -21,6 +21,8 @@ function open(seed: number, stand: Stand | null = "hold", setup?: (room: RescueR
 /** The room's own parts, for staging a moment. */
 type Inside = { launch(n: 1 | 2, row: number): void; crossings: number; stand: Stand | null; kesHold: boolean; bankedN: number; said: Set<string> };
 const inside = (room: RescueRoom) => room as unknown as Inside;
+/** The build before the brightest-thing rule (v155): the patch on the cloud's clock, and a lamp that leaks. */
+const clock = (r: RescueRoom) => (r.patchAim = "clock");
 
 describe("Run 9: the rescue, on the low one", () => {
   it("the low one is three strips cut by two pools, and the bank is the slip at the landing, south of all of it", () => {
@@ -40,7 +42,7 @@ describe("Run 9: the rescue, on the low one", () => {
   it("a careful hand fills three boats before the cloud is at the landing: every wisp goes in by his pull, some by way of Kes's stones, and the patch crosses on the way", () => {
     let won = 0;
     for (const seed of [7919, 15838, 23757, 31676]) {
-      const { room, lines, toPlay } = open(seed);
+      const { room, lines, toPlay } = open(seed, "hold", clock);
       toPlay();
       let crossings = 0, had = false, lifts = 0;
       for (let n = 0; n < 1200 && room.state.phase === "playing"; n++) {
@@ -87,7 +89,7 @@ describe("Run 9: the rescue, on the low one", () => {
   });
 
   it("the docked boat's lamp is the bank: a wisp of his that comes into its light flies in, one of hers does not, and the fourth lifts the boat", () => {
-    const { room, toPlay } = open(11, null);
+    const { room, toPlay } = open(11, null, clock);
     toPlay();
     const g = room.state.game, c = g.board.center, L = RESCUE.lamp;
     const mine = g.wisps.filter((w) => w.guild === 0), hers = g.wisps.find((w) => w.guild === 1)!;
@@ -124,7 +126,7 @@ describe("Run 9: the rescue, on the low one", () => {
   });
 
   it("the lamp does not keep its light: left unfed its newest pip flickers and goes out, then another; a wisp in time keeps it, a lifted boat is safe, and the switch turns it off", () => {
-    const { room, lines, toPlay } = open(11, null);
+    const { room, lines, toPlay } = open(11, null, clock);
     toPlay();
     const g = room.state.game, c = g.board.center, L = RESCUE.lamp;
     const view = () => room.storyView().rescue!;
@@ -170,7 +172,7 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(room.state.fill[0]).toBe(RESCUE.perBoat);
     expect(room.pipsLost).toBe(2);
     // On its switch the lamp keeps its light, as in the build before.
-    const held = open(11, null, (r) => (r.lampMode = "holds"));
+    const held = open(11, null, (r) => ((r.lampMode = "holds"), (r.patchAim = "clock")));
     held.toPlay();
     const hg = held.room.state.game, w = hg.wisps.find((q) => q.guild === 0)!;
     w.pos = w.prev = pt(hg.board.center.x + L.at[0], hg.board.center.y + L.at[1] - 3);
@@ -253,7 +255,7 @@ describe("Run 9: the rescue, on the low one", () => {
   });
 
   it("the patch comes on the cloud's clock, never on how many are in: each crossing is told for a while first, the still comes early in the first tell, and it aims at the gathering as it sets out", () => {
-    const { room, conn, lines, toPlay } = open(4321, null);
+    const { room, conn, lines, toPlay } = open(4321, null, clock);
     toPlay();
     const g = room.state.game, c = g.board.center, C = RESCUE.patch.clock;
     const mine = g.wisps.filter((w) => w.guild === 0);
@@ -466,5 +468,160 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(carried).toBeGreaterThan(0);
     expect(room.lostToPatch).toBeGreaterThanOrEqual(1);
     expect(room.storyView().rescue!.patch).toBeUndefined();
+  });
+
+  describe("the rule: it goes for the brightest thing", () => {
+    type Bait = { tell: { k: number; left: number } | null; toldAt: number; said: Set<string>; fill: number[]; sipAt: number };
+    const bait = (room: RescueRoom) => room as unknown as Bait;
+    const stage = (seed = 2024) => {
+      const o = open(seed, null);
+      o.toPlay();
+      const g = o.room.state.game, c = g.board.center, L = RESCUE.lamp, D = RESCUE.drop;
+      // Its first visit is behind it, and no other comes until the test calls one.
+      inside(o.room).crossings = 1;
+      bait(o.room).toldAt = 1e9;
+      const put = (w: (typeof g.wisps)[number], x: number, y: number) => ((w.pos = w.prev = pt(c.x + x, c.y + y)), (w.target = null), (w.holder = null));
+      const mine = () => g.wisps.filter((w) => w.guild === 0 && !g.away.has(w.id));
+      /** His loose wisps: this many at the stones, the rest far off and apart. */
+      const lay = (atStones: number) => mine().forEach((w, i) => (i < atStones ? put(w, D.at[0] + (i % 2), D.at[1] + Math.floor(i / 2)) : put(w, -14 + i * 7, -24)));
+      /** A warning about to end, with the still and the lesson out of the way. */
+      const tellNow = () => (bait(o.room).said.add("what"), bait(o.room).said.add("rule"), (bait(o.room).tell = { k: 0, left: 3 }));
+      return { ...o, g, c, L, D, put, mine, lay, tellNow, view: () => o.room.storyView().rescue! };
+    };
+
+    it("it is the run's own rule, and the lamp does not leak under it", () => {
+      const { room, L, mine, put, view } = stage();
+      expect(room.patchAim).toBe("bait");
+      put(mine()[0]!, L.at[0], L.at[1] - 2);
+      room.onTick();
+      expect(room.state.fill[0]).toBe(1);
+      for (let n = 0; n < L.hold + 2 * L.drip; n++) room.onTick();
+      expect(room.state.fill[0]).toBe(1);
+      expect(room.pipsLost).toBe(0);
+      expect(view().lamp!.gutter).toBeUndefined();
+    });
+
+    it("the lamp takes one wisp and then nothing for a while: the next waits in its light, the ring is told, and it goes in by itself", () => {
+      const { room, L, mine, put, view } = stage();
+      const B = RESCUE.patch.bait;
+      const [a, b] = mine();
+      put(a!, L.at[0], L.at[1] - 2);
+      put(b!, L.at[0] + 1, L.at[1] - 2);
+      room.onTick();
+      expect(room.state.fill[0]).toBe(1);
+      expect(view().lamp!.sip).toEqual({ left: B.sip, of: B.sip, n: 1 });
+      for (let n = 0; n < B.sip - 1; n++) room.onTick();
+      expect(room.state.fill[0]).toBe(1);
+      expect(view().lamp!.sip!.left).toBe(1);
+      room.onTick();
+      expect(room.state.fill[0]).toBe(2);
+    });
+
+    it("more at the stones than in the lamp and it takes the stones: the boat keeps its light and Kes says so", () => {
+      const { room, g, L, lay, put, mine, tellNow, lines, view } = stage();
+      put(mine()[0]!, L.at[0], L.at[1] - 2);
+      room.onTick();
+      expect(room.state.fill[0]).toBe(1);
+      lay(2);
+      tellNow();
+      room.onTick();
+      // Told all through the warning: what it is turned for, and how bright that is.
+      expect(view().tell!.to).toMatchObject({ kind: "heap", n: 2 });
+      const before = room.lostToPatch;
+      let sat = false;
+      for (let n = 0; n < 80 && (room.state.patch || bait(room).tell); n++) room.onTick(), (sat ||= !!view().lamp!.sat);
+      for (let n = 0; n < 12; n++) room.onTick();
+      expect(sat).toBe(false);
+      expect(room.lostToPatch - before).toBeGreaterThanOrEqual(2);
+      expect(room.state.fill[0]).toBeGreaterThanOrEqual(1);
+      expect(room.pipsLost).toBe(0);
+      expect(lines().some((l) => l.text === "It took the stones. Boat's still lit. Go!")).toBe(true);
+      expect(g.tick).toBeGreaterThan(0);
+    });
+
+    it("as many in the lamp as at the stones and it sits on the boat: the pips go out one by one, the lamp is cold a while after, and nobody is harmed", () => {
+      const { room, g, L, lay, put, mine, tellNow, lines, view } = stage();
+      const B = RESCUE.patch.bait;
+      for (let k = 0; k < 2; k++) {
+        put(mine()[0]!, L.at[0], L.at[1] - 2);
+        room.onTick();
+        for (let n = 0; n < B.sip; n++) room.onTick();
+      }
+      expect(room.state.fill[0]).toBe(2);
+      lay(2);
+      tellNow();
+      room.onTick();
+      expect(view().tell!.to).toMatchObject({ kind: "lamp", n: 2 });
+      let satFor = 0, offAt = -1;
+      const went: number[] = [];
+      for (let n = 0; n < 120 && (room.state.patch || bait(room).tell); n++) {
+        room.onTick();
+        const v = view();
+        if (v.lamp!.sat) satFor++, expect(v.lamp!.dark).toBe(true);
+        if (v.lamp!.went === g.tick) went.push(g.tick);
+        if (offAt < 0 && v.lamp!.cold === 0) offAt = g.tick;
+        // Nobody is hurt, and nobody is shown lost: Rook plays on, and Kes is only ever dark.
+        expect(room.state.phase).toBe("playing");
+      }
+      for (let n = 0; n < 12; n++) room.onTick();
+      expect(satFor).toBeGreaterThanOrEqual(2 * B.drink);
+      expect(went).toHaveLength(2);
+      expect(went[1]! - went[0]!).toBe(B.drink);
+      expect(room.state.fill[0]).toBe(0);
+      expect(room.pipsLost).toBe(2);
+      expect(room.state.lifted).toBe(0);
+      expect(lines().some((l) => l.text === "It's on the boat. Rook, it's on the boat!")).toBe(true);
+      expect(lines().some((l) => l.text === "They're all right. They're all right. The lamp's cold. Again!")).toBe(true);
+      // Cold: it takes nothing for a while after the patch has moved off it.
+      expect(offAt).toBeGreaterThan(0);
+      expect(bait(room).sipAt).toBeGreaterThanOrEqual(offAt + B.cold);
+    });
+
+    it("a lifted boat is never touched", () => {
+      const { room, L, put, mine, lay, tellNow } = stage();
+      bait(room).fill[0] = RESCUE.perBoat - 1;
+      put(mine()[0]!, L.at[0], L.at[1] - 2);
+      room.onTick();
+      expect(room.state.lifted).toBe(1);
+      lay(0);
+      tellNow();
+      for (let n = 0; n < 120 && (room.state.patch || bait(room).tell); n++) room.onTick();
+      expect(room.state.fill[0]).toBe(RESCUE.perBoat);
+      expect(room.state.lifted).toBe(1);
+    });
+
+    it("its first visit goes to the lamp if anything is in it, and then Kes says the rule once; nothing he reads says bait, offer, give or feed", () => {
+      const { room, lines, msgs, toPlay } = open(7919, "bait");
+      toPlay();
+      for (let n = 0; n < 1400 && room.state.phase === "playing"; n++) room.onTick();
+      const said = lines().map((l) => l.text);
+      expect(said.filter((t) => t === "It goes for the brightest thing. Leave more at the stones than there is in the lamp!")).toHaveLength(1);
+      expect(said.indexOf("It's on the boat. Rook, it's on the boat!")).toBeGreaterThanOrEqual(0);
+      expect(said.indexOf("It's on the boat. Rook, it's on the boat!")).toBeLessThan(said.indexOf("It goes for the brightest thing. Leave more at the stones than there is in the lamp!"));
+      const read = [...said, ...msgs.flatMap((m) => (m.t === "room" ? (m.room.story?.rescue?.caption ?? []) : []))];
+      for (const t of read) expect(t).not.toMatch(/\b(bait|offer|offering|give|feed)\b/i);
+      for (const t of read) expect(t).not.toMatch(/\bsink/i);
+      expect(said).not.toContain("It went for the heap. Don't let mine sit!");
+      expect(said).not.toContain("It won't keep in this cloud! Fill it in one go!");
+    });
+
+    it("bringing everything straight in does not win before the cloud; leaving more at the stones than is in the lamp does, with the patch taking a large share", () => {
+      let poured = 0, left = 0;
+      for (const seed of [7919, 15838, 23757]) {
+        const a = open(seed, "hold");
+        a.toPlay();
+        for (let n = 0; n < 700 && a.room.state.phase === "playing" && a.room.restarts === 0; n++) a.room.onTick();
+        if (a.room.restarts === 0 && a.room.state.phase === "results") poured++;
+        const b = open(seed, "bait");
+        b.toPlay();
+        for (let n = 0; n < 700 && b.room.state.phase === "playing" && b.room.restarts === 0; n++) b.room.onTick();
+        if (b.room.restarts === 0 && b.room.state.phase === "results") {
+          left++;
+          expect(b.room.lostToPatch / (b.room.wispsIn + b.room.lost)).toBeGreaterThan(0.4);
+        }
+      }
+      expect(poured).toBe(0);
+      expect(left).toBeGreaterThanOrEqual(2);
+    });
   });
 });

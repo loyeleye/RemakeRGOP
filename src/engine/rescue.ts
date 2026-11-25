@@ -109,8 +109,25 @@ export const RESCUE = {
    * full-screen still comes `clock.hold` ticks into the first tell.
    */
   patch: {
-    aim: "clock" as "clock" | "react" | "seek" | "line",
+    aim: "bait" as "bait" | "clock" | "react" | "seek" | "line",
     clock: { at: [0.12, 0.25, 0.4] as readonly number[], tell: 18, hold: 2 },
+    /**
+     * The rule now ("bait", from Ladi's note of 24 Nov, 6:38 PM; the page's ?patch=bait, and
+     * ?patch=clock is the one before): it goes for the brightest thing there is, and the docked
+     * boat's lamp is a light as big as its pips. It comes all run long, told as on the clock: the
+     * first tell when his first wisp is in (or at tick `firstBy`), and after that a tell every
+     * `every` ticks, never sooner than `rest` ticks after the last visit ended. At the end of the
+     * tell it sets out for the biggest light: a gathering of loose wisps, Kes's string in her hand,
+     * or the lamp. A tie goes as `tie` says. A gathering it takes whole, as before. On the
+     * lamp it sits, the boat and everyone aboard dark under it, and a pip goes out every `drink`
+     * ticks until the lamp is empty; then it moves off. A boat that has lifted is never touched.
+     * So a boat is filled by leaving it something brighter than the lamp to take. The lamp does
+     * not leak in this rule. `teach`: on the first try its first visit goes to the lamp if there
+     * is a pip in it, whatever lies about, so that he sees it before Kes says the rule.
+     * `net`: after this many lost tries, `kept` wisps of Kes's stay at the stones, hers and not
+     * his to pull, and are there again for each visit.
+     */
+    bait: { firstBy: 40, every: 45, rest: 6, drink: 3, teach: true as boolean, net: 2, kept: 2, ruleTicks: 14, /** A tie goes to the lamp ("more at the stones than there is in the lamp"), or to the loose light. */ tie: "lamp" as "lamp" | "heap", /** The lamp takes one wisp, then nothing for this many ticks (the next waits in its light, and what waits there counts as the lamp's own light): so no boat is filled between two visits by pouring alone. 0: it takes them as they come. */ sip: 14, /** After it has sat on a boat the lamp is cold: it takes nothing for this many ticks after it moves off. */ cold: 10, /** His wisps come up no farther than this from the slip, so that there is time to place them between visits. */ arriveFar: 17, /** Measurements: how long before it sets out the stand-in that leaves it some starts seeing to the stones... */ prep: 30, /** ...and how many pips it pours early in a round before it minds the stones. */ plan: 2 },
     react: { sizes: [4, 6, 9] as readonly number[], speeds: [2.25, 3, 3.9] as readonly number[], loomAt: 3, swellFrom: 4, loomTicks: 2, linger: 3, sit: [8, -7] as readonly [number, number], slide: [1.3, 0.9] as readonly [number, number] },
     at: [5, 7, 10] as readonly number[], by: [110, 200, 290] as readonly number[], speeds: [3, 3.4, 3.9] as readonly number[], near: 3, size: 6, speed: 3, warn: 3, firstBanks: 4, firstBy: 110, secondBanks: 8, secondBy: 230, clearOfKes: 5, courseSouth: 3, nearCourse: 3, under: 3, gap: 30, lean: 2, wait: 20, smokeTicks: 4, drag: false as boolean,
   },

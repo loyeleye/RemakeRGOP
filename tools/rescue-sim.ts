@@ -13,14 +13,15 @@ for (const [k, v] of Object.entries(opts)) {
   const path = k.split("."), last = path.pop()!;
   let at = RESCUE as unknown as Record<string, unknown>;
   for (const part of path) at = at[part] as Record<string, unknown>;
-  at[last] = v.includes(",") ? v.split(",").map(Number) : Number(v);
+  at[last] = v.includes(",") ? v.split(",").map(Number) : Number.isNaN(Number(v)) ? v : Number(v);
 }
 if (opts.sloppy) (RESCUE.stand as { sloppiness: number }).sloppiness = Number(opts.sloppy);
+let winIn = 0, winPatch = 0, winLost = 0;
 let first = 0, ticks = 0, restarts = 0, lost = 0, toPatch = 0, via = 0, set = 0, crossings = 0, done = 0, pips = 0, worst = 0;
 for (let k = 1; k <= seeds; k++) {
   let s = k * 7919;
   const room = new RescueRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), stand);
-  if (opts.patch) room.patchAim = opts.patch as "clock" | "react" | "seek" | "line";
+  if (opts.patch) room.patchAim = opts.patch as "bait" | "clock" | "react" | "seek" | "line";
   if (opts.kes) room.kesMode = opts.kes as "supply" | "banks";
   if (opts.flare) room.flareOn = opts.flare === "1";
   if (opts.lamp) room.lampMode = opts.lamp as "leaks" | "holds";
@@ -38,9 +39,11 @@ for (let k = 1; k <= seeds; k++) {
   const st = room.state;
   if (st.phase === "results") done++;
   if (room.restarts === 0 && st.phase === "results") first++;
+  if (st.phase === "results") (winIn += room.wispsIn), (winPatch += room.lostToPatch), (winLost += room.lost);
   ticks += room.ticks; restarts += room.restarts; lost += room.lost + lostAll; toPatch += room.lostToPatch + patchAll; via += room.viaKes; set += room.setDowns; crossings += st.crossings; pips += room.pipsLost; worst = Math.max(worst, room.ticks);
   if (opts.each) console.log(`seed ${k}: ${st.phase} ticks ${room.ticks} restarts ${room.restarts} banked ${st.banked} via Kes ${room.viaKes}/${room.setDowns} lost ${room.lost} (patch ${room.lostToPatch}) pips out ${room.pipsLost} cloud ${st.game.cloudAt} patch ${marks.join(" ")}`);
   if (opts.log) console.log("   " + said.join(" | "));
 }
 const m = (n: number) => (n / seeds).toFixed(1);
+console.log(`   in the winning try: ${m(winIn)} in, ${m(winPatch)} to the patch, ${m(winLost - winPatch)} to the cloud; the patch took ${Math.round((100 * winPatch) / Math.max(1, winIn + winLost))}% of all that came`);
 console.log(`${stand}: won first try ${first}/${seeds}, finished ${done}, winning-run ticks ${m(ticks)}, restarts ${m(restarts)}, lost ${m(lost)} (patch ${m(toPatch)}), via Kes ${m(via)} of ${m(set)} set down, crossings ${m(crossings)}, pips out ${m(pips)}, slowest ${worst}`);

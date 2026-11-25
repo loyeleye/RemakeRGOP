@@ -41,3 +41,51 @@ export function resetProgress(): Progress {
   save({ ...FRESH });
   return { ...FRESH };
 }
+
+// The optional runs: for each, whether it has been won and the best score, in this browser only.
+
+export interface OptRecord {
+  /** The best score reached (for Granny's rematch, what the pond wall says). */
+  best: number;
+  /** Won at least once: a first win is what earns the run's reward. */
+  won: boolean;
+  /** Times played. */
+  count: number;
+}
+
+const OPT_KEY = "lanternfall.optional";
+
+function loadOpts(): Record<string, OptRecord> {
+  try {
+    const all = JSON.parse(localStorage.getItem(OPT_KEY) ?? "null") as Record<string, OptRecord> | null;
+    if (all && typeof all === "object") return all;
+  } catch {
+    /* storage blocked or bad: nothing kept */
+  }
+  return {};
+}
+
+export function loadOpt(id: string): OptRecord {
+  const r = loadOpts()[id];
+  return r && Number.isFinite(r.best) && Number.isFinite(r.count) ? { best: r.best, won: !!r.won, count: r.count } : { best: 0, won: false, count: 0 };
+}
+
+/** A run has ended: keep the better score. True if this was its first win. */
+export function saveOpt(id: string, now: { best: number; won: boolean; count: number }): boolean {
+  const all = loadOpts(), was = loadOpt(id);
+  all[id] = { best: Math.max(was.best, now.best), won: was.won || now.won, count: Math.max(was.count, now.count) };
+  try {
+    localStorage.setItem(OPT_KEY, JSON.stringify(all));
+  } catch {
+    /* storage blocked: the record lasts this page only */
+  }
+  return now.won && !was.won;
+}
+
+export function resetOpts() {
+  try {
+    localStorage.removeItem(OPT_KEY);
+  } catch {
+    /* storage blocked */
+  }
+}

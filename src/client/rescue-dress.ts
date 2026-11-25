@@ -67,6 +67,18 @@ export const RESCUE_LOOK = {
   /** A lamp gone cold ahead of the patch: its ember's colour and how bright it is (a lit one is 1). */
   ember: "#ff4a1a",
   emberLit: 0.07,
+  /**
+   * The patch sitting on the boat: the lamp, the boat and everyone aboard are simply dark (`shade`
+   * of the boat's own colour). When it has moved off, the glows aboard come back one by one: the
+   * first after `late` seconds, the next every `each`, each over `over`. What it is going for
+   * during a warning is `dim` of its own light.
+   */
+  sat: { shade: 0.05, late: 1.1, each: 0.5, over: 0.6, dim: 0.6 },
+  /**
+   * The stain is drawn this much wider than the rule's own size (tiles): a tile is taken when the
+   * patch reaches its middle, so the stain has to cover half a tile more to be seen covering it.
+   */
+  stainOver: 0.4,
   /** Seconds a wick of smoke stands where a wisp went out, and how far it rises. */
   smokeSec: 2,
   smokeRise: 2.2,
@@ -82,7 +94,7 @@ void main() {
 const FS = `
 precision highp float;
 varying vec2 vW;
-uniform float uTime, uCloud, uBase, uVeil, uPatchA, uRag, uShow, uLane, uLaneR, uEdge;
+uniform float uTime, uCloud, uBase, uVeil, uPatchA, uRag, uShow, uLane, uLaneR, uEdge, uOver;
 uniform vec3 uCold;
 uniform vec3 uPatch, uLo, uHi, uDark;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -112,7 +124,7 @@ void main() {
   // The patch: a stain in the cloud with a hard, uneven edge. The cloud's own grain shows in it, faintly; the ground under it does not.
   vec2 d = vW - uPatch.xy;
   float ang = atan(d.y, d.x);
-  float edge = uPatch.z * (1.0 + uRag * (sin(ang * 3.0 + 1.3) + 0.6 * sin(ang * 5.0 - uTime * 0.5) + 0.5 * sin(ang * 9.0 + uTime * 0.8))) + (n2 - 0.5) * 0.5;
+  float edge = (uPatch.z + uOver) * (1.0 + uRag * (sin(ang * 3.0 + 1.3) + 0.6 * sin(ang * 5.0 - uTime * 0.5) + 0.5 * sin(ang * 9.0 + uTime * 0.8))) + (n2 - 0.5) * 0.5;
   float k = (1.0 - smoothstep(edge - 0.12, edge, length(d))) * uPatchA * (1.0 - uVeil);
   // Its course ahead of it: a faint cold lane on the ground, with a thin line down its middle, as far as the land goes.
   float ahead = step(uPatch.x, vW.x) * (1.0 - smoothstep(20.0, 23.0, abs(vW.x))) * (1.0 - wall) * (1.0 - uVeil) * uLane;
@@ -125,7 +137,7 @@ void main() {
 }`;
 
 interface Lamp { x: number; z: number; glow: THREE.Sprite; core: THREE.Sprite; box: THREE.MeshStandardMaterial; lit: number; seed: number; coldAt: number; size: number; warm: THREE.Color }
-interface Boat { root: THREE.Group; shell: THREE.Group; real: boolean; lamp: THREE.Sprite; core: THREE.Sprite; pips: THREE.Mesh[]; pipGlows: THREE.Sprite[]; mist: THREE.Sprite[]; mistOn: number; wentAt: number; seated: number; riders: THREE.Object3D[]; paint: { m: THREE.MeshStandardMaterial; base: THREE.Color; glow?: number }[]; at: THREE.Vector3; from: THREE.Vector3; to: THREE.Vector3; rot: number; rotFrom: number; rotTo: number; movedAt: number; liftedAt: number; fill: number; pulse: number; lit: number }
+interface Boat { root: THREE.Group; shell: THREE.Group; real: boolean; lamp: THREE.Sprite; core: THREE.Sprite; pips: THREE.Mesh[]; pipGlows: THREE.Sprite[]; mist: THREE.Sprite[]; mistOn: number; wentAt: number; seated: number; riders: THREE.Object3D[]; paint: { m: THREE.MeshStandardMaterial; base: THREE.Color; glow?: number }[]; at: THREE.Vector3; from: THREE.Vector3; to: THREE.Vector3; rot: number; rotFrom: number; rotTo: number; movedAt: number; liftedAt: number; fill: number; pulse: number; lit: number; /** Under the patch: how dark it is drawn (0 to 1), and when the patch last moved off it. */ under: number; backAt: number }
 interface Fly { s: THREE.Sprite; from: THREE.Vector3; at: number }
 interface Body { root: THREE.Group; glow: THREE.Sprite; group: number; seat: number; gone: number }
 interface Smoke { s: THREE.Sprite; x: number; z: number; at: number }
@@ -159,7 +171,7 @@ export class RescueFx {
   readonly all = new THREE.Group();
   private u = {
     uTime: { value: 0 }, uCloud: { value: RESCUE.cloud.start as number }, uBase: { value: RESCUE_LOOK.sea as number }, uVeil: { value: 0 }, uPatchA: { value: 0 },
-    uRag: { value: RESCUE_LOOK.ragged as number }, uShow: { value: RESCUE_LOOK.stainShow as number }, uLane: { value: 0 }, uLaneR: { value: 3 }, uEdge: { value: RESCUE_LOOK.front as number }, uCold: { value: new THREE.Color(RESCUE_LOOK.lane) },
+    uRag: { value: RESCUE_LOOK.ragged as number }, uOver: { value: RESCUE_LOOK.stainOver as number }, uShow: { value: RESCUE_LOOK.stainShow as number }, uLane: { value: 0 }, uLaneR: { value: 3 }, uEdge: { value: RESCUE_LOOK.front as number }, uCold: { value: new THREE.Color(RESCUE_LOOK.lane) },
     uPatch: { value: new THREE.Vector3(0, 0, 3) }, uLo: { value: new THREE.Color(RESCUE_LOOK.pale[0]) }, uHi: { value: new THREE.Color(RESCUE_LOOK.pale[1]) }, uDark: { value: new THREE.Color(RESCUE_LOOK.dark) },
   };
   private lamps: Lamp[] = [];
@@ -176,6 +188,8 @@ export class RescueFx {
   private swaps: { group: THREE.Group; name: string; turn: number }[] = [];
   /** The patch's size as drawn, eased toward what it is. */
   private pr = 3;
+  /** The last frame's time, so that easing takes the same time at any frame rate. */
+  private last = 0;
   private patchBig = 0;
   private smoked = new Set<string>();
   private smokeMap = smokeTexture();
@@ -405,6 +419,7 @@ export class RescueFx {
         glow.position.set(0, 0.45, 0.42);
         glow.renderOrder = 6;
         r.add(glow);
+        r.userData.glow = glow;
         r.position.set(sx * Math.min(0.62, half * 0.5), 0.6, z);
         r.visible = false;
         riders.push(r);
@@ -453,7 +468,7 @@ export class RescueFx {
       const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
       if (m?.isMeshStandardMaterial && !pips.includes(o as THREE.Mesh) && o !== lampBox) paint.push({ m, base: m.color.clone() });
     });
-    return { root, shell, real: false, lamp, core, pips, pipGlows, mist, mistOn: 0, wentAt: -9, seated: 0, riders, paint, at: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), rot: 0, rotFrom: 0, rotTo: 0, movedAt: -9, liftedAt: -1, fill: 0, pulse: -9, lit: 0 };
+    return { root, shell, real: false, lamp, core, pips, pipGlows, mist, mistOn: 0, wentAt: -9, seated: 0, riders, paint, at: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), rot: 0, rotFrom: 0, rotTo: 0, movedAt: -9, liftedAt: -1, fill: 0, pulse: -9, lit: 0, under: 0, backAt: -99 };
   }
 
   /** The maps thread's models in place of the block-outs, each as soon as it has loaded. */
@@ -517,6 +532,8 @@ export class RescueFx {
       b.liftedAt = -1;
       b.movedAt = time - 9;
       b.fill = 0;
+      b.under = 0;
+      b.backAt = -99;
       for (const r of b.riders) r.visible = false;
       b.root.visible = true;
     });
@@ -525,6 +542,9 @@ export class RescueFx {
 
   step(f: RescueFrame) {
     const { r, time } = f, L = RESCUE_LOOK;
+    // How far a thing eases this frame, at `rate` a second.
+    const dt = Math.max(0, Math.min(0.2, time - this.last)), ease = (rate: number) => 1 - Math.exp(-dt * rate);
+    this.last = time;
     this.dress();
     this.u.uTime.value = time;
     // The cloud comes in a step at a time, quickly, and at the end closes over everything.
@@ -539,7 +559,7 @@ export class RescueFx {
       pz = p.y - p.dy * (1 - f.t) - f.half.h;
       // Its size eases to what it is, so a swell is seen growing; a new one starts at its own size.
       if (this.patchN !== p.n) this.pr = p.r;
-      this.pr += (p.r - this.pr) * 0.14;
+      this.pr += (p.r - this.pr) * ease(9);
       pr = this.pr;
       this.u.uPatch.value.set(px, pz, pr);
       this.u.uPatchA.value = Math.min(1, this.u.uPatchA.value + 0.08);
@@ -573,10 +593,13 @@ export class RescueFx {
 
     // Wisps: not seen under it, nor once it has had them; on its course they dim as it comes.
     const taken = r.taken ?? [];
+    // What it is turned for during a warning is a little dimmer than the rest: a gathering's wisps, or the lamp.
+    const to = r.tell?.to, toX = to ? to.x + 0.5 - f.half.w : 0, toZ = to ? to.y + 0.5 - f.half.h : 0;
+    const eyed = (x: number, z: number) => !!to && (to.kind === "heap" || to.kind === "string") && Math.hypot(x - toX, z - toZ) <= RESCUE.patch.near + 1.5;
     for (const [id, w] of f.wisps) {
       const x = w.root.position.x, z = w.root.position.z;
       w.root.visible = !(p && !p.drag && (under(x, z, -0.15) || taken.includes(id)));
-      const k = p?.drag && under(x, z) ? 0.35 : onCourse(x, z) ? 0.45 + 0.2 * Math.sin(time * 17 + x) : 1;
+      const k = p?.drag && under(x, z) ? 0.35 : onCourse(x, z) ? 0.45 + 0.2 * Math.sin(time * 17 + x) : eyed(x, z) ? L.sat.dim : 1;
       if (k < 1) (w.halo.material.opacity *= k), (w.light.intensity *= k);
     }
     // Where one went out: a grey wick of smoke stands a moment and thins.
@@ -700,11 +723,22 @@ export class RescueFx {
       // The boat being loaded shows a small light even empty, so it is seen which one takes the next bank.
       const mine = i === this.lifted && b.liftedAt < 0;
       // Under the patch the docked lamp is dark: nothing of its light is seen.
-      const out = mine && !!r.lamp?.dark && !!p && under(r.lamp.x + 0.5 - f.half.w, r.lamp.y + 0.5 - f.half.h, 0.5) ? 0 : 1;
+      // Sitting on the boat, the lamp, the boat and everyone aboard are simply dark; nothing is seen being taken.
+      const sat = mine && !!r.lamp?.sat;
+      if (!sat && b.under > 0.5 && b.backAt < -90) b.backAt = time;
+      if (sat) b.backAt = -99;
+      b.under += ((sat ? 1 : 0) - b.under) * ease(sat ? 12 : 2.5);
+      // The lamp it is turned for is a little dimmer; one it has just left is cold.
+      const eye = mine && r.tell?.to?.kind === "lamp" ? L.sat.dim : mine && r.lamp?.cold !== undefined && r.lamp.sip ? 0.3 : 1;
+      const out = (mine && !!r.lamp?.dark && !!p && under(r.lamp.x + 0.5 - f.half.w, r.lamp.y + 0.5 - f.half.h, 0.5) ? 0 : 1) * (sat ? 0 : 1) * eye;
+      b.riders.forEach((rd, k) => {
+        const glow = rd.userData.glow as THREE.Sprite | undefined;
+        if (glow) glow.material.opacity = 0.35 * (sat ? 0 : b.backAt < -90 ? 1 : Math.max(0, Math.min(1, (time - b.backAt - L.sat.late - k * L.sat.each) / L.sat.over)));
+      });
       b.lamp.material.opacity = (share > 0 ? 0.3 + 0.6 * share : mine ? 0.3 : 0) * out;
       b.core.scale.setScalar(0.5 + 0.8 * share + pulse * 0.4);
       b.core.material.opacity = (share > 0 ? 0.6 + 0.4 * share : mine ? 0.5 : 0) * out;
-      ((b.root.userData.lampBox as THREE.Mesh).material as THREE.MeshStandardMaterial).emissiveIntensity = (mine ? 0.5 : 0) + share * 2.2;
+      ((b.root.userData.lampBox as THREE.Mesh).material as THREE.MeshStandardMaterial).emissiveIntensity = ((mine ? 0.5 : 0) + share * 2.2) * out;
       // The lamp does not keep its light: its newest pip flickers before it goes, and the cloud laps at the post.
       const gut = mine && r.lamp?.gutter !== undefined ? r.lamp.gutter : -1, G = L.gutter;
       if (mine && r.lamp?.went !== undefined && r.lamp.went !== this.wentSeen) (this.wentSeen = r.lamp.went), (b.wentAt = time);
@@ -720,14 +754,14 @@ export class RescueFx {
       });
       b.pips.forEach((pip, k) => {
         const on = k < fill, newest = on && k === fill - 1 ? pulse : 0, fl = on && k === fill - 1 ? flick : 1;
-        (pip.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? (2.6 + newest * 3) * fl : 0;
-        (pip.material as THREE.MeshStandardMaterial).color.set(on ? "#ffe2a0" : mine ? "#cfc8ba" : "#5a554e");
+        (pip.material as THREE.MeshStandardMaterial).emissiveIntensity = on && !sat ? (2.6 + newest * 3) * fl : 0;
+        (pip.material as THREE.MeshStandardMaterial).color.set(sat ? "#2a2826" : on ? "#ffe2a0" : mine ? "#cfc8ba" : "#5a554e");
         b.pipGlows[k]!.material.opacity = on ? (0.75 + 0.25 * newest) * out * fl : 0;
         b.pipGlows[k]!.scale.setScalar(L.pip.glow * (1 + 0.9 * newest));
       });
       // A waiting boat is dark; it takes its colour as it comes into the slip.
       b.lit += ((mine || b.liftedAt >= 0 ? 1 : 0) - b.lit) * 0.05;
-      const shade = L.waiting + (1 - L.waiting) * b.lit;
+      const shade = (L.waiting + (1 - L.waiting) * b.lit) * (1 - (1 - L.sat.shade) * b.under);
       for (const q of b.paint) q.m.color.copy(q.base).multiplyScalar(shade), q.glow !== undefined && (q.m.emissiveIntensity = q.glow * shade * shade);
       // Moving up the queue, and into the slip.
       const s = Math.min(1, Math.max(0, (time - b.movedAt) / L.slideSec)), e = s * s * (3 - 2 * s);

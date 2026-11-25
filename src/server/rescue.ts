@@ -21,15 +21,23 @@ import { realClock, type Clock } from "./room.js";
 
 const YOU = 1, KES_ID = 2;
 const ROOK = "Rook", KES = "Kes", GRAN = "Sefa's grandmother";
+/** Kes's lines for the bait rule (story/run9-rework-lines.md, the last section). Nobody says "bait". */
+const RULE = "It goes for the brightest thing. Leave more at the stones than there is in the lamp!";
+const NET = "These two stay at the stones. You fill the boat.";
+
+/** What the patch would go for: a gathering of loose light, Kes's string, the docked lamp, or nothing much. Where, and how big. */
+type Bright = { kind: "heap" | "string" | "lamp" | "none"; n: number; x: number; row: number; stones?: boolean };
 
 /** How a stand-in for the player plays, in tests and measurements. */
-export type Stand = "hold" | "idle" | "heap" | "wary" | "spread";
+export type Stand = "hold" | "idle" | "heap" | "wary" | "spread" | "bait" | "badbait" | "timed";
 
 /** The patch: its middle (tiles, not whole), its step each tick, its half-width, and ticks left before its edge reaches the land. */
 type Patch = {
   x: number; y: number; dx: number; dy: number; r: number; warn: number; n: 1 | 2 | 3 | 4; took: number; crossedKes: boolean; saidUp: boolean;
   /** Its own pace and size, and (react) what it is going for: where along its row, whether it will loom there whatever is left, and where it is in that. */
-  speed: number; r0: number; aim?: { x: number; loom?: boolean }; phase: "run" | "loom" | "linger" | "leave"; left: number; big?: number;
+  /** Ticks it has sat on a boat with light in its lamp. */
+  sat?: number;
+  speed: number; r0: number; aim?: { x: number; loom?: boolean; /** It is going for the docked lamp: it stops on the boat. */ lamp?: boolean }; phase: "run" | "loom" | "linger" | "leave"; left: number; big?: number;
   /** Left sitting at the landing's edge at the end: it does not move. */
   sit?: boolean;
 };
@@ -101,7 +109,24 @@ export class RescueRoom {
   /** "dark" (the story thread's, the default) or "drag" (the first sketch; ?patch=drag in the page). */
   patchMode: "dark" | "drag" = RESCUE.patch.drag ? "drag" : "dark";
   /** Where a crossing aims: at the most loose light (the rule), or along the first build's fixed lines (?patch=line). */
-  patchAim: "clock" | "react" | "seek" | "line" = RESCUE.patch.aim;
+  patchAim: "bait" | "clock" | "react" | "seek" | "line" = RESCUE.patch.aim;
+  /** Bait: the tick the last tell began, what it would go for if it set out now, and whether it has sat on a boat this visit. */
+  private toldAt = -1e9;
+  /** Bait: the tick the lamp will take its next wisp. */
+  private sipAt = 0;
+  /** How long that wait is in all (the ring round the lamp closes over it). */
+  private sipOf = 0;
+  private target: Bright | null = null;
+  private onBoat = false;
+  private warned = false;
+  /** This visit took a gathering at the stones while the docked lamp had light in it. */
+  private spared = false;
+  /** The tick it last moved off a boat it had sat on. */
+  private offBoatAt = -1e9;
+  /** Bait's safety net: wisps of Kes's that stay at the stones (hers, not his to pull). */
+  private kept = new Set<number>();
+  /** Bad bait (a stand-in): whether it leaves too few this visit. */
+  private skimp = false;
   /** A crossing being told (clock): which one, and ticks until it sets out. */
   private tell: { k: number; left: number } | null = null;
   /** Kes sets hers down at the stones for him (the rule), or banks them herself as in the first build (?kes=banks). */
@@ -209,7 +234,7 @@ export class RescueRoom {
         { id: KES_ID, guild: 1 as Guild, name: KES },
       ],
       this.seed(),
-      [R.his, R.hers],
+      [R.his, R.hers + (this.netOn() ? R.patch.bait.kept : 0)],
       100000,
     ));
     g.waterLawHere = true;
@@ -228,7 +253,15 @@ export class RescueRoom {
     g.respawnPause = g.outPause = R.pause;
     // The lamp does the banking (takeIn), not the engine's zone.
     for (const w of g.wisps) g.noBank.add(w.id);
-    this.hers = new Set(g.wisps.filter((w) => w.guild === 1).map((w) => w.id));
+    const theirs = g.wisps.filter((w) => w.guild === 1).map((w) => w.id);
+    this.hers = new Set(theirs.slice(0, R.hers));
+    this.kept = new Set(theirs.slice(R.hers));
+    this.toldAt = -1e9;
+    this.sipAt = 0;
+    this.sipOf = 0;
+    this.target = null;
+    this.onBoat = this.warned = this.skimp = false;
+    this.offBoatAt = -1e9;
     this.setDown = new Set();
     this.carrying = false;
     this.headStill = 0;
@@ -239,6 +272,9 @@ export class RescueRoom {
     this.flaredAt = -9;
     this.flew = [];
     this.captions = first && this.kesMode === "supply" ? [{ text: R.goal, until: R.goalTicks }, { text: R.part, until: R.goalTicks }] : [];
+    // A try after the first: what she told him stays up a while, and after two lost tries she keeps a pair back herself.
+    if (!first && this.patchAim === "bait" && this.said.has("rule")) this.captions.push({ text: this.kept.size ? NET : RULE, until: R.patch.bait.ruleTicks });
+    if (this.kept.size && !this.said.has("net")) (this.said.add("net"), this.lines.push({ who: KES, text: NET, player: KES_ID }));
     this.queue = [];
     this.busyUntil = 0;
     this.fill = Array<number>(R.boats).fill(0);
@@ -288,6 +324,13 @@ export class RescueRoom {
   private arrive(w: Wisp) {
     const g = this.game;
     if (this.endingAt >= 0 || this.lifted >= RESCUE.boats) return void g.away.set(w.id, 1e9);
+    if (this.kept.has(w.id)) {
+      // The pair she keeps back: at the stones, hers.
+      w.guild = 1 as Guild;
+      const d = RESCUE.drop, c = g.board.center;
+      const at = this.openSpot(() => true, 0, 1, pt(c.x + d.at[0], c.y + d.at[1]), 1) ?? pt(c.x + d.at[0], c.y + d.at[1]);
+      return moveWisp(w, at);
+    }
     if (this.hers.has(w.id)) {
       // One of hers comes back as hers, whatever became of it last time.
       w.guild = 1 as Guild;
@@ -298,15 +341,16 @@ export class RescueRoom {
     }
     // Before the first crossing his come up on the middle strip where it will cross, so there is something loose there for it to pass over.
     const armed = this.crossings === 0 && !this.patch && this.banked() >= RESCUE.patch.firstBanks - 2;
-    const at = (armed && this.onCourse(this.course())) || this.openSpot((x) => loStrip(x) < 2, RESCUE.arriveNear, 2);
+    const bait = this.patchAim === "bait";
+    const at = (armed && !bait && this.onCourse(this.course())) || this.openSpot((x) => loStrip(x) < 2, RESCUE.arriveNear, 2, null, 0, bait ? RESCUE.patch.bait.arriveFar : 99);
     if (!at) return void g.away.set(w.id, g.tick + RESCUE.pause);
     moveWisp(w, at);
   }
 
   /** A tile of open ground on the strips `strip` allows, at least `near` from the slip, inside the cloud's edge, and `apart` from every wisp. */
-  private openSpot(strip: (x: number) => boolean, near: number, apart: number, around: Pt | null = null, within = 0): Pt | null {
+  private openSpot(strip: (x: number) => boolean, near: number, apart: number, around: Pt | null = null, within = 0, far = 99): Pt | null {
     const g = this.game, b = g.board, c = b.center, R = RESCUE;
-    const edge = (g.cloudAt ?? R.cloud.start) - R.arriveInside;
+    const edge = Math.min(far, (g.cloudAt ?? R.cloud.start) - R.arriveInside);
     const lo = Math.min(near, Math.max(6, edge - 4));
     const live = g.wisps.filter((o) => !g.away.has(o.id));
     for (let n = 0; n < 200; n++) {
@@ -373,8 +417,11 @@ export class RescueRoom {
   private takeIn() {
     const g = this.game, R = RESCUE, lamp = this.lampAt();
     if (this.lampDark()) return;
+    const sip = this.patchAim === "bait" ? R.patch.bait.sip : 0;
     for (const w of g.wisps) {
       if (this.lifted >= R.boats || this.endingAt >= 0) return;
+      // Bait: it takes one, and the next waits its turn in the lamp's light.
+      if (sip && g.tick < this.sipAt) return;
       if (g.away.has(w.id) || this.taken.has(w.id) || this.covers(w.pos)) continue;
       if (this.kesMode === "supply" && (w.guild === 1 || g.string.includes(w.id))) continue;
       if (Math.hypot(w.pos.x - lamp.x, w.pos.y - lamp.y) > R.lamp.take) continue;
@@ -391,6 +438,8 @@ export class RescueRoom {
       this.bankedN++;
       this.wispsIn++;
       this.goesAt = g.tick + R.lamp.hold;
+      this.sipAt = g.tick + sip;
+      this.sipOf = sip;
       // The try: enough of them in quick succession and the lamp flares, a pip more.
       this.recent = [...this.recent.filter((t) => g.tick - t < R.flare.within), g.tick];
       const flare = this.flareOn && this.recent.length >= R.flare.of;
@@ -412,9 +461,17 @@ export class RescueRoom {
    * The lamp does not keep its light in this cloud: when it has not been fed for a while its
    * newest pip gutters out, and then another, until a wisp goes in. A dark lamp's clock stands.
    */
+  private leaks() {
+    return this.lampMode === "leaks" && this.patchAim !== "bait";
+  }
+
+  private netOn() {
+    return this.patchAim === "bait" && this.restarts >= RESCUE.patch.bait.net;
+  }
+
   private leak() {
     const g = this.game, L = RESCUE.lamp;
-    if (this.lampMode !== "leaks" || this.endingAt >= 0 || this.lifted >= RESCUE.boats) return;
+    if (!this.leaks() || this.endingAt >= 0 || this.lifted >= RESCUE.boats) return;
     if (!this.fill[this.lifted]) return void (this.goesAt = 1e9);
     if (this.lampDark()) return void this.goesAt++;
     if (g.tick < this.goesAt) return;
@@ -495,7 +552,7 @@ export class RescueRoom {
     // The first time it is over the docked boat: she says why nothing goes in.
     if (this.patch && !this.said.has("lampdark") && this.covers(this.lampAt())) {
       this.said.add("lampdark");
-      this.say(KES, "The lamp's gone dark. Wait for it!", { player: KES_ID }, "key");
+      this.say(KES, this.patchAim === "bait" ? "It's on the boat. Rook, it's on the boat!" : "The lamp's gone dark. Wait for it!", { player: KES_ID }, "key");
     }
     this.takeIn();
     this.leak();
@@ -579,6 +636,7 @@ export class RescueRoom {
     const g = this.game, P = RESCUE.patch, c = g.board.center;
     const kes = this.player(KES_ID);
     if (!this.patch) {
+      if (this.patchAim === "bait") return this.onClock();
       if (g.tick < this.crossedAt + P.gap) return;
       const n = this.banked();
       if (this.patchAim === "clock") return this.onClock();
@@ -661,6 +719,15 @@ export class RescueRoom {
       this.gone(w);
       p.took++;
     }
+    // It has moved off a boat it sat on: the glows aboard come back, and the lamp is cold a while (it takes nothing).
+    if (this.onBoat && p.phase === "leave" && !this.covers(this.lampAt())) {
+      this.onBoat = false;
+      this.offBoatAt = g.tick;
+      this.sipOf = RESCUE.patch.bait.cold;
+      this.sipAt = Math.max(this.sipAt, g.tick + this.sipOf);
+      this.say(KES, "They're all right. They're all right. The lamp's cold. Again!", { player: KES_ID }, this.said.has("cold") ? "quip" : "key");
+      this.said.add("cold");
+    }
     // Over Kes: her glow goes dark and her string drops, every wisp on it loose where it was.
     if (!this.kesDark && this.covers(kes.pos)) {
       this.kesDark = true;
@@ -694,7 +761,13 @@ export class RescueRoom {
     if (p.x - p.r > c.x + LO_FRAME.x1 + 2) {
       if (p.n === 1 && p.took > 0) this.say(KES, this.patchAim === "line" ? "Where did they go?" : "They're gone.", { player: KES_ID }, "key");
       // The one thing he has to learn about it, said after the first time, and held on the screen.
-      if (this.patchAim !== "line" && p.n === 1 && !this.said.has("light")) (this.said.add("light"), this.say(KES, "It went for the heap. Don't let mine sit!", { player: KES_ID }, "key", RESCUE.goalTicks));
+      if (this.patchAim !== "line" && this.patchAim !== "bait" && p.n === 1 && !this.said.has("light")) (this.said.add("light"), this.say(KES, "It went for the heap. Don't let mine sit!", { player: KES_ID }, "key", RESCUE.goalTicks));
+      if (this.patchAim === "bait") {
+        // What it left behind, in her mouth; and after its first visit, the rule.
+        if (this.spared) this.say(KES, "It took the stones. Boat's still lit. Go!", { player: KES_ID }, this.said.has("spared") ? "quip" : "key"), this.said.add("spared");
+        if (!this.said.has("rule")) (this.said.add("rule"), this.say(KES, RULE, { player: KES_ID }, "key", RESCUE.patch.bait.ruleTicks));
+        this.onBoat = this.spared = false;
+      }
       this.patch = null;
       this.kesHold = false;
       this.crossings++;
@@ -737,7 +810,7 @@ export class RescueRoom {
 
   /** "react", or "clock", which is react on a clock. */
   private reacts() {
-    return this.patchAim === "react" || this.patchAim === "clock";
+    return this.patchAim === "react" || this.patchAim === "clock" || this.patchAim === "bait";
   }
 
   /**
@@ -745,17 +818,25 @@ export class RescueRoom {
    * (the far lamps going cold toward the landing), and then sets out at the biggest gathering.
    */
   private onClock() {
-    const g = this.game, C = RESCUE.patch.clock, k = this.crossings;
+    const g = this.game, C = RESCUE.patch.clock, B = RESCUE.patch.bait, k = this.crossings, bait = this.patchAim === "bait";
     if (!this.tell) {
-      if (k >= C.at.length || this.endingAt >= 0 || g.tick < Math.round(C.at[k]! * rescueCloudTicks())) return;
+      if (this.endingAt >= 0) return;
+      if (bait) {
+        if (k === 0 ? !(this.bankedN >= 1 || g.tick >= B.firstBy) : g.tick < this.toldAt + B.every || g.tick < this.crossedAt + B.rest) return;
+      } else if (k >= C.at.length || g.tick < Math.round(C.at[k]! * rescueCloudTicks())) return;
       this.tell = { k, left: C.tell };
-      if (k > 0) this.say(KES, k === 1 ? "It's coming back!" : "Again! Clear the stones!", { player: KES_ID }, "key");
+      this.toldAt = g.tick;
+      this.warned = false;
+      this.skimp = this.rng.next() < 0.5;
+      // The pair she keeps back is at the stones again for each visit.
+      for (const id of this.kept) if (g.away.has(id)) g.away.set(id, g.tick + 1);
+      if (k > 0 && (!bait || k === 1)) this.say(KES, k === 1 ? "It's coming back!" : "Again! Clear the stones!", { player: KES_ID }, "key");
       return;
     }
     const t = this.tell;
     t.left--;
     // The first time, with the first lamps cold: play stops on the full-screen still.
-    if (k === 0 && t.left <= C.tell - C.hold && !this.said.has("what")) {
+    if (k === 0 && this.restarts === 0 && t.left <= C.tell - C.hold && !this.said.has("what")) {
       this.said.add("what");
       this.lines.push({ who: KES, text: "Rook. What is that.", player: KES_ID, ...(this.stillsOn ? { still: { id: RESCUE.hold.id, full: true } } : {}) });
       if (this.stillsOn) {
@@ -764,9 +845,67 @@ export class RescueRoom {
         this.holdFor = 0;
       }
     }
+    if (bait) {
+      // What it would go for if it set out now: he can see it, and change it.
+      this.target = this.brightest();
+      // Half way through the tell and still turned for the boat: she calls it, once he knows the rule.
+      if (this.target.kind === "lamp" && this.said.has("rule") && !this.warned && t.left <= C.tell / 2 && t.left > 3) {
+        this.warned = true;
+        this.say(KES, "Too few at the stones! It's turning for the boat!", { player: KES_ID });
+      }
+    }
     if (t.left > 0) return;
     this.tell = null;
+    if (bait) return this.setOutBait();
     this.setOut(true);
+  }
+
+  /**
+   * Bait: the brightest thing there is. Loose light of his gathered within `near` tiles (the pair
+   * Kes keeps back counts), her string in her hand, and the docked lamp at its pips. The lamp only
+   * when it is brighter than both; of the other two the bigger, a gathering before a string.
+   */
+  private brightest(): Bright {
+    const g = this.game, B = RESCUE.patch.bait, c = g.board.center, kes = this.player(KES_ID), lamp = this.lampAt();
+    const docked = g.tick >= this.dockAt && this.lifted < RESCUE.boats;
+    // What waits in the lamp's light is the lamp's light too.
+    const waiting = this.waiting();
+    const pips = docked ? this.fill[this.lifted]! + waiting.length : 0;
+    const asLamp: Bright = { kind: "lamp", n: pips, x: lamp.x, row: lamp.y };
+    // The first visit of the first try: to the lamp, if there is anything in it, so that he sees what it does there.
+    if (B.teach && this.crossings === 0 && this.restarts === 0 && !this.said.has("rule") && pips >= 1) return asLamp;
+    const heap = this.gathering(new Set(waiting.map((w) => w.id))), strung = this.kesDark ? 0 : g.string.length;
+    const most = Math.max(heap?.n ?? 0, strung);
+    if (pips > 0 && (B.tie === "lamp" ? pips >= most : pips > most)) return asLamp;
+    if (heap && heap.n >= strung) {
+      const d = RESCUE.drop;
+      return { kind: "heap", n: heap.n, x: heap.x, row: heap.row, stones: Math.hypot(heap.x - (c.x + d.at[0]), heap.row - (c.y + d.at[1])) <= d.r + 2 };
+    }
+    if (strung) {
+      const mean = g.string.reduce((sum, id) => sum + g.wisps[id]!.pos.y, 0) / strung, lean = RESCUE.patch.lean;
+      return { kind: "string", n: strung, x: kes.pos.x, row: kes.pos.y + Math.max(-lean, Math.min(lean, Math.round(mean - kes.pos.y))) };
+    }
+    return { kind: "none", n: 0, x: c.x, row: this.course() };
+  }
+
+  /** His wisps waiting in the docked lamp's light for it to take them. */
+  private waiting() {
+    const g = this.game, lamp = this.lampAt();
+    return g.wisps.filter((w) => w.guild === 0 && !g.away.has(w.id) && !this.taken.has(w.id) && Math.hypot(w.pos.x - lamp.x, w.pos.y - lamp.y) <= RESCUE.lamp.take);
+  }
+
+  /** Bait: the tell is over, and it sets out for the brightest thing. Its size and pace follow how bright that is. */
+  private setOutBait() {
+    const A = RESCUE.patch.react, P = RESCUE.patch, t = this.brightest(), many = Math.max(1, t.n);
+    const n = Math.min(3, this.crossings + 1) as 1 | 2 | 3;
+    const pace = A.speeds[Math.min(many, A.speeds.length) - 1] ?? P.speed, size = A.sizes[many >= 2 ? 1 : 0]!;
+    this.target = null;
+    this.spared = t.kind === "heap" && !!t.stones && this.fill[this.lifted]! > 0;
+    if (t.kind === "none") return this.launch(n, t.row, pace, size);
+    // For the lamp it comes up the boat itself, two rows south of the lamp, and is never smaller than a boat is wide.
+    if (t.kind === "lamp") return this.launch(n, t.row + 2, pace, Math.max(size, A.sizes[1]!), { x: t.x + 0.5, lamp: true, loom: many >= A.loomAt });
+    this.launch(n, t.row, pace, size, { x: t.x + 0.5, ...(t.kind === "string" ? { loom: many >= A.loomAt } : {}) });
+    if (t.kind === "string") this.kesHold = true;
   }
 
   /** One tick of its going. React: it swells as it nears a gathering, stays over it a moment, and shrinks as it goes on. */
@@ -779,7 +918,16 @@ export class RescueRoom {
     }
     if (p.phase === "run") {
       const big = A.sizes[2]! / 2, gap = p.aim.x - p.x;
-      if (p.warn > 0 || gap <= 0 || gap > A.swellFrom + big + p.speed || !(p.aim.loom || this.pile(p) >= A.loomAt)) {
+      const swell = p.aim.loom || this.pile(p) >= A.loomAt;
+      // Going for the lamp it stops on the boat whatever its size; it swells only for three pips or more.
+      if (p.aim.lamp && !swell && p.warn <= 0 && gap > 0 && gap <= p.speed) {
+        p.dx = gap;
+        p.x = p.aim.x;
+        p.phase = "linger";
+        p.left = A.linger;
+        return;
+      }
+      if (p.warn > 0 || gap <= 0 || gap > A.swellFrom + big + p.speed || !swell) {
         p.dx = p.speed;
         p.x += p.dx;
         return;
@@ -795,6 +943,18 @@ export class RescueRoom {
       if (--p.left <= 0) (p.phase = "linger"), (p.left = A.linger);
     } else if (p.phase === "linger") {
       p.dx = 0;
+      // On the boat it stays until the lamp is empty: a pip goes out every `drink` ticks. Nothing is seen or heard of it but the strip.
+      const g = this.game, pips = this.lifted < RESCUE.boats && g.tick >= this.dockAt ? this.fill[this.lifted]! : 0;
+      if (p.aim.lamp && pips > 0) {
+        this.onBoat = true;
+        p.left = Math.max(1, p.left - 1);
+        if (++p.sat! % RESCUE.patch.bait.drink === 0) {
+          this.fill[this.lifted]!--;
+          this.pipsLost++;
+          this.wentAt = g.tick;
+        }
+        return;
+      }
       if (--p.left <= 0) (p.phase = "leave"), (p.left = A.loomTicks);
     } else {
       p.dx = p.speed;
@@ -814,9 +974,9 @@ export class RescueRoom {
    * The biggest gathering of loose light he could pull: his own loose wisps and the ones at the
    * stones, within `near` tiles of each other. On a tie, the one nearest the lamp. Its row and size.
    */
-  gathering(): { row: number; x: number; n: number; ids: number[] } | null {
+  gathering(not?: Set<number>): { row: number; x: number; n: number; ids: number[] } | null {
     const g = this.game, P = RESCUE.patch, rook = this.player(YOU), lamp = this.lampAt();
-    const loose = g.wisps.filter((w) => w.guild === 0 && !g.away.has(w.id) && rook.beam !== w.id && !(w.holder === YOU && w.touched));
+    const loose = g.wisps.filter((w) => (w.guild === 0 || this.kept.has(w.id)) && !not?.has(w.id) && !g.away.has(w.id) && rook.beam !== w.id && !(w.holder === YOU && w.touched));
     const seen = new Set<number>();
     let best: { row: number; x: number; n: number; ids: number[]; d: number } | null = null;
     for (const w of loose) {
@@ -832,11 +992,11 @@ export class RescueRoom {
   }
 
   /** It sets out west of the land on this row, so that its edge reaches the land as the warning ends. */
-  private launch(n: 1 | 2 | 3, row: number, speed: number = RESCUE.patch.speed, size: number = RESCUE.patch.size, aim?: { x: number; loom?: boolean }) {
+  private launch(n: 1 | 2 | 3, row: number, speed: number = RESCUE.patch.speed, size: number = RESCUE.patch.size, aim?: { x: number; loom?: boolean; lamp?: boolean }) {
     const P = RESCUE.patch, c = this.game.board.center, r = size / 2;
     let west = LO_FRAME.x1;
     for (let dy = -Math.ceil(r); dy <= Math.ceil(r); dy++) for (let x = LO_FRAME.x0; x <= LO_FRAME.x1; x++) if (loLand(x, row - c.y + dy) && x < west) west = x;
-    this.patch = { x: c.x + west - r - P.warn * speed, y: row + 0.5, dx: speed, dy: 0, r, warn: P.warn + 1, n, took: 0, crossedKes: false, saidUp: false, speed, r0: r, phase: "run", left: 0, ...(aim ? { aim } : {}) };
+    this.patch = { x: c.x + west - r - P.warn * speed, y: row + 0.5, dx: speed, dy: 0, r, warn: P.warn + 1, n, took: 0, crossedKes: false, saidUp: false, speed, r0: r, phase: "run", left: 0, sat: 0, ...(aim ? { aim } : {}) };
   }
 
   /** A wisp the patch took: it is not there any more. Another comes in its place, as after a bank. */
@@ -849,7 +1009,7 @@ export class RescueRoom {
     w.skate = null;
     w.grip = Grip.Free;
     g.string = g.string.filter((id) => id !== w.id);
-    g.away.set(w.id, g.tick + RESCUE.pause);
+    g.away.set(w.id, this.kept.has(w.id) ? 1e9 : g.tick + RESCUE.pause);
     this.lost++;
     this.lostToPatch++;
   }
@@ -868,7 +1028,7 @@ export class RescueRoom {
       this.say(KES, "I'm all right. I'm all right. More coming.", { player: KES_ID }, "key");
     }
     const fix = me.mode !== "pull" || undefined;
-    const live = (w: Wisp) => w.guild === 1 && !g.board.inBankZone(w.pos) && !g.away.has(w.id) && !this.taken.has(w.id);
+    const live = (w: Wisp) => w.guild === 1 && !this.kept.has(w.id) && !g.board.inBankZone(w.pos) && !g.away.has(w.id) && !this.taken.has(w.id);
     const tail = g.string.length ? g.wisps[g.string[g.string.length - 1]!]! : null;
     const loose = g.wisps.filter((w) => live(w) && !g.string.includes(w.id) && !this.covers(w.pos) && (!tail || (cheb(w.pos, tail.pos) <= RESCUE.storm.link - 1 && g.board.canSee(w.pos, tail.pos))));
     const head = g.string.length ? g.wisps[g.string[0]!] : undefined;
@@ -1024,6 +1184,45 @@ export class RescueRoom {
     };
     // "wary" also keeps a lamp that has light in it fed, so that what it poured in a hurry is not left to gutter.
     if (this.stand === "hold" || (this.stand === "wary" && (this.patch || this.tell || (this.lampMode === "leaks" && this.fill[this.lifted]! > 0)))) return (this.heapIn = false), straightIn();
+    if (this.stand === "bait" || this.stand === "badbait" || this.stand === "timed") {
+      // The bait rule's three. "bait" pours a couple of pips early in each round, then sees to it
+      // that the stones hold more than the lamp does (what waits in its light counted) by the time
+      // it sets out, and pours on only what they still cover; when the boat can be filled before
+      // the next visit arrives it pours everything. "badbait" leaves one too few on half the
+      // visits. "timed" only minds the stones once the tell has begun.
+      const B = R.patch.bait, docked = g.tick >= this.dockAt;
+      const atStones = (w: Wisp) => far(w, stones) <= R.stand.heapR;
+      const waiting = mine.filter((w) => far(w, lamp) <= R.lamp.take);
+      const heaped = mine.filter((w) => atStones(w) && !waiting.includes(w));
+      const keptThere = g.wisps.filter((w) => this.kept.has(w.id) && !g.away.has(w.id) && atStones(w)).length;
+      const loose = mine.filter((w) => !heaped.includes(w) && !waiting.includes(w));
+      const bright = (docked ? this.fill[this.lifted]! : 0) + waiting.length, have = heaped.length + keptThere;
+      const over = (B.tie === "lamp" ? 1 : 0) - (this.stand === "badbait" && this.skimp ? 2 : 0);
+      // When the next one arrives, as he would feel it from the rhythm, and how many the lamp can take by then.
+      const setsOut = this.tell ? g.tick + this.tell.left : this.crossings === 0 ? g.tick + 60 : Math.max(this.toldAt + B.every, this.crossedAt + B.rest) + R.patch.clock.tell;
+      // (With a few ticks in hand: the first of them has still to be brought.)
+      const left = this.patch ? 0 : setsOut + 4 - g.tick, free = left - Math.max(0, this.sipAt - g.tick) - (waiting.length ? 1 : 4);
+      const sips = B.sip ? (free > 0 ? Math.floor(free / B.sip) + 1 : 0) : 99;
+      const toLift = R.perBoat - this.fill[this.lifted]!;
+      const anyNear = (ws: Wisp[]) => nearest(ws, lamp);
+      // The boat can lift before it comes: everything in, the nearest first.
+      if (docked && toLift <= sips && waiting.length + loose.length + heaped.length >= toLift) {
+        if (waiting.length >= toLift) return;
+        const w = anyNear([...loose, ...heaped]);
+        return w ? this.fetch(w, byLamp) : undefined;
+      }
+      // Otherwise, by where the rhythm is. Early: pour, up to `plan` pips (more only if the stones
+      // already hold enough for it). From `prep` ticks before it sets out: the stones first, until
+      // they hold more than the lamp, and then pour only what they still cover.
+      const need = bright + over, prep = !this.patch && setsOut - g.tick <= (this.stand === "timed" ? R.patch.clock.tell : B.prep);
+      const covered = have >= need + 1;
+      if (prep && bright > 0 && have < need) return loose.length ? this.fetch(nearest(loose, stones)!, stones) : undefined;
+      if (loose.length && (covered || (!prep && bright < B.plan))) return this.fetch(anyNear(loose)!, byLamp);
+      if (heaped.length && have - 1 >= need + 1) return this.fetch(anyNear(heaped)!, byLamp);
+      // Nothing to pour that the stones would cover: stock the stones for the next one.
+      if (loose.length && bright > 0) return this.fetch(nearest(loose, stones)!, stones);
+      return;
+    }
     if (this.stand === "spread") {
       // Four near the lamp but apart, one to a spot, so that the patch sees singles; then all in.
       const spots = R.stand.spread.map(([x, y]) => pt(c.x + x, c.y + y));
@@ -1175,8 +1374,11 @@ export class RescueRoom {
         cloud: this.game.cloudAt ?? RESCUE.cloud.start,
         lamp: {
           x: this.lampAt().x, y: this.lampAt().y, take: RESCUE.lamp.take, ...(this.lampDark() ? { dark: true } : {}),
-          ...(this.lampMode === "leaks" && this.endingAt < 0 && this.goesAt - this.game.tick <= RESCUE.lamp.flicker && this.fill[this.lifted] ? { gutter: Math.max(0, this.goesAt - this.game.tick) } : {}),
+          ...(this.leaks() && this.endingAt < 0 && this.goesAt - this.game.tick <= RESCUE.lamp.flicker && this.fill[this.lifted] ? { gutter: Math.max(0, this.goesAt - this.game.tick) } : {}),
           ...(this.game.tick - this.wentAt <= 3 ? { went: this.wentAt } : {}),
+          ...(this.onBoat && this.patch ? { sat: true } : {}),
+          ...(this.game.tick - this.offBoatAt <= 12 ? { cold: this.game.tick - this.offBoatAt } : {}),
+          ...(this.patchAim === "bait" && this.sipAt > this.game.tick && this.sipOf > 0 && this.endingAt < 0 ? { sip: { left: this.sipAt - this.game.tick, of: this.sipOf, n: this.waiting().length } } : {}),
         },
         left: (RESCUE.boats - this.lifted) * RESCUE.perBoat - (this.fill[this.lifted] ?? 0),
         reach: RESCUE.cloud.landing,
@@ -1186,7 +1388,8 @@ export class RescueRoom {
         ...(this.flew.some((o) => this.ticks - o.tick <= 2) ? { flew: this.flew.filter((o) => this.ticks - o.tick <= 2) } : {}),
         ...(this.phase === "playing" && this.captions.some((k) => this.ticks < k.until) ? { caption: this.captions.filter((k) => this.ticks < k.until).map((k) => k.text) } : {}),
         ...(this.holdLeft > 0 ? { hold: { id: RESCUE.hold.id, left: this.holdLeft, of: RESCUE.hold.ticks, line: "Rook. What is that." } } : {}),
-        ...(this.tell ? { tell: { left: this.tell.left, of: RESCUE.patch.clock.tell, n: this.tell.k + 1 } } : {}),
+        ...(this.tell ? { tell: { left: this.tell.left, of: RESCUE.patch.clock.tell, n: this.tell.k + 1, ...(this.target ? { to: { x: this.target.x, y: this.target.row, n: this.target.n, kind: this.target.kind } } : {}) } } : {}),
+        ...(this.kept.size ? { kept: [...this.kept] } : {}),
         ...(p ? { patch: { x: p.x, y: p.y, dx: p.dx, dy: p.dy, r: p.r, warn: Math.max(0, p.warn), n: p.n, ...(this.patchMode === "drag" ? { drag: true } : {}), ...(p.big ? { big: p.big } : {}), ...(p.sit ? { sit: true } : {}) } } : {}),
         ...(this.kesDark ? { dark: [KES_ID] } : {}),
         ...(this.taken.size ? { taken: [...this.taken] } : {}),
@@ -1226,7 +1429,7 @@ export class RescueRoom {
 
   /** For tests. */
   get state() {
-    return { phase: this.phase, game: this.game, end: this.end, said: this.said, fill: this.fill, lifted: this.lifted, patch: this.patch, crossings: this.crossings, taken: this.taken, kesDark: this.kesDark, pools: LO_POOLS, banked: this.bankedN, setDown: this.setDown, hers: this.hers, holdLeft: this.holdLeft, tell: this.tell };
+    return { phase: this.phase, game: this.game, end: this.end, said: this.said, fill: this.fill, lifted: this.lifted, patch: this.patch, crossings: this.crossings, taken: this.taken, kesDark: this.kesDark, pools: LO_POOLS, banked: this.bankedN, setDown: this.setDown, hers: this.hers, holdLeft: this.holdLeft, tell: this.tell, target: this.target, kept: this.kept, onBoat: this.onBoat };
   }
 }
 

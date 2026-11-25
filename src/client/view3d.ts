@@ -19,7 +19,9 @@ import { makeCloud, makeCurtain, makeIsland, makeWaterfall } from "./islands.js"
 import { DYING, crowdSpot, terraceHeight } from "../engine/dying.js";
 import { DRESS, dressVerge, quarryPit, sieveGrain, sieveMask, sievePaths, wellLoop } from "./sieve-dress.js";
 import { SIEVE } from "../engine/sieve.js";
-import { RescueFx } from "./rescue-dress.js";
+import { RESCUE_LOOK, RescueFx } from "./rescue-dress.js";
+import { RematchFx } from "./rematch-dress.js";
+import { drawOptHud } from "./opt-hud.js";
 import { SHIP_LOOK, ShipFx } from "./ship-dress.js";
 import { SHIP, SHIP_DECK } from "../engine/shiphome.js";
 import { RESCUE } from "../engine/rescue.js";
@@ -58,6 +60,8 @@ export interface DrawState {
   dying?: NonNullable<import("../engine/protocol.js").StoryView["dying"]>;
   /** Run 9, the rescue (see StoryView.rescue). */
   rescue?: NonNullable<import("../engine/protocol.js").StoryView["rescue"]>;
+  /** The optional runs (see StoryView.opt). */
+  opt?: NonNullable<import("../engine/protocol.js").StoryView["opt"]>;
   /** Run 10, the ship home (see StoryView.ship). */
   ship?: NonNullable<import("../engine/protocol.js").StoryView["ship"]>;
   /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
@@ -1430,6 +1434,11 @@ export class World {
     this.hemi.intensity = th.hemi[2];
     this.sun.color.set(th.sun[0]);
     this.sun.intensity = th.sun[1];
+    // Where the sun stands: high in the north-west, unless the island has its own hour.
+    this.sun.position.set(...(th.sunAt ?? ([-16, 26, -22] as [number, number, number])));
+    // A low sun throws long shadows: its shadow camera takes in more ground.
+    const sc = this.sun.shadow.camera, reach = th.sunAt ? 30 : 20;
+    if (sc.right !== reach) (sc.left = sc.bottom = -reach), (sc.right = sc.top = reach), sc.updateProjectionMatrix();
     this.renderer.toneMappingExposure = th.exposure;
     this.dayLight = { hemi: th.hemi[2], sun: th.sun[1], exposure: th.exposure };
     this.buildDistantIslands(th);
@@ -2953,6 +2962,19 @@ export class World {
     this.hemi.intensity = (SIEVE_LIGHT.sky[1] + (SIEVE_LIGHT.sky[2] - SIEVE_LIGHT.sky[1]) * k) * dim;
   }
 
+  /** Optional run 1, Granny's rematch: the chalk wall by the pool, with the score on it (rematch-dress.ts). */
+  private rematchFx: RematchFx | null = null;
+  private stepRematch(st: DrawState) {
+    const o = st.opt?.id === "o1" ? st.opt : undefined;
+    if (!o) {
+      this.rematchFx?.dispose();
+      this.rematchFx = null;
+      return;
+    }
+    if (!this.rematchFx) this.scene.add((this.rematchFx = new RematchFx()).all);
+    this.rematchFx.step(o);
+  }
+
   /** Run 9, the rescue: the cloud sea and its wall, the patch, the landing, the boats and the lamps (rescue-dress.ts). */
   private rescueFx: RescueFx | null = null;
   private stepRescue(st: DrawState, time: number) {
@@ -4044,6 +4066,7 @@ export class World {
     this.stepFalls(st, time);
     this.stepSieve(st, time);
     this.stepRescue(st, time);
+    this.stepRematch(st);
     this.stepShip(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
@@ -4251,6 +4274,10 @@ const RESCUE_HUD = {
   lit: "#ffc860", unlit: "rgba(255,236,200,0.2)", line: "rgba(255,236,200,0.75)", cloud: "#dfe5f4",
   /** The first-wisp hint: the ring's size on the wisp and the dashes of the line to the lamp. */
   ring: 20, dash: [7, 7] as [number, number],
+  /** During a warning, what the patch is turned for: a thin cold line from the cloud's edge to it, and a ring the size it will come at. */
+  aim: { line: "rgba(196,210,255,0.95)", under: "rgba(14,18,52,0.8)", width: 1.5, dash: [10, 8] as [number, number] },
+  /** The lamp is not ready for its next wisp: a ring round its light that closes as the wait runs out (warm), or after the patch has sat on the boat (cold). */
+  sip: { warm: "rgba(255,214,140,0.95)", cold: "rgba(170,196,255,0.95)", track: "rgba(255,255,255,0.16)", width: 3.2 },
 };
 
 /**
@@ -4326,16 +4353,18 @@ function drawRescueHud(g: CanvasRenderingContext2D, cam: Camera, st: DrawState, 
     g.lineTo(cx - hw * 0.45, hy + hh);
     g.quadraticCurveTo(cx - hw * 0.8, hy + hh, cx - hw, hy);
     g.closePath();
-    g.fillStyle = mine ? "#b98a58" : "#7b6248";
+    // Under the patch the boat is dark, and so are the people in it.
+    const sat = mine && !!r.lamp?.sat;
+    g.fillStyle = sat ? "#2b2530" : mine ? "#b98a58" : "#7b6248";
     g.fill();
-    if (mine) (g.strokeStyle = H.lit), (g.lineWidth = 1.6), g.stroke();
+    if (mine) (g.strokeStyle = sat ? "rgba(200,190,235,0.6)" : H.lit), (g.lineWidth = 1.6), g.stroke();
     // Its eight people: on the landing under it until they are aboard, two more with each pip.
     const per = 8, aboard = lifted ? per : Math.floor((fill / r.perBoat) * per);
     for (let q = 0; q < per; q++) {
       const on = q < aboard, qx = cx + (q - (per - 1) / 2) * 5 * k, qy = on ? hy - 2.5 * k : hy + hh + 8 * k;
       g.beginPath();
       g.arc(qx, qy, 1.9 * k, 0, Math.PI * 2);
-      g.fillStyle = on ? "#ffe9c4" : "#c9d2ea";
+      g.fillStyle = on ? (sat ? "#5d5868" : "#ffe9c4") : "#c9d2ea";
       g.fill();
     }
     if (lifted) {
@@ -4350,6 +4379,59 @@ function drawRescueHud(g: CanvasRenderingContext2D, cam: Camera, st: DrawState, 
       g.stroke();
     }
     g.globalAlpha = 1;
+  }
+  // On the ground (drawn before the lines, so those lie over it): a circle of `rad` tiles round a tile, as it lies on the ground.
+  const ground = (tx: number, ty: number, rad: number, from = 0, share = 1) => {
+    g.beginPath();
+    const steps = Math.max(2, Math.ceil(56 * share));
+    for (let i = 0; i <= steps; i++) {
+      const a = -Math.PI / 2 + (from + (share * i) / steps) * Math.PI * 2, q = cam.toScreen(tx + Math.cos(a) * rad, ty + Math.sin(a) * rad, 0.3);
+      if (i) g.lineTo(q.x, q.y);
+      else g.moveTo(q.x, q.y);
+    }
+    g.stroke();
+  };
+  // What the patch is turned for, all through its warning: he can see it, and change it.
+  const to = r.tell?.to;
+  if (to && to.kind !== "none" && r.ending === undefined && !r.hold) {
+    const A = H.aim, half = st.shrine.board.width / 2, halfH = st.shrine.board.height / 2;
+    // Toward the lamp it comes up the boat, two rows south of the lamp, and no smaller than a boat is wide.
+    const sizes = RESCUE.patch.react.sizes, lamp = to.kind === "lamp", ty = to.y + (lamp ? 2 : 0) + 0.5, tx = to.x + 0.5;
+    const rad = (lamp ? Math.max(sizes[1]!, sizes[to.n >= 2 ? 1 : 0]!) : sizes[to.n >= 2 ? 1 : 0]!) / 2;
+    // From the cloud's edge, west of it on its row.
+    const dz = ty - halfH, edge = half - Math.sqrt(Math.max(0, r.cloud * r.cloud - dz * dz)), x0 = Math.max(tx - 34, Math.min(edge, tx - rad - 1));
+    const a = cam.toScreen(x0, ty, 0.3), b = cam.toScreen(tx - rad - RESCUE_LOOK.stainOver, ty, 0.3);
+    g.save();
+    g.lineCap = "round";
+    // Dark under pale, so that it reads on the pale cloud and on the grass alike.
+    for (const [color, width] of [[A.under, A.width + 2.4], [A.line, A.width]] as const) {
+      g.strokeStyle = color;
+      g.lineWidth = width;
+      g.setLineDash(A.dash);
+      g.lineDashOffset = -st.now / 45;
+      g.beginPath();
+      g.moveTo(a.x, a.y);
+      g.lineTo(b.x, b.y);
+      g.stroke();
+      g.setLineDash([]);
+      ground(tx, ty, rad + RESCUE_LOOK.stainOver);
+    }
+    g.restore();
+  }
+  // The lamp between two wisps: the ring round its light closes, and the one waiting in it goes in by itself.
+  const sip = r.lamp?.sip;
+  if (sip && r.lamp && !r.lamp.dark && r.ending === undefined && !r.hold) {
+    const S = H.sip, done = Math.max(0, Math.min(1, 1 - (sip.left - Math.min(1, st.t)) / Math.max(1, sip.of)));
+    const lx = r.lamp.x + 0.5, ly = r.lamp.y + 0.5, rad = r.lamp.take + 0.2;
+    g.save();
+    g.lineCap = "round";
+    g.lineWidth = S.width;
+    g.strokeStyle = S.track;
+    ground(lx, ly, rad);
+    g.strokeStyle = r.lamp.cold !== undefined && sip.of === RESCUE.patch.bait.cold ? S.cold : S.warm;
+    if (sip.n > 0) (g.shadowColor = g.strokeStyle), (g.shadowBlur = 8);
+    ground(lx, ly, rad, 0, Math.max(0.02, done));
+    g.restore();
   }
   // Lines that must land, under the strip.
   let cy = y0 + hgt + 8;
@@ -4439,6 +4521,7 @@ export function drawOverlay(g: CanvasRenderingContext2D, cam: Camera, st: DrawSt
     g.fillText(label, p.x, p.y);
   }
   if (st.rescue) drawRescueHud(g, cam, st, st.rescue);
+  if (st.opt) drawOptHud(g, cam, st.opt, st.snap, st.t, st.now, st.shrine.board.center);
   // Run 10: a cloud bank is coming down one side (Ladi, 24 Nov: "the affordance at the top is fine").
   // A pale swell with arrows at the top edge on its side, on every screen, from the moment it is on
   // its way until its front reaches the bow, growing as it nears.

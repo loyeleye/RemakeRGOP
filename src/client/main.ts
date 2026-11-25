@@ -22,7 +22,9 @@ import { DYING } from "../engine/dying.js";
 import { PondRoom, answersTap } from "../server/pond.js";
 import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
-import { loadProgress, reach, resetProgress } from "./progress.js";
+import { loadOpt, loadProgress, reach, resetOpts, resetProgress, saveOpt } from "./progress.js";
+import { RematchRoom } from "../server/rematch.js";
+import { REMATCH } from "../engine/rematch.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
@@ -72,6 +74,7 @@ function onServer(m: ServerMsg) {
       placeView(!!room.story?.pond, !!room.story?.pond?.leaving);
       openKitchen();
       noteProgress();
+      noteOpt();
       render();
       break;
     }
@@ -135,7 +138,7 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | null = null;
 
 /** The walkable map, at the speed on trial: ?walkspeed=1.5, 2 or 2.5 shortens the map's beat; with &only=rook only his stride is longer. */
 function pondRoom(walk: number) {
@@ -148,12 +151,53 @@ function pondRoom(walk: number) {
   return r;
 }
 
+/**
+ * Optional run 1, Granny's rematch. The pond wall's score and how many rematches there have been
+ * are kept in this browser. Switches: ?cheat=hold, goal or nap picks her cheat (they take turns
+ * otherwise); ?granny=beatable lets her lose, for comparison; ?reward=1 shows the placeholder
+ * pop-up on a first win.
+ */
+function rematchRoom() {
+  const r = new RematchRoom();
+  const q = new URLSearchParams(location.search), rec = loadOpt(REMATCH.id);
+  r.wall = Math.max(REMATCH.wallStart, rec.best);
+  r.count = rec.count;
+  const cheat = q.get("cheat");
+  if (cheat === "hold" || cheat === "goal" || cheat === "nap") r.cheatPick = cheat;
+  if (q.get("granny") === "beatable") r.beatable = true;
+  optSeen = null;
+  return r;
+}
+
+/** Which playing of an optional run has had its record kept (its count), so that each is kept once. */
+let optSeen: number | null = null;
+
+/**
+ * A first win of an optional run. Nothing is given yet (Ladi, 24 Nov): this is where a reward
+ * will be handed over. With ?reward=1 a placeholder pop-up shows that one is coming.
+ */
+function rewardEarned(runId: string) {
+  if (new URLSearchParams(location.search).get("reward") !== "1") return;
+  const el = $("reward");
+  el.dataset.run = runId;
+  el.hidden = false;
+  window.setTimeout(() => (el.hidden = true), 5200);
+}
+
+/** An optional run has ended: its score is kept, and a first win earns its reward. */
+function noteOpt() {
+  const rec = room?.story?.opt?.record;
+  if (!rec || rec.count === optSeen || room!.phase !== "results") return;
+  optSeen = rec.count;
+  if (saveOpt(rec.id, { best: rec.best, won: rec.won, count: rec.count })) rewardEarned(rec.id);
+}
+
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
-  const r = run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   storyRoom = r;
   runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
@@ -916,7 +960,11 @@ function rescueRoom() {
   const q = new URLSearchParams(location.search);
   const aim = q.get("patch");
   if (aim === "drag") r.patchMode = "drag";
-  if (aim === "clock" || aim === "react" || aim === "seek" || aim === "line") r.patchAim = aim;
+  // The rule: it goes for the brightest thing (bait, the run's own). ?patch=clock is the build before it (v155).
+  if (aim === "bait" || aim === "clock" || aim === "react" || aim === "seek" || aim === "line") r.patchAim = aim;
+  // How long the lamp waits between two wisps (14 ticks is the run's own; ?sip=10 to compare, 0 for none).
+  const sip = q.get("sip");
+  if (sip !== null && Number(sip) >= 0 && Number(sip) <= 30) (RESCUE.patch.bait as { sip: number }).sip = Math.round(Number(sip));
   const clock = (q.get("clock") ?? "").split(",").map(Number);
   if (clock.length === 3 && clock.every((n) => n > 0 && n < 1)) (RESCUE.patch.clock as { at: readonly number[] }).at = clock;
   if (q.get("kes") === "banks") r.kesMode = "banks";
@@ -1027,7 +1075,8 @@ function rescueSound(r: NonNullable<StoryView["rescue"]>) {
   const gutter = r.lamp?.gutter !== undefined;
   if (gutter && !rescueHeard.gutter) sound.lampGutter();
   rescueHeard.gutter = gutter;
-  if (r.lamp?.went !== undefined && r.lamp.went !== rescueHeard.went) (rescueHeard.went = r.lamp.went), sound.pipOut();
+  // (Nothing is heard of a pip that goes out under the patch: the strip shows it, and that is all.)
+  if (r.lamp?.went !== undefined && r.lamp.went !== rescueHeard.went) (rescueHeard.went = r.lamp.went), r.lamp.sat || r.lamp.dark || sound.pipOut();
   if (key && key !== rescueHeard.flew) sound.pipChime(((fill - 1) % r.perBoat + r.perBoat) % r.perBoat);
   rescueHeard.flew = key || rescueHeard.flew;
   rescueHeard.fill = fill;
@@ -1698,6 +1747,7 @@ $("story6").onclick = () => connectStory(playerName(), 6);
 $("story8").onclick = () => connectStory(playerName(), 8);
 $("story9").onclick = () => connectStory(playerName(), 9);
 $("story10").onclick = () => connectStory(playerName(), 10);
+$("story-o1").onclick = () => connectStory(playerName(), "o1");
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Saved progress: continue from where this browser got to, jump to any walk, or start over.
 function renderProgress() {
@@ -1753,6 +1803,7 @@ $("walk-go").onclick = () => {
 }
 $("progress-reset").onclick = () => {
   resetProgress();
+  resetOpts();
   resetHints();
   renderProgress();
 };
@@ -1942,7 +1993,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, ship: room?.story?.ship, walk: room?.story?.pond?.walk };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, opt: room?.story?.opt, ship: room?.story?.ship, walk: room?.story?.pond?.walk };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.

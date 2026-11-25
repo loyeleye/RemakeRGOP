@@ -25,6 +25,8 @@ export interface Theme {
   wall: PropKind;
   boulder: PropKind;
   particles: Particles;
+  /** Where the sun stands, if not high in the north-west (world units from the brazier: east, up, south). */
+  sunAt?: [number, number, number];
   /** A place to walk, not an arena: grass, no parapet round the edge, no monoliths. */
   place?: boolean;
   /** A shrine that is played on but dressed with a place's props (Kite Fell). */
@@ -123,6 +125,17 @@ export const THEMES: Record<string, Theme> = {
   },
   get "home-pond-big"() {
     return THEMES["tidepool-steps"]!;
+  },
+  // The same pond in the afternoon (optional run 1, Granny's rematch): a low warm sun from the west, long shadows
+  // running east, the sky paler and the haze warm (the maps thread's numbers). Wisps and guild colours are untouched.
+  get "home-pond-afternoon"() {
+    const base = THEMES["tidepool-steps"]!;
+    return {
+      ...base, name: "Home pond, afternoon",
+      sky: { ...base.sky, zenith: "#3f78c8", sky: "#8fb0d8", haze: "#f2d6b0" },
+      fog: "#e6cfb0", hemi: ["#ffe8cc", "#7a6a48", 1.05] as [string, string, number], sun: ["#ffd9a0", 2.5] as [string, number], exposure: 0.97,
+      sunAt: [-30, 14, -6] as [number, number, number],
+    };
   },
   // Kite Fell, Kes's island (run 5, the race): short wind-flattened grass, bare of palms, and dressed
   // with its props like a place, but played on like a shrine.

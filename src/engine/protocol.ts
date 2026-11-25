@@ -173,9 +173,11 @@ export interface StoryView {
   rescue?: {
     kes: number; boats: number[]; perBoat: number; lifted: number; cloud: number;
     /** The docked boat's lamp (the bank): its tile, how near a wisp must come, and whether it is dark just now (the patch over it, or no boat docked). */
-    lamp?: { x: number; y: number; take: number; dark?: boolean; gutter?: number; went?: number };
+    lamp?: { x: number; y: number; take: number; dark?: boolean; gutter?: number; went?: number; /** The patch is sitting on the boat. */ sat?: boolean; /** Ticks since it moved off a boat it sat on (for a while after). */ cold?: number; /** Bait: the lamp is not ready for its next wisp: ticks left of how many, and how many wait in its light. */ sip?: { left: number; of: number; n: number } };
     /** Banks still wanted, the cloud's edge at the start and where it ends the run (tiles from the slip). */
     left?: number; from?: number; reach?: number;
+    /** Bait's safety net: wisps of Kes's that she keeps at the stones (hers, not his to pull). */
+    kept?: number[];
     /** Kes's drop, the ring of stones: its tile and size. */
     drop?: { x: number; y: number; r: number };
     /** Wisps the lamp has just taken: where each flew in from. */
@@ -187,7 +189,7 @@ export interface StoryView {
     /** The full-screen still that stops play, while it is up. */
     hold?: { id: string; left: number; of: number; line: string };
     /** A crossing being told (the patch on a clock): ticks until it sets out, of how many, and which crossing. */
-    tell?: { left: number; of: number; n: number };
+    tell?: { left: number; of: number; n: number; /** Bait: what it would go for if it set out now (tile, how bright, and what it is). */ to?: { x: number; y: number; n: number; kind: "heap" | "string" | "lamp" | "none" } };
     patch?: { x: number; y: number; dx: number; dy: number; r: number; warn: number; n: number; drag?: boolean; /** React: the size it is swelling to. Sitting still at the end. */ big?: number; sit?: boolean }; dark?: number[]; /** Wisps it has covered, not seen again; and where each went out (tiles) and on which tick. */ taken?: number[]; outs?: { x: number; y: number; tick: number }[]; ending?: number; aboard?: number[];
   };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */

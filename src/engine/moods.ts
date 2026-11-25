@@ -3,7 +3,8 @@
 // Lumi's open-mouth faces are rare on purpose (four in the whole game, Ladi, 23 Nov 2026). In runs 1
 // and 2 there is one: "delight-flash", when her tide pull first works, and only a line naming it gets it.
 export const MOODS: Record<string, readonly string[]> = {
-  Hesta: ["neutral", "approving", "firm"],
+  // "grinning" and "dozing" are the optional run's (Granny's rematch): only a line that names them gets them.
+  Hesta: ["neutral", "approving", "firm", "grinning", "dozing"],
   Lumi: ["neutral", "calling", "delighted", "grudging", "smug", "unimpressed", "delight-flash"],
   Rook: ["neutral", "warm", "proud", "baffled"],
   Nell: ["neutral", "curious", "delighted", "determined", "sheepish", "worried"],
@@ -38,8 +39,8 @@ const RULES: [who: string, match: RegExp, mood: string][] = [
   ["Kes", /^You worked for that\./, "gracious"],
   ["Kes", /^(Whatever you say|Good\.|There he is\.|I pulled\.|Did you see that\?|They like company|You hold on too long|I know\. It's annoying\.|Same time next week|Nice\.|Don't get used to it)/, "smug"],
   // Run 9, the rescue (the gameplay thread checks this mapping; the two Kes faces are placeholders being re-framed).
-  ["Kes", /^(Rook\. What is that\.|There's nothing up there\.|It's coming back|Again! Clear the stones!|The lamp's gone dark|It went for the heap|It won't keep in this cloud)/, "alarmed"],
-  ["Kes", /^(My string|They're gone\.|I'm all right\.)/, "bereft"],
+  ["Kes", /^(Rook\. What is that\.|There's nothing up there\.|It's coming back|Again! Clear the stones!|The lamp's gone dark|It went for the heap|It won't keep in this cloud|It goes for the brightest thing|Too few at the stones|It's on the boat|It took the stones|These two stay at the stones)/, "alarmed"],
+  ["Kes", /^(My string|They're gone\.|I'm all right\.|They're all right\.)/, "bereft"],
   ["Sefa's grandmother", /^Little ones on the first boat/, "steady"],
   ["Sefa's grandmother", /^You keep looking over there/, "soft"],
   ["Sefa's grandmother", /./, "talking"],
