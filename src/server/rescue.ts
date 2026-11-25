@@ -22,7 +22,7 @@ import { realClock, type Clock } from "./room.js";
 const YOU = 1, KES_ID = 2;
 const ROOK = "Rook", KES = "Kes", GRAN = "Sefa's grandmother";
 /** Kes's lines for the bait rule (story/run9-rework-lines.md, the last section). Nobody says "bait". */
-const RULE = "It goes for the brightest thing. Leave more at the stones than there is in the lamp!";
+const RULE = "It goes for the brightest thing. So leave more at the stones than in the lamp.";
 const NET = "These two stay at the stones. You fill the boat.";
 
 /** What the patch would go for: a gathering of loose light, Kes's string, the docked lamp, or nothing much. Where, and how big. */
@@ -421,9 +421,46 @@ export class RescueRoom {
     return pt(c.x + RESCUE.lamp.at[0], c.y + RESCUE.lamp.at[1]);
   }
 
-  /** The lamp is dark: the patch is over it (light inside it cannot be seen), or no boat is docked yet. */
+  /** The lamp is dark: the patch is fully on the boat (light inside it cannot be seen), or no boat is docked yet. */
   private lampDark() {
-    return this.covers(this.lampAt()) || this.game.tick < this.dockAt;
+    return this.onTheBoat() || this.game.tick < this.dockAt;
+  }
+
+  /** Where the patch's middle is when it sits on the docked boat: two rows south of the lamp. */
+  private boatAt() {
+    const l = this.lampAt();
+    return pt(l.x, l.y + 2);
+  }
+
+  /**
+   * The patch is fully on the boat: its middle within a tile of the lamp or of where it sits on the
+   * boat, or it went through one of them this tick. Not at first touch (Ladi, 25 Nov): until then the lamp still takes.
+   */
+  private onTheBoat() {
+    const p = this.patch;
+    return !!p && (this.covers(this.boatAt(), 1 - p.r) || this.covers(this.lampAt(), 1 - p.r));
+  }
+
+  /**
+   * A boat has lifted out from under a patch on its way to it: it turns for the next brightest
+   * thing there is (the next boat is not docked yet, so it is loose light or her string, or nothing).
+   */
+  private turnFromBoat() {
+    const p = this.patch;
+    if (!p || !p.aim?.lamp || p.phase === "linger" || p.phase === "leave") return;
+    const t = this.brightest();
+    if (t.kind === "heap" || t.kind === "string") {
+      p.aim = { x: t.x + 0.5, ...(t.kind === "string" && t.n >= RESCUE.patch.react.loomAt ? { loom: true } : {}) };
+      if (p.via !== "to") (p.via = "turn"), (p.phase = "run");
+      p.row = t.row + 0.5;
+      if (t.kind === "string") this.kesHold = true;
+    } else {
+      delete p.aim;
+      if (p.via !== "to") delete p.via;
+      p.phase = "run";
+      p.dx = p.speed;
+      p.dy = 0;
+    }
   }
 
   /**
@@ -437,11 +474,17 @@ export class RescueRoom {
     const sip = this.patchAim === "bait" ? R.patch.bait.sip : 0;
     for (const w of g.wisps) {
       if (this.lifted >= R.boats || this.endingAt >= 0) return;
-      // Bait: it takes one, and the next waits its turn in the lamp's light.
-      if (sip && g.tick < this.sipAt) return;
-      if (g.away.has(w.id) || this.taken.has(w.id) || this.covers(w.pos)) continue;
+      // Bait: it takes one, and the next waits its turn in the lamp's light; but not the one that fills the boat (Ladi, 25 Nov).
+      const fills = this.fill[this.lifted] === R.perBoat - 1;
+      // What is left of its wait is the next boat's: it docks that much later, so pouring alone is no quicker than before.
+      const early = fills && this.sipOf === sip ? Math.max(0, this.sipAt - g.tick) : 0;
+      if (sip && g.tick < this.sipAt && !early) return;
+      if (g.away.has(w.id)) continue;
       if (this.kesMode === "supply" && (w.guild === 1 || g.string.includes(w.id))) continue;
       if (Math.hypot(w.pos.x - lamp.x, w.pos.y - lamp.y) > R.lamp.take) continue;
+      // The patch at its edge does not keep that one from the lamp either.
+      if ((this.taken.has(w.id) || this.covers(w.pos)) && !(fills && w.guild === 0)) continue;
+      this.taken.delete(w.id);
       this.flew.push({ x: w.pos.x, y: w.pos.y, tick: g.tick });
       if (w.guild === 1) this.kesBanks++;
       if (this.setDown.has(w.id)) this.viaKes++;
@@ -467,8 +510,9 @@ export class RescueRoom {
         if (++this.fill[this.lifted]! < R.perBoat) continue;
         if (this.lifted === R.boats - 1) return this.lastBoat();
         this.lifted++;
-        this.dockAt = g.tick + R.lamp.swap;
-        this.say(KES, this.lifted === 1 ? "First boat's away!" : "Second's away! One more!", { player: KES_ID }, "key");
+        this.dockAt = g.tick + R.lamp.swap + early;
+        this.say(KES, this.lifted === 1 ? "First boat's away." : "Second's away. One more, Rook.", { player: KES_ID }, "key");
+        this.turnFromBoat();
       }
       if (g.tick < this.dockAt) return;
     }
@@ -501,7 +545,7 @@ export class RescueRoom {
     this.pipsLost++;
     this.wentAt = g.tick;
     this.goesAt = g.tick + L.drip;
-    if (!this.said.has("leak")) (this.said.add("leak"), this.say(KES, "It won't keep in this cloud! Fill it in one go!", { player: KES_ID }, "key", RESCUE.goalTicks));
+    if (!this.said.has("leak")) (this.said.add("leak"), this.say(KES, "It won't keep in this cloud. Fill it in one go.", { player: KES_ID }, "key", RESCUE.goalTicks));
   }
 
   // ---------------------------------------------------------------- the clock
@@ -569,12 +613,12 @@ export class RescueRoom {
     // The first pull stopped at a pool: she calls it, once.
     if (!this.said.has("water") && g.bankStops.some((s) => s.player === YOU)) {
       this.said.add("water");
-      this.say(KES, "Not over the water! Walk it round!", { player: KES_ID }, "key");
+      this.say(KES, "Not over the water. Walk it round.", { player: KES_ID }, "key");
     }
     // The first time it is over the docked boat: she says why nothing goes in.
-    if (this.patch && !this.said.has("lampdark") && this.covers(this.lampAt())) {
+    if (this.patch && !this.said.has("lampdark") && this.onTheBoat()) {
       this.said.add("lampdark");
-      this.say(KES, this.patchAim === "bait" ? "It's on the boat. Rook, it's on the boat!" : "The lamp's gone dark. Wait for it!", { player: KES_ID }, "key");
+      this.say(KES, this.patchAim === "bait" ? "It's on the boat. Steady." : "Lamp's gone dark. Wait for it.", { player: KES_ID }, "key");
     }
     this.takeIn();
     this.leak();
@@ -607,7 +651,7 @@ export class RescueRoom {
     for (const w of g.wisps) g.away.set(w.id, 1e9);
     g.string = [];
     for (const p of g.players) p.action = { kind: "idle" };
-    this.say(KES, "That's all of them. Rook, that's all of them.", { player: KES_ID }, "key");
+    this.say(KES, "That's all of them. Now us.", { player: KES_ID }, "key");
     this.say(GRAN, "You keep looking over there. Go on.", this.still("r9-3"), "key");
   }
 
@@ -692,7 +736,7 @@ export class RescueRoom {
         const mean = strung ? g.string.reduce((sum, id) => sum + g.wisps[id]!.pos.y, 0) / strung : kes.pos.y;
         this.launch(2, kes.pos.y + Math.max(-P.lean, Math.min(P.lean, Math.round(mean - kes.pos.y))));
         this.kesHold = true;
-        this.say(KES, "It's coming back. Get them off the neck!", { player: KES_ID }, "key");
+        this.say(KES, "It's coming back. Get them off the neck.", { player: KES_ID }, "key");
       }
       return;
     }
@@ -747,14 +791,14 @@ export class RescueRoom {
       this.offBoatAt = g.tick;
       this.sipOf = RESCUE.patch.bait.cold;
       this.sipAt = Math.max(this.sipAt, g.tick + this.sipOf);
-      this.say(KES, "They're all right. They're all right. The lamp's cold. Again!", { player: KES_ID }, this.said.has("cold") ? "quip" : "key");
+      this.say(KES, "They're all right. Lamp's cold. We go again.", { player: KES_ID }, this.said.has("cold") ? "quip" : "key");
       this.said.add("cold");
     }
     // The visit bent over her: a tick before it covers her she calls it, and stands where she is.
     if (p.via === "to" && !p.called && Math.hypot(kes.pos.x + 0.5 - p.x, kes.pos.y + 0.5 - p.y) - p.r <= p.speed) {
       p.called = true;
       this.kesHold = true;
-      const line: StoryLine = { who: KES, text: "It's coming back!", player: KES_ID };
+      const line: StoryLine = { who: KES, text: "It's coming back.", player: KES_ID };
       this.queue = this.queue.filter((q) => q.key);
       this.lines.push(line);
       this.busyUntil = g.tick + lineTicks(line);
@@ -807,10 +851,10 @@ export class RescueRoom {
     if (p.x - p.r > c.x + LO_FRAME.x1 + 2) {
       if (p.n === 1 && p.took > 0) this.say(KES, this.patchAim === "line" ? "Where did they go?" : "They're gone.", { player: KES_ID }, "key");
       // The one thing he has to learn about it, said after the first time, and held on the screen.
-      if (this.patchAim !== "line" && this.patchAim !== "bait" && p.n === 1 && !this.said.has("light")) (this.said.add("light"), this.say(KES, "It went for the heap. Don't let mine sit!", { player: KES_ID }, "key", RESCUE.goalTicks));
+      if (this.patchAim !== "line" && this.patchAim !== "bait" && p.n === 1 && !this.said.has("light")) (this.said.add("light"), this.say(KES, "It went for the heap. Don't let mine sit.", { player: KES_ID }, "key", RESCUE.goalTicks));
       if (this.patchAim === "bait") {
         // What it left behind, in her mouth; and after its first visit, the rule.
-        if (this.spared) this.say(KES, "It took the stones. Boat's still lit. Go!", { player: KES_ID }, this.said.has("spared") ? "quip" : "key"), this.said.add("spared");
+        if (this.spared) this.say(KES, "It took the stones. Boat's still lit. Go.", { player: KES_ID }, this.said.has("spared") ? "quip" : "key"), this.said.add("spared");
         if (!this.said.has("rule")) (this.said.add("rule"), this.say(KES, RULE, { player: KES_ID }, "key", RESCUE.patch.bait.ruleTicks));
         this.onBoat = this.spared = false;
       }
@@ -844,14 +888,14 @@ export class RescueRoom {
         const mean = g.string.reduce((sum, id) => sum + g.wisps[id]!.pos.y, 0) / strung;
         this.launch(2, kes.pos.y + Math.max(-P.lean, Math.min(P.lean, Math.round(mean - kes.pos.y))), pace(strung), size(strung), react ? { x: kes.pos.x + 0.5, loom: strung >= A.loomAt } : undefined);
         this.kesHold = true;
-        if (!clock) this.say(KES, "It's coming back!", { player: KES_ID }, "key");
+        if (!clock) this.say(KES, "It's coming back.", { player: KES_ID }, "key");
         return;
       }
       if (!clock && !last) return;
     }
     const at = this.gathering(), many = Math.max(1, at?.n ?? 1);
     this.launch((k + 1) as 1 | 2 | 3, at ? at.row : this.course(), pace(many), size(many), react && at ? { x: at.x + 0.5 } : undefined);
-    if (k > 0 && !clock) this.say(KES, k === 1 ? "It's coming back!" : "Again! Clear the stones!", { player: KES_ID }, "key");
+    if (k > 0 && !clock) this.say(KES, k === 1 ? "It's coming back." : "Again. Clear the stones.", { player: KES_ID }, "key");
   }
 
   /** "react", or "clock", which is react on a clock. */
@@ -877,7 +921,7 @@ export class RescueRoom {
       // The pair she keeps back is at the stones again for each visit.
       for (const id of this.kept) if (g.away.has(id)) g.away.set(id, g.tick + 1);
       // (Bait: the second visit's word is hers as it reaches her, see overKes; if that has been, it is said here.)
-      if (k > 0 && (!bait || (k === 1 && this.bentOnce))) this.say(KES, k === 1 ? "It's coming back!" : "Again! Clear the stones!", { player: KES_ID }, "key");
+      if (k > 0 && (!bait || (k === 1 && this.bentOnce))) this.say(KES, k === 1 ? "It's coming back." : "Again. Clear the stones.", { player: KES_ID }, "key");
       return;
     }
     const t = this.tell;
@@ -898,7 +942,7 @@ export class RescueRoom {
       // Half way through the tell and still turned for the boat: she calls it, once he knows the rule.
       if (this.target.kind === "lamp" && this.said.has("rule") && !this.warned && t.left <= C.tell / 2 && t.left > 3) {
         this.warned = true;
-        this.say(KES, "Too few at the stones! It's turning for the boat!", { player: KES_ID });
+        this.say(KES, "Too few at the stones. It's turning for the boat.", { player: KES_ID });
       }
     }
     if (t.left > 0) return;
@@ -959,7 +1003,7 @@ export class RescueRoom {
   /**
    * The second visit, once a run (the gameplay thread, 24 Nov): whatever it is going for, its way
    * is bent to pass over Kes first, so that the static over her is heard once for certain. It
-   * sets out on her row and makes straight for her; she calls "It's coming back!" a tick before
+   * sets out on her row and makes straight for her; she calls "It's coming back." a tick before
    * it covers her (the burst cuts the line off, and she says it again when she is out); it stays
    * over her a tick and then goes on to what it came for. Her next pair comes up as it sets out,
    * if it was due, so that she has it in hand.
@@ -1167,7 +1211,7 @@ export class RescueRoom {
     if (this.emptyHanded) {
       // Her supply starts again.
       this.emptyHanded = false;
-      this.say(KES, "I'm all right. I'm all right. More coming.", { player: KES_ID }, "key");
+      this.say(KES, "I'm all right. More coming.", { player: KES_ID }, "key");
     }
     const fix = me.mode !== "pull" || undefined;
     const live = (w: Wisp) => w.guild === 1 && !this.kept.has(w.id) && !g.board.inBankZone(w.pos) && !g.away.has(w.id) && !this.taken.has(w.id);
@@ -1290,7 +1334,7 @@ export class RescueRoom {
     this.setDowns += ids.length;
     // Called every time, never the same twice running; the first time it is kept even if she is mid-line.
     const n = ["", "One", "Two", "Three"][ids.length] ?? "", full = ids.length === RESCUE.hers && n;
-    const call = full ? [`${n} at the stones, Rook!`, `Stones! ${n} more!`, "More at the stones!"][this.calls++ % 3]! : "More at the stones!";
+    const call = full ? [`${n} at the stones, Rook.`, `${n} more at the stones.`, "More at the stones."][this.calls++ % 3]! : "More at the stones.";
     this.say(KES, call, { player: KES_ID }, this.said.has("stones") ? "quip" : "key");
     this.said.add("stones");
   }

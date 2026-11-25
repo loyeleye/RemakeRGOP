@@ -71,13 +71,13 @@ describe("Run 9: the rescue, on the low one", () => {
       expect(said[1]).toBe("Little ones on the first boat. We'll keep.");
       expect(said[2]).toBe(RESCUE.goal);
       expect(said[3]).toBe(RESCUE.part);
-      expect(said).toContain("First boat's away!");
-      expect(said).toContain("Second's away! One more!");
+      expect(said).toContain("First boat's away.");
+      expect(said).toContain("Second's away. One more, Rook.");
       expect(said).toContain("Rook. What is that.");
-      expect(said).toContain("It went for the heap. Don't let mine sit!");
+      expect(said).toContain("It went for the heap. Don't let mine sit.");
       expect(said.some((t) => /stones/i.test(t))).toBe(true);
       expect(room.stillsShown).toContain(RESCUE.hold.id);
-      expect(said.slice(-2)).toEqual(["That's all of them. Rook, that's all of them.", "You keep looking over there. Go on."]);
+      expect(said.slice(-2)).toEqual(["That's all of them. Now us.", "You keep looking over there. Go on."]);
       // Hesta is not on the low one, and nobody is told they lost.
       expect(lines().some((l) => l.who === "Hesta")).toBe(false);
       expect(room.stillsShown[0]).toBe("r9-0");
@@ -153,7 +153,7 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(view().left).toBe(RESCUE.boats * RESCUE.perBoat - 1);
     for (let n = 0; n < L.drip; n++) room.onTick();
     expect(room.state.fill[0]).toBe(0);
-    expect(lines().filter((l) => l.text === "It won't keep in this cloud! Fill it in one go!")).toHaveLength(1);
+    expect(lines().filter((l) => l.text === "It won't keep in this cloud. Fill it in one go.")).toHaveLength(1);
     // Empty, it has nothing to lose.
     for (let n = 0; n < L.hold + L.drip; n++) room.onTick();
     expect(room.pipsLost).toBe(2);
@@ -199,7 +199,7 @@ describe("Run 9: the rescue, on the low one", () => {
       expect(Math.hypot(w.pos.x - c.x - RESCUE.lamp.at[0], w.pos.y - c.y - RESCUE.lamp.at[1])).toBeGreaterThan(RESCUE.lamp.take);
     }
     expect(g.string).toEqual([]);
-    expect(lines().map((l) => l.text)).toContain("Two at the stones, Rook!");
+    expect(lines().map((l) => l.text)).toContain("Two at the stones, Rook.");
     expect(room.storyView().rescue!.drop).toEqual({ x: c.x + D.at[0], y: c.y + D.at[1], r: D.r });
     // With nobody to put them in she brings no more: the same two wait, and nothing is banked.
     for (let n = 0; n < 60; n++) room.onTick();
@@ -251,7 +251,7 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(big).toBe(P.react.sizes[2]! / 2);
     expect(lingered).toBe(P.react.linger);
     expect(room.lostToPatch).toBe(3);
-    expect(lines().map((l) => l.text)).toContain("It went for the heap. Don't let mine sit!");
+    expect(lines().map((l) => l.text)).toContain("It went for the heap. Don't let mine sit.");
   });
 
   it("the patch comes on the cloud's clock, never on how many are in: each crossing is told for a while first, the still comes early in the first tell, and it aims at the gathering as it sets out", () => {
@@ -300,7 +300,7 @@ describe("Run 9: the rescue, on the low one", () => {
     while (g.tick <= next) room.onTick();
     expect(room.storyView().rescue!.tell!.n).toBe(2);
     for (let n = 0; n < 8; n++) room.onTick();
-    expect(lines().map((l) => l.text)).toContain("It's coming back!");
+    expect(lines().map((l) => l.text)).toContain("It's coming back.");
   });
 
   it("while the patch is over the docked boat its lamp is dark and takes nothing", () => {
@@ -325,6 +325,39 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(room.lostToPatch).toBeGreaterThanOrEqual(1);
   });
 
+  it("the wisp that fills a boat goes in while the patch is still coming, even in the lamp's wait and under its edge; the boat lifts and the patch turns away", () => {
+    const { room, lines, toPlay } = open(2024, null);
+    toPlay();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = room as any, g = room.state.game, c = g.board.center, L = RESCUE.lamp, lamp = pt(c.x + L.at[0], c.y + L.at[1]);
+    r.said.add("what");
+    while (g.tick < r.dockAt) room.onTick();
+    r.fill[0] = RESCUE.perBoat - 1;
+    // The lamp has just taken one: the next would wait its turn.
+    r.sipOf = RESCUE.patch.bait.sip;
+    r.sipAt = g.tick + RESCUE.patch.bait.sip;
+    r.launch(2, lamp.y + 2, 3, RESCUE.patch.react.sizes[1], { x: lamp.x + 0.5, lamp: true });
+    const w = g.wisps.find((q) => q.guild === 0)!;
+    let touched = false;
+    let edge = false;
+    for (let n = 0; n < 40 && room.state.lifted === 0; n++) {
+      const q = r.patch;
+      // A tick before its edge reaches the lamp he brings the last one into the light.
+      if (!touched && q && q.warn <= 0 && Math.hypot(q.x - lamp.x - 0.5, q.y - lamp.y - 0.5) - q.r <= q.speed + 0.5) (touched = true), (w.pos = w.prev = pt(lamp.x, lamp.y - 1)), (w.target = null), g.away.delete(w.id);
+      room.onTick();
+      if (room.state.lifted === 0) continue;
+      // It went in with the patch's edge over the lamp and its middle not yet on the boat.
+      edge = r.covers(lamp) && !r.onTheBoat();
+    }
+    expect(touched).toBe(true);
+    expect(edge).toBe(true);
+    expect(room.state.lifted).toBe(1);
+    expect(lines().map((l) => l.text).some((t) => t.startsWith("First boat's away"))).toBe(true);
+    // It does not go on to sit on the empty slip, and the next boat comes in its own time.
+    expect(r.patch?.aim?.lamp).toBeFalsy();
+    expect(r.dockAt - g.tick).toBeGreaterThan(RESCUE.lamp.swap);
+  });
+
   it("the first build's rules stay on their switches: Kes banks her own and the patch keeps to its two fixed lines", () => {
     const { room, lines, toPlay } = open(7919, "hold", (r) => ((r.kesMode = "banks"), (r.patchAim = "line")));
     toPlay();
@@ -341,7 +374,7 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(room.stillsShown).not.toContain(RESCUE.hold.id);
     const said = lines().map((l) => l.text);
     expect(said).toContain("Near side's yours. I'll string the far side over.");
-    expect(said).toContain("It's coming back. Get them off the neck!");
+    expect(said).toContain("It's coming back. Get them off the neck.");
   });
 
   it("with nobody at Rook's staff the cloud reaches the landing: it starts again there with Kes's word, and nobody is shown lost", () => {
@@ -446,7 +479,7 @@ describe("Run 9: the rescue, on the low one", () => {
     for (let n = 0; n < 12; n++) room.onTick();
     // Still on the west strip, at the water's edge or walking round: never on the water, never across it by the straight line.
     expect(g.board.tile(w.pos)).not.toBe(Tile.Water);
-    const said = lines().filter((l) => l.text === "Not over the water! Walk it round!");
+    const said = lines().filter((l) => l.text === "Not over the water. Walk it round.");
     expect(said.length).toBeLessThanOrEqual(1);
   });
 
@@ -481,7 +514,7 @@ describe("Run 9: the rescue, on the low one", () => {
       const p = patch()!;
       expect(p.bent).toBe(true);
       // No word of hers at the tell: it is kept for when it reaches her.
-      expect(lines().filter((l) => l.text === "It's coming back!")).toHaveLength(0);
+      expect(lines().filter((l) => l.text === "It's coming back.")).toHaveLength(0);
       let called = -1, dark = -1, out = -1, darks = 0, was = false;
       const before = lines().length;
       let heardUnder = 0, carried = 0, goneAfter = false;
@@ -501,7 +534,7 @@ describe("Run 9: the rescue, on the low one", () => {
         was = now;
       }
       expect(called).toBeGreaterThan(0);
-      expect(lines().slice(before).map((l) => l.text)).toContain("It's coming back!");
+      expect(lines().slice(before).map((l) => l.text)).toContain("It's coming back.");
       expect(dark - called).toBeGreaterThanOrEqual(1);
       expect(dark - called).toBeLessThanOrEqual(2);
       expect(out).toBeGreaterThan(dark);
@@ -512,7 +545,7 @@ describe("Run 9: the rescue, on the low one", () => {
       // Her empty hands, and her supply starts again with a line.
       for (let n = 0; n < 60 && !lines().some((l) => l.text.startsWith("I'm all right")); n++) room.onTick();
       expect(lines().map((l) => l.text)).toContain("My string...");
-      expect(lines().map((l) => l.text)).toContain("I'm all right. I'm all right. More coming.");
+      expect(lines().map((l) => l.text)).toContain("I'm all right. More coming.");
       // She is where she was, and unharmed; and the visits after it are left to chance (not bent).
       expect(g.players).toContain(kes);
       while (!patch() && room.state.phase === "playing" && g.tick < 900) room.onTick();
@@ -593,7 +626,7 @@ describe("Run 9: the rescue, on the low one", () => {
       expect(room.lostToPatch - before).toBeGreaterThanOrEqual(2);
       expect(room.state.fill[0]).toBeGreaterThanOrEqual(1);
       expect(room.pipsLost).toBe(0);
-      expect(lines().some((l) => l.text === "It took the stones. Boat's still lit. Go!")).toBe(true);
+      expect(lines().some((l) => l.text === "It took the stones. Boat's still lit. Go.")).toBe(true);
       expect(g.tick).toBeGreaterThan(0);
     });
 
@@ -628,8 +661,8 @@ describe("Run 9: the rescue, on the low one", () => {
       expect(room.state.fill[0]).toBe(0);
       expect(room.pipsLost).toBe(2);
       expect(room.state.lifted).toBe(0);
-      expect(lines().some((l) => l.text === "It's on the boat. Rook, it's on the boat!")).toBe(true);
-      expect(lines().some((l) => l.text === "They're all right. They're all right. The lamp's cold. Again!")).toBe(true);
+      expect(lines().some((l) => l.text === "It's on the boat. Steady.")).toBe(true);
+      expect(lines().some((l) => l.text === "They're all right. Lamp's cold. We go again.")).toBe(true);
       // Cold: it takes nothing for a while after the patch has moved off it.
       expect(offAt).toBeGreaterThan(0);
       expect(bait(room).sipAt).toBeGreaterThanOrEqual(offAt + B.cold);
@@ -653,14 +686,14 @@ describe("Run 9: the rescue, on the low one", () => {
       toPlay();
       for (let n = 0; n < 1400 && room.state.phase === "playing"; n++) room.onTick();
       const said = lines().map((l) => l.text);
-      expect(said.filter((t) => t === "It goes for the brightest thing. Leave more at the stones than there is in the lamp!")).toHaveLength(1);
-      expect(said.indexOf("It's on the boat. Rook, it's on the boat!")).toBeGreaterThanOrEqual(0);
-      expect(said.indexOf("It's on the boat. Rook, it's on the boat!")).toBeLessThan(said.indexOf("It goes for the brightest thing. Leave more at the stones than there is in the lamp!"));
+      expect(said.filter((t) => t === "It goes for the brightest thing. So leave more at the stones than in the lamp.")).toHaveLength(1);
+      expect(said.indexOf("It's on the boat. Steady.")).toBeGreaterThanOrEqual(0);
+      expect(said.indexOf("It's on the boat. Steady.")).toBeLessThan(said.indexOf("It goes for the brightest thing. So leave more at the stones than in the lamp."));
       const read = [...said, ...msgs.flatMap((m) => (m.t === "room" ? (m.room.story?.rescue?.caption ?? []) : []))];
       for (const t of read) expect(t).not.toMatch(/\b(bait|offer|offering|give|feed)\b/i);
       for (const t of read) expect(t).not.toMatch(/\bsink/i);
-      expect(said).not.toContain("It went for the heap. Don't let mine sit!");
-      expect(said).not.toContain("It won't keep in this cloud! Fill it in one go!");
+      expect(said).not.toContain("It went for the heap. Don't let mine sit.");
+      expect(said).not.toContain("It won't keep in this cloud. Fill it in one go.");
     });
 
     it("bringing everything straight in does not win before the cloud; leaving more at the stones than is in the lamp does, with the patch taking a large share", () => {
