@@ -470,7 +470,7 @@ describe("Run 9: the rescue, on the low one", () => {
     expect(room.storyView().rescue!.patch).toBeUndefined();
   });
 
-  it("the second visit is bent over Kes once a run: she calls it, is cut off a tick later, and it goes on to what it came for", () => {
+  it("the second visit is bent over Kes once a run: she calls it, is cut off a tick later, the pair she carries is gone, and it goes on to what it came for", () => {
     for (const seed of [7919, 15838, 23757]) {
       const { room, lines, toPlay } = open(seed, "heap");
       toPlay();
@@ -484,13 +484,17 @@ describe("Run 9: the rescue, on the low one", () => {
       expect(lines().filter((l) => l.text === "It's coming back!")).toHaveLength(0);
       let called = -1, dark = -1, out = -1, darks = 0, was = false;
       const before = lines().length;
-      let heardUnder = 0;
+      let heardUnder = 0, carried = 0, goneAfter = false;
       for (let n = 0; n < 80 && patch(); n++) {
         const had = lines().length;
         room.onTick();
         if (called < 0 && patch()?.called) called = g.tick;
         const now = room.state.kesDark;
+        // She is carrying a pair to the stones when it covers her.
+        if (now && !was && dark < 0) carried = [...room.state.spare].filter((id) => !g.away.has(id)).length;
         if (now && !was) (darks++, dark < 0 && (dark = g.tick));
+        // When she comes out they are gone, for good.
+        if (!now && was && out < 0) goneAfter = [...room.state.spare].every((id) => (g.away.get(id) ?? 0) > 1e8);
         if (!now && was && out < 0) out = g.tick;
         // Under it nothing of hers is said (the line she was on is the one that is cut off).
         if (now && was) heardUnder += lines().slice(had).filter((l) => l.who === "Kes").length;
@@ -503,6 +507,12 @@ describe("Run 9: the rescue, on the low one", () => {
       expect(out).toBeGreaterThan(dark);
       expect(darks).toBe(1);
       expect(heardUnder).toBe(0);
+      expect(carried).toBe(2);
+      expect(goneAfter).toBe(true);
+      // Her empty hands, and her supply starts again with a line.
+      for (let n = 0; n < 60 && !lines().some((l) => l.text.startsWith("I'm all right")); n++) room.onTick();
+      expect(lines().map((l) => l.text)).toContain("My string...");
+      expect(lines().map((l) => l.text)).toContain("I'm all right. I'm all right. More coming.");
       // She is where she was, and unharmed; and the visits after it are left to chance (not bent).
       expect(g.players).toContain(kes);
       while (!patch() && room.state.phase === "playing" && g.tick < 900) room.onTick();
@@ -655,7 +665,7 @@ describe("Run 9: the rescue, on the low one", () => {
 
     it("bringing everything straight in does not win before the cloud; leaving more at the stones than is in the lamp does, with the patch taking a large share", () => {
       let poured = 0, left = 0;
-      for (const seed of [7919, 15838, 23757]) {
+      for (const seed of [1, 2, 3, 4, 5, 6].map((k) => k * 7919)) {
         const a = open(seed, "hold");
         a.toPlay();
         for (let n = 0; n < 700 && a.room.state.phase === "playing" && a.room.restarts === 0; n++) a.room.onTick();
@@ -669,7 +679,8 @@ describe("Run 9: the rescue, on the low one", () => {
         }
       }
       expect(poured).toBe(0);
-      expect(left).toBeGreaterThanOrEqual(2);
+      // 27 of 30 over the measurements (tools/rescue-sim.ts 30 bait).
+      expect(left).toBeGreaterThanOrEqual(4);
     });
   });
 });

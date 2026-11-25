@@ -4,7 +4,7 @@
 // Browsers only allow sound after a tap or key press, so nothing plays before the first one.
 // All the numbers that set the feel are in SOUND.
 
-import { VOICE_LINES } from "./voice-lines.js";
+import { VOICE_LINES, VOICE_STOCK } from "./voice-lines.js";
 
 export const SOUND = {
   /** Master volume, 0 to 1. */
@@ -344,12 +344,25 @@ let babbling: { who: string; g: GainNode } | null = null;
 let cutWho: string | null = null;
 const voiceBusy = () => voicing != null && !voicing.ended && (!voicing.paused || cutWho === voicingWho);
 
+/** The last stock sound each speaker made, so the next is another. */
+const lastStock = new Map<string, string>();
+/** One of a speaker's stock sounds (VOICE_STOCK): one that suits the line if any does, not the one before; none if they have none. */
+function stockFor(who: string, text: string): string | undefined {
+  const all = VOICE_STOCK[who];
+  if (!all?.length) return undefined;
+  const fits = all.filter((c) => c.for?.test(text)), from = (fits.length ? fits : all).map((c) => c.src);
+  const pick = from.length > 1 ? from.filter((f) => f !== lastStock.get(who)) : from;
+  const src = pick[Math.floor(Math.random() * pick.length)]!;
+  lastStock.set(who, src);
+  return src;
+}
+
 /** A line appears: its clip if it has one, else Hesta's "Now" cue or the speaker's babble. */
 export function speak(who: string, text: string, now = false) {
   // Someone is still talking: don't talk over them (the text still shows).
   if (voiceBusy()) return;
   // An exact whole-line clip wins; then a pattern; else the babble.
-  const src = VOICE_LINES[`${who}|${text}`] ?? VOICE.find((c) => c.who === who && c.match.test(text))?.src;
+  const src = VOICE_LINES[`${who}|${text}`] ?? VOICE.find((c) => c.who === who && c.match.test(text))?.src ?? stockFor(who, text);
   if (src) {
     if (!out()) return;
     const a = new Audio(src);

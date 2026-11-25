@@ -55,14 +55,22 @@ describe("optional run 3c: Kes's rematch on the Fell", () => {
     expect(o.vanes!.map((v) => v.n).sort()).toEqual([KITE.gust.lone, KITE.gust.rich]);
   });
 
-  it("his staff takes hold only from a vane's mark: a tap from by the fire says so, and nothing is taken", () => {
+  it("his staff takes hold only from a vane's mark: a tap from by the fire walks him to that arm's mark, and says why once", () => {
     const { room, tick } = play(2, null);
-    tick(KITE.gust.head > 0 ? 6 : 12);
-    const g = room.state.game, w = g.wisps.find((q) => !g.away.has(q.id))!;
-    room.connect(() => {}).message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: w.id } }));
-    expect(room.storyView().opt!.caption?.some((c) => c.who === "" && /only holds from the mark/.test(c.text))).toBe(true);
-    tick(4);
-    expect(g.players.find((p) => p.id === 1)!.action.kind).not.toBe("staff");
+    tick(6);
+    const g = room.state.game, me = g.players.find((p) => p.id === 1)!, c = g.board.center;
+    const w = g.wisps.find((q) => !g.away.has(q.id) && room.state.course.has(q.id))!, arm = room.state.course.get(w.id)!.arm;
+    const tap = () => room.connect(() => {}).message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: w.id } }));
+    tap();
+    const hints = () => (room.storyView().opt!.caption ?? []).filter((c) => c.who === "" && /only holds from the mark/.test(c.text)).length;
+    expect(hints()).toBe(1);
+    tick();
+    expect(me.action.kind).toBe("walk");
+    const [mx, my] = KT_VANES[arm].mark;
+    if (me.action.kind === "walk") expect(Math.max(Math.abs(me.action.to.x - c.x - mx), Math.abs(me.action.to.y - c.y - my))).toBeLessThanOrEqual(1);
+    tick(2);
+    tap();
+    expect(hints()).toBe(1);
     expect(room.state.score[0]).toBe(0);
   });
 

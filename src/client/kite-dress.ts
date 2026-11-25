@@ -14,18 +14,18 @@ type Opt = NonNullable<StoryView["opt"]>;
 /** How it looks, in one place. */
 export const KITE_LOOK = {
   /** The band: its colour and how solid it is, and how much wider than the course it is drawn. */
-  band: "#f4f1e4",
-  solid: 0.42,
+  band: "#f6efd2",
+  solid: 0.3,
   wider: 1,
   /** The streaks: how many on each way, how long (tiles), how fast (tiles a second) and how solid. */
-  streaks: 16,
-  long: [1.6, 3.2] as const,
-  fast: [5, 8] as const,
+  streaks: 30,
+  long: [2.6, 4.6] as const,
+  fast: [6, 10] as const,
   streak: "#ffffff",
-  streakSolid: 0.8,
+  streakSolid: 1,
   /** The stakes: how far apart along each edge (tiles), how high, and the ribbon's colours. */
-  stakeEvery: 7,
-  stakeHigh: 1.3,
+  stakeEvery: 6,
+  stakeHigh: 1.7,
   ribbon: ["#e8674f", "#f2c14e"] as const,
   /** The circle at a mark: plain, when Rook stands in it, and when Kes does. */
   mark: "#f3f1e8",
@@ -87,7 +87,7 @@ export class KiteFx {
     const streakMat = () => new THREE.MeshBasicMaterial({ color: L.streak, transparent: true, opacity: 0, depthWrite: false });
     for (const arm of ARMS)
       for (let i = 0; i < L.streaks; i++) {
-        const long = L.long[0] + rand() * (L.long[1] - L.long[0]), geo = new THREE.PlaneGeometry(1, 0.16);
+        const long = L.long[0] + rand() * (L.long[1] - L.long[0]), geo = new THREE.PlaneGeometry(1, 0.3);
         geo.rotateX(-Math.PI / 2);
         const mesh = new THREE.Mesh(geo, streakMat());
         mesh.scale.x = long;
@@ -106,10 +106,10 @@ export class KiteFx {
       const m = new THREE.Mesh(post, wood);
       m.position.set(x, L.stakeHigh / 2, z);
       m.castShadow = true;
-      const flag = new THREE.PlaneGeometry(1, 0.22);
-      flag.translate(0.5, 0, 0);
+      const flag = new THREE.PlaneGeometry(1.7, 0.38);
+      flag.translate(0.85, 0, 0);
       const r = new THREE.Mesh(flag, cloth[n++ % cloth.length]!);
-      r.position.set(x, L.stakeHigh - 0.1, z);
+      r.position.set(x, L.stakeHigh - 0.2, z);
       const turn = -Math.atan2(p.dy, p.dx);
       r.rotation.y = turn;
       this.all.add(m, r);
@@ -148,7 +148,7 @@ export class KiteFx {
       k.mesh.rotation.y = -Math.atan2(p.dy, p.dx);
       // In at the rim and out at the far edge, and a little unsteady between.
       const ends = Math.min(1, k.s / 5, -kfCoast(p.x, p.y) / 2);
-      (k.mesh.material as THREE.MeshBasicMaterial).opacity = L.streakSolid * Math.max(0, ends) * (0.6 + 0.4 * Math.sin(time * 3 + k.s));
+      (k.mesh.material as THREE.MeshBasicMaterial).opacity = L.streakSolid * Math.max(0, ends) * (0.8 + 0.2 * Math.sin(time * 3 + k.s));
     }
     for (const r of this.ribbons) {
       r.mesh.rotation.y = r.turn + Math.sin(time * 9 + r.phase) * 0.22;

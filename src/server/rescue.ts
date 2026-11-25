@@ -135,6 +135,9 @@ export class RescueRoom {
   private offBoatAt = -1e9;
   /** Bait's safety net: wisps of Kes's that stay at the stones (hers, not his to pull). */
   private kept = new Set<number>();
+  /** The pair she carries on the visit bent over her, and which of them it has covered. */
+  private spare = new Set<number>();
+  private spareOn = false;
   /** Bad bait (a stand-in): whether it leaves too few this visit. */
   private skimp = false;
   /** A crossing being told (clock): which one, and ticks until it sets out. */
@@ -244,7 +247,7 @@ export class RescueRoom {
         { id: KES_ID, guild: 1 as Guild, name: KES },
       ],
       this.seed(),
-      [R.his, R.hers + (this.netOn() ? R.patch.bait.kept : 0)],
+      [R.his, R.hers + (this.netOn() ? R.patch.bait.kept : 0) + (this.spareOn0() ? R.patch.bait.spare : 0)],
       100000,
     ));
     g.waterLawHere = true;
@@ -264,8 +267,12 @@ export class RescueRoom {
     // The lamp does the banking (takeIn), not the engine's zone.
     for (const w of g.wisps) g.noBank.add(w.id);
     const theirs = g.wisps.filter((w) => w.guild === 1).map((w) => w.id);
+    const keptN = this.netOn() ? R.patch.bait.kept : 0;
     this.hers = new Set(theirs.slice(0, R.hers));
-    this.kept = new Set(theirs.slice(R.hers));
+    this.kept = new Set(theirs.slice(R.hers, R.hers + keptN));
+    this.spare = new Set(theirs.slice(R.hers + keptN));
+    this.spareOn = false;
+    for (const id of this.spare) g.away.set(id, 1e9);
     this.toldAt = -1e9;
     this.sipAt = 0;
     this.sipOf = 0;
@@ -333,7 +340,7 @@ export class RescueRoom {
   /** A wisp comes onto the board: his on the near side by itself, hers in her group's place on the far side. */
   private arrive(w: Wisp) {
     const g = this.game;
-    if (this.endingAt >= 0 || this.lifted >= RESCUE.boats) return void g.away.set(w.id, 1e9);
+    if (this.endingAt >= 0 || this.lifted >= RESCUE.boats || this.spare.has(w.id)) return void g.away.set(w.id, 1e9);
     if (this.kept.has(w.id)) {
       // The pair she keeps back: at the stones, hers.
       w.guild = 1 as Guild;
@@ -473,6 +480,11 @@ export class RescueRoom {
    */
   private leaks() {
     return this.lampMode === "leaks" && this.patchAim !== "bait";
+  }
+
+  /** A spare pair is made for a try only while the visit bent over Kes is still to come. */
+  private spareOn0() {
+    return this.patchAim === "bait" && this.kesMode === "supply" && !this.bentOnce;
   }
 
   private netOn() {
@@ -770,6 +782,18 @@ export class RescueRoom {
       this.kesDark = false;
       // Cut off in the middle of a line, she says it again now: nothing else is said over it.
       if (this.cutMidLine) (this.cutMidLine = false), (this.busyUntil = Math.max(this.busyUntil, g.tick + 2));
+      // The pair she was carrying is not there any more.
+      if (this.spareOn) {
+        this.spareOn = false;
+        for (const id of this.spare) {
+          const w = g.wisps[id]!;
+          if (g.away.has(id)) continue;
+          this.outs.push({ x: w.pos.x, y: w.pos.y, tick: g.tick });
+          moveWisp(w, w.pos);
+          g.string = g.string.filter((s) => s !== id);
+          g.away.set(id, 1e9);
+        }
+      }
       this.kesShaken = g.tick + (this.kesMode === "supply" && this.brokeString ? RESCUE.kes.emptyHands : RESCUE.kes.shaken);
       this.emptyHanded = this.kesMode === "supply" && this.brokeString;
       this.brokeString = false;
@@ -950,6 +974,38 @@ export class RescueRoom {
     p.bent = true;
     p.row = (lamp ? t.row + 2 : t.row) + 0.5;
     for (const w of g.wisps) if (this.hers.has(w.id) && this.groupDue && g.away.has(w.id) && g.away.get(w.id)! < 1e8) g.away.set(w.id, g.tick + 1);
+    this.carryPair();
+  }
+
+  /**
+   * The visit bent over her: she is carrying a pair to the stones when it comes (an extra pair, made
+   * for this visit). They are strung behind her, and she makes for the stones with them.
+   */
+  private carryPair() {
+    const g = this.game, b = g.board, kes = this.player(KES_ID), c = b.center, stand = pt(c.x + RESCUE.drop.stand[0], c.y + RESCUE.drop.stand[1]);
+    if (this.kesMode !== "supply" || g.string.length >= 2) return;
+    let lead = kes.pos;
+    for (const id of this.spare) {
+      if (g.string.length >= 2) break;
+      const w = g.wisps[id]!, free = (p: Pt) => b.passable(p, Mover.Wisp) && !samePt(p, kes.pos) && !g.wisps.some((o) => o !== w && !g.away.has(o.id) && samePt(o.pos, p));
+      // Behind her: the free tile next to the one in front that is farthest from the stones, so the string trails her there.
+      let at: Pt | null = null;
+      for (let r = 1; r <= 2 && !at; r++) {
+        const ring: Pt[] = [];
+        for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) if (Math.max(Math.abs(dx), Math.abs(dy)) === r && free(pt(lead.x + dx, lead.y + dy))) ring.push(pt(lead.x + dx, lead.y + dy));
+        at = ring.sort((p, q) => Math.hypot(q.x - stand.x, q.y - stand.y) - Math.hypot(p.x - stand.x, p.y - stand.y))[0] ?? null;
+      }
+      if (!at) break;
+      g.away.delete(id);
+      moveWisp(w, at);
+      w.guild = 1 as Guild;
+      w.holder = KES_ID;
+      w.grip = Grip.Held;
+      g.string.push(id);
+      lead = at;
+      this.spareOn = true;
+    }
+    if (this.spareOn) this.carrying = true;
   }
 
   /** One tick of the visit bent over Kes, until it is on its own row again. */
@@ -1095,7 +1151,7 @@ export class RescueRoom {
     w.skate = null;
     w.grip = Grip.Free;
     g.string = g.string.filter((id) => id !== w.id);
-    g.away.set(w.id, this.kept.has(w.id) ? 1e9 : g.tick + RESCUE.pause);
+    g.away.set(w.id, this.kept.has(w.id) || this.spare.has(w.id) ? 1e9 : g.tick + RESCUE.pause);
     this.lost++;
     this.lostToPatch++;
   }
@@ -1136,6 +1192,8 @@ export class RescueRoom {
       if (head && live(head) && g.inReach({ ...me, mode: "pull" }, head)) return cmd(me.action.kind === "staff" && me.action.wisp === head.id ? null : { action: { kind: "staff", wisp: head.id }, toggleMode: fix });
       return idle();
     }
+    // With the pair for the bent visit on her string, she makes straight for the stones.
+    if (this.spareOn && this.kesMode === "supply" && head && live(head)) return this.carry(head);
     if (loose.length && g.string.length < RESCUE.storm.max) {
       this.carrying = false;
       // Walk to each wisp and touch it: that is what her gift costs her.
@@ -1178,6 +1236,8 @@ export class RescueRoom {
     const stand = pt(c.x + D.stand[0], c.y + D.stand[1]);
     if (!samePt(me.pos, stand)) return (this.headStill = 0), walk(stand);
     // There: when the string has closed up behind her (or will come no nearer), she lets go, and they are his.
+    // The pair for the bent visit is never set down: it comes for her before she can.
+    if (this.spareOn) return;
     const tail = g.string.map((id) => g.wisps[id]!);
     const closed = tail.every((w, i) => cheb(w.pos, i ? tail[i - 1]!.pos : me.pos) <= 1);
     if (closed || ++this.headStill > 4) return this.setAtStones();
@@ -1518,7 +1578,7 @@ export class RescueRoom {
 
   /** For tests. */
   get state() {
-    return { phase: this.phase, game: this.game, end: this.end, said: this.said, fill: this.fill, lifted: this.lifted, patch: this.patch, crossings: this.crossings, taken: this.taken, kesDark: this.kesDark, pools: LO_POOLS, banked: this.bankedN, setDown: this.setDown, hers: this.hers, holdLeft: this.holdLeft, tell: this.tell, target: this.target, kept: this.kept, onBoat: this.onBoat };
+    return { phase: this.phase, game: this.game, end: this.end, said: this.said, fill: this.fill, lifted: this.lifted, patch: this.patch, crossings: this.crossings, taken: this.taken, kesDark: this.kesDark, pools: LO_POOLS, banked: this.bankedN, setDown: this.setDown, hers: this.hers, holdLeft: this.holdLeft, tell: this.tell, target: this.target, kept: this.kept, spare: this.spare, onBoat: this.onBoat };
   }
 }
 

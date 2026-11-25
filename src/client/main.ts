@@ -29,6 +29,7 @@ import { CoveRoom } from "../server/cove.js";
 import { COVE } from "../engine/cove.js";
 import { KiteRoom } from "../server/kite.js";
 import { KITE } from "../engine/kite.js";
+import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
@@ -547,7 +548,8 @@ function typeOn() {
   $("dialog-text").innerHTML = lineHtml(t.l.text);
   typing = null;
   // Time to read it, whether or not another line is waiting (a tap moves on sooner).
-  talkTimer = window.setTimeout(nextTalk, Math.max(1800, t.l.text.length * 45));
+  // Long enough to read, and for its voice to finish: a line that comes while a clip still plays is not voiced.
+  talkTimer = window.setTimeout(nextTalk, Math.max(1800, t.l.text.length * 45, (VOICE_SECONDS[`${t.l.who}|${t.l.text}`] ?? 0) * 1000 + 250));
 }
 
 $("dialog").onclick = () => {

@@ -9,7 +9,7 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import ts from "typescript";
-import { VOICE_LINES } from "../src/client/voice-lines.js";
+import { VOICE_LINES, VOICE_STOCK } from "../src/client/voice-lines.js";
 import { STILLS } from "../src/engine/stills.js";
 import { CoveRoom } from "../src/server/cove.js";
 import { KiteRoom } from "../src/server/kite.js";
@@ -255,6 +255,9 @@ const stills = Object.entries(STILLS)
     return { slot: id, run: run ? `run${run}` : "?", shown: full ? "full screen" : "panel", who: card.who, faces: card.faces, file: `public/stills/${id}.webp`, ...(pictures.has(`${id}-1`) ? { note: "Replaced by its frames (-1, -2, -3), which have pictures. Nothing to draw." } : used ? {} : { note: "No line in any room calls this slot today." }) };
   });
 
+// A speaker with stock sounds has a sound on every line, though not the line itself.
+for (const l of lines) if (VOICE_STOCK[l.speaker as string]) (l as Record<string, unknown>).stock = true;
+
 const doc = {
   made: new Date().toISOString(),
   by: "tools/unvoiced-lines.ts in RemakeRGOP (the build thread). Run it again after lines change: npx tsx tools/unvoiced-lines.ts",
@@ -264,6 +267,7 @@ const doc = {
     mustLand: "true: a line that must land. It is also held on the screen as a caption for some seconds (the goal, and lines that name the choice).",
     alwaysPlays: "true: the room always plays it, in its turn, even if someone is speaking. false: a quip, dropped if it cannot start at once.",
     heardIn: "How many of `plays` stand-in plays the line was heard in. 0 is flagged in `note`.",
+    stock: "true: the speaker has stock sounds (a few short voiced sounds), one of which plays on this line; it needs no clip of its own unless one is wanted.",
     pattern: "An entry with pattern: true is a line with a number in it, listed for reference only (clip is null).",
   },
   runs: summary,

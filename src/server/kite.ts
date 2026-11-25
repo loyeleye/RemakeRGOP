@@ -121,12 +121,21 @@ export class KiteRoom {
           const w = g.wisps[action.wisp]!, me = this.player(YOU);
           // No shoving: one that Kes has hold of is hers.
           if (this.heldBy(w) === KES_ID) return;
-          // His staff takes hold only from a vane's mark. A tap from anywhere else says so, and he stays where he is.
+          // His staff takes hold only from a vane's mark. A tap on one he cannot hold from where he
+          // is walks him to the mark of the arm it is going down (the gameplay thread, 25 Nov), and
+          // the first time says why; at that mark already, it says it has to come by.
           if (!this.canHold(me, w)) {
-            if (g.tick - this.hintAt >= 12) {
-              this.hintAt = g.tick;
-              this.captions.push({ who: "", text: this.atMark(me) ? "Too far. It has to come by the vane." : "Your staff only holds from the mark by a vane.", until: g.tick + 6 });
-            }
+            const arm = this.course.get(w.id)?.arm ?? this.gustOf.get(w.id)?.arm ?? null, at = this.atMark(me);
+            const hint = (key: string, text: string) => {
+              if (this.said.has(key)) return;
+              this.said.add(key);
+              this.captions.push({ who: "", text, until: g.tick + 6 });
+            };
+            if (arm && at !== arm) {
+              hint("mark", "Your staff only holds from the mark by a vane.");
+              const to = this.near(this.mark(arm), YOU);
+              if (!(me.action.kind === "walk" && samePt(me.action.to, to))) g.command(YOU, { action: { kind: "walk", to }, toggleRun: !!msg.toggleRun });
+            } else hint("far", "Too far. It has to come by the vane.");
             return;
           }
         }
