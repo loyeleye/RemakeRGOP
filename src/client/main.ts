@@ -2200,7 +2200,7 @@ let skiffSaid = false;
 function heldScene(p: Piece) {
   const H = HELD[p.id]!, el = document.createElement("div");
   el.id = "gap-scene";
-  el.className = "morning";
+  el.className = H.shape ? `morning ${H.shape}` : "morning";
   el.innerHTML = `<div class="tags"><span class="nb">Draft</span><span>${esc(H.tag)}</span></div><p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
   const pics = H.pictures.map((m) => storyCard(m.slot, "pic"));
   el.prepend(...pics);
@@ -2244,7 +2244,7 @@ function heldScene(p: Piece) {
     for (const line of m.lines ?? []) {
       // Long enough to read, and to hear its clip out.
       const len = Math.max(H.line, line.text.length * 0.055, (VOICE_SECONDS[`${line.who[0]}|${line.text}`] ?? 0) + 0.5);
-      at(t + H.gap, () => sceneLine(caption, line));
+      at(t + H.gap, () => sceneLine(caption, line, line.quiet));
       at(t + H.gap + len, () => caption.classList.remove("on"));
       t += H.gap + len;
     }

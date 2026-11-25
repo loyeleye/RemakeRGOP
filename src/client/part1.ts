@@ -69,11 +69,13 @@ export const EVENING = {
 export interface Held {
   /** The tag in the corner: what Ladi has not seen. */
   tag: string;
+  /** "four3": 4:3 pictures (the default is square). */
+  shape?: "four3";
   /**
    * `shake`: a layer (the same picture, alpha only where it moves) flicked on and off with a small
    * offset while the picture is up; `cut`: in without a cross-fade.
    */
-  pictures: { slot: string; hold: number; lines?: { who: string[]; text: string }[]; shake?: string; cut?: true }[];
+  pictures: { slot: string; hold: number; lines?: { who: string[]; text: string; quiet?: true }[]; shake?: string; cut?: true }[];
   /** Seconds: the cross-fade, the hold before anyone speaks, each line, the pause before it. */
   fade: number;
   lead: number;
@@ -142,6 +144,29 @@ export const HELD: Record<string, Held> = {
       { slot: "sendoff-11", hold: 3 },
       { slot: "sendoff-12", hold: 1.5, lines: [{ who: ["Hesta"], text: "Stay put, Sparkbug. Keep that lantern lit." }] },
       { slot: "sendoff-13", hold: 4.5 },
+    ],
+  },
+  // 9-10, the eight pictures before the stranger's ship (production/story/handoff-9-10/final/README.md,
+  // 25 Nov): the cutscene thread's picks, not seen by Ladi, S1 to S8 of "The scene between runs 9 and
+  // 10, as it would now go" in story/runs9-10-story-check.md, whose lines these are. The shadow as his
+  // reason and Kes's "Go. I'm right behind you." after the joke are Ladi's; the wording is draft.
+  // Picture 3 is the dream's boat again. Rook's and Kes's lines are voiced; the stranger's is a caption.
+  "9-10": {
+    tag: "Pictures and wording not seen by Ladi",
+    shape: "four3",
+    fade: 0.6,
+    lead: 0.5,
+    line: 2.4,
+    gap: 0.4,
+    pictures: [
+      { slot: "handoff-1-shadow", hold: 1, lines: [{ who: ["Rook"], text: "I don't like where that thing's heading. That's home." }] },
+      { slot: "handoff-2-kes-hand", hold: 0.8, lines: [{ who: ["Kes"], text: "Then come on. We go round with the boats." }] },
+      { slot: "handoff-3-dream", hold: 1.5 },
+      { slot: "handoff-4-stranger", hold: 1, lines: [{ who: ["The stranger"], text: "I know a shorter way." }] },
+      { slot: "handoff-5-kes-rail", hold: 0.8, lines: [{ who: ["Kes"], text: "Race you home, then." }] },
+      { slot: "handoff-6-rook", hold: 0.6, lines: [{ who: ["Rook"], text: "...", quiet: true }] },
+      { slot: "handoff-7-kes-nod", hold: 1, lines: [{ who: ["Kes"], text: "Go. I'm right behind you." }] },
+      { slot: "handoff-8-boarding", hold: 3.5 },
     ],
   },
 };
@@ -260,7 +285,8 @@ export const PART1: Piece[] = [
   // Shown as its thirteen pictures (HELD["8-9b"]); take `scene` off and it is its card again.
   { id: "8-9b", name: "The beacon and the send-off", kind: "card", scene: "held", card: { heading: "The beacon and the send-off", summary: "The beacon lights on the low one. At the landing Hesta plots the course, Kes goes, Lumi stays, and Hesta lights the unfinished lantern.", ruled: "Part ruled: the send-off is in the bible. The lines and the lantern being lit are draft. A storyboard only." } },
   { id: "9", name: "Run 9, the rescue", kind: "run", run: 9 },
-  { id: "9-10", name: "The stranger's ship", kind: "card", card: { heading: "Eight pictures, before the ship", summary: "The shadow heading for home. Kes: \"Then come on.\" The dream, one beat. The stranger: \"I know a shorter way.\" Kes: \"Race you home, then.\" Rook: \"...\" Kes: \"Go. I'm right behind you.\" His back as he boards.", ruled: "Part ruled: the shadow as his reason and Kes's line after the joke are Ladi's. The wording and the pictures are draft." } },
+  // Shown as its eight pictures (HELD["9-10"]); take `scene` off and it is its card again.
+  { id: "9-10", name: "The stranger's ship", kind: "card", scene: "held", card: { heading: "Eight pictures, before the ship", summary: "The shadow heading for home. Kes: \"Then come on.\" The dream, one beat. The stranger: \"I know a shorter way.\" Kes: \"Race you home, then.\" Rook: \"...\" Kes: \"Go. I'm right behind you.\" His back as he boards.", ruled: "Part ruled: the shadow as his reason and Kes's line after the joke are Ladi's. The wording and the pictures are draft." } },
   { id: "10", name: "Run 10, the ship home", kind: "run", run: 10 },
   { id: "11", name: "The Offering", kind: "card", card: { heading: "The Offering, at first light", summary: "The end of Part 1.", ruled: "Part ruled: in the bible, and \"at first light\" is Ladi's. A storyboard only.", end: true } },
 ];

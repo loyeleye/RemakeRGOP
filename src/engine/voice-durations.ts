@@ -360,4 +360,8 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Hesta|Grabbed the hot end. At my age.": 2.54,
   "Hesta|The low one's going under, Rook. Get them onto their boats, and bring the boats home the long way round. Don't cut across open cloud in the dark.": 9.74,
   "Hesta|Stay put, Sparkbug. Keep that lantern lit.": 3.79,
+  "Rook|I don't like where that thing's heading. That's home.": 2.69,
+  "Kes|Then come on. We go round with the boats.": 2.14,
+  "Kes|Race you home, then.": 1.13,
+  "Kes|Go. I'm right behind you.": 1.32,
 };

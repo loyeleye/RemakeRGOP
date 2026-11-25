@@ -375,6 +375,10 @@ export const VOICE_LINES: Record<string, string> = {
   "Hesta|Grabbed the hot end. At my age.": "voice/hesta-hot-end.mp3",
   "Hesta|The low one's going under, Rook. Get them onto their boats, and bring the boats home the long way round. Don't cut across open cloud in the dark.": "voice/hesta-low-one-route.mp3",
   "Hesta|Stay put, Sparkbug. Keep that lantern lit.": "voice/hesta-stay-put.mp3",
+  "Rook|I don't like where that thing's heading. That's home.": "voice/rook-heading-home.mp3",
+  "Kes|Then come on. We go round with the boats.": "voice/kes-then-come-on.mp3",
+  "Kes|Race you home, then.": "voice/kes-race-you-home.mp3",
+  "Kes|Go. I'm right behind you.": "voice/kes-right-behind-you.mp3",
 };
 
 /**
