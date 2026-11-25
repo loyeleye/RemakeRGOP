@@ -13,6 +13,7 @@ import { SV_WELLS, sieveRows, svCoast, svOutline } from "./sieve.js";
 import { LO_FRAME, LO_OVAL, RESCUE, loCoast, loFromSlip, loOutline, lowOneRows } from "./rescue.js";
 import { SHIP, SHIP_DECK, SHIP_FRAME, shipRows } from "./shiphome.js";
 import { KF_FAR, KF_OVAL, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
+import { TIDEPOOL, TP_FRAME, tidepoolRows, tpCoast, tpOutline, tpTiles } from "./tidepool.js";
 import { COVE, CV_FRAME, CV_ISLE, coveFlats, coveRows, cvCoast, cvFromBrazier, cvOutline } from "./cove.js";
 import { HS_CENTRE, HS_FAR, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
 import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
@@ -1406,6 +1407,8 @@ export const STORY_SHRINES: Shrine[] = [
   shipDeck(),
   // Optional run 2, Lumi's lesson with Kes: the Cove of the home pond (see cove.ts).
   cove(),
+  // Optional run 3b, the tide job: Tidepool Steps, terraced (see tidepool.ts).
+  tidepoolTerraces(),
 ];
 
 /** The Kindling ground with the crater in it: everything else as run 1's island. */
@@ -1461,6 +1464,18 @@ function cove(): Shrine {
   b.phoneSpan = COVE.phoneSpan;
   const tidal = coveFlats().map(([x, y]) => (c.y + y) * b.width + c.x + x);
   return { ...sh, coast: cvCoast, outline: cvFromBrazier, arms: true, lobes: [], core: { x: CV_ISLE.x, y: CV_ISLE.y, outline: cvOutline }, tidal };
+}
+
+/** Tidepool Steps, terraced (optional run 3b): five steps up from the court, a cascade of pools on each side. The strips are open ground on the board; the tide floods them. */
+function tidepoolTerraces(): Shrine {
+  const rows = tidepoolRows();
+  const def: ShrineDef = { id: TIDEPOOL.shrine, name: "Tidepool Steps", blurb: "Marit's island: terraces of tide pools, stepping down to the brazier.", full: true, scale: 1, rings: [], spawnBand: [6, 18], rows };
+  const sh = finish(def, rows, 2, null);
+  const b = sh.board, c = b.center;
+  b.frame = { x: c.x + TP_FRAME.x0, y: c.y + TP_FRAME.y0, w: TP_FRAME.x1 - TP_FRAME.x0 + 1, h: TP_FRAME.y1 - TP_FRAME.y0 + 1 };
+  b.phoneSpan = TIDEPOOL.phoneSpan;
+  const tidal = tpTiles("strip").map(({ x, y }) => (c.y + y) * b.width + c.x + x);
+  return { ...sh, coast: tpCoast, outline: tpOutline, arms: true, lobes: [], tidal };
 }
 
 /** Kite Fell: drawn from the maps thread's shapes, like the home island. */

@@ -3995,7 +3995,11 @@ export class World {
         this.wispGuild.set(w.id, w.guild);
       }
       const pw = st.prev?.wisps.find((q) => q.id === w.id);
-      const jump = !pw || Math.abs(pw.x - w.x) > 2 || Math.abs(pw.y - w.y) > 2;
+      // A wisp that moved too far in one tick to have travelled there (a respawn) is put straight in
+      // its new place. On the ship (run 10) a haul brings one in up to five tiles a tick and the wind
+      // slides it astern as well, so only one that has just come back from away is put straight there.
+      const far = st.ship ? 12 : 2;
+      const jump = !pw || !!pw.away !== !!w.away || Math.abs(pw.x - w.x) > far || Math.abs(pw.y - w.y) > far;
       const x = jump ? w.x : lerp(w.px, w.x);
       const y = jump ? w.y : lerp(w.py, w.y);
       // Held fast in the ground: no bob, sunk low in its ring of stones.

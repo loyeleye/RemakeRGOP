@@ -453,9 +453,9 @@ export class Game {
   tidePuller: number | null = null;
   /** Story (the Cove): her pull draws only the loose wisps within this many tiles of her; null draws the whole pool. */
   tideDraw: number | null = null;
-  /** Story (the Cove): the tide comes in over the flats (Shrine.tidal), or goes out and leaves them wet stone. */
-  setTide(isIn: boolean) {
-    for (const i of this.shrine.tidal ?? []) this.board.tiles[i] = isIn ? Tile.Water : Tile.Floor;
+  /** Story (the Cove): the tide comes in over the flats (Shrine.tidal), or goes out and leaves them wet stone. `only`: just these of them (Tidepool Steps, a step at a time). */
+  setTide(isIn: boolean, only?: Iterable<number>) {
+    for (const i of only ?? this.shrine.tidal ?? []) this.board.tiles[i] = isIn ? Tile.Water : Tile.Floor;
     this.pools = null;
     this.board.version++;
   }

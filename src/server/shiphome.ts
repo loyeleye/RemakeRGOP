@@ -676,6 +676,19 @@ export class ShipRoom {
         ...(this.gutterAt >= 0 ? { gutter: t - this.gutterAt } : {}),
         ...(this.over() ? { over: t - (this.len - S.railTicks) } : {}),
       },
+      // Two meters along the top (Ladi, 24 Nov): how far home still is, and how much light the lamp
+      // has, which is how fast the ship goes. Gone once he is over the rail.
+      ...(this.phase === "playing" && !this.over()
+        ? {
+            opt: {
+              id: "r10",
+              strip: [
+                { label: "To home", n: 0, of: 0, tone: "chalk" as const, bar: Math.max(0, 1 - t / this.len), steady: true },
+                ...(this.speedOn ? [{ label: "Lamp", n: 0, of: 0, tone: "us" as const, bar: this.fire }] : []),
+              ],
+            },
+          }
+        : {}),
     };
   }
 

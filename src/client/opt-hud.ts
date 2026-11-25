@@ -258,14 +258,14 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
       g.fillStyle = T.soon ? "#ffe9c4" : color;
       g.fillRect(bx, by + bh + 3 * k, bw * Math.max(0, Math.min(1, T.share)), 2.5 * k);
     } else if (c.bar !== undefined) {
-      // A bar that runs down: warm while there is plenty, red at the last.
+      // A bar that runs down: warm while there is plenty, red at the last (or, steady, its own colour throughout).
       const bx = cx + 2 * k, bw = cw - 8 * k, by = py - 4 * k, bh = 8 * k, f = Math.max(0, Math.min(1, c.bar));
       g.fillStyle = "rgba(255,255,255,0.14)";
       box(g, bx, by, bw, bh, 4 * k);
       g.fill();
       if (f > 0.01) {
-        g.fillStyle = f > 0.25 ? "#ffcf7a" : "#ff8a5c";
-        g.globalAlpha = f > 0.25 ? 1 : 0.75 + 0.25 * Math.sin(now / 200);
+        g.fillStyle = c.steady ? color : f > 0.25 ? "#ffcf7a" : "#ff8a5c";
+        g.globalAlpha = c.steady || f > 0.25 ? 1 : 0.75 + 0.25 * Math.sin(now / 200);
         box(g, bx, by, Math.max(bh, bw * f), bh, 4 * k);
         g.fill();
         g.globalAlpha = 1;
