@@ -23,7 +23,7 @@ export interface Piece {
    * picture, then Lumi's unlit lantern, then on. The gameplay thread's call, not Ladi's: the pictures
    * are his, the scene's content is draft, so it carries a DRAFT mark.
    */
-  scene?: "kitchen" | "supper" | "evening";
+  scene?: "kitchen" | "supper" | "evening" | "glow" | "dream";
 }
 
 /**
@@ -65,6 +65,59 @@ export const EVENING = {
 };
 
 /**
+ * The dream, before run 1 (the cutscene thread's set 1, production/story/dream/final/README.md): eight
+ * pictures, all that thread's picks; Ladi has seen only the rough storyboard. Wordless until the last:
+ * picture 7 goes to white, then a cut to Lumi standing over him, "You're late." (Ladi, 25 Nov, 1:07 AM;
+ * the first line in the game). Holds are the cutscene thread's.
+ */
+export const DREAM = {
+  fade: 0.7,
+  pictures: [
+    { slot: "dream-1-run", hold: 3 },
+    { slot: "dream-2-stone", hold: 3 },
+    { slot: "dream-3-boat", hold: 3.5 },
+    { slot: "dream-4-hands", hold: 2.5 },
+    { slot: "dream-5-face", hold: 3 },
+    { slot: "dream-6-hesta", hold: 4 },
+    { slot: "dream-7-lantern", hold: 2.5 },
+  ],
+  /** Seconds: picture 7 going to white, the white held, then picture 8 with the line. */
+  white: 1.5,
+  whiteHold: 1,
+  wake: { slot: "dream-8-wake", hold: 3, lead: 0.5, line: { who: ["Lumi"], text: "You're late." } },
+};
+
+/**
+ * The glow test, before run 6 (story/part1-cutscene-brief.md, section 2): seven wide pictures, the
+ * cutscene thread's final set (production/story/part1/glowtest/final/README.md). Six are Ladi's (23 and
+ * 24 Nov); picture 5, Rook proud, is the cutscene thread's pick, not seen by him. Mabry's captions are
+ * the story thread's drafts, unvoiced, not seen by Ladi: she does not say "Lovely." after Lumi, and the
+ * silence in picture 7 ends on one clap from off frame. A `layer` fades a light over the picture under
+ * it (`over`: on top of the previous picture, not after a cut). How long each holds is the cutscene
+ * thread's, stretched in picture 1 so both of Mabry's lines fit.
+ */
+export const GLOW = {
+  /** Seconds: the cross-fade between pictures, each caption, the pause before it. */
+  fade: 0.5,
+  line: 2.2,
+  gap: 0.4,
+  pictures: [
+    { slot: "gt-1-wide", hold: 4, lines: [{ who: ["Mabry"], text: "Nell. Both hands, dear." }, { who: ["Mabry"], text: "Lovely. Next." }] },
+    { slot: "gt-2-lumi-dark", hold: 2.5, lines: [{ who: ["Mabry"], text: "Lumi." }] },
+    { slot: "gt-3-glow-layer", over: true, layer: 1, hold: 1.5 },
+    { slot: "gt-4-flood-nolight", cut: true, hold: 0 },
+    { slot: "gt-4-flood-layer", over: true, layer: 0.4, hold: 3 },
+    { slot: "gt-5-rook-proud", hold: 2 },
+    { slot: "gt-6-hesta", hold: 3.5 },
+    { slot: "gt-7-silence", hold: 2.5 },
+  ] as { slot: string; hold: number; lines?: { who: string[]; text: string }[]; over?: true; layer?: number; cut?: true }[],
+  /** After the clap: the hold, then the fade out with Mabry's last line over it. */
+  clapTail: 0.8,
+  out: 1.6,
+  last: { who: ["Mabry"], text: "...Lovely. Next." },
+};
+
+/**
  * Supper, after run 7 (story/part1-cutscene-brief.md, 1c): one picture, Lumi's glow breathing on it,
  * and Dawn's creed said like grace. The picture is Ladi's ("Looks good", 25 Nov, 1:27 AM) and so are
  * the creed's four lines (25 Nov, 1:11 AM). The glow's breathing is his idea: about 60 to 100 percent
@@ -96,7 +149,8 @@ export const SUPPER = {
 const DRAFT = "Draft: not ruled by Ladi yet.";
 
 export const PART1: Piece[] = [
-  { id: "0", name: "Before run 1", kind: "card", card: { heading: "Before run 1: the dream", summary: "The dream. Then Rook wakes to Lumi standing over him with his staff: \"You're late.\" Cut to the Kindling ground at night.", ruled: "Part ruled: the dream is in the bible, and how he wakes is Ladi's. The dream's pictures are not painted yet." } },
+  // Shown as its eight pictures (DREAM); take `scene` off and it is its card again.
+  { id: "0", name: "Before run 1", kind: "card", scene: "dream", card: { heading: "Before run 1: the dream", summary: "The dream. Then Rook wakes to Lumi standing over him with his staff: \"You're late.\" Cut to the Kindling ground at night.", ruled: "Part ruled: the dream is in the bible, and how he wakes is Ladi's. The dream's pictures are not painted yet." } },
   { id: "1", name: "Run 1, the Kindling", kind: "run", run: 1 },
   { id: "1-2", name: "The kitchen, morning", kind: "card", scene: "kitchen", card: { heading: "The kitchen, morning", summary: "Lumi's lantern on the table. Lumi counting what it still needs, Rook at the stove: \"Next Kindling. We light it together.\" \"If you're not late.\" Rosalind's cup. Lumi at the door with his staff.", ruled: "Ruled: pictures 2 to 4 and the two lines are Ladi's. Picture 1, the lantern, is still the early draft." } },
   { id: "2", name: "Run 2, Lumi's lesson", kind: "run", run: 2 },
@@ -111,7 +165,8 @@ export const PART1: Piece[] = [
   // Walk 3's first state, walk number 6 in engine/walks.ts. Its old card is kept in case it is ever wanted again.
   { id: "5-6a", name: "Walk 3, an ordinary morning", kind: "walk", walk: 6, card: { heading: "Walk 3, first state: an ordinary morning", summary: "Nell, Kes and Moth offer the optional runs. Tapping Maudie at his door turns it into the festival morning and closes them for good.", ruled: "Part ruled: the two states, Maudie's tap and talking to the person are Ladi's. The lines are to be judged in game.", optional: true } },
   { id: "5-6", name: "Walk 3, the festival morning", kind: "walk", walk: 3 },
-  { id: "5-6b", name: "The glow test", kind: "card", card: { heading: "The glow test", summary: "Mabry's shrine: the glow test. Then the alarm at night (its pictures open run 6).", ruled: "Part ruled: the glow test is in the bible; its pictures are being settled with Ladi. The island going down into cloud is Ladi's pick." } },
+  // Shown as its seven pictures (GLOW); take `scene` off and it is its card again.
+  { id: "5-6b", name: "The glow test", kind: "card", scene: "glow", card: { heading: "The glow test", summary: "Mabry's shrine: the glow test. Then the alarm at night (its pictures open run 6).", ruled: "Part ruled: the glow test is in the bible; its pictures are being settled with Ladi. The island going down into cloud is Ladi's pick." } },
   { id: "6", name: "Runs 6 and 7, the dying brazier", kind: "run", run: 6 },
   { id: "7-8a", name: "Supper", kind: "card", scene: "supper", card: { heading: "Supper", summary: "One picture: Rook and Lumi say Dawn's creed, Lumi on the bench beside him.", ruled: "Ruled: the supper is in the bible, and the picture, Lumi's seat and the creed's four lines are Ladi's." } },
   { id: "7-8", name: "Walk 4, night", kind: "walk", walk: 4 },

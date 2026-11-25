@@ -186,6 +186,8 @@ export const VOICE_LINES: Record<string, string> = {
   "Hesta|Leave the far ones, Rook. Hold what's near.": "voice/hesta-leave-far-felt.mp3",
   "Hesta|North one. Then the...": "voice/hesta-north-one-felt.mp3",
   "Hesta|Budge up, Rook.": "voice/hesta-budge-up.mp3",
+  "Nell|Granny!": "voice/nell-granny.mp3",
+  "Sefa|Granny!": "voice/sefa-granny.mp3",
   "Hesta|I'll hold them. You fetch.": "voice/hesta-ill-hold.mp3",
   "Hesta|Let go at the glass. It knows the way.": "voice/hesta-let-go-glass.mp3",
   "Hesta|Still warm, this. Somebody taught you well.": "voice/hesta-still-warm-felt.mp3",
@@ -369,6 +371,7 @@ export const VOICE_LINES: Record<string, string> = {
   // The morning after run 1 (Part 1, 1-2): the two lines Ladi approved (gameplay/voice/final/scenes).
   "Rook|Next Kindling. We light it together.": "voice/scenes.mp3#t=17.10,19.64",
   "Lumi|If you're not late.": "voice/scenes.mp3#t=20.54,21.61",
+  "Lumi|You're late.": "voice/lumi-youre-late.mp3",
 };
 
 /**

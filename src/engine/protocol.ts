@@ -66,6 +66,8 @@ export interface StoryLine {
   still?: StillCue;
   /** Shown but not voiced (Nell and Sefa in Granny's game, Ladi 25 Nov). */
   quiet?: boolean;
+  /** Its voice may start while another is still speaking (Nell and Sefa's "Granny!" as Hesta lands). */
+  over?: boolean;
 }
 
 /** One cell of an optional run's strip: a label over `of` pips with `n` lit, in a tone, and a small badge beside it (e.g. "x2"). */

@@ -65,7 +65,8 @@ export function alarmCards(ready: (leftMs: number) => void, then: (skipped: bool
     kitchen(cam) {
       const K = A.kitchen;
       const lamp = layer("alarm/alarm1-lamp", K.lamp[0], K.lamp[1], "50% 0");
-      const cups = K.cups.map(([x, y], i) => layer(`alarm/alarm1-cup-${i + 1}`, x, y, "50% 0"));
+      // Each cup is cut out along its own outline (25 Nov: the old square cut-outs carried a piece of the next cup), and swings from its hook.
+      const cups = K.cups.map(([x, y], i) => layer(`alarm/alarm1-cup-${i + 1}`, x, y, `${K.hooks[i]![0] - x}px ${K.hooks[i]![1] - y}px`));
       cam.append(layer("alarm/alarm1-kitchen-empty"), lamp, ...cups);
       return {
         start(at) {

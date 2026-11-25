@@ -181,6 +181,8 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Hesta|Leave the far ones, Rook. Hold what's near.": 4.15,
   "Hesta|North one. Then the...": 2.11,
   "Hesta|Budge up, Rook.": 1.73,
+  "Nell|Granny!": 0.89,
+  "Sefa|Granny!": 1.82,
   "Hesta|I'll hold them. You fetch.": 2.3,
   "Hesta|Let go at the glass. It knows the way.": 3.26,
   "Hesta|Still warm, this. Somebody taught you well.": 5.21,
@@ -354,4 +356,5 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Rook|No light goes out alone.": 1.09,
   "Rook|Next Kindling. We light it together.": 2.34,
   "Lumi|If you're not late.": 0.87,
+  "Lumi|You're late.": 0.55,
 };

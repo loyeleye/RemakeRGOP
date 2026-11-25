@@ -87,7 +87,7 @@ export const DYING = {
     readyAfterMs: 800,
     line: { who: "Lumi", text: "Dad. The falls." },
     /** The lamp and the three cups (where each hangs on the 1024 by 768 picture): they start still and build over `build` seconds to `swing` degrees either way, each at its own rate (swings a second). Cups knock at `clinks` (ms). */
-    kitchen: { lamp: [403, 40] as const, cups: [[338, 245], [405, 245], [463, 245]] as const, build: 0.6, swing: 9, rates: [1.7, 2.05, 1.85] as const, lampSwing: 5, lampRate: 1.1, clinks: [700, 1150, 1900, 2450] as const },
+    kitchen: { lamp: [403, 40] as const, cups: [[335, 251], [395, 242], [453, 241]] as const, hooks: [[367, 253], [434, 244], [485, 243]] as const, build: 0.6, swing: 9, rates: [1.7, 2.05, 1.85] as const, lampSwing: 5, lampRate: 1.1, clinks: [700, 1150, 1900, 2450] as const },
     /**
      * The brazier, close: how high its fire is by seconds into the shot (3 strong, 2 low, 1 embers, 0 out;
      * the four pictures cross-fade between marks). `sparks`: `count` of them rise `rise` pixels from

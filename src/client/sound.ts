@@ -209,6 +209,16 @@ export function slipKnock() {
   thump(0.12);
 }
 
+/**
+ * One clap from off frame (the glow test's end): a bright noise crack, a lower body under it, and
+ * the room's echo after it, a little to one side.
+ */
+export function clap(pan = -0.3) {
+  noise(0.5, "bandpass", 1400, 0.09, pan);
+  noise(0.25, "lowpass", 700, 0.14, pan);
+  window.setTimeout(() => noise(0.06, "bandpass", 1100, 0.25, -pan), 90);
+}
+
 /** A pull stopped at the water's edge (the laws of water): a soft, low plop with a little splash. */
 let lastPlop = 0;
 export function bankPlop() {

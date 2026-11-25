@@ -368,6 +368,16 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #gap-scene.morning .pic { opacity: 0; }
 #gap-scene.morning .pic.on { opacity: 1; }
 #gap-scene.morning.out .pic, #gap-scene.morning.out .creed { opacity: 0; }
+/* The dream (before run 1): 4:3 pictures, and the white the last one fades into. */
+#gap-scene.four3 .pic { width: min(100vw, calc(100vh * 4 / 3)); aspect-ratio: 4 / 3; }
+#gap-scene .white { position: absolute; inset: 0; background: #fffaf0; opacity: 0; transition: opacity 1.5s ease-in; z-index: 1; pointer-events: none; }
+#gap-scene .white.on { opacity: 1; }
+#gap-scene .tags, #gap-scene .out, #gap-scene .creed { z-index: 2; }
+/* The glow test (5-6b): wide pictures, and lights faded in over the picture under them. */
+#gap-scene.wide .pic { width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9; }
+#gap-scene.wide .pic.layer { background-color: transparent; mix-blend-mode: screen; }
+#gap-scene.wide.out .pic { transition-duration: 1.6s; }
+#gap-scene.wide.out .creed.stay { opacity: 1; }
 #gap-scene.supper.out .pic, #gap-scene.supper.out .creed { opacity: 0; }
 #gap-scene .glow { display: block; position: absolute; inset: 0; background-size: cover; background-position: center; mix-blend-mode: screen; opacity: 0; }
 #gap-scene .glow.real { opacity: 1; animation: glow-breathe var(--glow-rise, 5s) ease-in-out infinite alternate; }

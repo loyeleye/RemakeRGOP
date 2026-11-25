@@ -411,8 +411,8 @@ export class DyingRoom {
     }
     if (g.tick === DYING.landing.line) this.say(HESTA, "Budge up, Rook.", { player: HESTA_ID }, "key");
     // The first sound from the crowd: two children, one on top of the other.
-    if (g.tick === DYING.landing.line + 3) this.lines.push({ who: "Nell", text: "Granny!" });
-    if (g.tick === DYING.landing.line + 4) this.lines.push({ who: "Sefa", text: "Granny!" });
+    if (g.tick === DYING.landing.line + 3) this.lines.push({ who: "Nell", text: "Granny!", over: true });
+    if (g.tick === DYING.landing.line + 4) this.lines.push({ who: "Sefa", text: "Granny!", over: true });
     if (this.lasted >= S.warmAfter && g.tick === DYING.landing.line + 8) this.say(HESTA, "Still warm, this. Somebody taught you well.", { player: HESTA_ID }, "key");
     if (!this.said.has("glass") && g.wisps.some((w) => !g.away.has(w.id) && g.board.tile(w.pos) === Tile.Rime)) {
       this.said.add("glass");

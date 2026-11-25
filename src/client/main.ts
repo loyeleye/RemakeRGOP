@@ -37,7 +37,7 @@ import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
-import { EVENING, MENU_RUNS, MORNING, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
+import { DREAM, EVENING, GLOW, MENU_RUNS, MORNING, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
 import { card as storyCard, ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import { buildTesting } from "./testing.js";
 import * as sound from "./sound.js";
@@ -433,7 +433,7 @@ function sayLine(l: StoryLine, released = false) {
   void el.offsetWidth;
   el.style.animation = "";
   barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60, (VOICE_SECONDS[`${l.who}|${l.text}`] ?? 0) * 1000 + 400), wisp: l.wisp, ring: l.ring, player: l.player, speaker: speaker || undefined, who: l.who, text: l.text };
-  if (!l.quiet) sound.speak(l.who, l.text, l.who === "Hesta" && l.wisp != null);
+  if (!l.quiet) sound.speak(l.who, l.text, l.who === "Hesta" && l.wisp != null, !!l.over);
   if (!anchored) placeBarks(performance.now());
 }
 
@@ -2000,7 +2000,7 @@ function playPiece(i: number) {
   savePlace(i);
   renderPart1();
   $("chain-card").hidden = true;
-  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : p.scene === "supper" ? supperScene(p) : p.scene === "evening" ? eveningScene(p) : chainCard(p);
+  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : p.scene === "supper" ? supperScene(p) : p.scene === "evening" ? eveningScene(p) : p.scene === "glow" ? glowScene(p) : p.scene === "dream" ? dreamScene(p) : chainCard(p);
   if (p.kind === "walk") return connectStory(playerName(), "pond", p.walk);
   connectStory(playerName(), p.run!);
 }
@@ -2082,11 +2082,11 @@ function chainCard(p: Piece) {
 /** Set by the kitchen scene as it hands on, so run 2 does not open on the lantern a second time. */
 let lanternShown = false;
 /** One caption line of a gap scene: who says it (faces and names) and the words, spoken by each. */
-function sceneLine(el: HTMLElement, line: { who: string[]; text: string }) {
+function sceneLine(el: HTMLElement, line: { who: string[]; text: string }, quiet = false) {
   const faces = line.who.map((w) => faceHtml({ who: w, text: line.text })).join("");
   el.innerHTML = `<span class="who">${faces}<b>${esc(line.who.join(" and "))}</b></span><span>${esc(line.text)}</span>`;
   el.classList.add("on");
-  line.who.forEach((w, i) => sound.speak(w, line.text, false, i > 0));
+  if (!quiet) line.who.forEach((w, i) => sound.speak(w, line.text, false, i > 0));
 }
 
 /**
@@ -2177,6 +2177,125 @@ function eveningScene(p: Piece) {
   });
   at(t, () => el.classList.add("out"));
   at(t + M.fade, () => {
+    if (!here()) return el.remove();
+    chainOn();
+    window.setTimeout(() => (el.classList.remove("on"), window.setTimeout(() => el.remove(), 700)), 100);
+  });
+  el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
+    timers.forEach((x) => clearTimeout(x));
+    el.remove();
+    leave();
+  };
+}
+
+/**
+ * Before run 1, the dream (DREAM in client/part1.ts): seven pictures cross-fading, the last going to
+ * white, then a cut to Lumi over him with the game's first line, then run 1. Tagged: every picture is
+ * the cutscene thread's pick, not seen by Ladi as a final.
+ */
+function dreamScene(p: Piece) {
+  const D = DREAM, el = document.createElement("div");
+  el.id = "gap-scene";
+  el.className = "morning four3";
+  el.innerHTML = `<div class="tags"><span class="nb">Draft</span><span>Pictures not seen by Ladi</span></div><div class="white"></div><p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
+  const pics = D.pictures.map((m) => storyCard(m.slot, "pic"));
+  const wake = storyCard(D.wake.slot, "pic wake");
+  el.prepend(...pics, wake);
+  document.body.appendChild(el);
+  const white = el.querySelector<HTMLElement>(".white")!;
+  white.style.transitionDuration = `${D.white}s`;
+  const timers: number[] = [];
+  const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
+  const here = () => chainAt === pieceIndex(p.id);
+  const caption = el.querySelector<HTMLElement>(".creed")!;
+  requestAnimationFrame(() => requestAnimationFrame(() => (el.classList.add("on"), pics[0]!.classList.add("on"))));
+  let t = D.fade;
+  D.pictures.forEach((m, i) => {
+    if (i > 0) at(t, () => (pics[i - 1]!.classList.remove("on"), pics[i]!.classList.add("on")));
+    t += (i > 0 ? D.fade : 0) + m.hold;
+  });
+  at(t, () => white.classList.add("on"));
+  t += D.white + D.whiteHold;
+  // The cut from white: no fade on the way in, and the white is gone at once.
+  at(t, () => {
+    pics.forEach((x) => x.classList.remove("on"));
+    for (const x of [wake, white]) x.style.transition = "none";
+    wake.classList.add("on");
+    white.classList.remove("on");
+  });
+  at(t + D.wake.lead, () => sceneLine(caption, D.wake.line));
+  t += Math.max(D.wake.hold, D.wake.lead + 2.5);
+  at(t - 0.6, () => caption.classList.remove("on"));
+  at(t, () => ((wake.style.transition = ""), el.classList.add("out")));
+  at(t + D.fade, () => {
+    if (!here()) return el.remove();
+    chainOn();
+    window.setTimeout(() => (el.classList.remove("on"), window.setTimeout(() => el.remove(), 700)), 100);
+  });
+  el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
+    timers.forEach((x) => clearTimeout(x));
+    el.remove();
+    leave();
+  };
+}
+
+/**
+ * Gap 5-6's glow test (GLOW in client/part1.ts): seven wide pictures, the lights faded in over the
+ * picture under them (a screen blend, as the painter built them), Mabry's unvoiced captions over the
+ * first two, then the silence, one clap from off frame, and out to run 6. Tagged: picture 5 and the
+ * captions are not seen by Ladi.
+ */
+function glowScene(p: Piece) {
+  const G = GLOW, el = document.createElement("div");
+  el.id = "gap-scene";
+  el.className = "morning wide";
+  el.innerHTML = `<div class="tags"><span class="nb">Draft</span><span>Picture 5 (Rook) and Mabry's lines not seen by Ladi</span></div><p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
+  const pics = G.pictures.map((m) => {
+    const c = storyCard(m.slot, m.over ? "pic layer" : "pic");
+    if (m.layer) c.style.transitionDuration = `${m.layer}s`;
+    return c;
+  });
+  el.prepend(...pics);
+  document.body.appendChild(el);
+  const timers: number[] = [];
+  const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
+  const here = () => chainAt === pieceIndex(p.id);
+  const caption = el.querySelector<HTMLElement>(".creed")!;
+  let shown: HTMLElement[] = [];
+  const show = (i: number) => {
+    const m = G.pictures[i]!, c = pics[i]!;
+    if (m.over) return (c.classList.add("on"), shown.push(c));
+    if (m.cut) {
+      // A hard cut: no fade either way, then the fades come back for whatever follows.
+      for (const x of [...shown, c]) x.style.transition = "none";
+      shown.forEach((x) => x.classList.remove("on"));
+      c.classList.add("on");
+      const was = shown;
+      requestAnimationFrame(() => requestAnimationFrame(() => [...was, c].forEach((x) => (x.style.transition = ""))));
+    } else {
+      shown.forEach((x) => x.classList.remove("on"));
+      c.classList.add("on");
+    }
+    shown = [c];
+  };
+  requestAnimationFrame(() => requestAnimationFrame(() => (el.classList.add("on"), show(0))));
+  let t = 0.8;
+  G.pictures.forEach((m, i) => {
+    if (i > 0) at(t, () => show(i));
+    t += i === 0 || m.cut ? 0 : m.layer ?? G.fade;
+    let said = 0;
+    for (const line of m.lines ?? []) {
+      at(t + said + G.gap, () => sceneLine(caption, line, true));
+      at(t + said + G.gap + G.line, () => caption.classList.remove("on"));
+      said += G.gap + G.line;
+    }
+    t += Math.max(m.hold, said + G.gap);
+  });
+  at(t, () => sound.clap());
+  t += G.clapTail;
+  at(t, () => (el.classList.add("out"), sceneLine(caption, G.last, true), caption.classList.add("stay")));
+  at(t + G.out + G.line * 0.6, () => caption.classList.remove("on", "stay"));
+  at(t + G.out + G.line * 0.6 + 0.7, () => {
     if (!here()) return el.remove();
     chainOn();
     window.setTimeout(() => (el.classList.remove("on"), window.setTimeout(() => el.remove(), 700)), 100);
@@ -2571,7 +2690,7 @@ function castOf(): Map<number, string> | undefined {
   const m = new Map<number, string>();
   for (const p of room.players) {
     const name = p.name.toLowerCase();
-    const who = ["rook", "lumi", "wick", "moth", "kes", "hesta", "nell", "sefa"].find((n) => name.startsWith(n));
+    const who = ["rook", "lumi", "wick", "moth", "kes", "hesta", "nell", "sefa", "maudie", "mabry", "orrin"].find((n) => name.startsWith(n));
     if (who) m.set(p.id, who);
   }
   if (room.story.run === "The Grand Kindling") m.set(me, "rook");
