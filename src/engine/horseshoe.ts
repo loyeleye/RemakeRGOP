@@ -50,11 +50,20 @@ export const isWater = (x: number, y: number) => (lake(x, y) || cove(x, y)) && o
  * the coast: the edge's own shape, without the Kindling bulge or the spur.
  */
 export function hsOval(x: number, y: number) {
-  const fy = Math.floor(y);
-  let best = Infinity;
-  for (let k = 0; k - 1 <= best && k < 140; k++)
-    for (const row of k ? [fy - k, fy + k] : [fy])
-      for (const p of rim().get(row) ?? []) best = Math.min(best, Math.hypot(p[0] - x, p[1] - y));
+  const fy = Math.floor(y), r = rim();
+  // Squared distances, and one square root at the end: Math.hypot is slow, and this runs for every
+  // point the coast is traced through (it was most of the second building the home island took).
+  let best2 = Infinity;
+  for (let k = 0; k < 140 && (k - 1) * (k - 1) <= best2; k++)
+    for (const row of k ? [fy - k, fy + k] : [fy]) {
+      const pts = r.get(row);
+      if (!pts) continue;
+      for (let i = 0; i < pts.length; i++) {
+        const dx = pts[i]![0] - x, dy = pts[i]![1] - y, d2 = dx * dx + dy * dy;
+        if (d2 < best2) best2 = d2;
+      }
+    }
+  const best = Math.sqrt(best2);
   return (outer(x, y) ? -best : best) - 0.5;
 }
 /** Points along the outer edge, a tenth of a tile apart in latitude, kept by whole latitude. */

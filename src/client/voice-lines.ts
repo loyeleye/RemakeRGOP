@@ -314,6 +314,18 @@ export const VOICE_LINES: Record<string, string> = {
   "Nell|Wall says 2. Beat 2!": "voice/optional.mp3#t=116.49,118.44",
   "Nell|Wall says 3. Beat 3!": "voice/optional.mp3#t=119.34,121.43",
   "Nell|Wall says 4. Beat 4!": "voice/optional.mp3#t=122.33,124.47",
+  // Moss Hollow, Tidepool Steps and Granny's rematch, second batch (same folder, 25 Nov). "Tide's turned"
+  // and "She won't." keep their earlier clips, which runs 4 and 5 already use.
+  "Hesta|Moss Hollow and straight home. Don't let Garrick feed you.": "voice/optional.mp3#t=125.37,129.69",
+  "Hesta|The thick patch hides three, Rook. Count before you cut.": "voice/optional.mp3#t=130.59,134.53",
+  "Hesta|I can count, thank you.": "voice/optional.mp3#t=138.43,140.46",
+  "Lumi|Eight strokes. I'm counting. Don't chip it.": "voice/optional.mp3#t=141.36,144.10",
+  "Lumi|Five left. Choose.": "voice/optional.mp3#t=145.00,146.52",
+  "Lumi|That's eight. I said.": "voice/optional.mp3#t=147.42,148.71",
+  "Lumi|Two goes, Dad. A tide each. Then it's your turn.": "voice/optional.mp3#t=149.61,152.65",
+  "Lumi|I'm not small.": "voice/optional.mp3#t=156.91,157.76",
+  "Rook|It's getting too far ahead!": "voice/run10.mp3#t=6.96,8.34",
+  "Rook|I've lost sight of it.": "voice/run10.mp3#t=9.24,10.33",
 };
 
 /**

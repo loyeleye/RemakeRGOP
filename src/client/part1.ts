@@ -73,14 +73,46 @@ export function loadPlace(): number {
   }
 }
 
+/** The furthest piece he has reached (its index), kept through "Start again", or -1. */
+export function loadFar(): number {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) ?? "null") as { at?: string; far?: string } | null;
+    return Math.max(v?.far ? pieceIndex(v.far) : -1, v?.at ? pieceIndex(v.at) : -1);
+  } catch {
+    return -1;
+  }
+}
+
 export function savePlace(i: number) {
   try {
     if (i < 0) localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, JSON.stringify({ at: PART1[i]!.id }));
+    else localStorage.setItem(KEY, JSON.stringify({ at: PART1[i]!.id, far: PART1[Math.max(i, loadFar())]!.id }));
   } catch {
     /* storage blocked: the place lasts this page only */
   }
 }
+
+/**
+ * The menu buttons that open one run on its own, and the piece that has to be reached before each
+ * shows while Part 1 is under way (brief rule 5: nothing the story has not shown appears early).
+ * The optional runs show from the walk that offers them.
+ */
+export const MENU_RUNS: { button: string; piece: string }[] = [
+  { button: "story", piece: "1" },
+  { button: "story2", piece: "2" },
+  { button: "story3", piece: "3" },
+  { button: "story4", piece: "4" },
+  { button: "story5", piece: "5" },
+  { button: "story6", piece: "6" },
+  { button: "story8", piece: "8" },
+  { button: "story9", piece: "9" },
+  { button: "story10", piece: "10" },
+  { button: "story-o1", piece: "3-4" },
+  { button: "story-o2", piece: "5-6a" },
+  { button: "story-o3c", piece: "5-6a" },
+  { button: "story-o3a", piece: "5-6a" },
+  { button: "story-o3b", piece: "5-6a" },
+];
 
 /** Which piece a finished run is, by its title (runs 6 and 7 are one piece). */
 export function pieceOfRun(title: string): number {

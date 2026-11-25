@@ -37,7 +37,7 @@ import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
-import { OPTIONAL_RUNS, PART1, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
+import { MENU_RUNS, OPTIONAL_RUNS, PART1, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
 import { ENDING, ENDING_CUTS, endingCut, KindlingEnding, lanternCard, setEndingCut } from "./ending.js";
 import * as sound from "./sound.js";
 import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
@@ -809,6 +809,8 @@ function lessonToPond(): boolean {
   fade.className = "fade-black";
   document.body.appendChild(fade);
   requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => fade.classList.add("on"), 2600)));
+  // On as soon as it is fully black (0.8 s after it starts), and back out once the pond has drawn
+  // its first frame, quickly, so the black lasts as little as the building takes (gameplay thread: under a second).
   setTimeout(() => {
     const l = link;
     link = null;
@@ -816,11 +818,15 @@ function lessonToPond(): boolean {
     clearCaptions();
     stopStorySound();
     connectStory(playerName(), "pond");
-    setTimeout(() => {
+    let n = 0;
+    const out = () => {
+      if (++n < 3) return void requestAnimationFrame(out);
+      fade.classList.add("quick");
       fade.classList.remove("on");
-      setTimeout(() => fade.remove(), 900);
-    }, 300);
-  }, 3600);
+      setTimeout(() => fade.remove(), 600);
+    };
+    requestAnimationFrame(out);
+  }, 3420);
   return true;
 }
 
@@ -2038,6 +2044,23 @@ function renderPart1() {
   const at = loadPlace();
   $("part1").textContent = at < 0 ? "Play Part 1" : `Continue Part 1: ${PART1[at]!.name}`;
   $("part1-again").hidden = at < 0;
+  // Once Part 1 is under way, a run's own button waits until the story has reached it (the testing
+  // panel's box shows them all).
+  const far = loadFar(), all = $<HTMLInputElement>("show-runs").checked;
+  for (const r of MENU_RUNS) $(r.button).hidden = !all && far >= 0 && pieceIndex(r.piece) > far;
+}
+{
+  const box = $<HTMLInputElement>("show-runs");
+  const KEY = "lanternfall.showRuns";
+  try {
+    box.checked = localStorage.getItem(KEY) === "1";
+  } catch {}
+  box.onchange = () => {
+    try {
+      localStorage.setItem(KEY, box.checked ? "1" : "0");
+    } catch {}
+    renderPart1();
+  };
 }
 $("part1").onclick = () => playPiece(Math.max(0, loadPlace()));
 $("part1-again").onclick = () => playPiece(0);
@@ -2089,6 +2112,8 @@ $("progress-reset").onclick = () => {
   resetProgress();
   resetOpts();
   resetHints();
+  savePlace(-1);
+  renderPart1();
   renderProgress();
 };
 renderProgress();
