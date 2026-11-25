@@ -551,6 +551,7 @@ export class PondRoom {
       starts.set(id, at);
     });
     const room = new GrannyRoom(this.clock, this.seed, starts);
+    room.eveningNext = this.chain;
     this.endClock();
     const send = this.send;
     const conn = room.connect((m) => send?.(m));

@@ -37,7 +37,7 @@ import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
-import { MENU_RUNS, MORNING, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
+import { EVENING, MENU_RUNS, MORNING, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
 import { card as storyCard, ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import { buildTesting } from "./testing.js";
 import * as sound from "./sound.js";
@@ -1990,7 +1990,7 @@ function playPiece(i: number) {
   savePlace(i);
   renderPart1();
   $("chain-card").hidden = true;
-  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : p.scene === "supper" ? supperScene(p) : chainCard(p);
+  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : p.scene === "supper" ? supperScene(p) : p.scene === "evening" ? eveningScene(p) : chainCard(p);
   if (p.kind === "walk") return connectStory(playerName(), "pond", p.walk);
   connectStory(playerName(), p.run!);
 }
@@ -2131,6 +2131,47 @@ function kitchenScene(p: Piece) {
   });
   el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
     left = true;
+    timers.forEach((x) => clearTimeout(x));
+    el.remove();
+    leave();
+  };
+}
+
+/**
+ * Gap 3-4's evening: its two pictures cross-fading, the two lines as captions with faces and voices,
+ * no taps, then on to walk 2 (the morning walk's styles). Marked draft: nothing in it is Ladi's yet.
+ */
+function eveningScene(p: Piece) {
+  const M = EVENING, el = document.createElement("div");
+  el.id = "gap-scene";
+  el.className = "morning";
+  el.innerHTML = `<div class="tags"><span class="nb">Draft</span><span>Scene and pictures not ruled by Ladi</span></div><p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
+  const pics = M.pictures.map((m) => storyCard(m.slot, "pic"));
+  el.prepend(...pics);
+  document.body.appendChild(el);
+  const timers: number[] = [];
+  const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
+  const here = () => chainAt === pieceIndex(p.id);
+  const caption = el.querySelector<HTMLElement>(".creed")!;
+  requestAnimationFrame(() => requestAnimationFrame(() => (el.classList.add("on"), pics[0]!.classList.add("on"))));
+  let t = M.fade + M.lead;
+  M.pictures.forEach((m, i) => {
+    if (i > 0) at(t, () => (pics[i - 1]!.classList.remove("on"), pics[i]!.classList.add("on")));
+    t += i > 0 ? M.fade : 0;
+    for (const line of m.lines ?? []) {
+      at(t + M.gap, () => sceneLine(caption, line));
+      at(t + M.gap + M.line, () => caption.classList.remove("on"));
+      t += M.gap + M.line;
+    }
+    t += m.hold;
+  });
+  at(t, () => el.classList.add("out"));
+  at(t + M.fade, () => {
+    if (!here()) return el.remove();
+    chainOn();
+    window.setTimeout(() => (el.classList.remove("on"), window.setTimeout(() => el.remove(), 700)), 100);
+  });
+  el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
     timers.forEach((x) => clearTimeout(x));
     el.remove();
     leave();

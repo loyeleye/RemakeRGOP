@@ -32,6 +32,8 @@ export class GrannyRoom {
   private phase: Phase = "countdown";
   /** The reaction still (?nostills in the page leaves it out). */
   stillsOn = true;
+  /** In Part 1's chain the evening scene comes next and says "Best of three. No rocks." / "No promises.", so the end leaves them to it. */
+  eveningNext = false;
   private countdown = 0;
   private game!: Game;
   private rng: Rng;
@@ -582,8 +584,7 @@ export class GrannyRoom {
         { who: LUMI, text: "There's three left." },
         { who: HESTA, text: "Three of you. I can count too." },
         ...(PLAYER_IS_ROOK ? [{ who: LUMI, text: "There were four of us." }] : []),
-        { who: LUMI, text: "Best of three. No rocks." },
-        { who: HESTA, text: "No promises." },
+        ...(this.eveningNext ? [] : [{ who: LUMI, text: "Best of three. No rocks." }, { who: HESTA, text: "No promises." }]),
         ...(this.baits >= GRANNY.baited && PLAYER_IS_ROOK ? [{ who: HESTA, text: "You saw what I was doing. Most don't." }] : []),
       ],
     };

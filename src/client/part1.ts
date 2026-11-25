@@ -23,7 +23,7 @@ export interface Piece {
    * picture, then Lumi's unlit lantern, then on. The gameplay thread's call, not Ladi's: the pictures
    * are his, the scene's content is draft, so it carries a DRAFT mark.
    */
-  scene?: "kitchen" | "supper";
+  scene?: "kitchen" | "supper" | "evening";
 }
 
 /**
@@ -43,6 +43,25 @@ export const MORNING = {
   /** Seconds each line holds, and the pause after it. */
   line: 3.5,
   gap: 0.6,
+};
+
+/**
+ * The evening after run 3 (story/part1-between-runs.md, run 3 to run 4): two pictures, the children's
+ * honey drops by the pond at sunset with Lumi's "Best of three. No rocks." and Hesta's "No promises.",
+ * then the kitchen table at night with nobody in it. Then walk 2. The scene and both lines are the
+ * story thread's draft; the pictures are the cutscene thread's pick on Ladi's word to finish without
+ * waiting (25 Nov), not seen by him. How long each holds is the build's.
+ */
+export const EVENING = {
+  fade: 0.8,
+  pictures: [
+    { slot: "evening-1", hold: 2.5, lines: [{ who: ["Lumi"], text: "Best of three. No rocks." }, { who: ["Hesta"], text: "No promises." }] },
+    { slot: "evening-2", hold: 4.5 },
+  ] as { slot: string; hold: number; lines?: { who: string[]; text: string }[] }[],
+  line: 3.2,
+  gap: 0.6,
+  /** Seconds the first picture holds before anyone speaks. */
+  lead: 1.5,
 };
 
 /**
@@ -83,7 +102,8 @@ export const PART1: Piece[] = [
   { id: "2", name: "Run 2, Lumi's lesson", kind: "run", run: 2 },
   { id: "2-3", name: "Walk 1, the pond", kind: "walk", walk: 1 },
   { id: "3", name: "Run 3, Granny's game", kind: "run", run: 3 },
-  { id: "3-4a", name: "The evening", kind: "card", card: { heading: "Evening", summary: "Two pictures: honey drops at the pond; the kitchen table at night.", ruled: DRAFT } },
+  // Shown as its two pictures (EVENING); take `scene` off and it is its card again.
+  { id: "3-4a", name: "The evening", kind: "card", scene: "evening", card: { heading: "Evening", summary: "Two pictures: honey drops at the pond; the kitchen table at night.", ruled: DRAFT } },
   { id: "3-4", name: "Walk 2, the morning of the job", kind: "walk", walk: 2 },
   { id: "4", name: "Run 4, the job", kind: "run", run: 4 },
   { id: "4-5", name: "The skiff home", kind: "card", card: { heading: "The skiff home", summary: "The skiff comes back to the home landing. Kes is waiting and challenges him. Maudie watches the three of them leave. The skiff crosses to Kite Fell.", ruled: "Part ruled: the race being on Kite Fell is Ladi's. The scene is draft." } },
