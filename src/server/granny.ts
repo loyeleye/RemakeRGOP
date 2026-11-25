@@ -30,6 +30,8 @@ const WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "E
 export class GrannyRoom {
   private send: ((m: ServerMsg) => void) | null = null;
   private phase: Phase = "countdown";
+  /** The reaction still (?nostills in the page leaves it out). */
+  stillsOn = true;
   private countdown = 0;
   private game!: Game;
   private rng: Rng;
@@ -174,7 +176,8 @@ export class GrannyRoom {
     this.dropped = new Set();
     this.phase = "countdown";
     this.countdown = GRANNY.bellTicks;
-    this.say(LUMI, PLAYER_IS_ROOK ? "I'm captain. I picked Dad first." : "I'm captain.", { talk: true });
+    // Still 3.0 under her line (approved for "I picked Dad first.", so only when he is Rook).
+    this.say(LUMI, PLAYER_IS_ROOK ? "I'm captain. I picked Dad first." : "I'm captain.", { talk: true, ...(this.stillsOn && PLAYER_IS_ROOK ? { still: { id: "r3-0" } } : {}) });
     this.endClock();
     this.stop = this.clock.every(TICK_MS, () => this.onTick());
     this.flush();

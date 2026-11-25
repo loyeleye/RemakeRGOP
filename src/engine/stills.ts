@@ -51,6 +51,7 @@ export const STILLS: Record<string, StillCard> = {
   "r1-1": { who: "Hesta at the foot of the north steps, between the foot lamps, one hand cupped to call", faces: "Eyes creased and bright. Brows up. Mouth open, calling." },
   // Over Rook's line and Lumi's answer: the same picture, the caption changing.
   "r2-0": { who: "Lumi holding his staff, too long for her, at the pond's edge. Rook crouched beside her, hands off", faces: "Lumi: eyes on the water, brows down, mouth shut, chin up. Rook: eyes on her, brows up, a small closed smile." },
+  "r3-0": { who: "Lumi in front, pointing back at Rook without looking, Rook behind her. Nell and Sefa shoulders at the edges", faces: "Lumi: eyes ahead, brows level, mouth shut, certain. Rook: brows up, a small smile." },
   // Moss Hollow only, over Garrick's two greeting lines.
   "r4-1": { who: "Garrick, half length, a working keeper on his own ground", faces: "Eyes level. Brows flat. Mouth shut, easy." },
   // Run 8, the Sieve. Faces in the cutscene thread's terms: eyes, brows, mouth.
