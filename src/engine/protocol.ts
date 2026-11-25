@@ -132,6 +132,8 @@ export interface StoryView {
     stranded?: number[];
     /** The Cove: each tide pool (its middle, in tiles) and how many wisps are in it now. */
     pools?: { x: number; y: number; n: number }[];
+    /** Kite Fell (optional run 3c): the mark by each vane (its tile and how near counts), how many wisps are on the wind toward it, and who is standing at it. */
+    vanes?: { x: number; y: number; r: number; n: number; you?: boolean; her?: boolean }[];
   };
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };
