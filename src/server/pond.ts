@@ -159,6 +159,12 @@ export class PondRoom {
   private walkLines = new Map<string, string[]>();
   /** A note for the player once the thing that goes on is tapped, when what's next isn't built. */
   private notBuilt = false;
+  /** Played as part of Part 1's chain: the walk's last tap hands on to the page, which opens what comes next. */
+  chain = false;
+  /** The walk's last tap was made (in the chain). */
+  private done = false;
+  /** An optional run asked for in the walk, for the page to open (counted, so each ask is seen once). */
+  private optional: { id: string; n: number } | null = null;
   /** From walk 2, Rook's door opens the kitchen still (client side): the times he's gone in. */
   private kitchen = 0;
 
@@ -451,10 +457,12 @@ export class PondRoom {
       this.broadcast();
       return;
     }
-    // Walk 2: Nell or Sefa, asked twice, starts the rematch (the optional run).
+    // Walk 2: Nell or Sefa, asked twice, starts the rematch (the optional run, O1): the page opens it, and brings him back here after.
     if (W.n === 2 && (thing.name === NELL || thing.name === SEFA) && (this.taps.get(thing.name) ?? 0) >= 1) {
       this.say(thing.name, "Yes! Granny! Rematch!");
-      return this.startGame(false);
+      this.optional = { id: "o1", n: (this.optional?.n ?? 0) + 1 };
+      this.broadcast();
+      return;
     }
     // From walk 2, his door opens the kitchen: a still with three things to tap (client/kitchen.ts).
     if (W.n >= 2 && thing.name === "house") {
@@ -471,6 +479,12 @@ export class PondRoom {
     this.say(person ? thing.name : "Rook", lines[n % lines.length]!);
     // What goes on from here isn't built yet: say so, once per tap.
     if (W.n !== 1 && thing.name === W.go) {
+      // In Part 1's chain the page goes on from here; on its own, say that nothing is built after it.
+      if (this.chain) {
+        this.done = true;
+        this.broadcast();
+        return;
+      }
       this.notBuilt = true;
       this.lines.push({ who: "", text: `(This is where run ${W.next} would start. It isn't built yet.)`, talk: true });
     }
@@ -565,7 +579,7 @@ export class PondRoom {
   }
 
   storyView(): StoryView {
-    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.kitchen ? { kitchen: this.kitchen } : {}), ...(this.leavingAt >= 0 ? { leaving: true } : {}) } };
+    return { run: POND.title, movement: 0, title: this.walkDef.n === 1 ? POND.title : this.walkDef.title, ring: null, mark: null, kes: 0, rival: null, note: "", pond: { lantern: this.spots.lantern, walk: this.walkDef.n, light: this.walkDef.light, ...(this.kitchen ? { kitchen: this.kitchen } : {}), ...(this.leavingAt >= 0 ? { leaving: true } : {}), ...(this.done ? { done: true } : {}), ...(this.optional ? { optional: this.optional } : {}) } };
   }
 
   view(): RoomView {

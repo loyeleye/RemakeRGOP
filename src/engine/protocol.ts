@@ -223,7 +223,11 @@ export interface StoryView {
   };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */
   /** kitchen: how many times Rook has gone in his door this walk (from walk 2); a rise opens the kitchen still. */
-  pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "night" | "dusk"; kitchen?: number };
+  pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "night" | "dusk"; kitchen?: number;
+    /** Part 1's chain: the walk's last tap was made, and the page goes on. */
+    done?: boolean;
+    /** An optional run asked for in the walk (counted, so each ask opens it once). */
+    optional?: { id: string; n: number } };
 }
 
 export type ClientMsg =

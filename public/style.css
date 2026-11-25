@@ -346,3 +346,19 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 @media (max-width: 700px) {
   body.opt-call #call { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 64px); left: 10px; right: auto; }
 }
+
+/* Part 1 played through (client/part1.ts): a card stands in for a scene not built yet. */
+#chain-card { position: fixed; inset: 0; z-index: 60; background: #0b0a12; display: grid; place-items: center; padding: 16px; color: #e9dcc4; overflow-y: auto; }
+#chain-card[hidden] { display: none; }
+#chain-card .card { max-width: 520px; width: 100%; display: grid; gap: 14px; text-align: center; animation: still-in 0.35s ease-out; }
+#chain-card .tags { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+#chain-card .tags span { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; border: 1px solid #e9dcc455; opacity: 0.8; }
+#chain-card .tags .nb { border-color: #ffb46a; color: #ffcf9a; }
+#chain-card h2 { margin: 0; font: 600 clamp(22px, 4.6vw, 32px)/1.2 Georgia, serif; }
+#chain-card p { margin: 0; line-height: 1.5; }
+#chain-card .ruled { font-size: 13px; opacity: 0.6; }
+#chain-card .opts { display: grid; gap: 8px; text-align: left; background: #ffffff0d; border-radius: 12px; padding: 12px; }
+#chain-card .opts b { font-size: 13px; opacity: 0.7; }
+#chain-card .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.chain-row { display: flex; gap: 8px; }
+.chain-row > button:first-child { flex: 1; }

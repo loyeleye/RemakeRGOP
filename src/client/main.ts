@@ -37,6 +37,7 @@ import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
+import { OPTIONAL_RUNS, PART1, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
 import { ENDING, ENDING_CUTS, endingCut, KindlingEnding, lanternCard, setEndingCut } from "./ending.js";
 import * as sound from "./sound.js";
 import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
@@ -84,6 +85,7 @@ function onServer(m: ServerMsg) {
       openKitchen();
       noteProgress();
       noteOpt();
+      chainWatch();
       render();
       break;
     }
@@ -152,6 +154,7 @@ let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRo
 /** The walkable map, at the speed on trial: ?walkspeed=1.5, 2 or 2.5 shortens the map's beat; with &only=rook only his stride is longer. */
 function pondRoom(walk: number) {
   const r = new PondRoom(undefined, undefined, walk);
+  r.chain = chainAt >= 0 && chainBack === null;
   const q = new URLSearchParams(location.search), f = Number(q.get("walkspeed"));
   if ([1.5, 2, 2.5].includes(f)) {
     if (q.get("only") === "rook") r.rookStride = f;
@@ -624,7 +627,7 @@ function botLevel(): "easy" | "medium" | "hard" {
   return v === "easy" || v === "hard" ? v : "medium";
 }
 
-function leave() {
+function leave(keepUrl = false) {
   const l = link;
   link = null;
   l?.close();
@@ -642,12 +645,18 @@ function leave() {
   skyBase = null;
   shipCut(false);
   stopStorySound();
-  try {
-    history.replaceState(null, "", location.pathname);
-  } catch {
-    /* sandboxed page */
+  if (!keepUrl) {
+    // Back to the menu: Part 1's chain is left (its place is kept).
+    chainAt = -1;
+    chainBack = null;
+    try {
+      history.replaceState(null, "", location.pathname);
+    } catch {
+      /* sandboxed page */
+    }
   }
   render();
+  renderPart1();
 }
 
 // ------------------------------------------------------------------ screens
@@ -961,7 +970,7 @@ let ending: KindlingEnding | null = null;
 /** The Kindling's ending: the total, how bright the sky got, and the last lines, one by one. */
 function renderStoryEnd() {
   const st = room!.story!, end = st.end;
-  $("again").textContent = "Play again";
+  $("again").textContent = chainAgainLabel() ?? "Play again";
   $("again").hidden = false;
   // Run 1 ends on the cutscene in place of this panel.
   if (end && end.sky !== undefined) {
@@ -971,8 +980,9 @@ function renderStoryEnd() {
       ending = new KindlingEnding(end, {
         html: (l) => `${faceHtml(l)}<span><b class="${l.who.toLowerCase()}">${esc(l.who)}</b> ${lineHtml(l.text)}</span>`,
         speak: (l) => sound.speak(l.who, l.text, false),
-        playAgain: () => link?.send({ t: "lobby" }),
-        leave,
+        playAgain: () => (chainAt >= 0 ? chainOn() : link?.send({ t: "lobby" })),
+        leave: () => leave(),
+        ...(chainAt >= 0 ? { againLabel: "Continue" } : {}),
       });
     }
     return;
@@ -1197,7 +1207,9 @@ function shipDone() {
     shipLeft = null;
     const f = shipFade;
     shipFade = null;
-    leave();
+    // In Part 1's chain, nothing between it and the Offering.
+    if (chainAt >= 0) chainOn();
+    else leave();
     setTimeout(() => f?.classList.remove("on"), 200);
     setTimeout(() => f?.remove(), 1100);
   }, 1600);
@@ -1920,6 +1932,122 @@ $("story-continue").onclick = () => {
   // What comes after run 10 isn't built: the latest walk reached.
   connectStory(playerName(), "pond", Math.max(1, p.walk));
 };
+// ------------------------------------------------------------------ Part 1, played through
+
+/** The piece of Part 1 on screen (its index in PART1), or -1 outside the chain. */
+let chainAt = -1;
+/** An optional run opened from a walk or a walk's card: the piece to come back to. */
+let chainBack: number | null = null;
+/** The walk's hand-on and optional asks already acted on. */
+let chainDone = false;
+let chainOptN = 0;
+
+/** Open a piece of Part 1: a run, a walk, or a card for what is not built yet. */
+function playPiece(i: number) {
+  const p = PART1[i];
+  if (!p) return leave();
+  if (link) leave(true);
+  chainAt = i;
+  chainBack = null;
+  chainDone = false;
+  chainOptN = 0;
+  savePlace(i);
+  renderPart1();
+  $("chain-card").hidden = true;
+  if (p.kind === "card") return chainCard(p);
+  if (p.kind === "walk") return connectStory(playerName(), "pond", p.walk);
+  connectStory(playerName(), p.run!);
+}
+
+/** On to the next piece. */
+function chainOn() {
+  playPiece(chainAt + 1);
+}
+
+/** Back from an optional run to the piece it was opened from. */
+function chainReturn() {
+  const i = chainBack ?? chainAt;
+  playPiece(i);
+}
+
+/** What the results card's main button does in the chain (null outside it). */
+function chainAgainLabel(): string | null {
+  if (chainAt < 0) return null;
+  if (chainBack !== null) return "Back to the walk";
+  // Run 2 not won: it is played again (won, it goes on into the walk by itself).
+  if (room?.story?.run === "Lumi's lesson") return "Try again";
+  return "Continue";
+}
+
+/** Keeps the saved place with what is on screen (a walk starts its run, run 2 goes on into walk 1), and acts on a walk's last tap and its optional asks. */
+function chainWatch() {
+  if (chainAt < 0 || chainBack !== null) return;
+  const st = room?.story;
+  if (!st) return;
+  const pond = st.pond;
+  if (pond?.walk) {
+    const i = pieceOfWalk(pond.walk);
+    if (i >= 0 && i !== chainAt) (chainAt = i), (chainDone = false), (chainOptN = 0), savePlace(i), renderPart1();
+    if (pond.done && !chainDone) {
+      chainDone = true;
+      window.setTimeout(() => chainAt >= 0 && chainOn(), 1400);
+    }
+    if (pond.optional && pond.optional.n > chainOptN) {
+      chainOptN = pond.optional.n;
+      const id = pond.optional.id as "o1";
+      window.setTimeout(() => chainOptional(id), 1200);
+    }
+    return;
+  }
+  const i = st.run ? pieceOfRun(st.run) : -1;
+  if (i >= 0 && i !== chainAt) (chainAt = i), savePlace(i), renderPart1();
+}
+
+/** An optional run, from a walk or its card: it comes back to the same piece. */
+function chainOptional(id: "o1" | "o2" | "o3a" | "o3b" | "o3c") {
+  const back = chainAt;
+  if (link) leave(true);
+  chainAt = back;
+  chainBack = back;
+  $("chain-card").hidden = true;
+  connectStory(playerName(), id);
+}
+
+/** A card for a piece that is not built: its heading, what it will be, how much is ruled, and Continue. */
+function chainCard(p: Piece) {
+  const c = p.card!, el = $("chain-card");
+  const opts = c.optional
+    ? `<div class="opts"><b>Offered here (until Maudie's tap):</b>${OPTIONAL_RUNS.map((o) => `<button class="ghost opt" data-id="${o.id}">${esc(o.label)} <span class="soon">${esc(o.who)}</span></button>`).join("")}</div>`
+    : "";
+  el.innerHTML = `<div class="card"><div class="tags"><span class="nb">Not built yet</span><span>Draft</span><span>Part 1, ${esc(p.id)}</span></div><h2>${esc(c.heading)}</h2><p>${esc(c.summary)}</p><p class="ruled">${esc(c.ruled)}</p>${opts}<div class="btns"><button class="big go">${c.end ? "End of Part 1" : "Continue"}</button><button class="ghost out">Leave</button></div></div>`;
+  el.hidden = false;
+  el.querySelector<HTMLButtonElement>(".go")!.onclick = () => {
+    if (!c.end) return chainOn();
+    el.hidden = true;
+    leave();
+  };
+  el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
+    el.hidden = true;
+    leave();
+  };
+  el.querySelectorAll<HTMLButtonElement>(".opt").forEach((b) => (b.onclick = () => chainOptional(b.dataset.id as "o1")));
+}
+
+/** The menu's Part 1 buttons: Play, or Continue with the piece's name, and Start again. */
+function renderPart1() {
+  const at = loadPlace();
+  $("part1").textContent = at < 0 ? "Play Part 1" : `Continue Part 1: ${PART1[at]!.name}`;
+  $("part1-again").hidden = at < 0;
+}
+$("part1").onclick = () => playPiece(Math.max(0, loadPlace()));
+$("part1-again").onclick = () => playPiece(0);
+renderPart1();
+{
+  // ?part1=<piece>: straight into Part 1 at that piece (its id in client/part1.ts, such as 5-6 or 9-10).
+  const at = new URLSearchParams(location.search).get("part1");
+  if (at !== null && pieceIndex(at) >= 0) window.setTimeout(() => playPiece(pieceIndex(at)), 0);
+}
+
 $<HTMLSelectElement>("walk-pick").replaceChildren(
   ...WALKS.map((w) => {
     const o = document.createElement("option");
@@ -2023,10 +2151,15 @@ for (const g of [0, 1, 2, 3] as Guild[]) {
   $(`bot-${g}`).onclick = () => link?.send({ t: "bot", guild: g, level: botLevel() });
   $(`unbot-${g}`).onclick = () => link?.send({ t: "bot", guild: g, remove: true });
 }
-$("again").onclick = () => link?.send({ t: "lobby" });
-$("leave").onclick = leave;
-$("leave2").onclick = leave;
-$("leave3").onclick = leave;
+$("again").onclick = () => {
+  const how = chainAgainLabel();
+  if (how === "Continue") return chainOn();
+  if (how === "Back to the walk") return chainReturn();
+  link?.send({ t: "lobby" });
+};
+$("leave").onclick = () => leave();
+$("leave2").onclick = () => leave();
+$("leave3").onclick = () => leave();
 $("share").onclick = async () => {
   const url = `${location.origin}${location.pathname}?room=${room?.code}`;
   try {

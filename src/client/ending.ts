@@ -151,6 +151,8 @@ export interface EndingHooks {
   speak(l: StoryLine): void;
   playAgain(): void;
   leave(): void;
+  /** The title card's main button, if not "Play again" (Part 1's chain: "Continue"). */
+  againLabel?: string;
 }
 
 export class KindlingEnding {
@@ -199,7 +201,7 @@ export class KindlingEnding {
     add("out", Object.assign(document.createElement("div"), { className: "black" }));
     const title = document.createElement("div");
     title.className = "title";
-    title.innerHTML = `<h1>Lanternfall</h1><div class="btns"><button class="big again">Play again</button><button class="ghost leave">Leave</button></div>`;
+    title.innerHTML = `<h1>Lanternfall</h1><div class="btns"><button class="big again">${hooks.againLabel ?? "Play again"}</button><button class="ghost leave">Leave</button></div>`;
     title.querySelector<HTMLButtonElement>(".again")!.onclick = () => hooks.playAgain();
     title.querySelector<HTMLButtonElement>(".leave")!.onclick = () => hooks.leave();
     add("title", title);
