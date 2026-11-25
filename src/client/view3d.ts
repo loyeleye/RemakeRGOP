@@ -4260,7 +4260,7 @@ function drawRescueHud(g: CanvasRenderingContext2D, cam: Camera, st: DrawState, 
   const H = RESCUE_HUD, n = r.boats.length;
   // Fitted between the corner buttons (and clear of the little map on a small screen).
   const room = cam.w - (cam.compact ? 230 : 150), wide = H.bar + 18 + n * H.cell + (n - 1) * H.gap + 24;
-  const k = Math.max(0.62, Math.min(1.02, room / wide)), W = wide * k, x0 = Math.max(60, (cam.w - W) / 2 - (cam.compact && cam.w > cam.h ? 30 : 0)), y0 = 4, hgt = 57 * k;
+  const k = Math.max(0.62, Math.min(1.02, room / wide)), W = wide * k, x0 = Math.max(52, Math.min((cam.w - W) / 2 - (cam.compact && cam.w > cam.h ? 30 : 0), cam.w - 112 - W)), y0 = 4, hgt = 57 * k;
   g.save();
   g.fillStyle = "rgba(10,8,20,0.6)";
   roundRect(g, x0, y0, W, hgt, 12 * k);
@@ -4336,6 +4336,8 @@ function drawRescueHud(g: CanvasRenderingContext2D, cam: Camera, st: DrawState, 
   }
   // Lines that must land, under the strip.
   let cy = y0 + hgt + 8;
+  // On a phone held upright the little map has the top right corner: the lines keep to its left.
+  const tall = cam.compact && cam.h > cam.w, midX = tall ? (cam.w - 132) / 2 : cam.w / 2, maxW = tall ? cam.w - 160 : cam.w - 60;
   const fs = Math.max(13, Math.min(18, cam.w / 44));
   for (const [i, text] of (r.caption ?? []).entries()) {
     g.font = `${i === 0 ? 700 : 500} ${fs}px system-ui, sans-serif`;
@@ -4344,15 +4346,15 @@ function drawRescueHud(g: CanvasRenderingContext2D, cam: Camera, st: DrawState, 
     const words = text.split(" "), rows: string[] = [];
     for (const w of words) {
       const last = rows[rows.length - 1];
-      if (last !== undefined && g.measureText(`${last} ${w}`).width <= cam.w - 60) rows[rows.length - 1] = `${last} ${w}`;
+      if (last !== undefined && g.measureText(`${last} ${w}`).width <= maxW) rows[rows.length - 1] = `${last} ${w}`;
       else rows.push(w);
     }
     const tw = Math.max(...rows.map((t) => g.measureText(t).width)) + 26, th = rows.length * (fs + 5) + 10;
     g.fillStyle = "rgba(10,8,20,0.72)";
-    roundRect(g, cam.w / 2 - tw / 2, cy, tw, th, 10);
+    roundRect(g, midX - tw / 2, cy, tw, th, 10);
     g.fill();
     g.fillStyle = i === 0 ? "#ffe9c4" : "#d9cfff";
-    rows.forEach((t, j) => g.fillText(t, cam.w / 2, cy + 6 + (j + 1) * (fs + 5) - 6));
+    rows.forEach((t, j) => g.fillText(t, midX, cy + 6 + (j + 1) * (fs + 5) - 6));
     cy += th + 6;
   }
   // Until his first wisp is in: which one, and where it goes.
