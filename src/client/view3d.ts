@@ -4305,7 +4305,10 @@ export class World {
       // Lantern sits up and to the side of the figure, where the staff head is.
       const side = new THREE.Vector3(-0.38, 1.74, 0.07).applyAxisAngle(new THREE.Vector3(0, 1, 0), rig.facing);
       rig.lantern.position.copy(side);
-      rig.lantern.scale.setScalar(0.9 + Math.sin(time * 7 + p.id) * 0.06);
+      // Kes's own staff is long and held across her: a smaller, fainter glow, so that it does not wash her out (cast thread).
+      const small = rig.cast === "kes";
+      rig.lantern.scale.setScalar((small ? 0.5 : 0.9) + Math.sin(time * 7 + p.id) * 0.06);
+      rig.lantern.material.opacity = small ? 0.55 : 1;
 
       const beam = rig.beam;
       let target = p.beam !== null ? wispPos.get(p.beam) : undefined;
