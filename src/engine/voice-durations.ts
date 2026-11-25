@@ -351,4 +351,6 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Rook|What the dark asks for, we give with open hands.": 2.78,
   "Lumi|No light goes out alone.": 1.23,
   "Rook|No light goes out alone.": 1.09,
+  "Rook|Next Kindling. We light it together.": 2.34,
+  "Lumi|If you're not late.": 0.87,
 };

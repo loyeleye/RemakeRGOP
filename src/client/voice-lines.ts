@@ -365,6 +365,9 @@ export const VOICE_LINES: Record<string, string> = {
   "Rook|What the dark asks for, we give with open hands.": "voice/scenes.mp3#t=8.70,11.68",
   "Lumi|No light goes out alone.": "voice/scenes.mp3#t=12.58,14.01",
   "Rook|No light goes out alone.": "voice/scenes.mp3#t=14.91,16.20",
+  // The morning after run 1 (Part 1, 1-2): the two lines Ladi approved (gameplay/voice/final/scenes).
+  "Rook|Next Kindling. We light it together.": "voice/scenes.mp3#t=17.10,19.64",
+  "Lumi|If you're not late.": "voice/scenes.mp3#t=20.54,21.61",
 };
 
 /**
