@@ -410,4 +410,6 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Moth|And Marit says the tide owes her eight. Her words.": 2.72,
   "Mabry|The fire's steady this morning. And your Lumi. Such a light in that child.": 4.57,
   "Manu|My mother won't get in a boat before the children do. Make her.": 3.82,
+  "Maudie|Your Granny was up before the birds. Shooed me off her step.": 3.91,
+  "Maudie|Nobody shoos me.": 3.02,
 };

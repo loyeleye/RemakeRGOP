@@ -429,6 +429,9 @@ export const VOICE_LINES: Record<string, string> = {
   "Moth|And Marit says the tide owes her eight. Her words.": "voice/part1-late-2.mp3#t=14.69,17.61",
   "Mabry|The fire's steady this morning. And your Lumi. Such a light in that child.": "voice/part1-late-2.mp3#t=18.51,23.28",
   "Manu|My mother won't get in a boat before the children do. Make her.": "voice/part1-late-2.mp3#t=24.18,28.20",
+  // Maudie, 26 Nov: Gemini, the Laomedeia voice, Ladi's pick.
+  "Maudie|Your Granny was up before the birds. Shooed me off her step.": "voice/part1-late-2.mp3#t=29.10,33.21",
+  "Maudie|Nobody shoos me.": "voice/part1-late-2.mp3#t=34.11,37.33",
 };
 
 /**
