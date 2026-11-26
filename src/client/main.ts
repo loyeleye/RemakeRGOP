@@ -1584,7 +1584,8 @@ function act(m: Omit<Extract<ClientMsg, { t: "act" }>, "t">) {
 }
 
 /** What a tap at a screen point means: a wisp (with a generous radius) or a tile to walk to. */
-function targetAt(sx: number, sy: number): { action: Action; wisp: number | null } | null {
+/** What a tap at this spot does; `tap` is false for a hover, which only asks. */
+function targetAt(sx: number, sy: number, tap = false): { action: Action; wisp: number | null } | null {
   if (!snap || !room) return null;
   const t = cam.toTile(sx, sy);
   const p = snap.players.find((q) => q.id === me);
@@ -1647,6 +1648,12 @@ function targetAt(sx: number, sy: number): { action: Action; wisp: number | null
     const place = world?.placeAt(sx, sy);
     const on = place === "house" ? home.house && { x: home.house.x + Math.floor(home.house.w / 2), y: home.house.y + Math.floor(home.house.h / 2) } : place ? props.find((q) => q.kind === place) : null;
     if (on) return { action: { kind: "walk", to: { x: on.x, y: on.y } }, wisp: null };
+  }
+  // Run 10: a tap on the ferryman (about his middle) does not walk Rook anywhere; it is answered, and he does not turn.
+  const ferry = ferryAt();
+  if (ferry) {
+    const c = cam.toScreen(ferry.x, ferry.y, 0.9);
+    if (Math.hypot(c.x - sx, c.y - sy) <= Math.max(bigTapRadius(), cam.scale * 0.8)) return tap && ferryTold(), null;
   }
   const tile: Pt = { x: Math.floor(t.x), y: Math.floor(t.y) };
   const board = shrineFor(room.shrine, room.teams).board;
@@ -1753,7 +1760,7 @@ const endPointer = (e: PointerEvent) => {
     setCallMode(false);
     return;
   }
-  const t = targetAt(x, y);
+  const t = targetAt(x, y, true);
   if (t) {
     noteTap(t.wisp, x, y);
     act({ action: t.action });
@@ -2732,8 +2739,32 @@ requestAnimationFrame(frame);
 /** The watchers drawn last frame (Lumi and Hesta on the rim in run 1). */
 let lastWatchers: DrawState["watchers"];
 /** Where a speaker's head is on the field, for a bubble over them: a watcher, else a player playing them. */
+/** Run 10: where the ferryman stands in the prow, in board tiles (the middle of him, not a tile's corner). */
+function ferryAt(): { x: number; y: number } | null {
+  if (!room?.story?.ship) return null;
+  const c = shrineFor(room.shrine, room.teams).board.center;
+  return { x: c.x + 0.5 + SHIP.figure[0], y: c.y + 0.5 + SHIP.figure[1] };
+}
+
+/** A tap on the ferryman: he keeps his back to us and says nothing; a line of narration sits over him instead (Ladi, 26 Nov). */
+function ferryTold() {
+  const el = $("bark");
+  el.className = "bark tell";
+  el.querySelector("img")!.hidden = true;
+  el.querySelector("span")!.innerHTML = lineHtml(SHIP.ferryTap);
+  el.hidden = false;
+  el.style.animation = "none";
+  void el.offsetWidth;
+  el.style.animation = "";
+  barks.bark = { el, until: performance.now() + 3200, speaker: "the ferryman" };
+}
+
 function speakerAt(who: string): { x: number; y: number; h: number } | null {
   const cast = who.toLowerCase();
+  if (cast === "the ferryman") {
+    const f = ferryAt();
+    return f && { ...f, h: 2.1 * (CAST_SCALE.ferryman ?? 1) };
+  }
   const head = 2.1 * (CAST_SCALE[cast] ?? 1);
   const w = lastWatchers?.find((q) => q.cast === cast);
   if (w) return { x: w.x, y: w.y, h: head };
@@ -3106,7 +3137,7 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   /** Show a story line as if the run said it (for checking dialog and barks). */
   say: (l: StoryLine) => sayLine(l),
   /** What a click at this screen point would do. */
-  tap: (x: number, y: number) => targetAt(x, y),
+  tap: (x: number, y: number) => targetAt(x, y, true),
   /** The story run in the page, for jumping to its end in tests. */
   story: () => storyRoom,
   /** The camera (for pictures: set follow false and cx, cy to look somewhere). */

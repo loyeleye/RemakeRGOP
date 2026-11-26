@@ -37,7 +37,7 @@ function stage(g: Game, w: Wisp, x: number, y: number) {
 }
 
 describe("Run 10: the ship home", () => {
-  it("the board is a deck with the lamp amidships, the cloud sea round it where only wisps go, and the man at the stern", () => {
+  it("the board is a deck with the lamp amidships, the cloud sea round it where only wisps go, and the ferryman off it in the prow", () => {
     const sh = shrineById(SHIP.shrine), b = sh.board, c = b.center;
     expect(sh.deck).toBe(true);
     expect(b.tile(c)).toBe(Tile.Brazier);
@@ -47,7 +47,10 @@ describe("Run 10: the ship home", () => {
         if (onDeck(x, y)) expect(t === Tile.Edge || t === Tile.Well).toBe(false);
         else expect(t).toBe(inSea(x, y) ? Tile.Well : Tile.Edge);
       }
-    expect((sh.props ?? []).some((p) => p.kind === "ship-figure" && p.x === c.x + SHIP.figure[0] && p.y === c.y + SHIP.figure[1])).toBe(true);
+    // The ferryman stands in the prow, off the deck: nobody can walk to him or stand beside him.
+    expect((sh.props ?? []).some((p) => p.kind === "ship-figure")).toBe(false);
+    expect(onDeck(Math.round(SHIP.figure[0]), Math.round(SHIP.figure[1]))).toBe(false);
+    expect(SHIP.figure[1]).toBeLessThan(-SHIP_DECK.hl - 1);
     // The wisps' lanes are out in the cloud on both sides, from `off[0]` to `off[1]` tiles past the rail.
     expect(shipLanes()).toHaveLength(2 * (SHIP.off[1] - SHIP.off[0] + 1));
     for (const x of shipLanes()) {

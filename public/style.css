@@ -161,6 +161,7 @@ b.kes, .bark.kes span b { color: #c9a2ff; }
 .bark.static img, .bark.static span { opacity: 0.22; filter: grayscale(1) contrast(2.4); }
 @keyframes static-jump { 0% { background-position: 0 0, 0 0; } 33% { background-position: 23px 41px, -11px 19px; } 66% { background-position: -17px 9px, 31px -7px; } }
 .bark.chip { top: 64px; right: 12px; left: auto; transform: none; }
+.bark.tell { padding: 5px 14px; font-style: italic; color: #e8e0ff; }
 body.touch .bark.chip { top: 58px; left: 12px; right: auto; }
 #end-lines img.face { width: 28px; height: 28px; border-radius: 50%; vertical-align: middle; margin-right: 6px; object-fit: cover; }
 .soon { font-size: 11px; opacity: 0.7; border: 1px solid currentColor; border-radius: 6px; padding: 0 4px; margin-left: 4px; vertical-align: middle; }
