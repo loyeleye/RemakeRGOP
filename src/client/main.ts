@@ -10,7 +10,7 @@ import { LessonRoom } from "../server/lesson.js";
 import { GrannyRoom, lineTicks } from "../server/granny.js";
 import { stillMs } from "../engine/stills.js";
 import { StillsPanel } from "./stills.js";
-import { alarmCards } from "./alarm.js";
+import { alarmCards, riseCard } from "./alarm.js";
 import { RaceRoom } from "../server/race.js";
 import { DyingRoom } from "../server/dying.js";
 import { SieveRoom } from "../server/sieve.js";
@@ -1431,11 +1431,13 @@ function dyingZoom(d: NonNullable<StoryView["dying"]> | undefined, board: Board)
 /** The held pictures: the three of the landing, and the island clear of the cloud. Plain dark cards with the picture's name until the cutscene thread's pictures exist. */
 /** The landing's drawn pictures, fetched and kept as the run opens, so each is there the moment it is called. */
 const dyingArt = new Map<string, HTMLImageElement>();
+/** The end of run 7 while it is up (alarm.ts riseCard). */
+let risen: ReturnType<typeof riseCard> | null = null;
 function dyingCard(d: NonNullable<StoryView["dying"]> | undefined) {
   const el = $("still");
   // Fetched as the run opens, so a picture is there the moment it is called.
   if (d && !dyingArt.size)
-    for (const f of [...DYING.stills.files, DYING.risen.file]) {
+    for (const f of DYING.stills.files) {
       const img = new Image();
       img.alt = "";
       img.src = `stills/${f}.webp`;
@@ -1445,6 +1447,16 @@ function dyingCard(d: NonNullable<StoryView["dying"]> | undefined) {
   const n = !d ? -1 : d.still !== undefined ? d.still : d.part === "risen" ? 3 : -1;
   if (n === dyingStill) return;
   dyingStill = n;
+  risen?.stop();
+  risen = null;
+  // The island clearing the cloud is the alarm's island shot the other way, moving (Ladi, 26 Nov).
+  if (n === 3) {
+    el.hidden = true;
+    const sec = ((d!.stillTicks ?? DYING.risen.ticks) * tickMs) / 1000;
+    risen = riseCard(sec);
+    risen.el.style.animationDuration = `${sec}s`;
+    return;
+  }
   el.hidden = n < 0;
   if (n < 0) return;
   const name = n === 3 ? DYING.risen.name : DYING.stills.names[n]!;
@@ -3207,6 +3219,8 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   story: () => storyRoom,
   /** The camera (for pictures: set follow false and cx, cy to look somewhere). */
   cam: () => cam,
+  /** Play the end of run 7 (the island rising) on its own, for this many seconds. */
+  rise: (sec = 6) => riseCard(sec).el.style.setProperty("animation-duration", `${sec}s`),
   /** What became of each voiced line (said, waited, let go). */
   voices: () => sound.voiceLog,
 };

@@ -123,70 +123,7 @@ export function alarmCards(ready: (leftMs: number) => void, then: (skipped: bool
     },
     // The island going down: its heart flickers and dies, then it drops, shaking, shedding rock,
     // through three layers of cloud that drift at their own speeds.
-    descent(cam) {
-      const D = A.descent;
-      const isle = document.createElement("div");
-      isle.className = "isle";
-      const w = D.island.size[0] * D.island.scale, h = D.island.size[1] * D.island.scale, left = (W - w) / 2;
-      const bright = layer("alarm/shot4/island-bright");
-      for (const img of [layer("alarm/shot4/island-dim"), bright]) (img.style.width = `${w}px`), (img.style.height = `${h}px`), isle.append(img);
-      // The waterfall, down the island's near face and going down with it: one strip repeated to below the screen, its water running.
-      const fall = document.createElement("div");
-      fall.className = "fall";
-      const strip = layer("alarm/shot4/waterfall-strip");
-      fall.style.backgroundImage = `url(${strip.src})`;
-      fall.style.backgroundSize = `${D.fall.wide * D.island.scale}px ${D.fall.tall * D.island.scale}px`;
-      fall.style.left = `${D.fall.at[0] * D.island.scale}px`;
-      fall.style.top = `${D.fall.at[1] * D.island.scale}px`;
-      fall.style.width = `${D.fall.wide * D.island.scale}px`;
-      fall.style.height = `${H}px`;
-      isle.append(fall);
-      isle.style.left = `${left}px`;
-      isle.style.top = `${D.island.top}px`;
-      const clouds = D.clouds.map((c) => {
-        const img = layer(`alarm/shot4/${c.file}`, 0, c.y);
-        img.style.width = `${D.cloudSize[0] * c.scale}px`;
-        img.style.height = `${D.cloudSize[1] * c.scale}px`;
-        return img;
-      });
-      let seed = 11;
-      const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-      const span = D.rocksUntil - D.dropAt;
-      const drop = (t: number) => {
-        const r = Math.max(0, Math.min(1, (t - D.dropAt) / (A.shots.find((x) => x.id === "descent")!.ms / 1000 - D.dropAt)));
-        return D.drop * r * r * (3 - 2 * r);
-      };
-      // Each rock: when it lets go, where on the underside (left or right of the falls; it narrows to a point in the middle), and how it turns.
-      const rocks = Array.from({ length: D.rocks }, (_, i) => {
-        const dx = (rnd() < 0.5 ? -1 : 1) * (D.under.clear + rnd() * (D.under.half - D.under.clear));
-        const el = layer(`alarm/shot4/debris-${(i % 4) + 1}`);
-        el.style.opacity = "0";
-        return { el, at: D.dropAt + (span * (i + rnd() * 0.8)) / D.rocks, x: W / 2 + dx, dy: D.under.tip - Math.abs(dx) * D.under.slope, vx: dx * 0.25 + (rnd() * 2 - 1) * 20, spin: (rnd() * 2 - 1) * 540, size: 0.8 + rnd() * 0.9 };
-      });
-      cam.append(layer("alarm/shot4/sky"), ...clouds.filter((_, i) => D.clouds[i]!.behind), isle, ...rocks.map((r) => r.el), ...clouds.filter((_, i) => !D.clouds[i]!.behind));
-      return {
-        start(at, sec) {
-          at(0, () => sound.alarmHiss(sec));
-          at(D.dropAt * 1000, () => (sound.lurchGroan(), sound.alarmRumble(A.shots.find((x) => x.id === "descent")!.ms / 1000 - D.dropAt)));
-          for (const r of rocks) at(r.at * 1000, () => sound.rockCrack((r.x - W / 2) / (W / 2)));
-        },
-        step(t) {
-          bright.style.opacity = t * 1000 >= D.heartMs ? "0" : (1 - along(D.heart, (t * 1000) / D.heartMs)).toFixed(2);
-          const y = drop(t), going = t > D.dropAt ? 1 : 0;
-          isle.style.transform = `translate(${(going * D.shake * Math.sin(t * 53) * Math.sin(t * 7.1)).toFixed(1)}px, ${(y + going * D.shake * 0.7 * Math.sin(t * 61 + 1)).toFixed(1)}px)`;
-          fall.style.backgroundPositionY = `${((D.fall.speed * t) % (D.fall.tall * D.island.scale)).toFixed(1)}px`;
-          D.clouds.forEach((c, i) => (clouds[i]!.style.transform = `translateX(${(c.x + c.speed * t).toFixed(1)}px)`));
-          for (const r of rocks) {
-            const f = t - r.at;
-            if (f < 0) continue;
-            r.el.style.opacity = "1";
-            // It leaves with the island's own fall, then gravity has it.
-            const y0 = D.island.top + drop(r.at) + r.dy;
-            r.el.style.transform = `translate(${(r.x + r.vx * f).toFixed(1)}px, ${(y0 + 40 * f + 0.5 * D.gravity * f * f).toFixed(1)}px) rotate(${(r.spin * f).toFixed(0)}deg) scale(${r.size.toFixed(2)})`;
-          }
-        },
-      };
-    },
+    descent: (cam) => isleShot(cam, layer, A.shots.find((x) => x.id === "descent")!.ms / 1000, false),
     lumi(cam) {
       cam.append(layer("r6-alarm-5"));
       // Her line is up for her shot and goes with it.
@@ -262,4 +199,169 @@ export function alarmCards(ready: (leftMs: number) => void, then: (skipped: bool
   skip.onclick = () => (sound.alarmQuiet(), end(true));
   // Not before its pictures are there (or two seconds, whichever is first).
   void Promise.race([Promise.all(imgs.map((i) => i.decode().catch(() => {}))), new Promise((r) => setTimeout(r, 2000))]).then(go);
+}
+
+type Layer = (file: string, x?: number, y?: number, origin?: string) => HTMLImageElement;
+
+/**
+ * The island and its clouds (alarm shot 4). Going down (`up` false): its heart flickers and dies,
+ * then it drops, shaking, shedding rock, through three layers of cloud that drift at their own
+ * speeds. Coming up (`up`, the end of run 7: Ladi, 26 Nov, "reverse the descent showing the island
+ * rising out of the clouds"): the same shot the other way, without the rock: it rises out of the
+ * cloud, its heart flickers back to life once it is clear, and the Kindling brazier on top burns,
+ * a small fire of its own (DYING.risenShot).
+ */
+function isleShot(cam: HTMLDivElement, layer: Layer, sec: number, up: boolean): Pick<Shot, "start" | "step"> {
+  const A = DYING.alarm, D = A.descent, R = DYING.risenShot;
+  const isle = document.createElement("div");
+  isle.className = "isle";
+  const w = D.island.size[0] * D.island.scale, h = D.island.size[1] * D.island.scale, left = (W - w) / 2;
+  const bright = layer("alarm/shot4/island-bright");
+  for (const img of [layer("alarm/shot4/island-dim"), bright]) (img.style.width = `${w}px`), (img.style.height = `${h}px`), isle.append(img);
+  // The waterfall, down the island's near face and going with it: one strip repeated to below the screen, its water running.
+  const fall = document.createElement("div");
+  fall.className = "fall";
+  const strip = layer("alarm/shot4/waterfall-strip");
+  fall.style.backgroundImage = `url(${strip.src})`;
+  fall.style.backgroundSize = `${D.fall.wide * D.island.scale}px ${D.fall.tall * D.island.scale}px`;
+  fall.style.left = `${D.fall.at[0] * D.island.scale}px`;
+  fall.style.top = `${D.fall.at[1] * D.island.scale}px`;
+  fall.style.width = `${D.fall.wide * D.island.scale}px`;
+  fall.style.height = `${H}px`;
+  isle.append(fall);
+  // The brazier's fire, coming up: drawn here each frame, over the bowl on the Kindling ground.
+  let fire: CanvasRenderingContext2D | null = null;
+  if (up) {
+    const cv = document.createElement("canvas");
+    cv.width = R.fire.box[0];
+    cv.height = R.fire.box[1];
+    cv.className = "fire";
+    cv.style.left = `${R.fire.at[0] * D.island.scale - R.fire.box[0] / 2}px`;
+    cv.style.top = `${R.fire.at[1] * D.island.scale - R.fire.box[1] + R.fire.base}px`;
+    isle.append(cv);
+    fire = cv.getContext("2d");
+  }
+  isle.style.left = `${left}px`;
+  isle.style.top = `${D.island.top}px`;
+  const clouds = D.clouds.map((c) => {
+    const img = layer(`alarm/shot4/${c.file}`, 0, c.y);
+    img.style.width = `${D.cloudSize[0] * c.scale}px`;
+    img.style.height = `${D.cloudSize[1] * c.scale}px`;
+    return img;
+  });
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  const span = D.rocksUntil - D.dropAt;
+  const smooth = (r: number) => (r = Math.max(0, Math.min(1, r))) * r * (3 - 2 * r);
+  // How far below its place the island is: going down, from `dropAt` to the shot's end; coming up, from `drop` to nothing by `riseUntil`.
+  const drop = (t: number) => (up ? D.drop * (1 - smooth(t / R.riseUntil)) : D.drop * smooth((t - D.dropAt) / (sec - D.dropAt)));
+  // Each rock: when it lets go, where on the underside (left or right of the falls; it narrows to a point in the middle), and how it turns.
+  const rocks = up
+    ? []
+    : Array.from({ length: D.rocks }, (_, i) => {
+        const dx = (rnd() < 0.5 ? -1 : 1) * (D.under.clear + rnd() * (D.under.half - D.under.clear));
+        const el = layer(`alarm/shot4/debris-${(i % 4) + 1}`);
+        el.style.opacity = "0";
+        return { el, at: D.dropAt + (span * (i + rnd() * 0.8)) / D.rocks, x: W / 2 + dx, dy: D.under.tip - Math.abs(dx) * D.under.slope, vx: dx * 0.25 + (rnd() * 2 - 1) * 20, spin: (rnd() * 2 - 1) * 540, size: 0.8 + rnd() * 0.9 };
+      });
+  cam.append(layer("alarm/shot4/sky"), ...clouds.filter((_, i) => D.clouds[i]!.behind), isle, ...rocks.map((r) => r.el), ...clouds.filter((_, i) => !D.clouds[i]!.behind));
+  // The flames: tongues that each sway and lick up at their own pace, the same every time.
+  const tongues = Array.from({ length: R.fire.tongues }, (_, i) => ({ x: (i / Math.max(1, R.fire.tongues - 1) - 0.5) * R.fire.wide, h: 0.6 + rnd() * 0.4, rate: 5 + rnd() * 4, ph: rnd() * 6.3 }));
+  const drawFire = (t: number, lit: number) => {
+    if (!fire) return;
+    const g = fire, [bw, bh] = R.fire.box, cx = bw / 2, base = bh - R.fire.base;
+    g.clearRect(0, 0, bw, bh);
+    // The glow on the ground round the bowl.
+    const glow = g.createRadialGradient(cx, base, 0, cx, base, R.fire.glow);
+    glow.addColorStop(0, `rgba(255, 170, 70, ${(0.45 * lit).toFixed(2)})`);
+    glow.addColorStop(1, "rgba(255, 140, 50, 0)");
+    g.fillStyle = glow;
+    g.fillRect(0, 0, bw, bh);
+    for (const [col, k] of [["255, 120, 40", 1], ["255, 200, 80", 0.68], ["255, 245, 190", 0.38]] as const) {
+      g.fillStyle = `rgba(${col}, ${(0.95 * lit).toFixed(2)})`;
+      for (const q of tongues) {
+        const tall = R.fire.tall * k * q.h * (0.8 + 0.2 * Math.sin(t * q.rate + q.ph)) * (0.55 + 0.45 * lit);
+        const half = (R.fire.wide / R.fire.tongues) * 0.9 * k + 1, x = cx + q.x * k, sway = Math.sin(t * q.rate * 0.7 + q.ph) * 1.5;
+        g.beginPath();
+        g.moveTo(x - half, base);
+        g.quadraticCurveTo(x - half * 0.8, base - tall * 0.55, x + sway, base - tall);
+        g.quadraticCurveTo(x + half * 0.8, base - tall * 0.55, x + half, base);
+        g.fill();
+      }
+    }
+  };
+  return {
+    start(at) {
+      if (up) return;
+      at(0, () => sound.alarmHiss(sec));
+      at(D.dropAt * 1000, () => (sound.lurchGroan(), sound.alarmRumble(sec - D.dropAt)));
+      for (const r of rocks) at(r.at * 1000, () => sound.rockCrack((r.x - W / 2) / (W / 2)));
+    },
+    step(t) {
+      // Going down, the heart is bright and flickers out; coming up, it is dark until the island is clear, then flickers back.
+      if (!up) bright.style.opacity = t * 1000 >= D.heartMs ? "0" : (1 - along(D.heart, (t * 1000) / D.heartMs)).toFixed(2);
+      else {
+        const u = (t - R.heartFrom) / (D.heartMs / 1000);
+        bright.style.opacity = u <= 0 ? "0" : u >= 1 ? "1" : (1 - along(D.heart, 1 - u)).toFixed(2);
+      }
+      const y = drop(t), moving = up ? t < R.riseUntil : t > D.dropAt;
+      const shake = moving ? (up ? R.shake : D.shake) : 0;
+      isle.style.transform = `translate(${(shake * Math.sin(t * 53) * Math.sin(t * 7.1)).toFixed(1)}px, ${(y + shake * 0.7 * Math.sin(t * 61 + 1)).toFixed(1)}px)`;
+      fall.style.backgroundPositionY = `${((D.fall.speed * t) % (D.fall.tall * D.island.scale)).toFixed(1)}px`;
+      D.clouds.forEach((c, i) => (clouds[i]!.style.transform = `translateX(${(c.x + c.speed * t).toFixed(1)}px)`));
+      drawFire(t, up ? R.fire.low + (1 - R.fire.low) * Math.max(0, Math.min(1, (t - R.heartFrom) / (D.heartMs / 1000))) : 0);
+      for (const r of rocks) {
+        const f = t - r.at;
+        if (f < 0) continue;
+        r.el.style.opacity = "1";
+        // It leaves with the island's own fall, then gravity has it.
+        const y0 = D.island.top + drop(r.at) + r.dy;
+        r.el.style.transform = `translate(${(r.x + r.vx * f).toFixed(1)}px, ${(y0 + 40 * f + 0.5 * D.gravity * f * f).toFixed(1)}px) rotate(${(r.spin * f).toFixed(0)}deg) scale(${r.size.toFixed(2)})`;
+      }
+    },
+  };
+}
+
+/**
+ * The end of run 7: the island coming up out of the cloud, its heart lit again and the brazier
+ * burning (isleShot, coming up), full screen for `sec` seconds. Returns its element (already on
+ * the page) and a stop that takes it away.
+ */
+export function riseCard(sec: number): { el: HTMLDivElement; stop: () => void } {
+  const el = document.createElement("div");
+  el.id = "risen";
+  const stage = document.createElement("div");
+  stage.className = "stage";
+  const cam = document.createElement("div");
+  cam.className = "cam";
+  stage.append(cam);
+  el.append(stage);
+  const fit = () => stage.style.setProperty("--s", String(Math.min(innerWidth / W, innerHeight / H)));
+  fit();
+  addEventListener("resize", fit);
+  const layer: Layer = (file, x = 0, y = 0) => {
+    const img = new Image();
+    img.alt = "";
+    img.style.left = `${x}px`;
+    img.style.top = `${y}px`;
+    img.src = `stills/${file}.webp`;
+    return img;
+  };
+  const shot = isleShot(cam, layer, sec, true);
+  document.body.append(el);
+  const t0 = performance.now();
+  let frame = 0;
+  const tick = () => {
+    frame = requestAnimationFrame(tick);
+    shot.step?.((performance.now() - t0) / 1000);
+  };
+  tick();
+  return {
+    el,
+    stop: () => {
+      cancelAnimationFrame(frame);
+      removeEventListener("resize", fit);
+      el.remove();
+    },
+  };
 }

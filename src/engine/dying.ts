@@ -65,7 +65,16 @@ export const DYING = {
    */
   landingShow: { faces: 4, comet: 5, hesta: 4 },
   /** The picture at the end of run 7 (its file in public/stills/), and how long it is up, fading in and out. */
-  risen: { ticks: 7, name: "The island clears the cloud", file: "r7-end-1" },
+  risen: { ticks: 10, name: "The island clears the cloud", file: "r7-end-1" },
+  /**
+   * The end of run 7 is the alarm's island shot the other way (Ladi, 26 Nov, in place of the r7-end-1
+   * picture): it rises out of the cloud, shaking by `shake`, until `riseUntil` seconds; its heart
+   * flickers back from `heartFrom`. The Kindling brazier on top burns throughout, a small fire
+   * (`fire.low` of itself while the heart is dark, all of it once lit): drawn in a `box` (stage
+   * pixels) whose bottom is `base` below the bowl's mouth `at` (on the island's picture, before its
+   * scale), `tongues` flames across `wide`, up to `tall` high, with a glow `glow` round it.
+   */
+  risenShot: { riseUntil: 3.2, heartFrom: 3.0, shake: 1.2, fire: { at: [369, 13] as const, box: [44, 46] as const, base: 6, wide: 12, tall: 22, tongues: 4, glow: 20, low: 0.6 } },
   /**
    * The alarm, before run 6: five short shots, full screen, none of them still (Ladi, 24 Nov: the
    * first cut was too long and too quiet). `shots` is the order: each is up for `ms`, pushes in by
@@ -79,7 +88,7 @@ export const DYING = {
       { id: "kitchen", name: "The kitchen, dark", ms: 3000, push: 0.03 },
       { id: "lumi", name: "Lumi at the door", ms: 3000, push: 0.03 },
       { id: "falls", name: "From Rook's door: the falls", ms: 3000, push: 0.08 },
-      { id: "brazier", name: "The Kindling ground, close", ms: 5000, push: 0.05, at: [468, 380] },
+      { id: "brazier", name: "The Kindling ground, close", ms: 5000, push: 0.05, at: [512, 395] },
       { id: "descent", name: "The island going down", ms: 6000, push: 0 },
     ] as readonly { id: "kitchen" | "falls" | "brazier" | "descent" | "lumi"; name: string; ms: number; push: number; at?: readonly [number, number] }[],
     fadeMs: 500, bellFromMs: 300, bellEveryMs: 2400, bellFar: 0.6, bellNear: 1, lineAfterMs: 300,
@@ -95,7 +104,7 @@ export const DYING = {
      */
     brazier: {
       fire: [[0, 3], [0.9, 3], [1.1, 2], [1.35, 3], [1.6, 2], [1.8, 3], [2.1, 2], [2.6, 2], [2.9, 1], [3.1, 2], [3.5, 1], [4.2, 0], [5, 0]] as readonly (readonly [number, number])[],
-      sparks: { at: [468, 330] as const, spread: 42, rise: 150, until: 3.5, count: 46 },
+      sparks: { at: [510, 352] as const, spread: 58, rise: 170, until: 3.5, count: 46 },
     },
     /**
      * The island going down. Its heart flickers for `heartMs` (how dim along the way) and is dead. From
