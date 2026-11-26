@@ -403,4 +403,11 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Rook|That's Lumi's lantern. Why is it on the water?": 5.87,
   "Rook|She should be resting.": 1.93,
   "Rook|How are the hands?": 1,
+  "Moth|Word from the Sieve. Their keeper wants you today.": 2.89,
+  "Moth|Granny's route. She had it to me before light.": 2.92,
+  "Moth|You tell her.": 0.68,
+  "Moth|Garrick says it's grown back. He says bring the small one.": 3.58,
+  "Moth|And Marit says the tide owes her eight. Her words.": 2.72,
+  "Mabry|The fire's steady this morning. And your Lumi. Such a light in that child.": 4.57,
+  "Manu|My mother won't get in a boat before the children do. Make her.": 3.82,
 };

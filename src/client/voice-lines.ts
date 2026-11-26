@@ -421,6 +421,14 @@ export const VOICE_LINES: Record<string, string> = {
   "Rook|That's Lumi's lantern. Why is it on the water?": "voice/part1-late.mp3#t=93.82,99.89",
   "Rook|She should be resting.": "voice/part1-late.mp3#t=100.79,102.92",
   "Rook|How are the hands?": "voice/part1-late.mp3#t=103.82,105.02",
+  // Seven more, 26 Nov (gameplay/voice/handoff-2026-11-26b.md): Moth and Mabry on Sogni, Manu on Gemini, in the voices Ladi picked. Joined in one file for the preview's file limit.
+  "Moth|Word from the Sieve. Their keeper wants you today.": "voice/part1-late-2.mp3#t=0.22,3.31",
+  "Moth|Granny's route. She had it to me before light.": "voice/part1-late-2.mp3#t=4.21,7.33",
+  "Moth|You tell her.": "voice/part1-late-2.mp3#t=8.23,9.11",
+  "Moth|Garrick says it's grown back. He says bring the small one.": "voice/part1-late-2.mp3#t=10.01,13.79",
+  "Moth|And Marit says the tide owes her eight. Her words.": "voice/part1-late-2.mp3#t=14.69,17.61",
+  "Mabry|The fire's steady this morning. And your Lumi. Such a light in that child.": "voice/part1-late-2.mp3#t=18.51,23.28",
+  "Manu|My mother won't get in a boat before the children do. Make her.": "voice/part1-late-2.mp3#t=24.18,28.20",
 };
 
 /**
