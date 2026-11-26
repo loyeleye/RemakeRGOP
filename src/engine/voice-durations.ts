@@ -199,7 +199,7 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Hesta|Down goes the wall. Don't stop.": 3.1,
   "Hesta|There's a star, Rook. Fetch me the rest.": 5.52,
   "Hesta|The Sieve this morning, Rook. Young Tilda sent word. Keep them all moving. Don't settle on one.": 7.28,
-  "Rook|Granny?": 0.58,
+  "Rook|Granny?": 0.53,
   "Rook|Granny. Your hands.": 1.22,
   "Rook|It's not you.": 1.73,
   "Hesta|Come home, Rook.": 1.46,
