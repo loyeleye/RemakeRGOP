@@ -2873,7 +2873,7 @@ function castOf(): Map<number, string> | undefined {
   const m = new Map<number, string>();
   for (const p of room.players) {
     const name = p.name.toLowerCase();
-    const who = ["rook", "lumi", "wick", "moth", "kes", "hesta", "nell", "sefa", "maudie", "mabry", "orrin"].find((n) => name.startsWith(n));
+    const who = ["rook", "lumi", "wick", "moth", "kes", "hesta", "nell", "sefa", "maudie", "mabry", "orrin", "tilda"].find((n) => name.startsWith(n));
     if (who) m.set(p.id, who);
   }
   if (room.story.run === "The Grand Kindling") m.set(me, "rook");

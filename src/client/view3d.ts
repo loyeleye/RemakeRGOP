@@ -187,7 +187,7 @@ type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
 const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell", "sefa", "kes", "maudie", "mabry", "orrin"] as const;
 /** Each character's height against Rook's (models come in at one height). Lumi is nine. */
-export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95, ferryman: 1.05 };
+export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95, ferryman: 1.05, tilda: 0.88 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};
@@ -285,6 +285,14 @@ function loadFerryman() {
   if (ferryAsked) return;
   ferryAsked = true;
   loadFigure("ferryman");
+}
+
+/** Tilda, the Sieve's keeper, seen only in run 8: asked for when the Sieve is first dressed. */
+let tildaAsked = false;
+function loadTilda() {
+  if (tildaAsked) return;
+  tildaAsked = true;
+  loadFigure("tilda");
 }
 
 /** Run 9's villagers are asked for when that run first opens, not with the page: six models nobody else needs. */
@@ -1970,6 +1978,7 @@ export class World {
     // The Sieve is dressed as a worked quarry floor (sieve-dress.ts).
     const dressed = shrine.id === SIEVE.shrine && !!shrine.wells?.length && !!shrine.coast;
     this.sieveDressed = dressed;
+    if (dressed) loadTilda();
     // The plaza: flagstones laid right up to the island's edge.
     const floorTex = tex(`textures/floor-${th.floor}.webp`, 1 / 6, `textures/floor-${shrine.id}.webp`);
     const floorShape = new THREE.Shape();
