@@ -155,6 +155,8 @@ export class PondRoom {
     walkN = 1,
   ) {
     this.walkDef = walkByN(walkN);
+    // A walk that opens inside his house starts with the kitchen still up.
+    if (this.walkDef.inside) this.kitchen = 1;
   }
   readonly walkDef: Walk;
   /**

@@ -461,3 +461,15 @@ label.t-text { cursor: pointer; }
 #walk-ask .btns { display: flex; gap: 10px; justify-content: center; }
 #walk-ask .btns button { flex: 1; white-space: nowrap; }
 #walk-ask .btns.many { flex-direction: column; }
+/* A night going by between walk 7 and the next morning (main.ts nightPass): 3.8 s, then it lifts. */
+#night-pass { position: fixed; inset: 0; z-index: 90; pointer-events: auto; overflow: hidden; background: #0b0d1e; animation: np-sky 3.8s ease-in-out forwards; transition: opacity 0.7s; }
+#night-pass.out { opacity: 0; }
+#night-pass .stars { position: absolute; left: 0; top: 0; width: 2px; height: 2px; border-radius: 50%; background: #fff; opacity: 0; animation: np-stars 3.8s ease-in-out forwards;
+  box-shadow: 12vw 14vh #fff, 23vw 31vh #dfe6ff, 37vw 9vh #fff, 46vw 26vh #cfd8ff, 58vw 12vh #fff, 66vw 36vh #e8ecff, 74vw 7vh #fff, 83vw 22vh #dfe6ff, 91vw 41vh #fff, 7vw 44vh #cfd8ff, 29vw 52vh #fff, 52vw 47vh #dfe6ff, 79vw 55vh #fff, 16vw 63vh #e8ecff, 88vw 66vh #fff; }
+#night-pass .moon { position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; box-shadow: inset -10px 2px 0 0 #f4ecd0; filter: drop-shadow(0 0 10px #f4ecd066); opacity: 0; animation: np-moon 3.8s ease-in-out forwards; }
+#night-pass .dawn { position: absolute; inset: 0; background: radial-gradient(120% 70% at 50% 110%, #ffd9a0 0%, #e9a27a 30%, #8a6a8e66 60%, transparent 80%); opacity: 0; animation: np-dawn 3.8s ease-in forwards; }
+@keyframes np-sky { 0% { background: #c2643f00; } 14% { background: #3a2440; } 28% { background: #0b0d1e; } 72% { background: #0b0d1e; } 100% { background: #4a4a6e; } }
+@keyframes np-stars { 0%, 18% { opacity: 0; } 34%, 66% { opacity: 0.9; } 88%, 100% { opacity: 0; } }
+@keyframes np-moon { 0%, 16% { left: 14%; top: 72%; opacity: 0; } 30% { opacity: 1; } 50% { left: 50%; top: 22%; } 70% { opacity: 1; } 84%, 100% { left: 86%; top: 72%; opacity: 0; } }
+@keyframes np-dawn { 0%, 66% { opacity: 0; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #night-pass .moon { display: none; } }

@@ -53,6 +53,10 @@ export interface Walk {
   start: Anchor;
   /** Someone to talk to before `go` is the way on (walk 7's Kes), with the goal shown until then. */
   first?: { name: string; goal: string };
+  /** A night passes after it: the page shows the night going by before the next walk (Ladi, 26 Nov). */
+  night?: true;
+  /** It opens inside his house, on the kitchen still; out of the door is the walk (Ladi, 26 Nov). */
+  inside?: true;
 }
 
 export const WALKS: Walk[] = [
@@ -91,7 +95,7 @@ export const WALKS: Walk[] = [
   // line here but the first four of Kes's exchange is the story thread's draft, not seen by Ladi. Walk
   // 7's sunset tint is Ladi's, to signal the end of the day.
   {
-    n: 7, title: "Sunset", light: "sunset", after: 4, next: 5, go: "Lumi", start: "landing",
+    n: 7, title: "Sunset", light: "sunset", after: 4, next: 5, go: "Lumi", start: "landing", night: true,
     first: { name: "Kes", goal: "Talk to Kes" }, goal: "Go home", ask: "Turn in for the night?",
     people: [
       // Ladi (25 Nov): Kes a little onto the grass, Lumi by her for the talk, Moth off the anchor post;
@@ -116,7 +120,7 @@ export const WALKS: Walk[] = [
     ],
   },
   {
-    n: 8, title: "The next morning", light: "morning", after: 4, next: 5, go: "Kes", start: "door", goal: "Talk to Kes", ask: "Cross to Kite Fell?",
+    n: 8, title: "The next morning", light: "morning", after: 4, next: 5, go: "Kes", start: "door", inside: true, goal: "Talk to Kes", ask: "Cross to Kite Fell?",
     people: [
       { name: "Kes", at: "landing", stay: true, lines: ["There he is. Get in. I'm steering."] },
       { name: "Lumi", at: "landing", stay: true, lines: ["You're late."] },

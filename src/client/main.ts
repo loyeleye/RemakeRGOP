@@ -968,9 +968,12 @@ let shownEnd: unknown = null;
 /** Rook's kitchen (from walk 2): his door raises the pond's count, and each rise opens the still. */
 let kitchen: Kitchen | null = null;
 let kitchenSeen = 0;
+let kitchenWalk = 0;
 function openKitchen() {
   const pond = room?.story?.pond;
   const n = pond?.kitchen ?? 0;
+  // A new walk counts from nothing (walk 8 opens with the still up: WALKS' inside).
+  if (pond && pond.walk !== kitchenWalk) (kitchenWalk = pond.walk ?? 0), (kitchenSeen = 0);
   if (!pond || n < kitchenSeen) kitchenSeen = 0;
   if (!pond) {
     kitchen?.close();
@@ -2045,7 +2048,9 @@ function chainWatch() {
     if (i >= 0 && i !== chainAt) (chainAt = i), (chainDone = false), (chainOptN = 0), savePlace(i), renderPart1();
     if (pond.done && !chainDone) {
       chainDone = true;
-      window.setTimeout(() => chainAt >= 0 && chainOn(), 1400);
+      // After walk 7 a night passes, shown, before the next morning's walk opens under it.
+      if (WALKS.find((w) => w.n === pond.walk)?.night) nightPass(() => chainAt >= 0 && chainOn());
+      else window.setTimeout(() => chainAt >= 0 && chainOn(), 1400);
     }
     if (pond.optional && pond.optional.n > chainOptN) {
       chainOptN = pond.optional.n;
@@ -2056,6 +2061,23 @@ function chainWatch() {
   }
   const i = st.run ? pieceOfRun(st.run) : -1;
   if (i >= 0 && i !== chainAt) (chainAt = i), savePlace(i), renderPart1();
+}
+
+/**
+ * A night going by, over the screen (Ladi, 26 Nov: "a quick transition to show a day passed"): the
+ * sunset goes to night, a moon crosses under the stars, and first light comes up. What comes next is
+ * opened under it halfway (`then`), and the night lifts off it.
+ */
+const NIGHT = { open: 1400, total: 3800, lift: 700 };
+function nightPass(then: () => void) {
+  const el = document.createElement("div");
+  el.id = "night-pass";
+  el.setAttribute("aria-hidden", "true");
+  el.innerHTML = `<div class="stars"></div><div class="moon"></div><div class="dawn"></div>`;
+  document.body.appendChild(el);
+  window.setTimeout(then, NIGHT.open);
+  window.setTimeout(() => el.classList.add("out"), NIGHT.total);
+  window.setTimeout(() => el.remove(), NIGHT.total + NIGHT.lift);
 }
 
 /** An optional run, from a walk or its card: it comes back to the same piece. */
