@@ -126,7 +126,7 @@ export const HELD: Record<string, Held> = {
     gap: 0.4,
     pictures: [
       { slot: "hands-1-burnt", hold: 4, shake: "hands-1-shake-layer" },
-      // Ladi (26 Nov): "Granny?" was whiny; the story thread's steadier line, approved by Ladi the same day. Not voiced yet.
+      // Ladi (26 Nov): "Granny?" was whiny; the story thread's steadier line, approved by Ladi the same day. Voiced on Sogni.
       { slot: "hands-2-caught", hold: 0.6, lines: [{ who: ["Rook"], text: "Granny. Your hands." }] },
       // Ladi (26 Nov): she sends him to bed here, a night goes by, and the morning is a walk of its own
       // (walk 9). Her line and his answer are the story thread's (story/gap7-8-walk-beats.md),

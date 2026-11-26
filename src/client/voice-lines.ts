@@ -208,6 +208,8 @@ export const VOICE_LINES: Record<string, string> = {
   // Run 8, the Sieve (gameplay/voice/final/run8, 25 Nov).
   "Hesta|The Sieve this morning, Rook. Young Tilda sent word. Keep them all moving. Don't settle on one.": "voice/run8.mp3#t=0.22,7.70",
   "Rook|Granny?": "voice/run8.mp3#t=8.60,9.38",
+  // Hesta's hands (7-8b), the story thread's steadier line, approved by Ladi on 26 Nov; Sogni.
+  "Rook|Granny. Your hands.": "voice/rook-granny-your-hands.mp3",
   "Rook|It's not you.": "voice/run8.mp3#t=10.28,12.21",
   "Hesta|Come home, Rook.": "voice/run8.mp3#t=13.11,14.77",
   "Tilda|You're Rook. I'm Tilda. I keep this now.": "voice/run8.mp3#t=15.67,18.67",
