@@ -235,13 +235,16 @@ describe("Lumi's lesson", () => {
     expect(busy).toBe(true);
     for (let i = 0; i < T.pulledAfter; i++) r.room.onTick();
     expect(texts().filter((t) => t === "I pulled.").length).toBe(1);
-    // A later game in the same round: her "!" comes again, his stare doesn't.
+    // A later game in the same round (best of five after a loss): her "!" comes again; his stare, his question and her answer don't.
     r.act({ kind: "idle" });
     room.startRound(2, true);
     r.play();
     for (let i = 0; i < 6; i++) r.room.onTick();
     expect(tidePull(r)).toBe(true);
     expect(r.room.state.stareUntil).toBe(-1);
+    for (let i = 0; i < T.pulledAfter + 2; i++) r.room.onTick();
+    expect(texts().filter((t) => t === "How did you do that?").length).toBe(1);
+    expect(texts().filter((t) => t === "I pulled.").length).toBe(1);
   });
 
   it("after best of fifteen, Rook calls it for the night", () => {

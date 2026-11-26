@@ -325,8 +325,10 @@ export class LessonRoom {
     const held = lumi.beam !== null ? g.wisps[lumi.beam] : undefined;
     const tide = held && held.touched && g.board.tile(held.pos) === Tile.Water && g.wisps.some((o) => o !== held && o.guild === 0 && g.board.tile(o.pos) === Tile.Water && !samePt(o.pos, o.prev) && !o.target);
     if (tide && this.tideSeen < 0) this.tideFirstWorks(held!);
-    if (this.tideSeen >= 0 && g.tick === this.tideSeen + T.howAfter) this.say(ROOK, "How did you do that?", { player: ROOK_ID });
-    if (this.tideSeen >= 0 && g.tick === this.tideSeen + T.pulledAfter) this.say(LUMI, "I pulled.", { player: LUMI_ID });
+    // His question and her answer go with the stare: once in the lesson, not again in a later game (Ladi, 26 Nov).
+    const asked = this.tideSeen >= 0 && this.stareUntil >= 0;
+    if (asked && g.tick === this.tideSeen + T.howAfter) this.say(ROOK, "How did you do that?", { player: ROOK_ID });
+    if (asked && g.tick === this.tideSeen + T.pulledAfter) this.say(LUMI, "I pulled.", { player: LUMI_ID });
     if (g.scores[0]! >= T.target) return this.finish();
     // Rook to three first, or the clock runs out: she goes again.
     if (g.finished || g.scores[1]! >= T.target) {
@@ -343,7 +345,7 @@ export class LessonRoom {
   /**
    * The tick her tide pull first moves something in a game (anything that starts with it, such as
    * a picture, hooks in here). She flashes open delight, without words, then reins it into
-   * "I pulled." (smug). The first time in the round, Rook stops and stares for a beat or two: he
+   * "I pulled." (smug). The first time in the round, Rook stops and stares, and asks (later games after a loss bring back only her "!") for a beat or two: he
    * doesn't move or pull, turned to the wisp she holds. Nothing else stops: the clock runs, she
    * keeps full control and can score while he stands there.
    */
