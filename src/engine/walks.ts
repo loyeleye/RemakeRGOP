@@ -120,7 +120,10 @@ export const WALKS: Walk[] = [
     people: [
       { name: "Kes", at: "landing", stay: true, lines: ["There he is. Get in. I'm steering."] },
       { name: "Lumi", at: "landing", stay: true, lines: ["You're late."] },
-      { name: "Maudie", at: "path", stay: true, lines: ["Ros planted these the spring Lumi came.", "Wrong blue. She said so every year and never pulled them up.", "They came up the winter she was ill, too. In the snow. She laughed at that."] },
+      { name: "Maudie", at: "path", stay: true, lines: ["Ros planted these the spring Lumi came.", "Wrong blue. She said so every year and never pulled them up.", "They came up the winter she was ill, too. In the snow. She laughed at that.",
+        // The mourning ribbon (story thread, 26 Nov; Ladi: an optional tap is fine). Draft wording, not
+        // read by Ladi; unvoiced; the cutscene thread's hands-only still goes with it when it is drawn.
+        "You took yours off. I'm not saying a word."] },
       { name: "Hesta", at: "chair", stay: true, lines: ["..."] },
     ],
   },
