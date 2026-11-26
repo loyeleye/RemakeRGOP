@@ -3,6 +3,7 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Hesta|You never know when to stop, Rook.": 1.54,
   "Hesta|That'll do, Rook. You never know when to stop.": 2.69,
   "Hesta|You never did know when to stop, Rook.": 3.17,
+  "The ferryman|Over here! I know a shorter way.": 2.04,
   "Hesta|That's the where of it. Stand across from it, and it comes home.": 4.46,
   "Hesta|Good. You heard the crew and you finished. That's the when.": 4.46,
   "Hesta|One at a time tonight, Rook. Stand in the ring and pull.": 4.49,

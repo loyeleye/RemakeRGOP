@@ -172,8 +172,8 @@ export const HELD: Record<string, Held> = {
       { slot: "handoff-1-shadow", hold: 1, lines: [{ who: ["Rook"], text: "I don't like where that thing's heading. That's home." }] },
       { slot: "handoff-2-kes-hand", hold: 0.8, lines: [{ who: ["Kes"], text: "Then come on. We go round with the boats." }] },
       { slot: "handoff-3-dream", hold: 1.5 },
-      // The ferryman (Ladi, 26 Nov: "Over here! I know a shorter way."). Unnamed: who he is waits for Arc 4. A caption until Ladi says it's voiced.
-      { slot: "handoff-4-stranger", hold: 1, lines: [{ who: ["The ferryman"], text: "Over here! I know a shorter way.", quiet: true }] },
+      // The ferryman (Ladi, 26 Nov: "Over here! I know a shorter way."). Unnamed: who he is waits for Arc 4. Voiced on Sogni (Ladi's pick, 26 Nov).
+      { slot: "handoff-4-stranger", hold: 1, lines: [{ who: ["The ferryman"], text: "Over here! I know a shorter way." }] },
       { slot: "handoff-5-kes-rail", hold: 0.8, lines: [{ who: ["Kes"], text: "Race you home, then." }] },
       { slot: "handoff-6-rook", hold: 0.6, lines: [{ who: ["Rook"], text: "...", quiet: true }] },
       { slot: "handoff-7-kes-nod", hold: 1, lines: [{ who: ["Kes"], text: "Go. I'm right behind you." }] },
