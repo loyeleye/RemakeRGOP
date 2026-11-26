@@ -345,15 +345,16 @@ export class LessonRoom {
   /**
    * The tick her tide pull first moves something in a game (anything that starts with it, such as
    * a picture, hooks in here). She flashes open delight, without words, then reins it into
-   * "I pulled." (smug). The first time in the round, Rook stops and stares, and asks (later games after a loss bring back only her "!") for a beat or two: he
+   * "I pulled." (smug). The first time in the round, Rook stops and stares, and asks. A later game after a loss brings none of it back for a beat or two: he
    * doesn't move or pull, turned to the wisp she holds. Nothing else stops: the clock runs, she
    * keeps full control and can score while he stands there.
    */
   private tideFirstWorks(held: { pos: Pt }) {
     const g = this.game, rook = this.player(ROOK_ID);
     this.tideSeen = g.tick;
-    this.say(LUMI, "!", { player: LUMI_ID, mood: "delight-flash" });
+    // All of it once in the lesson: a later game after a loss brings none of it back (Ladi, 26 Nov).
     if (this.stared) return;
+    this.say(LUMI, "!", { player: LUMI_ID, mood: "delight-flash" });
     this.stared = true;
     this.stareUntil = g.tick + LESSON.firstToThree.rookStares;
     if (rook.action.kind !== "idle") g.command(ROOK_ID, { action: { kind: "idle" } });

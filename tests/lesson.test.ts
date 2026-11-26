@@ -184,10 +184,9 @@ describe("Lumi's lesson", () => {
     expect(r.room.state.end!.lines.at(-1)!.text).toBe("So I'm coming tomorrow.");
   });
 
-  /** Stands Lumi by one of her pool wisps and has her hold it until the tide pull first works ("!"). */
+  /** Stands Lumi by one of her pool wisps and has her hold it until the tide pull first works in this game. */
   function tidePull(r: ReturnType<typeof newRoom>) {
     const g = r.room.state.game, b = g.board;
-    const before = r.said().filter((l) => l.text === "!").length;
     const mine = g.wisps.filter((w) => w.guild === 0 && b.tile(w.pos) === Tile.Water);
     for (const w of mine)
       for (const [dx, dy] of [[0, -2], [0, 2], [-2, 0], [2, 0], [0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
@@ -198,7 +197,7 @@ describe("Lumi's lesson", () => {
         r.act({ kind: "staff", wisp: w.id });
         for (let i = 0; i < 8; i++) {
           r.room.onTick();
-          if (r.said().filter((l) => l.text === "!").length > before) return true;
+          if (r.room.state.tideSeen >= 0) return true;
         }
         r.act({ kind: "idle" });
         r.room.onTick();
@@ -235,7 +234,7 @@ describe("Lumi's lesson", () => {
     expect(busy).toBe(true);
     for (let i = 0; i < T.pulledAfter; i++) r.room.onTick();
     expect(texts().filter((t) => t === "I pulled.").length).toBe(1);
-    // A later game in the same round (best of five after a loss): her "!" comes again; his stare, his question and her answer don't.
+    // A later game in the same round (best of five after a loss): none of it comes again, not his stare, his question, her "!" or her answer (Ladi, 26 Nov).
     r.act({ kind: "idle" });
     room.startRound(2, true);
     r.play();
@@ -245,6 +244,7 @@ describe("Lumi's lesson", () => {
     for (let i = 0; i < T.pulledAfter + 2; i++) r.room.onTick();
     expect(texts().filter((t) => t === "How did you do that?").length).toBe(1);
     expect(texts().filter((t) => t === "I pulled.").length).toBe(1);
+    expect(texts().filter((t) => t === "!").length).toBe(1);
   });
 
   it("after best of fifteen, Rook calls it for the night", () => {
