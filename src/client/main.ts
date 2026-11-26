@@ -2362,14 +2362,14 @@ function heldScene(p: Piece) {
 
 /**
  * Before run 1, the dream (DREAM in client/part1.ts): seven pictures cross-fading, the last going to
- * white, then a cut to Lumi over him with the game's first line, then run 1. Tagged: every picture is
- * the cutscene thread's pick, not seen by Ladi as a final.
+ * white, then a cut to Lumi over him with the game's first line, then run 1. All eight pictures locked
+ * by Ladi (26 Nov), so no draft tag.
  */
 function dreamScene(p: Piece) {
   const D = DREAM, el = document.createElement("div");
   el.id = "gap-scene";
   el.className = "morning four3";
-  el.innerHTML = `<div class="tags"><span class="nb">Draft</span><span>Pictures not seen by Ladi</span></div><div class="white"></div><p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
+  el.innerHTML = `<div class="white"></div><p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
   const pics = D.pictures.map((m) => storyCard(m.slot, "pic"));
   const wake = storyCard(D.wake.slot, "pic wake");
   el.prepend(...pics, wake);
