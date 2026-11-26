@@ -77,12 +77,6 @@ export class SieveRoom {
   private tugEndedAt = -1;
   /** Which stills have been shown, in order (for tests). */
   stillsShown: string[] = [];
-  /**
-   * Picture 4 (the tug itself, no face), at the first tug. Off until 25 Nov because the board already
-   * shows it in his hand (gameplay thread); on now as a trial, so Ladi can judge the painted panel in
-   * play and drop it if it does not fit. ?still4=0 in the page turns it off.
-   */
-  stillFour = true;
   /** All the stills off (?nostills in the page). */
   stillsOn = true;
   /** For the measurements: wisps lost (the first not counted), how many of those over a well, restarts, and the ticks the last try took. */
@@ -383,7 +377,7 @@ export class SieveRoom {
       p.tugged = near?.id ?? null;
       p.moved = [];
       this.pulledAt = g.tick;
-      if (this.stillFour) this.picture("r8-4", true, near ? this.wellTile(near.pos) : null);
+      // No picture here: picture 4 (the tug over the pit) was taken out at Ladi's word, 26 Nov.
       return;
     }
     if (p.phase === "wait") {

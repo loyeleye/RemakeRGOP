@@ -104,7 +104,6 @@ export const OPTIONS: Opt[] = [
 
   { section: "run8", key: "pull", kind: "choice", label: "Which take of the pull plays", values: [["", "The tug, the third take (the run's own)"], ["2", "The second take (v112)"], ["1", "The first take (v111)"]] },
   { section: "run8", key: "nopull", kind: "flag", label: "No pull at all (v108). This wins over the take above." },
-  { section: "run8", key: "still4", kind: "flag", on: "0", label: "Leave out picture 4, the pit at the first tug (shown as a trial)" },
 
   { section: "run9", key: "patch", kind: "choice", label: "Where the dark patch goes", values: [["", "For the brightest light, the lamp too (the run's own)"], ["clock", "On a clock he can read (the build before, v155)"], ["react", "For light, swelling over a heap"], ["seek", "For light, at one size"], ["line", "Along the first build's fixed lines"], ["drag", "It carries wisps off (the first sketch)"]] },
   { section: "run9", key: "sip", kind: "number", min: 0, max: 30, step: 1, placeholder: String(RESCUE.patch.bait.sip), label: "Ticks the lamp waits between two wisps (0 for no wait)" },

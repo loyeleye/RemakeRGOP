@@ -462,11 +462,10 @@ describe("Run 8: a harder job, on the Sieve", () => {
 
 describe("Run 8: the reaction stills", () => {
   /** A whole game played by the juggler, with every line it says and when the room's clock said it, and every wisp's arrivals. */
-  function playThrough(stillFour = false) {
+  function playThrough() {
     let s = 7;
     const msgs: { at: number; m: ServerMsg }[] = [];
     const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "juggle");
-    room.stillFour = stillFour;
     let clock = 0;
     const conn = room.connect((m) => msgs.push({ at: clock, m }));
     conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
@@ -484,7 +483,7 @@ describe("Run 8: the reaction stills", () => {
     return { room, lines, arrivals };
   }
 
-  it("the core stills come in order with their lines, picture 4 stays off, and the end brings 10 and 11", () => {
+  it("the core stills come in order with their lines, picture 4 is gone, and the end brings 10 and 11", () => {
     const { room, lines } = playThrough();
     expect(room.state.phase).toBe("results");
     const shown = lines.filter((x) => x.l.still).map((x) => x.l.still!.id);
@@ -527,17 +526,8 @@ describe("Run 8: the reaction stills", () => {
     for (let i = 1; i < up.length; i++) if (!up[i]!.seq) expect(up[i]!.from - up[i - 1]!.to).toBeGreaterThanOrEqual(ticks(STILL.gapMs) - 1);
   });
 
-  it("picture 4 (the tug itself, no line) shows when switched on, and 5 cross-fades over it", () => {
-    const { lines } = playThrough(true);
-    const shown = lines.filter((x) => x.l.still).map((x) => x.l.still!.id);
-    expect(shown).toContain("r8-4");
-    const four = lines.find((x) => x.l.still?.id === "r8-4")!;
-    expect(four.l.text).toBe("");
-    expect(shown.indexOf("r8-4")).toBeLessThan(shown.indexOf("r8-5"));
-  });
-
   it("every still the run calls has a placeholder card", () => {
-    for (const id of ["r8-1", "r8-2", "r8-4", "r8-5", "r8-6", "r8-7", "r8-10", "r8-11a", "r8-11b"]) expect(STILLS[id]?.who).toBeTruthy();
+    for (const id of ["r8-1", "r8-2", "r8-5", "r8-6", "r8-7", "r8-10", "r8-11a", "r8-11b"]) expect(STILLS[id]?.who).toBeTruthy();
     // Held for its line plus a second, never shorter than the floor; seven holds longer.
     expect(stillMs("r8-1", 0)).toBe(STILL.inMs + STILL.holdMs + STILL.outMs);
     expect(stillMs("r8-1", 4000)).toBe(STILL.inMs + 5000 + STILL.outMs);

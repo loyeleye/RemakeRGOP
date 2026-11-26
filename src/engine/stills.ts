@@ -66,7 +66,6 @@ export const STILLS: Record<string, StillCard> = {
   "r8-2": { who: "Tilda in front, Rook beside her, looking down at the far well", faces: "She is tired, eyes half lidded. He frowns at the well, brows pulled together." },
   "r8-3": { who: "Tilda, a hand held flat at a wisp's height", faces: "Matter-of-fact, almost bored." },
   // Approved with the rest (25 Nov); shown at the first tug as a trial Ladi will judge in play.
-  "r8-4": { who: "The event: his wisp at the end of a thin, shaking beam, over a black pit", faces: "No face." },
   "r8-5": { who: "Tilda near, Rook behind her braced on his staff", faces: "She is lost: eyes wide, brows up, mouth open. He looks back at her, eyes wide, mouth just open.", untilNextMs: 6000 },
   "r8-6": { who: "The same two, turned", faces: "She looks at him, waiting, mouth shut tight. He looks down at his staff, brows pulled hard together." },
   "r8-7": { who: "Rook alone, head a little tilted", faces: "Concerned: brows raised and drawn together, mouth open as if he has just asked.", extraMs: 1000 },
