@@ -159,6 +159,8 @@ export class PondRoom {
     if (this.walkDef.inside) this.kitchen = 1;
   }
   readonly walkDef: Walk;
+  /** Where Rook starts instead of the walk's own start (back from a job, by the sky skiff: Ladi, 26 Nov). */
+  startAt: Anchor | null = null;
   /**
    * A trial of Rook's speed on the walkable map (the page's ?walkspeed=1.5, 2 or 2.5): either the
    * map's whole beat is shortened, so he and everyone on it stay in step, or (with &only=rook) only
@@ -274,7 +276,7 @@ export class PondRoom {
         this.wanderers.set(10 + i, { home: this.player(10 + i).pos, next: 3 + Math.floor(this.rand() * POND.wander.every[1]) });
       }
     });
-    put(ROOK_ID, W.start);
+    put(ROOK_ID, this.startAt ?? W.start);
     this.endClock();
     this.stop = this.clock.every(this.beatMs, () => this.onTick());
     this.broadcast();
@@ -493,10 +495,10 @@ export class PondRoom {
   }
 
   /** An exchange, one line after another (POND.offerGap apart); `then` after the last. */
-  private exchange(lines: { who: string; text: string }[], then?: () => void) {
+  private exchange(lines: { who: string; text: string; still?: string }[], then?: () => void) {
     const g = this.game, gap = POND.offerGap;
     this.later = [];
-    lines.forEach((l, i) => this.later.push({ at: g.tick + i * gap, f: () => this.say(l.who, l.text) }));
+    lines.forEach((l, i) => this.later.push({ at: g.tick + i * gap, f: () => this.say(l.who, l.text, l.still) }));
     if (then) this.later.push({ at: g.tick + (lines.length - 1) * gap + 2, f: then });
   }
 
@@ -669,7 +671,9 @@ export class PondRoom {
     return best;
   }
 
-  private say(who: string, text: string) {
+  private say(who: string, text: string, still?: string) {
+    // A line with a picture: the picture's caption, in the stills panel.
+    if (still) return void this.lines.push({ who, text, still: { id: still } });
     // Rook's own lines sit over his model, not in the corner (Ladi, 26 Nov: "She's my daughter." in walk 7).
     this.lines.push(who === "Rook" ? { who, text, player: ROOK_ID } : { who, text });
   }

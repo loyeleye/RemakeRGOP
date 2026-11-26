@@ -47,6 +47,8 @@ export interface StillCue {
 }
 
 export const STILLS: Record<string, StillCard> = {
+  // The morning walk before run 8 (walk 9): Lumi at the door with the staff and no bag, the hands scene's old last picture, cropped to 4:3 (story thread, 26 Nov).
+  "w9-lumi-door": { who: "Lumi in the doorway, the staff in her hands, no bag", faces: "Set. Chin up, mouth shut, eyes on him." },
   // Runs 1 to 5 (story/runs1-5-stills.md): each run's first still, at a pause. Approved by Ladi (25 Nov).
   "r1-1": { who: "Hesta at the foot of the north steps, between the foot lamps, one hand cupped to call", faces: "Eyes creased and bright. Brows up. Mouth open, calling." },
   // Over Rook's line and Lumi's answer: the same picture, the caption changing.

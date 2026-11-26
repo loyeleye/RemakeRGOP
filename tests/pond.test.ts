@@ -1,3 +1,4 @@
+import { WALKS } from "../src/engine/walks.js";
 import { describe, expect, it } from "vitest";
 import type { ServerMsg } from "../src/engine/protocol.js";
 import { PondRoom } from "../src/server/pond.js";
@@ -155,10 +156,12 @@ describe("The walks between runs 4 and 5", () => {
     const tap = (name: string) => r.answer({ name, at: () => ({ x: 0, y: 0 }) });
     // Everything said, kept (the room sends its lines on and clears them).
     const said: string[] = [];
-    const rs = room as unknown as { say: (who: string, text: string) => void };
+    const rs = room as unknown as { say: (who: string, text: string, still?: string) => void };
     const say = rs.say.bind(room);
-    rs.say = (who, text) => (said.push(text), say(who, text));
-    return { room, conn, r, tap, said };
+    const lines: { text: string; still?: { id: string } }[] = [];
+    const rl = room as unknown as { lines: typeof lines };
+    rs.say = (who: string, text: string, still?: string) => (said.push(text), say(who, text, still), lines.push(rl.lines.at(-1)!));
+    return { room, conn, r, tap, said, lines };
   };
   it("walk 7: Lumi is not the way on until Kes has had her say; then home", () => {
     const { room, conn, r, tap, said } = make(7);
@@ -176,6 +179,24 @@ describe("The walks between runs 4 and 5", () => {
     expect(r.asking).toBeTruthy();
     conn.message(JSON.stringify({ t: "answer", yes: true }));
     expect(r.done).toBe(true);
+  });
+  it("walk 9, the morning before run 8: it opens in his kitchen, Lumi's first line has her picture, and Moth asks after his talk", () => {
+    const { room, conn, r, tap, said, lines } = make(9);
+    expect((room as unknown as { kitchen: number }).kitchen).toBe(1);
+    expect(r.goal()).toBe("Talk to Moth at the sky skiff");
+    tap("Lumi");
+    for (let i = 0; i < 30; i++) room.onTick();
+    expect(lines.find((l) => l.text === "You packed one bag.")?.still?.id).toBe("w9-lumi-door");
+    expect(said).toContain("I'll count how long you take.");
+    tap("Moth");
+    for (let i = 0; i < 40 && !r.asking; i++) room.onTick();
+    expect(said.at(-1)).toBe("You tell her.");
+    expect(r.asking).toBeTruthy();
+    conn.message(JSON.stringify({ t: "answer", yes: true }));
+    expect(r.done).toBe(true);
+  });
+  it("walk 5, after run 8, starts by the sky skiff at the landing", () => {
+    expect(WALKS.find((w) => w.n === 5)!.start).toBe("landing");
   });
   it("walk 8: Kes asks before the crossing", () => {
     const { conn, r, tap } = make(8);

@@ -32,7 +32,7 @@ export interface WalkPerson {
   /** Where they go on their own once the walk's `first` talk is done (walk 7: Lumi runs home). */
   then?: Anchor;
   /** An exchange said on the first tap, one line after another, who by who (Kes's challenge in walk 7); later taps say `lines`. */
-  talk?: { who: string; text: string }[];
+  talk?: { who: string; text: string; still?: string }[];
 }
 
 export interface Walk {
@@ -146,8 +146,43 @@ export const WALKS: Walk[] = [
     n: 4, title: "Night", light: "night", after: 7, next: 8, go: "Hesta", start: "door", goal: "Find Hesta on the terrace", ask: "Sit with Hesta?",
     people: [{ name: "Hesta", at: "chair", lines: ["Couldn't sleep either?"] }],
   },
+  // Between Hesta's hands and run 8 (Ladi, 26 Nov): she sends him to bed, a night goes by, and he
+  // wakes in his house; the way on is Moth at the sky skiff with the next job. The shape is Ladi's; the
+  // lines are the story thread's, still to come (STORY_LINES_PENDING marks where they go).
   {
-    n: 5, title: "Dusk", light: "dusk", after: 8, next: 9, go: "Mabry", start: "door", goal: "Go to Mabry at the shrine", ask: "Go to the shrine with Mabry?",
+    n: 9, title: "Morning, before the Sieve", light: "morning", after: 7, next: 8, go: "Moth", start: "door", inside: true, goal: "Talk to Moth at the sky skiff", ask: "Set out for the Sieve?",
+    people: [
+      // The story thread's lines (story/gap7-8-walk-beats.md), approved by Ladi on 26 Nov; all unvoiced.
+      // The morning after a miracle: nothing is wrong, and nobody but Rook knows about her hands.
+      {
+        name: "Moth", at: "landing", stay: true, lines: ["Word from the Sieve. Their keeper wants you today."],
+        talk: [
+          { who: "Moth", text: "Word from the Sieve. Their keeper wants you today." },
+          { who: "Moth", text: "Granny's route. She had it to me before light." },
+          { who: "Rook", text: "She should be resting." },
+          { who: "Moth", text: "You tell her." },
+        ],
+      },
+      // Her first line goes with the picture that was the hands scene's last (Lumi at the door with the
+      // staff and no bag): the walk's models are too small to show the bag isn't there (story thread).
+      {
+        name: "Lumi", at: "door", stay: true, lines: ["I'll count how long you take."],
+        talk: [
+          { who: "Lumi", text: "You packed one bag.", still: "w9-lumi-door" },
+          { who: "Rook", text: "It's a long way out. Next one." },
+          { who: "Lumi", text: "I'll count how long you take." },
+        ],
+      },
+      { name: "Maudie", at: "path", stay: true, lines: ["Your Granny was up before the birds. Shooed me off her step.", "Nobody shoos me."] },
+      { name: "Nell", at: "pond", lines: ["I'm Granny. You're the brazier."] },
+      { name: "Sefa", at: "pond", lines: ["I'm always the brazier."] },
+      // Her hands inside her shawl.
+      { name: "Hesta", at: "chair", stay: true, lines: ["What hands? Go and earn your keep."], talk: [{ who: "Rook", text: "How are the hands?" }, { who: "Hesta", text: "What hands? Go and earn your keep." }] },
+      { name: "Mabry", at: "shrine", stay: true, lines: ["The fire's steady this morning. And your Lumi. Such a light in that child."] },
+    ],
+  },
+  {
+    n: 5, title: "Dusk", light: "dusk", after: 8, next: 9, go: "Mabry", start: "landing", goal: "Go to Mabry at the shrine", ask: "Go to the shrine with Mabry?",
     people: [
       { name: "Mabry", at: "shrine", lines: ["We will speak of the Offering. Not here."] },
       { name: "Kes", at: "shrine", stay: true, lines: ["Old men arguing. Don't worry about it."] },

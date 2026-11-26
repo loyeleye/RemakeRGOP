@@ -153,9 +153,12 @@ function connectPractice(name: string) {
 let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | TidepoolRoom | MossRoom | null = null;
 
 /** The walkable map, at the speed on trial: ?walkspeed=1.5, 2 or 2.5 shortens the map's beat; with &only=rook only his stride is longer. */
+/** Back from a job (an optional job run), the walk starts by the sky skiff (Ladi, 26 Nov). */
+let walkFromJob = false;
 function pondRoom(walk: number) {
   const r = new PondRoom(undefined, undefined, walk);
   r.chain = chainAt >= 0 && chainBack === null;
+  if (walkFromJob) (r.startAt = "landing"), (walkFromJob = false);
   const q = new URLSearchParams(location.search), f = Number(q.get("walkspeed"));
   if ([1.5, 2, 2.5].includes(f)) {
     if (q.get("only") === "rook") r.rookStride = f;
@@ -2023,8 +2026,11 @@ function chainOn() {
 }
 
 /** Back from an optional run to the piece it was opened from. */
+let chainFrom: string | null = null;
 function chainReturn() {
   const i = chainBack ?? chainAt;
+  // Moth's jobs (Moss Hollow, Tidepool Steps, Kite Fell) come back by the skiff.
+  walkFromJob = chainFrom === "o3a" || chainFrom === "o3b" || chainFrom === "o3c";
   playPiece(i);
 }
 
@@ -2086,6 +2092,7 @@ function chainOptional(id: "o1" | "o2" | "o3a" | "o3b" | "o3c") {
   if (link) leave(true);
   chainAt = back;
   chainBack = back;
+  chainFrom = id;
   $("chain-card").hidden = true;
   connectStory(playerName(), id);
 }
@@ -2293,6 +2300,8 @@ function heldScene(p: Piece) {
       at(4.3, () => (el.remove(), leave()));
       return;
     }
+    // A night going by after it (7-8b): the next piece opens under the night.
+    if (H.night) return nightPass(() => (chainOn(), el.remove()));
     chainOn();
     window.setTimeout(() => (el.classList.remove("on"), window.setTimeout(() => el.remove(), 700)), 100);
   });

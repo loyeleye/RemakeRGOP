@@ -78,6 +78,8 @@ export interface Held {
   pictures: { slot: string; hold: number; lines?: { who: string[]; text: string; quiet?: true }[]; shake?: string; cut?: true; fade?: number; hush?: true }[];
   /** A sound under the whole scene: "falls", the falls, until a picture with `hush` drops it out. */
   bed?: "falls";
+  /** A night goes by after it (main.ts nightPass), before the next piece opens. */
+  night?: true;
   /** Seconds: the cross-fade, the hold before anyone speaks, each line, the pause before it. */
   fade: number;
   lead: number;
@@ -124,10 +126,15 @@ export const HELD: Record<string, Held> = {
     gap: 0.4,
     pictures: [
       { slot: "hands-1-burnt", hold: 4, shake: "hands-1-shake-layer" },
-      { slot: "hands-2-caught", hold: 0.6, lines: [{ who: ["Rook"], text: "Granny?" }] },
-      { slot: "hands-3-laugh", hold: 1, lines: [{ who: ["Hesta"], text: "Grabbed the hot end. At my age." }, { who: ["Hesta"], text: "Now don't tell Lumi how many honey drops I've had." }] },
-      { slot: "hands-4-morning-door", hold: 3.5, cut: true },
+      // Ladi (26 Nov): "Granny?" was whiny; the story thread's steadier line, approved by Ladi the same day. Not voiced yet.
+      { slot: "hands-2-caught", hold: 0.6, lines: [{ who: ["Rook"], text: "Granny. Your hands." }] },
+      // Ladi (26 Nov): she sends him to bed here, a night goes by, and the morning is a walk of its own
+      // (walk 9). Her line and his answer are the story thread's (story/gap7-8-walk-beats.md),
+      // approved by Ladi on 26 Nov; unvoiced. The cut to morning at the door (hands-4-morning-door) is now the still with
+      // Lumi's first line in that walk.
+      { slot: "hands-3-laugh", hold: 1, lines: [{ who: ["Hesta"], text: "Grabbed the hot end. At my age." }, { who: ["Hesta"], text: "Now don't tell Lumi how many honey drops I've had." }, { who: ["Hesta"], text: "Go to bed, Rook. One of us should sleep." }, { who: ["Rook"], text: "I'll come by in the morning." }] },
     ],
+    night: true,
   },
   // 8-9b, the beacon and the send-off (production/story/part1/send-off/final/README.md, 25 Nov): the
   // cutscene thread's thirteen pictures, not seen by Ladi, in the order of story/part1-send-off.md,
@@ -337,7 +344,9 @@ export const PART1: Piece[] = [
   { id: "7-8a", name: "Supper", kind: "card", scene: "supper", card: { heading: "Supper", summary: "One picture: Rook and Lumi say Dawn's creed, Lumi on the bench beside him.", ruled: "Ruled: the supper is in the bible, and the picture, Lumi's seat and the creed's four lines are Ladi's." } },
   { id: "7-8", name: "Walk 4, night", kind: "walk", walk: 4 },
   // Shown as its four pictures (HELD["7-8b"]); take `scene` off and it is its card again.
-  { id: "7-8b", name: "Hesta's hands, and morning", kind: "card", scene: "held", card: { heading: "Hesta's hands, and morning", summary: "Hesta on the terrace is shaking, her hands burned, and laughs it off. Cut to morning: Lumi at the door with the staff and no bag.", ruled: "Part ruled: Hesta's hands are in the bible. The rest is draft." } },
+  { id: "7-8b", name: "Hesta's hands, and morning", kind: "card", scene: "held", card: { heading: "Hesta's hands, and morning", summary: "Hesta on the terrace is shaking, her hands burned, and laughs it off, and sends him to bed. A night goes by.", ruled: "Part ruled: Hesta's hands are in the bible. The rest is draft." } },
+  // Ladi (26 Nov): he wakes in his house, and Moth at the sky skiff has the next job.
+  { id: "7-8c", name: "Walk, the morning of the Sieve", kind: "walk", walk: 9 },
   { id: "8", name: "Run 8, the Sieve", kind: "run", run: 8 },
   { id: "8-9", name: "Walk 5, dusk", kind: "walk", walk: 5 },
   // Shown as its thirteen pictures (HELD["8-9b"]); take `scene` off and it is its card again.
