@@ -143,9 +143,11 @@ export const SHIP = {
   railTicks: 3,
   /** Measurements only: how the stand-in for the player plays (the keen one dithers a tick before a choice this often: 0.67 is two ticks a choice, about a careful first-timer). */
   stand: { pushy: 0, sloppiness: 0.08, blind: 0.5 },
-  /** Where Rook starts and where the hooded figure stands, in tiles from the lamp. */
+  /** Where Rook starts and where the ferryman stands (by the sail near the bow, his back to us the whole run: Ladi, 26 Nov), in tiles from the lamp. */
   rook: [0, 4] as const,
-  figure: [0, 11] as const,
+  figure: [2, -11] as const,
+  /** The tiller, lashed at the stern with nobody's hand on it. */
+  tiller: [0, 11] as const,
   /** On a phone, how many tiles the short side of the screen shows, and how far ahead of him the eye sits (tiles toward the bow). */
   phoneSpan: 27,
   phoneAhead: 4,
@@ -197,7 +199,7 @@ export const shipRise = (a: number, b: number, share: number, by = 1) => a + (b 
 /** The run's share done (0 to 1) as the sea's light: 0 is night, 1 is first light. */
 export const shipLight = (share: number) => Math.pow(Math.max(0, Math.min(1, share)), SHIP.sky.curve);
 
-/** The deck as map rows: planks, the cloud sea round it (wells: nobody walks there, wisps float over it, a staff reaches across), the hooded figure at the stern, and where Rook starts. The lamp is the board's centre. */
+/** The deck as map rows: planks, the cloud sea round it (wells: nobody walks there, wisps float over it, a staff reaches across), the ferryman by the sail, and where Rook starts. The lamp is the board's centre. */
 export function shipRows(): string[] {
   const g: string[][] = Array.from({ length: SHIP_SIZE.h }, (_, by) => Array.from({ length: SHIP_SIZE.w }, (_, bx) => (onDeck(bx - HALF_W, by - HALF_H) ? "." : inSea(bx - HALF_W, by - HALF_H) ? "@" : " ")));
   const put = (x: number, y: number, ch: string) => (g[y + HALF_H]![x + HALF_W] = ch);

@@ -187,7 +187,7 @@ type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
 const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell", "sefa", "kes", "maudie", "mabry", "orrin"] as const;
 /** Each character's height against Rook's (models come in at one height). Lumi is nine. */
-export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95 };
+export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95, ferryman: 1.05 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};
@@ -277,6 +277,14 @@ function loadCrowd() {
   if (crowdAsked) return;
   crowdAsked = true;
   for (const n of CROWD_MODELS) loadFigure(n);
+}
+
+/** The ferryman, seen only on the ship home (run 10): asked for when it first opens. */
+let ferryAsked = false;
+function loadFerryman() {
+  if (ferryAsked) return;
+  ferryAsked = true;
+  loadFigure("ferryman");
 }
 
 /** Run 9's villagers are asked for when that run first opens, not with the page: six models nobody else needs. */
@@ -3139,7 +3147,8 @@ export class World {
       return;
     }
     if (!this.shipFx) {
-      this.shipFx = new ShipFx(glowSprite, (n) => models[n]);
+      loadFerryman();
+      this.shipFx = new ShipFx(glowSprite, (n) => models[n], (n) => castBody(n));
       this.scene.add(this.shipFx.all);
       this.distant.visible = false;
     }

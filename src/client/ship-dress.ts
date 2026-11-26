@@ -304,7 +304,16 @@ export class ShipFx {
   private lands: { x: number; z: number; r: number }[] = [];
   private lifted = new Map<number, number>();
 
-  constructor(private glow: Glow, private model: (name: string) => THREE.Object3D | undefined) {
+  /** The ferryman's made figure (a rigged model with its own clips), once it is in; the block-out stands until then. */
+  private ferry: { body: THREE.Object3D; anim?: { set(m: "idle"): void; update(t: number): void } } | null = null;
+  private stand: THREE.Object3D;
+
+  constructor(
+    private glow: Glow,
+    private model: (name: string) => THREE.Object3D | undefined,
+    /** A rigged figure of the cast, lit as the cast is, with its clips on userData.anim; null until its model is in. */
+    private body: (name: string) => THREE.Object3D | null = () => null,
+  ) {
     const std: Std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, ...extra });
     const K = SHIP_LOOK, hw = SHIP_DECK.hw + 0.5, hl = SHIP_DECK.hl + 0.5;
 
@@ -418,7 +427,7 @@ export class ShipFx {
         // As made its post is at -x: turned so the post is aft and the bar points to the bow, and short enough to end behind him.
         m.rotation.y = Math.PI / 2;
         m.scale.setScalar(0.7);
-        m.position.set(SHIP.figure[0], 0.08, SHIP.figure[1] + 1.25);
+        m.position.set(SHIP.tiller[0], 0.08, SHIP.tiller[1] + 1.25);
         this.all.add(m);
       },
     });
@@ -445,11 +454,13 @@ export class ShipFx {
     const rim = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineBasicMaterial({ color: "#ffcf8a", transparent: true, opacity: 0.7 }));
     this.all.add(rim);
 
-    // The man at the stern: his back to us, his hands folded behind it, and the tiller lashed behind him. He never moves.
+    // The ferryman, by the sail near the bow: his back to us the whole run, looking ahead, and he never turns (Ladi and the story thread, 26 Nov).
+    // Until his made figure is in, the block-out stands there.
     const who = buildFixer(std);
     who.scale.setScalar(0.86);
     who.position.set(SHIP.figure[0], 0.08, SHIP.figure[1]);
     this.all.add(who);
+    this.stand = who;
 
     // The islands he passes, each put in its place as the run goes.
     for (const spec of K.islands) {
@@ -697,6 +708,21 @@ void main() {
     this.last = time;
     this.u.uTime.value = time;
     // Made pieces that have come in since the last frame take their places.
+    if (!this.ferry) {
+      const body = this.body("ferryman");
+      if (body) {
+        this.stand.visible = false;
+        // As made he faces +z, toward the camera: turned to face the bow, so all we ever see is his back.
+        body.rotation.y = Math.PI;
+        body.position.set(SHIP.figure[0], 0.08, SHIP.figure[1]);
+        body.traverse((o) => (o as THREE.Mesh).isMesh && ((o as THREE.Mesh).castShadow = true));
+        this.all.add(body);
+        const anim = body.userData.anim as NonNullable<ShipFx["ferry"]>["anim"];
+        anim?.set("idle");
+        this.ferry = { body, anim };
+      }
+    }
+    this.ferry?.anim?.update(time);
     if (this.slots.length) {
       this.slots = this.slots.filter((slot) => {
         const m = this.model(slot.name);

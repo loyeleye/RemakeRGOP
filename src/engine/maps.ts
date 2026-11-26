@@ -362,7 +362,7 @@ export const PROP_CHARS: Record<string, PropKind> = {
   "5": "kes-house", "6": "wind-vane", "7": "bent-tree", "8": "referee-stand",
   // The low one (run 9): its own brazier, cold, its path lamps and its houses. All are drawn by the run (rescue-dress.ts).
   "9": "cold-brazier", "0": "low-lamp", "?": "low-house",
-  // The ship home (run 10): the hooded figure at the stern, drawn by the run (ship-dress.ts).
+  // The ship home (run 10): the ferryman by the sail, drawn by the run (ship-dress.ts).
   "$": "ship-figure",
   q: "beehive", p: "garden-plot", m: "mat-rack", s: "baskets", w: "wheelbarrow", n: "pane-crate", r: "cargo-crates",
 };
