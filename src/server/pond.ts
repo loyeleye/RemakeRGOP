@@ -668,7 +668,8 @@ export class PondRoom {
   }
 
   private say(who: string, text: string) {
-    this.lines.push({ who, text });
+    // Rook's own lines sit over his model, not in the corner (Ladi, 26 Nov: "She's my daughter." in walk 7).
+    this.lines.push(who === "Rook" ? { who, text, player: ROOK_ID } : { who, text });
   }
 
   private flush() {
