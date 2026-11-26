@@ -255,7 +255,7 @@ export const DREAM = {
   /** 1.5 (was 1) so the cut to Lumi lands where the dream's sound bed ends its ringing, 29.4 s. */
   whiteHold: 1.5,
   /**
-   * The sound under it all, from picture 1 (Ladi's pick, "My pick is 2", 26 Nov): music/dream-bed.mp3, 33 s,
+   * The sound under it all, from picture 1: music/dream-bed.mp3, 33 s (not in yet: Ladi is choosing between two mixes, 26 Nov),
    * the gameplay thread's mix of Eleven Music and ElevenLabs sound effects (gameplay/audio/dream/). Its
    * marks: the boat's water 7.4 s, the lantern flame 11.6, ringing on the white 26 to 29.4, then a quiet
    * morning room under Lumi's line. If the timings above change, the mix has to change with them.
