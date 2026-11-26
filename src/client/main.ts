@@ -81,6 +81,9 @@ function onServer(m: ServerMsg) {
         snap = prevSnap = null;
       }
       if (room.phase === "countdown" && was !== "countdown") cam.follow = true;
+      // The round is over (Ladi, 26 Nov): whatever was still waiting to be said goes, and at the run's
+      // end the voice still talking stops too, so the end's own lines are heard at once.
+      if (was === "playing" && room.phase !== "playing") dropBarks(room.phase === "results");
       if (room.story) storyPhaseSound(was);
       placeView(!!room.story?.pond, !!room.story?.pond?.leaving);
       openKitchen();
@@ -395,14 +398,32 @@ function stillLine(l: StoryLine) {
   return ms;
 }
 
-/** Ordinary bubbles that came while a still was up: they wait until it has gone, so there is one place to read (gameplay thread). */
-const heldBarks: StoryLine[] = [];
+/**
+ * Ordinary bubbles that came while a still was up: they wait until it has gone, so there is one place
+ * to read (gameplay thread). And a voiced line that comes while someone is still talking waits for
+ * them to finish, so its bubble and its voice come together and no line goes unsaid (Ladi, 26 Nov).
+ * The round's end empties it (dropBarks): nothing from a finished round is still waiting to be said.
+ */
+const heldBarks: { l: StoryLine; at: number }[] = [];
 let heldNext = 0;
+/** A bubble waits for the voice before it at most this long (ms); past that it is about something long gone, and is let go. */
+const HELD_MAX = 12000;
+/** It waits its turn behind someone's voice: it has a clip of its own (not Hesta's "Now", which must not be late). */
+const waitsForVoice = (l: StoryLine) => !l.quiet && !l.thought && !l.over && !(l.who === "Hesta" && l.wisp != null) && sound.hasClip(l.who, l.text);
 function releaseBarks(now: number) {
+  while (heldBarks.length && now - heldBarks[0]!.at > HELD_MAX) heldBarks.shift();
   if (!heldBarks.length || stills.up || now < heldNext) return;
-  const l = heldBarks.shift()!;
-  heldNext = now + Math.max(2000, l.text.length * 60);
+  const { l } = heldBarks[0]!;
+  if (waitsForVoice(l) && sound.voiceTalking()) return;
+  heldBarks.shift();
+  // A still's held bubbles are spaced to be read; a voiced one is spaced by its voice.
+  heldNext = now + (waitsForVoice(l) ? 250 : Math.max(2000, l.text.length * 60));
   sayLine(l, true);
+}
+/** The round is over: the bubbles still waiting go unsaid, and so does any voice waiting its turn. */
+function dropBarks(stop: boolean) {
+  heldBarks.length = 0;
+  if (stop) sound.dropVoices();
 }
 
 function sayLine(l: StoryLine, released = false) {
@@ -420,7 +441,7 @@ function sayLine(l: StoryLine, released = false) {
     // Its bubble goes up with its picture, not after it.
     released = true;
   }
-  if (!released && !l.talk && room?.phase === "playing" && l.who && (stills.up || heldBarks.length)) return void heldBarks.push(l);
+  if (!released && !l.talk && room?.phase === "playing" && l.who && (stills.up || heldBarks.length || (waitsForVoice(l) && sound.voiceTalking()))) return void heldBarks.push({ l, at: performance.now() });
   if (l.talk || room?.phase !== "playing" || !l.who) return talk(l);
   // A line about nothing in particular sits over its speaker's model when they're on the field.
   const speaker = l.wisp == null && !l.ring && l.player == null ? speakerAt(l.who) && l.who.toLowerCase() : undefined;
@@ -438,7 +459,10 @@ function sayLine(l: StoryLine, released = false) {
   void el.offsetWidth;
   el.style.animation = "";
   barks[anchored ? "bark" : "chip"] = { el, until: performance.now() + Math.max(2000, l.text.length * 60, (VOICE_SECONDS[`${l.who}|${l.text}`] ?? 0) * 1000 + 400), wisp: l.wisp, ring: l.ring, player: l.player, speaker: speaker || undefined, who: l.who, text: l.text };
-  if (!l.quiet && !l.thought) sound.speak(l.who, l.text, l.who === "Hesta" && l.wisp != null, !!l.over);
+  // Hesta's "Now" is a cue to act: late is worse than none, so it cuts in over whoever is talking.
+  const cue = l.who === "Hesta" && l.wisp != null;
+  if (cue && !l.quiet && sound.hasClip(l.who, l.text)) sound.dropVoices();
+  if (!l.quiet && !l.thought) sound.speak(l.who, l.text, cue, !!l.over, cue ? 0 : undefined);
   if (!anchored) placeBarks(performance.now());
 }
 
@@ -610,8 +634,11 @@ function typeOn() {
   $("dialog-text").innerHTML = lineHtml(t.l.text);
   typing = null;
   // Time to read it, whether or not another line is waiting (a tap moves on sooner).
-  // Long enough to read, and for its voice to finish: a line that comes while a clip still plays is not voiced.
-  talkTimer = window.setTimeout(nextTalk, Math.max(1800, t.l.text.length * 45, (VOICE_SECONDS[`${t.l.who}|${t.l.text}`] ?? 0) * 1000 + 250));
+  // Long enough to read, and for its voice to finish (a clip that started late, or waited for the one
+  // before it, is heard out: up to a few seconds more, then the dialog goes on regardless).
+  const until = performance.now() + 6000;
+  const after = () => (sound.voiceBusy() && performance.now() < until ? (talkTimer = window.setTimeout(after, 120)) : nextTalk());
+  talkTimer = window.setTimeout(after, Math.max(1800, t.l.text.length * 45, (VOICE_SECONDS[`${t.l.who}|${t.l.text}`] ?? 0) * 1000 + 250));
 }
 
 $("dialog").onclick = () => {
@@ -619,10 +646,15 @@ $("dialog").onclick = () => {
     clearTimeout(typeTimer);
     typing.shown = typing.l.text.length - 1;
     typeOn();
-  } else nextTalk();
+  } else {
+    // Tapped past it: its voice stops with it, and the next line is said at once.
+    sound.dropVoices();
+    nextTalk();
+  }
 };
 
 function clearCaptions() {
+  sound.dropVoices();
   talkQueue.length = 0;
   clearTimeout(talkTimer);
   clearTimeout(typeTimer);
@@ -649,7 +681,7 @@ function leave(keepUrl = false) {
   clearCaptions();
   for (const t of stillTimers) clearTimeout(t);
   stillTimers = [];
-  heldBarks.length = 0;
+  dropBarks(true);
   stills.clear();
   inPlace = false;
   jumped = false;
@@ -2006,6 +2038,8 @@ let chainOptN = 0;
 /** Open a piece of Part 1: a run, a walk, or a card for what is not built yet. */
 function playPiece(i: number) {
   const p = PART1[i];
+  // A new piece: nothing from the last one is still talking.
+  sound.dropVoices();
   if (!p) return leave();
   if (link) leave(true);
   chainAt = i;
@@ -3173,6 +3207,8 @@ if (urlCode && /^[a-z]{4}$/i.test(urlCode)) {
   story: () => storyRoom,
   /** The camera (for pictures: set follow false and cx, cy to look somewhere). */
   cam: () => cam,
+  /** What became of each voiced line (said, waited, let go). */
+  voices: () => sound.voiceLog,
 };
 
 // ------------------------------------------------------------------ debug overlay

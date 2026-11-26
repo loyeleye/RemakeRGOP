@@ -9,6 +9,8 @@ import { VOICE_LINES, VOICE_STOCK } from "./voice-lines.js";
 export const SOUND = {
   /** Master volume, 0 to 1. */
   volume: 0.8,
+  /** A voice clip that has not started this long after its line (ms) is given up: the lines behind it go on. */
+  voiceStartMs: 3000,
   /** Bank chimes climb the scale; a gap of this many ticks between banks starts again at the bottom. */
   streakGap: 10,
   /** Crewmates' banks, and Kes's island far away. */
@@ -345,14 +347,54 @@ export const VOICE: { who: string; match: RegExp; src: string }[] = [
   { who: "Rook", match: /^Let's call it for now\. We can try again tomorrow\.$/, src: "voice/rook-call-it.mp3" },
 ];
 
-/** The voice clip playing now. One voice at a time: a line that comes while it plays stays silent. */
+/** The voice clip playing now. One voice at a time: a line that comes while it plays waits for it (voiceQueue). */
 let voicing: HTMLAudioElement | null = null;
 /** Who the clip is, and the last babble with its speaker: so one speaker can be cut off (run 9's static). */
 let voicingWho = "";
 let babbling: { who: string; g: GainNode } | null = null;
 /** The speaker whose voice the shadow has cut off, while it has. */
 let cutWho: string | null = null;
-const voiceBusy = () => voicing != null && !voicing.ended && (!voicing.paused || cutWho === voicingWho);
+/** Someone's clip is playing (or held under the static). */
+export const voiceBusy = () => voicing != null && !voicing.ended && (!voicing.paused || cutWho === voicingWho);
+/** Someone's clip is being heard now (not one held silent under run 9's static). */
+export const voiceTalking = () => voicing != null && !voicing.ended && cutWho !== voicingWho;
+
+/**
+ * Lines that came while a clip played: each is said when the one before it ends, unless it has
+ * waited past its time (then it goes unsaid, as its words are long gone). A run's end, a new scene
+ * or a tap past a line empties it (dropVoices), so nothing old is still talking over what is new.
+ */
+const voiceQueue: { who: string; text: string; now: boolean; until: number }[] = [];
+/** How long a line may wait for the clip before it, by default (ms). */
+export const VOICE_WAIT = 4000;
+/** What became of each voiced line, for the smoke test: said, waited, let go late, or stopped. */
+export const voiceLog: { at: number; who: string; text: string; e: "say" | "wait" | "late" | "drop" | "lost" }[] = [];
+const logVoice = (who: string, text: string, e: (typeof voiceLog)[number]["e"]) => {
+  voiceLog.push({ at: Math.round(performance.now()), who, text, e });
+  if (voiceLog.length > 300) voiceLog.shift();
+};
+function nextVoice() {
+  while (voiceQueue.length && !voiceBusy()) {
+    const q = voiceQueue.shift()!;
+    if (performance.now() <= q.until) return void speak(q.who, q.text, q.now);
+    logVoice(q.who, q.text, "late");
+  }
+}
+/** Stop the clip playing now and forget every line waiting behind it. */
+export function dropVoices() {
+  for (const q of voiceQueue) logVoice(q.who, q.text, "drop");
+  voiceQueue.length = 0;
+  const a = voicing;
+  voicing = null;
+  if (a) {
+    a.pause();
+    a.removeAttribute("src");
+  }
+}
+/** The clip a line would play, if it has one of its own (not a stock sound or the babble). */
+export function hasClip(who: string, text: string): boolean {
+  return !!(VOICE_LINES[`${who}|${text}`] ?? VOICE.find((c) => c.who === who && c.match.test(text)));
+}
 
 /** The joined voice files (tools/voice-sprites.py), fetched once each and kept in the page. */
 const joinedFiles = new Map<string, Promise<string>>();
@@ -389,12 +431,18 @@ function stockFor(who: string, text: string): string | undefined {
 }
 
 /** A line appears: its clip if it has one, else Hesta's "Now" cue or the speaker's babble. */
-export function speak(who: string, text: string, now = false, together = false) {
-  // Someone is still talking: don't talk over them (the text still shows). `together` is for a line
-  // two people say at once (the creed's last line at supper): the second voice joins the first.
-  if (voiceBusy() && !together) return;
-  // An exact whole-line clip wins; then a pattern; else the babble.
-  const src = VOICE_LINES[`${who}|${text}`] ?? VOICE.find((c) => c.who === who && c.match.test(text))?.src ?? stockFor(who, text);
+export function speak(who: string, text: string, now = false, together = false, wait = VOICE_WAIT) {
+  // An exact whole-line clip wins; then a pattern; else a stock sound, else the babble.
+  const own = VOICE_LINES[`${who}|${text}`] ?? VOICE.find((c) => c.who === who && c.match.test(text))?.src;
+  // Someone is still talking: don't talk over them. A line with its own clip waits its turn (the
+  // text still shows); a stock sound or a babble is only colour, and is let go. `together` is for a
+  // line two people say at once (the creed's last line at supper): the second voice joins the first.
+  if (voiceBusy() && !together) {
+    if (own && wait > 0) voiceQueue.push({ who, text, now, until: performance.now() + wait }), logVoice(who, text, "wait");
+    else if (own) logVoice(who, text, "lost");
+    return;
+  }
+  const src = own ?? stockFor(who, text);
   if (src) {
     if (!out()) return;
     // A time range of a joined file (voice/<group>.mp3#t=a,b, tools/voice-sprites.py): the page seeks to a itself and stops at b.
@@ -404,9 +452,20 @@ export function speak(who: string, text: string, now = false, together = false) 
     a.muted = muted;
     voicing = a;
     voicingWho = who;
-    const done = () => { if (voicing === a) voicing = null; };
+    if (own) logVoice(who, text, "say");
+    const done = () => {
+      if (voicing !== a) return;
+      voicing = null;
+      nextVoice();
+    };
     a.addEventListener("ended", done);
     a.addEventListener("error", done);
+    // A clip that has not started after a while (a slow or failed load) is given up, so the lines behind it are not kept waiting.
+    let started = false;
+    a.addEventListener("playing", () => (started = true), { once: true });
+    window.setTimeout(() => {
+      if (!started && voicing === a && cutWho !== who) (a.pause(), done());
+    }, SOUND.voiceStartMs);
     if (range) {
       const from = Number(range[2]), end = Number(range[3]);
       let timer = 0;
@@ -542,7 +601,9 @@ export function cutVoice(who: string | null): boolean {
   }
   if (was && voicing && voicingWho === was && voicing.paused && !voicing.ended) {
     const a = voicing;
-    void a.play().catch(() => { if (voicing === a) voicing = null; });
+    void a.play().catch(() => {
+      if (voicing === a) (voicing = null), nextVoice();
+    });
     return true;
   }
   return false;
