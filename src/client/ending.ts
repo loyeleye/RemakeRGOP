@@ -133,11 +133,15 @@ export function card(slot: string, cls: string, inner = "") {
   const el = document.createElement("div");
   el.className = `card ${cls}`;
   el.innerHTML = `${inner}<i class="ph">placeholder · ${slot}</i>`;
+  // While its picture loads, the card shows nothing of its own (no placeholder flashing before the picture); only if the picture never comes.
+  el.classList.add("wait");
   const img = new Image();
   img.onload = () => {
     el.style.backgroundImage = `url(story/${slot}.webp)`;
     el.classList.add("real");
+    el.classList.remove("wait");
   };
+  img.onerror = () => el.classList.remove("wait");
   img.src = `story/${slot}.webp`;
   return el;
 }

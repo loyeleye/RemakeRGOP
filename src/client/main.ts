@@ -1460,12 +1460,14 @@ function dyingCard(d: NonNullable<StoryView["dying"]> | undefined) {
   el.hidden = n < 0;
   if (n < 0) return;
   const name = n === 3 ? DYING.risen.name : DYING.stills.names[n]!;
-  el.innerHTML = `<div><small>picture to come</small><b>${esc(name)}</b></div>`;
-  // The drawn picture over the card, when there is one.
-  const file = n < 3 ? DYING.stills.files[n] : DYING.risen.file;
+  // The drawn picture, when there is one; its name on a dark card only if it never loads (not flashed up while it does).
+  const file = DYING.stills.files[n];
   const img = file ? dyingArt.get(file) : undefined;
-  if (img?.complete && img.naturalWidth) el.append(img);
-  else if (img) img.onload = () => dyingStill === n && el.append(img);
+  const named = () => (el.innerHTML = `<div><small>picture to come</small><b>${esc(name)}</b></div>`);
+  el.innerHTML = "";
+  if (!img) named();
+  else if (img.complete && img.naturalWidth) el.append(img);
+  else (img.onload = () => dyingStill === n && el.append(img)), (img.onerror = () => dyingStill === n && named());
   el.classList.remove("in", "inout");
   el.style.animationDuration = "";
   void el.offsetWidth;

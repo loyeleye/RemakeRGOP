@@ -107,6 +107,9 @@ export class StillsPanel {
         const img = new Image();
         img.alt = "";
         const show = () => ((ph.hidden = true), layer.prepend(img));
+        // Its card is kept out of sight while the picture loads, and shown only if it never comes.
+        ph.style.visibility = "hidden";
+        img.onerror = () => (ph.style.visibility = "");
         img.src = got.src;
         if (got.complete && got.naturalWidth) show();
         else img.onload = show;
@@ -188,6 +191,9 @@ export class StillsPanel {
       const img = new Image();
       img.alt = "";
       const put = () => ((ph.hidden = true), art.append(img));
+      // Its card is kept out of sight while the picture loads, and shown only if it never comes.
+      ph.style.visibility = "hidden";
+      img.onerror = () => (ph.style.visibility = "");
       img.src = got.src;
       if (got.complete && got.naturalWidth) put();
       else img.onload = put;

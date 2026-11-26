@@ -137,7 +137,7 @@ export function alarmCards(ready: (leftMs: number) => void, then: (skipped: bool
   const shots: Shot[] = A.shots.map((s) => {
     const pic = document.createElement("div");
     pic.className = "pic";
-    pic.innerHTML = `<div class="ph"><small>picture to come</small><b>${esc(s.name)}</b></div>`;
+    // Every shot is drawn now: no "picture to come" card under it to show through while it loads (Ladi, 26 Nov).
     const cam = document.createElement("div");
     cam.className = "cam";
     if (s.at) cam.style.transformOrigin = `${s.at[0]}px ${s.at[1]}px`;
@@ -197,8 +197,8 @@ export function alarmCards(ready: (leftMs: number) => void, then: (skipped: bool
     tick();
   };
   skip.onclick = () => (sound.alarmQuiet(), end(true));
-  // Not before its pictures are there (or two seconds, whichever is first).
-  void Promise.race([Promise.all(imgs.map((i) => i.decode().catch(() => {}))), new Promise((r) => setTimeout(r, 2000))]).then(go);
+  // Not before its pictures are there (or six seconds, whichever is first: a slow host can take a while for all its layers).
+  void Promise.race([Promise.all(imgs.map((i) => i.decode().catch(() => {}))), new Promise((r) => setTimeout(r, 6000))]).then(go);
 }
 
 type Layer = (file: string, x?: number, y?: number, origin?: string) => HTMLImageElement;

@@ -187,6 +187,8 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #ending .card, #opening { background-size: cover; background-position: center; }
 #ending .card .ph, #opening .ph { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: #ffffff80; font-style: normal; letter-spacing: 0.05em; }
 .card.real > :not(.ph), .card.real .ph { display: none; }
+/* While its picture loads, a card shows no placeholder label (client/ending.ts card): only if the picture never comes. */
+.card.wait .ph { visibility: hidden; }
 /* Placeholders, drawn so the timing reads: Fairy Ring from above, its brazier lit. */
 #ending .ring { background-color: #0d1030; background-image: radial-gradient(circle at 50% 50%, #fff3c4 0 1.5%, #ffb24a 3%, #ff8a2a44 10%, transparent 26%), radial-gradient(circle at 50% 50%, transparent 0 30%, #2a2050 31% 33%, transparent 34%), radial-gradient(ellipse at 50% 60%, #241a48, #0d1030 70%); }
 #ending .ring.real { background-position: center 30%; }
