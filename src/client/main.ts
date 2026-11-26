@@ -2380,7 +2380,7 @@ function dreamScene(p: Piece) {
   const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
   const here = () => chainAt === pieceIndex(p.id);
   const caption = el.querySelector<HTMLElement>(".creed")!;
-  requestAnimationFrame(() => requestAnimationFrame(() => (el.classList.add("on"), pics[0]!.classList.add("on"))));
+  requestAnimationFrame(() => requestAnimationFrame(() => (el.classList.add("on"), pics[0]!.classList.add("on"), sound.playBed(D.bed))));
   let t = D.fade;
   D.pictures.forEach((m, i) => {
     if (i > 0) at(t, () => (pics[i - 1]!.classList.remove("on"), pics[i]!.classList.add("on")));
@@ -2398,7 +2398,7 @@ function dreamScene(p: Piece) {
   at(t + D.wake.lead, () => sceneLine(caption, D.wake.line));
   t += Math.max(D.wake.hold, D.wake.lead + 2.5);
   at(t - 0.6, () => caption.classList.remove("on"));
-  at(t, () => ((wake.style.transition = ""), el.classList.add("out")));
+  at(t, () => ((wake.style.transition = ""), el.classList.add("out"), sound.stopMusic(D.fade + 0.3)));
   at(t + D.fade, () => {
     if (!here()) return el.remove();
     chainOn();
@@ -2406,6 +2406,7 @@ function dreamScene(p: Piece) {
   });
   el.querySelector<HTMLButtonElement>(".out")!.onclick = () => {
     timers.forEach((x) => clearTimeout(x));
+    sound.stopMusic(0.3);
     el.remove();
     leave();
   };

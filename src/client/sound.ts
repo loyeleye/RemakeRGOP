@@ -26,6 +26,8 @@ export const SOUND = {
   /** Music volume, and how long it fades under Lumi's bell. */
   musicGain: 0.45,
   musicFade: 1.5,
+  /** A cutscene's own mixed bed (music and atmosphere in one file, e.g. the dream's): how loud. */
+  bedGain: 0.7,
   /** The ending: wind under the descent, and how slowly the music lets go after the last bell. */
   windGain: 0.12,
   endMusicFade: 16,
@@ -672,6 +674,21 @@ export function playMusic(movement: number) {
   };
   music = a;
   next();
+}
+
+/**
+ * A cutscene's sound bed (music/<name>.mp3, music and atmosphere already mixed), once, in the music
+ * slot, so stopMusic fades it and the mute button covers it. Starts at once; a slow load starts late.
+ */
+export function playBed(name: string) {
+  stopMusic(0.3);
+  endingPiece = false;
+  const a = new Audio(`music/${name}.mp3`);
+  a.loop = false;
+  a.muted = muted;
+  a.volume = SOUND.bedGain;
+  music = a;
+  void a.play().catch(() => {});
 }
 
 /** Fade the music out over `sec` seconds. */
