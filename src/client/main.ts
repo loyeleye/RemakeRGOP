@@ -43,6 +43,7 @@ import { DREAM, EVENING, GLOW, HELD, MENU_RUNS, MORNING, OPTIONAL_RUNS, PART1, S
 import { card as storyCard, ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import { buildTesting } from "./testing.js";
 import * as sound from "./sound.js";
+import { fightMusic } from "./fight-music.js";
 import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -1089,6 +1090,8 @@ let pullFrom = 0;
 /** Lumi's bell at each movement's countdown (three rings at the end), with the music fading under it. */
 function storyPhaseSound(was: string | undefined) {
   const phase = room!.phase;
+  // The fight's music stops dead the moment play stops (the kill's last press, a loss, the results).
+  if (phase !== "playing") fightMusic(undefined, false);
   // The dying brazier has no bell and no music: only the fire. The Sieve has only the wind.
   if (room!.story?.dying) return;
   if (room!.story?.sieve || room!.story?.rescue || room!.story?.ship) {
@@ -1120,6 +1123,7 @@ function storyTickSound(s: GameSnapshot) {
   else if (st.sieve) void 0;
   else if (st.rescue) rescueSound(st.rescue);
   else if (st.ship) shipSound(st.ship);
+  else if (st.fight) fightMusic(st.fight, room!.phase === "playing");
   else if (room!.phase === "playing" && musicFor !== st.movement) {
     musicFor = st.movement;
     sound.playMusic(st.movement); // starts on a tick, so the beat lines up with the 600 ms steps
@@ -1511,6 +1515,7 @@ function stopStorySound() {
   dyingPart = "";
   dyingCard(undefined);
   sound.stopMusic(0.3);
+  fightMusic(undefined, false);
   musicFor = -1;
 }
 

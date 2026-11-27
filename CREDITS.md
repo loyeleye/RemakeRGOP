@@ -69,6 +69,12 @@ returned 404. The homepage (https://www.mureka.ai) offers "full commercial right
 being subscribed when a track is made. Before the game is sold, the actual terms need reading, and it
 needs checking which plan these tracks were made on.
 
+### Runs 3 and 4 (the offspring fight)
+
+| File | Source | Where |
+|---|---|---|
+| music/p2-fight.pack.json (ten mono .wav stems in one file as base64: p2-run3-{knock,heart,breath,tone}, p2-flare-{chord,note,far-knocks}, p2-run4-{her,him,locked}) | Sequenced in code by the gameplay thread on 2026-11-27 (project files `gameplay/audio/part2/`, its README) from single sounds it made that day with ElevenLabs sound effects (eleven_text_to_sound_v2) on Ladi's paid Starter plan. They ship only arranged and layered with each other, never as the loose sounds; the raw sounds stay out of the repo (`gameplay/voice/elevenlabs-licence-check.md`). Drafts: Ladi asked to hear them in play before judging them (27 Nov, 3:10 PM) | The fight's music layers (`src/client/fight-music.ts`) |
+
 ### The dream's sound bed
 
 | File | Source | Where |

@@ -74,6 +74,11 @@ function out(): { c: AudioContext; o: GainNode } | null {
   return { c: ctx, o: master };
 }
 
+/** The live context and master output for players kept elsewhere (the fight's music layers), or null before sound starts. */
+export function audioOut() {
+  return out();
+}
+
 export function isMuted() {
   return muted;
 }
