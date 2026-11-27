@@ -25,6 +25,8 @@ export const POND = {
   idleEvery: [6, 28] as [number, number],
   /** Ticks before Hesta and the children start walking in, and before Lumi runs over. */
   enterAt: 4,
+  /** Ticks between Hesta, Nell and Sefa setting off, so they come up the path in single file, not on one tile (Ladi, 26 Nov). */
+  enterGap: 3,
   lumiAt: 12,
   /** Tap reach: within this many tiles (either way, diagonals count as one) they answer at once. */
   reach: 2,
@@ -404,11 +406,9 @@ export class PondRoom {
       this.due();
       return this.broadcast();
     }
-    if (t === POND.enterAt) {
-      this.walk(HESTA_ID, this.spots.gather.hesta);
-      this.walk(NELL_ID, this.spots.gather.nell);
-      this.walk(SEFA_ID, this.spots.gather.sefa);
-    }
+    if (t === POND.enterAt) this.walk(HESTA_ID, this.spots.gather.hesta);
+    if (t === POND.enterAt + POND.enterGap) this.walk(NELL_ID, this.spots.gather.nell);
+    if (t === POND.enterAt + 2 * POND.enterGap) this.walk(SEFA_ID, this.spots.gather.sefa);
     if (t === POND.lumiAt) this.walk(LUMI_ID, this.spots.gather.lumi);
     g.step();
     const rook = this.player(ROOK_ID);
