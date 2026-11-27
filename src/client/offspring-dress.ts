@@ -139,14 +139,25 @@ export class OffspringFx {
     let df = this.to.face - this.from.face;
     while (df > Math.PI) df -= 2 * Math.PI;
     while (df < -Math.PI) df += 2 * Math.PI;
-    const x = this.from.x + (this.to.x - this.from.x) * t, y = this.from.y + (this.to.y - this.from.y) * t, face = this.from.face + df * t;
+    let x = this.from.x + (this.to.x - this.from.x) * t, y = this.from.y + (this.to.y - this.from.y) * t, up = 0;
+    const face = this.from.face + df * t;
+    // A leap to her, drawn by her flare: along the line in an arc, smooth over the ticks.
+    const lp = f.it.leap;
+    if (lp) {
+      const k = Math.max(0, Math.min(1, (f.tick - 1 + t - lp.t0) / lp.ticks));
+      x = lp.from.x + (lp.to.x - lp.from.x) * k;
+      y = lp.from.y + (lp.to.y - lp.from.y) * k;
+      up = Math.sin(Math.PI * k) * OFFSPRING.cycles.jump;
+    }
     const wx = (px: number) => px + 0.5 - o.half.w, wz = (py: number) => py + 0.5 - o.half.h;
-    this.it.position.set(wx(x), 0, wz(y));
+    this.it.position.set(wx(x), up, wz(y));
     this.it.rotation.y = -face;
     // The legs and body move; the eye stays level and still.
-    const moving = Math.hypot(this.to.x - this.from.x, this.to.y - this.from.y) > 0.05;
+    const moving = up === 0 && Math.hypot(this.to.x - this.from.x, this.to.y - this.from.y) > 0.05;
     if (moving) this.walk += dt * 9;
     this.legs.forEach((leg, i) => (leg.rotation.z = moving ? Math.sin(this.walk + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.35 : leg.rotation.z * 0.8));
+    // In the air its legs hang spread.
+    if (up > 0.05) this.legs.forEach((leg, i) => (leg.rotation.z = (i < 2 ? -1 : 1) * 0.55));
     this.body.position.y = L.ride + 0.25 + (moving ? Math.abs(Math.sin(this.walk)) * 0.08 : 0);
     // The back: brighter for every wisp inside it.
     const full = f.it.inside / Math.max(1, f.wisps);

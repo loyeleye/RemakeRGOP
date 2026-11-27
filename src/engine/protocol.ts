@@ -157,6 +157,8 @@ export interface StoryView {
     /** Meters on the ground at people's feet (the offspring fight: Solenne's light, and the boy's in run 4): the tile, how full (0 to 1), the mark needed for what comes next (0 to 1), and whose colour. */
     /** Where to tap on the offspring's back (run 4): its back held with the shard out, `live` when a tap would strike or pull. */
     hit?: { x: number; y: number; live: boolean };
+    /** Where it will land (the offspring fight, run 4, through her wind-up): the middle and its half-width, tiles. */
+    land?: { x: number; y: number; r: number };
     /** A mark on the ground where to stand (the offspring fight, round 1 of run 4). */
     stand?: { x: number; y: number };
     feet?: { x: number; y: number; f: number; mark?: number; tone: "her" | "fen"; /** It flashes (her hold nearly spent, while he is taught to cover the shard). */ flash?: boolean }[];
@@ -176,7 +178,7 @@ export interface StoryView {
     run: 3 | 4;
     part: "open" | "play" | "flare" | "kill";
     tick: number;
-    it: { x: number; y: number; face: number; after: "her" | "fen" | "wisp" | "brazier" | "shard" | null; to?: { x: number; y: number }; inside: number; held: boolean; wound: number; knocked?: number; eating?: boolean; /** Its back glows where to strike: 1 held with the shard out, 2 and he is behind it (a tap strikes). */ strike?: 1 | 2 };
+    it: { x: number; y: number; face: number; after: "her" | "fen" | "wisp" | "brazier" | "shard" | null; to?: { x: number; y: number }; inside: number; held: boolean; wound: number; knocked?: number; eating?: boolean; /** Its back glows where to strike: 1 held with the shard out, 2 and he is behind it (a tap strikes). */ strike?: 1 | 2; /** A leap to her, drawn by her flare: from, to, the tick it left and how many ticks it takes. */ leap?: { from: { x: number; y: number }; to: { x: number; y: number }; t0: number; ticks: number } };
     her: { x: number; y: number; light: number; full: number; glow: number; doing: "rest" | "windup" | "hold"; left: number; of: number; flash?: { kind: "shove" | "blast" | "save" | "flare"; tick: number } };
     fen: { x: number; y: number; light: number };
     shard?: { shown: boolean; glow: number; of: number };

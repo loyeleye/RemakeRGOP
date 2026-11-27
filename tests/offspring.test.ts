@@ -131,21 +131,22 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     a.tick();
     expect(a.room.state.wound).toBe(false);
     // Behind it, across the brazier, the shard out: its back glows to strike, and a tap opens the wound (never by itself).
-    const p = play(4);
-    p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
+    const p = play(4), b0 = p.x.it;
+    p.me.pos = p.me.prev = pt(Math.round(b0.x - Math.cos(b0.face) * 3), Math.round(b0.y - Math.sin(b0.face) * 3));
     p.send({ t: "fight", shard: true });
     p.tick(2);
     expect(p.room.state.wound).toBe(false);
     expect(p.room.storyView().fight!.it.strike).toBe(2);
     p.send({ t: "fight", hit: true });
     expect(p.room.state.wound).toBe(true);
+    // Then round the fire to pull, so the wisps fly through it.
+    p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
     p.send({ t: "fight", hit: true });
     p.tick(OFFSPRING.wound.pull);
     expect(p.room.state.inside).toBe(9);
     expect(p.me.action.kind).not.toBe("staff");
-    expect(p.x.torn.size).toBe(1);
-    expect(p.x.lit.size).toBeGreaterThanOrEqual(1);
-    // It flies to him through the fire, and banks.
+    expect(p.x.torn.size + p.room.state.banked).toBe(1);
+    // It flies to him through the fire (its back is at the fire's edge), and banks.
     for (let i = 0; i < 12 && p.room.state.banked === 0; i++) p.tick();
     expect(p.room.state.banked).toBe(1);
     // The hold ends and the wound shuts with it; in cycle 1 it then stands dazed.
@@ -201,11 +202,13 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   it("the kill also comes when the tenth banks with the wound already open", () => {
     const p = play(4);
     for (const id of [...p.x.inside].slice(1)) (p.x.inside.delete(id), p.x.banked.add(id));
-    p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
+    const b0 = p.x.it;
+    p.me.pos = p.me.prev = pt(Math.round(b0.x - Math.cos(b0.face) * 3), Math.round(b0.y - Math.sin(b0.face) * 3));
     p.send({ t: "fight", shard: true });
     p.tick();
     p.send({ t: "fight", hit: true });
     expect(p.room.state.wound).toBe(true);
+    p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
     p.send({ t: "fight", hit: true });
     for (let i = 0; i < 20 && p.room.state.phase === "playing"; i++) p.tick();
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
@@ -258,8 +261,13 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.send({ t: "fight", hit: true });
     p.tick();
     expect(f().teach?.hint).toBe("pull");
+    // The mark moves past the fire, where the pulled wisps fly home through it.
+    const there = f().teach!.stand!;
+    expect(Math.hypot(there.x - stand.x, there.y - stand.y)).toBeGreaterThan(3);
+    p.me.pos = p.me.prev = pt(there.x, there.y);
     p.send({ t: "fight", hit: true });
     p.tick(OFFSPRING.wound.pull);
+    expect(p.room.state.banked + p.x.torn.size).toBeGreaterThanOrEqual(1);
     // The hold runs now, and near its end she says to cover the shard, her ring flashing.
     expect(f().teach?.stand).toBeUndefined();
     for (let i = 0; i < 20 && f().teach?.hint !== "cover"; i++) p.tick();
@@ -293,6 +301,91 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.tick();
     expect(p.room.storyView().fight!.teach).toMatchObject({ hint: "show", retry: true });
     expect(p.lines.filter((l) => Object.values(OFFSPRING.teach.say).includes(l.text))).toEqual([]);
+  });
+
+  it("before each blast her flare draws it: it leaps to her landing mark, and he can't strike from the brazier's far side", () => {
+    const p = play(4);
+    p.x.teach.pulled = true;
+    p.x.her.left = 0;
+    p.tick();
+    // Rook waits on the brazier's edge; she recharges, flares, and it leaps over her wind-up.
+    p.me.pos = p.me.prev = pt(p.c.x - 2, p.c.y);
+    let leapt = false;
+    let marked = false;
+    for (let i = 0; i < 60 && p.room.state.cycle < 2; i++) {
+      p.tick();
+      if (p.room.storyView().fight!.it.leap) leapt = true;
+      if (p.room.storyView().opt?.land) marked = true;
+    }
+    expect(marked).toBe(true);
+    expect(p.room.state.cycle).toBe(2);
+    expect(leapt).toBe(true);
+    const sol = p.g.players.find((q) => q.id === 2)!.pos, it = p.x.it;
+    expect(Math.hypot(sol.x - it.x, sol.y - it.y)).toBeCloseTo(OFFSPRING.cycles.at, 5);
+    // The strike is from close behind it: not from the brazier's far side, where he pulls from.
+    p.send({ t: "fight", shard: true });
+    for (const [dx, dy] of [[-2, 0], [0, -2], [0, 2], [-1, -1], [-2, -1], [-2, 1]] as const) {
+      p.me.pos = p.me.prev = pt(p.c.x + dx, p.c.y + dy);
+      expect(p.room.storyView().fight!.it.strike).toBe(1);
+    }
+    p.me.pos = p.me.prev = pt(Math.round(it.x - Math.cos(it.face) * 2.5), Math.round(it.y - Math.sin(it.face) * 2.5));
+    expect(p.room.storyView().fight!.it.strike).toBe(2);
+  });
+
+  it("round 1's hold ends after three pulls, and a landing on him knocks him aside", () => {
+    const p = play(4), b0 = p.x.it;
+    p.me.pos = p.me.prev = pt(Math.round(b0.x - Math.cos(b0.face) * 3), Math.round(b0.y - Math.sin(b0.face) * 3));
+    p.send({ t: "fight", shard: true });
+    p.tick();
+    p.send({ t: "fight", hit: true });
+    p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
+    for (let n = 0; n < OFFSPRING.teach.pulls1; n++) {
+      p.send({ t: "fight", hit: true });
+      p.tick(OFFSPRING.wound.pull);
+    }
+    expect(p.x.her.left).toBeLessThanOrEqual(OFFSPRING.teach.coverAt);
+    // Out of the hold; he waits right where it will land.
+    p.send({ t: "fight", shard: true });
+    for (let i = 0; i < 80 && p.x.her.doing !== "windup"; i++) p.tick();
+    expect(p.x.her.doing).toBe("windup");
+    const to = p.room.storyView().opt!.land!;
+    p.me.pos = p.me.prev = pt(Math.round(to.x), Math.round(to.y));
+    let down = 0;
+    for (let i = 0; i < 5; i++) (p.tick(), (down = Math.max(down, p.room.state.down)));
+    expect(down).toBe(OFFSPRING.knockdown.down);
+    expect(Math.hypot(p.me.pos.x - to.x, p.me.pos.y - to.y)).toBeGreaterThan(OFFSPRING.it.size / 2);
+  });
+
+  it("out of her hold it jumps now and then to a random spot or onto a lit wisp, never near Rook, and not while it eats at the brazier", () => {
+    const p = play(4);
+    p.x.teach.pulled = true;
+    p.x.her.left = 0;
+    p.tick();
+    p.x.it.dazed = -1;
+    // Keep her short of a blast; count the jumps it makes on its own.
+    let hops = 0, last = -1;
+    for (let i = 0; i < 120 && p.room.state.phase === "playing"; i++) {
+      p.x.her.light = 3;
+      p.tick();
+      const lp = p.room.storyView().fight!.it.leap;
+      if (lp && lp.t0 !== last) {
+        last = lp.t0;
+        hops++;
+        expect(Math.hypot(lp.to.x - p.me.pos.x, lp.to.y - p.me.pos.y)).toBeGreaterThan(OFFSPRING.it.size / 2 + OFFSPRING.hop.clear);
+        expect(p.room.storyView().opt?.land).toBeTruthy();
+      }
+    }
+    expect(hops).toBeGreaterThanOrEqual(3);
+    // Off, none.
+    OFFSPRING.hop.on = 0;
+    const q = play(4);
+    q.x.teach.pulled = true;
+    q.x.her.left = 0;
+    q.tick();
+    let any = false;
+    for (let i = 0; i < 80 && q.room.state.phase === "playing"; i++) (q.x.her.light = 3), q.tick(), (any ||= !!q.room.storyView().fight!.it.leap);
+    expect(any).toBe(false);
+    OFFSPRING.hop.on = 1;
   });
 
   it("in its way: a run through his tile throws him clear and he is down three ticks (never hurt); off with knockdown.on 0", () => {

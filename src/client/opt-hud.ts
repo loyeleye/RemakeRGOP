@@ -226,6 +226,22 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
     g.restore();
   }
 
+  // Where it will land, through her wind-up: its size, in her colour, dashed and running.
+  if (o.land) {
+    const beat = 0.5 + 0.5 * Math.sin(now / 120);
+    g.save();
+    g.lineCap = "round";
+    g.lineWidth = 6;
+    g.strokeStyle = "rgba(10,8,20,0.45)";
+    ground(g, cam, o.land.x + 0.5, o.land.y + 0.5, o.land.r);
+    g.setLineDash([10, 7]);
+    g.lineDashOffset = now / 50;
+    g.lineWidth = 3.5;
+    g.strokeStyle = `rgba(207,230,255,${0.65 + 0.35 * beat})`;
+    ground(g, cam, o.land.x + 0.5, o.land.y + 0.5, o.land.r);
+    g.restore();
+  }
+
   // Where to stand: a gold ring on the ground, its dashes running, breathing in and out.
   if (o.stand) {
     const beat = 0.5 + 0.5 * Math.sin(now / 300);

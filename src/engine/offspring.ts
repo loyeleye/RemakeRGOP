@@ -100,13 +100,23 @@ export const OFFSPRING = {
     floor: 0,
     /** The wind-up (ticks), then the hold (ticks). */
     windup: 3,
-    hold: 12,
+    /** 16: with the strike from close behind, enough for 3 or 4 pulls (the gameplay thread's bots, 27 Nov). */
+    hold: 16,
     /** The save: what she has left after knocking it off him (a quarter of full), and how far it goes. */
     afterSave: 2,
     saveKnock: 3,
     /** After the save it stands dazed this many ticks before it looks for a light again. */
     saveDaze: 3,
   },
+  /**
+   * Random jumps (Ladi, 27 Nov 2:52 PM: "random jumps where he jumps to a random spot on the map if he
+   * is not currently eating from the brazier. He can jump onto wisps. He won't jump on Rook since that
+   * would be unfair"). Run 4, out of her hold: about every `every` ticks (give or take `spread` of it)
+   * it leaps to a random spot in the yard over `ticks` ticks, or, `onWisp` of the time, onto a loose
+   * lit wisp. Never within `clear` tiles of Rook (from its edge), nor onto her or the boy, nor while it
+   * eats at the brazier. `run3` 1 lets it jump in run 3 too. `on` 0 turns them off.
+   */
+  hop: { on: 1, every: 14, spread: 0.4, ticks: 3, onWisp: 0.5, clear: 2, run3: 0 },
   /** The flare at the end of run 3, held this many ticks before run 4 starts on the spot. */
   flareTicks: 4,
   /** Run 3's knockdown: if he is anywhere in the path its body sweeps (its width, and `near` more), he is thrown `aside` tiles clear of it and is down `down` ticks. Off: ?fight=knockdown.on:0. */
@@ -122,11 +132,11 @@ export const OFFSPRING = {
     /**
      * How near its back edge he has to be (tiles), and how far round from its face counts as behind
      * (degrees from straight ahead). The brief has him "behind it" and then "anywhere" once it is
-     * open, and has him pull from the brazier's far side: with an 8-tick hold that the shard cuts in
-     * half there is no time to walk round from its back, so behind counts from as far as his pull
-     * reaches, and the far side of the fire is behind it when she has put it in place.
+     * open, and has him pull from the brazier's far side. Was 9 (strike from as far as his pull
+     * reaches), which let him strike and pull from the brazier without moving (Ladi, 27 Nov 2:41 PM:
+     * too easy there). 2 (the gameplay thread's bots): run in, strike, run back round the fire, pull.
      */
-    near: 9,
+    near: 2,
     behind: 110,
     /** A tap on its back strikes (opens the wound) from behind it with the shard out. Ticks for each pull: one wisp torn out of the wound, which flies to him on its own (a tile a tick), so the next pull can follow at once. */
     pull: 2,
@@ -152,7 +162,7 @@ export const OFFSPRING = {
       sees: "With that uncovered you are the brightest thing it can see.",
       /** Round 2, as it starts eating from the brazier. Always. */
       lure: "Draw it off the brazier with the shard, and hide it before it reaches you.",
-      /** Round 3's blast, the first she doesn't place. */
+      /** Round 3's blast (not used: her flare draws it to her every round now, Ladi 27 Nov 2:41 PM). */
       placed: "I am done placing it for you, Salvage.",
     },
     /** The hint bubbles: PLACEHOLDER WORDING, the gameplay thread's to word. */
@@ -175,13 +185,25 @@ export const OFFSPRING = {
     wait: 3,
     /** Round 1: the cover step comes with this many ticks of her hold left (and her ring flashes). */
     coverAt: 4,
+    /** Round 1's hold ends (down to the cover step) after this many pulls. */
+    pulls1: 3,
     /** Ticks the lure hint stays up. */
     hintTicks: 9,
     /** Round 1's mark where to stand: on the line from it through the brazier, this many tiles past the brazier's middle. */
     mark: 3,
   },
-  /** Cycles 1 to `placed`: her blast also puts it in place, `at` tiles in front of her toward the brazier. */
-  cycles: { placed: 2, at: 3 },
+  /**
+   * Where it stands for each blast (Ladi, 27 Nov 2:41 PM: on the brazier run 4 was too easy; "the
+   * offspring should leap itself to the spot rather than be pulled there ... attracted by her flare
+   * right before she starts her energy blast"). As she winds up she flares and it leaps, over the
+   * wind-up, to `at` tiles in front of her toward the brazier, facing her, its back to the fire,
+   * dropping whatever it was doing. The landing is marked on the ground through the wind-up, and if
+   * Rook is on it he is knocked aside (run 3's knockdown). `side` (degrees, 0 off): from round 2 the
+   * spot swings that far round her, on her side away from Rook, so the fire is off to its side and
+   * the wisps come out loose to him (try 75). The leap is `jump` tiles high at the top. Not in the
+   * kill: there it stares at the fire.
+   */
+  cycles: { at: 5, side: 0, jump: 2 },
   /** Her three lines after a save (approved wording, Ladi 27 Nov 12:48 PM; no voice take yet). One at random. */
   saved: ["I can't do that twice, Salvage.", "Next time it has you, I keep what's left for the boy.", "That cost more than you're worth. Stay behind it."],
   /** Text on the short card. Placeholder wording, not story lines. */
