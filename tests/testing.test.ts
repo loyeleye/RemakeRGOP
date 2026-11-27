@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { OPTIONS, SECTIONS, readQuery, tuneKeys, writeQuery } from "../src/client/testing.js";
 import { COVE } from "../src/engine/cove.js";
+import { OFFSPRING } from "../src/engine/offspring.js";
 
 describe("the testing panel's table", () => {
   it("names each parameter once, each in a section the panel shows", () => {
@@ -27,6 +28,16 @@ describe("the testing panel's table", () => {
     const keys = tuneKeys(COVE).map(([k]) => k);
     expect(keys).toContain("tide.in");
     expect(keys).toContain("reach");
+  });
+
+  it("has the Part 2 fight: a Jump to pick for run 3 or 4, and its numbers", () => {
+    const { values } = readQuery("?part2=4&fight=it.size:4,knockdown.on:0");
+    expect([...values]).toEqual([["part2", "4"], ["fight", "it.size:4,knockdown.on:0"]]);
+    expect(readQuery("?part2=5").values.size).toBe(0);
+    const keys = tuneKeys(OFFSPRING).map(([k]) => k);
+    expect(keys).toContain("it.size");
+    expect(keys).toContain("knockdown.on");
+    expect(keys).toContain("her.hold");
   });
 
   it("writes nothing when nothing is set", () => {

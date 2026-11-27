@@ -196,10 +196,12 @@ function rematchRoom() {
  * lessons there have been are kept in this browser. Any number in COVE can be set from the link to
  * judge it by feel: ?cove=tide.in:10,tide.out:14,reach:10 and so on.
  */
-/** Part 2, runs 3 and 4, the offspring fight (a prototype): ?fight=key:val overrides OFFSPRING (dots for nested keys), and ?fight=start:4 starts on run 4. */
+/** Where the next Part 2 fight starts, when the testing panel's Jump to picks it (else ?part2=, else ?fight=start:). */
+let fightStart: 3 | 4 | null = null;
+/** Part 2, runs 3 and 4, the offspring fight (a prototype): ?fight=key:val overrides OFFSPRING (dots for nested keys); ?part2=4 (or ?fight=start:4) starts on run 4. */
 function fightRoom() {
   const q = new URLSearchParams(location.search);
-  let start: 3 | 4 = 3;
+  let start: 3 | 4 = q.get("part2") === "4" ? 4 : 3;
   for (const part of (q.get("fight") ?? "").split(",").filter(Boolean)) {
     const [k, v] = part.split(":"), path = (k ?? "").split("."), last = path.pop()!;
     if (k === "start") {
@@ -210,6 +212,8 @@ function fightRoom() {
     for (const step of path) at = (at?.[step] ?? {}) as Record<string, unknown>;
     if (typeof at[last] === "number" && Number.isFinite(Number(v))) at[last] = Number(v);
   }
+  if (fightStart) start = fightStart;
+  fightStart = null;
   return new FightRoom(undefined, undefined, start);
 }
 
@@ -2594,11 +2598,20 @@ $("part1").onclick = () => playPiece(Math.max(0, loadPlace()));
 $("part1-again").onclick = () => playPiece(0);
 renderPart1();
 // The testing panel: every option the address can carry, as controls (client/testing.ts).
-buildTesting((id) => playPiece(pieceIndex(id)));
+buildTesting((key, v) => (key === "part2" ? playFight(v === "4" ? 4 : 3) : playPiece(pieceIndex(v))));
+/** The Part 2 fight from the testing panel or ?part2=: a test jump, so saved progress doesn't move on. */
+function playFight(start: 3 | 4) {
+  if (link) leave(true);
+  fightStart = start;
+  connectStory(playerName(), "p2fight");
+  jumped = true;
+}
 {
   // ?part1=<piece>: straight into Part 1 at that piece (its id in client/part1.ts, such as 5-6 or 9-10).
-  const at = new URLSearchParams(location.search).get("part1");
+  // ?part2=3 or 4: straight into the Part 2 fight, from that run.
+  const q = new URLSearchParams(location.search), at = q.get("part1"), p2 = q.get("part2");
   if (at !== null && pieceIndex(at) >= 0) window.setTimeout(() => playPiece(pieceIndex(at)), 0);
+  else if (p2 === "3" || p2 === "4") window.setTimeout(() => playFight(p2 === "4" ? 4 : 3), 0);
 }
 
 $<HTMLSelectElement>("walk-pick").replaceChildren(

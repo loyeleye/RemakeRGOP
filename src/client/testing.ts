@@ -10,13 +10,14 @@ import { Game } from "../engine/game.js";
 import { COVE } from "../engine/cove.js";
 import { KITE } from "../engine/kite.js";
 import { MOSS } from "../engine/mosshollow.js";
+import { OFFSPRING } from "../engine/offspring.js";
 import { TIDEPOOL } from "../engine/tidepool.js";
 import { RESCUE } from "../engine/rescue.js";
 import { SHIP } from "../engine/shiphome.js";
 import { ENDING_CUTS, endingCut, setEndingCut } from "./ending.js";
 import { PART1 } from "./part1.js";
 
-export type Section = "jump" | "run1" | "run6" | "run8" | "run9" | "run10" | "rematch" | "cove" | "moss" | "tidepool" | "kite" | "walks" | "other";
+export type Section = "jump" | "run1" | "run6" | "run8" | "run9" | "run10" | "rematch" | "cove" | "moss" | "tidepool" | "kite" | "p2fight" | "walks" | "other";
 
 /** The panel's sections after Jump to and Story progress, in order. */
 export const SECTIONS: { id: Exclude<Section, "jump">; title: string }[] = [
@@ -30,6 +31,7 @@ export const SECTIONS: { id: Exclude<Section, "jump">; title: string }[] = [
   { id: "moss", title: "Optional: Moss Hollow" },
   { id: "tidepool", title: "Optional: Tidepool Steps" },
   { id: "kite", title: "Optional: Kes's rematch on the Fell" },
+  { id: "p2fight", title: "Part 2, runs 3 and 4: the offspring fight" },
   { id: "walks", title: "Walks between runs" },
   { id: "other", title: "Other" },
 ];
@@ -73,7 +75,7 @@ export interface Opt {
   saved?: Saved;
   /** The element's id, for an option something else finds by id. */
   id?: string;
-  /** choice: a Go button beside it, which plays the picked Part 1 piece now. */
+  /** choice: a Go button beside it, which plays the pick now (a Part 1 piece, or where the Part 2 fight starts). */
   go?: true;
 }
 
@@ -92,6 +94,7 @@ const ending: Saved = { def: "test", get: () => endingCut(), set: (v) => setEndi
 
 export const OPTIONS: Opt[] = [
   { section: "jump", key: "part1", kind: "choice", go: true, id: "part1-pick", label: "Part 1 piece", hint: "Go plays it now. In the link, the page opens straight into it.", values: [["", "None, open the menu"], ...PART1.map((p) => [p.id, `${p.name} (${p.id})`] as const)] },
+  { section: "jump", key: "part2", kind: "choice", go: true, id: "part2-pick", label: "Part 2: the offspring fight", hint: "A prototype on placeholder shapes. Go plays it now, with the numbers set below.", values: [["", "None, open the menu"], ["3", "Run 3, from the first pull"], ["4", "Run 4, from her flare"]] },
 
   { section: "run1", key: "ending", kind: "choice", id: "ending-pick", saved: ending, label: "Which cut of the ending plays", hint: "Remembered in this browser too.", values: ENDING_CUTS.map((c) => [c.id, c.name] as const) },
 
@@ -128,6 +131,8 @@ export const OPTIONS: Opt[] = [
   { section: "moss", key: "moss", kind: "tune", of: MOSS, label: "The run's numbers" },
   { section: "tidepool", key: "tidepool", kind: "tune", of: TIDEPOOL, label: "The run's numbers" },
   { section: "kite", key: "kite", kind: "tune", of: KITE, label: "The run's numbers" },
+
+  { section: "p2fight", key: "fight", kind: "tune", of: OFFSPRING, label: "The fight's numbers", hint: "it.size is how many tiles across it is (try 4). knockdown.on: 0 turns the knockdown off. One tick is 0.6 s." },
 
   { section: "walks", key: "walkspeed", kind: "choice", label: "Walking speed on the walks", values: [["", "Normal"], ["1.5", "1.5 times"], ["2", "Twice"], ["2.5", "2.5 times"]] },
   { section: "walks", key: "only", kind: "flag", on: "rook", label: "Only Rook's stride is longer; the walk's beat stays as it is" },
@@ -210,7 +215,7 @@ interface Control {
 
 let uid = 0;
 
-function control(o: Opt, onGo: (id: string) => void): { c: Control; row: HTMLElement } {
+function control(o: Opt, onGo: (key: string, value: string) => void): { c: Control; row: HTMLElement } {
   const text = (forId?: string) => {
     const t = el(forId ? "label" : "span", { class: "t-text" }, o.label, " ", keyTag(o));
     if (forId) (t as HTMLLabelElement).htmlFor = forId;
@@ -237,7 +242,8 @@ function control(o: Opt, onGo: (id: string) => void): { c: Control; row: HTMLEle
       const go = el("button", { type: "button", className: "small", textContent: "Go" });
       const sync = () => (go.disabled = !sel.value);
       sel.addEventListener("change", sync);
-      go.onclick = () => sel.value && onGo(sel.value);
+      go.setAttribute("aria-label", `Play ${o.label}`);
+      go.onclick = () => sel.value && onGo(o.key, sel.value);
       field = el("div", { class: "t-pair" }, sel, go);
       queueMicrotask(sync);
       c.show = (v) => ((sel.value = v ?? ""), sync());
@@ -265,15 +271,16 @@ function control(o: Opt, onGo: (id: string) => void): { c: Control; row: HTMLEle
     },
   };
   const grid = el("div", { class: "t-tune" }, ...boxes.map(([k, b]) => el("label", { htmlFor: b.id }, el("span", {}, k), b)));
-  const row = el("div", { class: "t-row" }, el("span", { class: "t-text" }, o.label, " ", keyTag(o)), el("span", { class: "t-hint" }, "Fill in a box to change that number. An empty box keeps the run's own, shown greyed."), grid);
+  const row = el("div", { class: "t-row" }, el("span", { class: "t-text" }, o.label, " ", keyTag(o)), ...hint(), el("span", { class: "t-hint" }, "Fill in a box to change that number. An empty box keeps the run's own, shown greyed."), grid);
   return { c, row };
 }
 
 /**
  * Build the panel into #progress (index.html holds its frame, Story progress and the walk picker,
- * which main.ts wires). `play` starts a Part 1 piece by its id, as ?part1= does.
+ * which main.ts wires). `play` plays a Jump to pick now: a Part 1 piece by its id, as ?part1= does,
+ * or the Part 2 fight from run 3 or 4, as ?part2= does.
  */
-export function buildTesting(play: (pieceId: string) => void) {
+export function buildTesting(play: (key: string, value: string) => void) {
   // As before: the address, else this browser, says whether tapping across water walks round it.
   try {
     const v = new URLSearchParams(location.search).get("walkround") ?? localStorage.getItem(WALK_ROUND_KEY);
@@ -290,10 +297,12 @@ export function buildTesting(play: (pieceId: string) => void) {
   const controls: Control[] = [];
   const counts = new Map<Section, HTMLElement>();
 
-  const go = (id: string) => {
+  const go = (key: string, value: string) => {
     // Nothing else changed: play it here. Otherwise load the page with the options set, which opens it.
-    if (query(["part1"]) === start) play(id);
-    else location.assign(base + query());
+    // (Only the pick itself is written: two Jump to picks in one link would open the first.)
+    const jumps = OPTIONS.filter((x) => x.go).map((x) => x.key);
+    if (query(jumps) === start) play(key, value);
+    else location.assign(base + query(jumps.filter((k) => k !== key)));
   };
   // Jump to's own options go under its heading, above the walk picker.
   let after: Element = document.querySelector("#t-jump h3")!;
@@ -338,7 +347,7 @@ export function buildTesting(play: (pieceId: string) => void) {
   }
 
   for (const c of controls) c.show(c.opt.saved ? c.opt.saved.get() : (loaded.values.get(c.opt.key) ?? null));
-  const start = query(["part1"]), startAll = query();
+  const start = query(OPTIONS.filter((x) => x.go).map((x) => x.key)), startAll = query();
   refresh();
   // A section with something set opens, so that what is set shows.
   for (const d of runs.querySelectorAll<HTMLDetailsElement>("details.t-sec")) d.open = !!d.querySelector(".t-count")!.textContent;
