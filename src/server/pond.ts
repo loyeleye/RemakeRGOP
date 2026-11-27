@@ -27,8 +27,6 @@ export const POND = {
   enterAt: 4,
   /** Ticks between Nell, Sefa and Hesta setting off, so they come up the path in single file, not on one tile (Ladi, 26 Nov). */
   enterGap: 3,
-  /** The children's stride on the way in, against Hesta's 1: they reach the pond before her (Ladi, 27 Nov). */
-  kidStride: 1.5,
   /**
    * Hesta's lines if Rook taps her before she reaches the pond: the story thread's three (27 Nov), all of
    * them at Ladi's word ("Use them all. She picks one at random and then cycles between them."). Unvoiced.
@@ -258,8 +256,8 @@ export class PondRoom {
     place(HESTA_ID, S.enter[1]!);
     place(SEFA_ID, S.enter[2]!);
     this.player(HESTA_ID).run = false;
-    this.player(NELL_ID).run = this.player(SEFA_ID).run = false;
-    if (this.walkDef.n === 1) for (const id of [NELL_ID, SEFA_ID]) this.game.stride.set(id, POND.kidStride);
+    // Walk 1: the children run on ahead to the pond (Ladi, 27 Nov), with the run animation; Hesta walks.
+    this.player(NELL_ID).run = this.player(SEFA_ID).run = this.walkDef.n === 1;
     this.endClock();
     this.stop = this.clock.every(this.beatMs, () => this.onTick());
     this.broadcast();
@@ -419,7 +417,7 @@ export class PondRoom {
       this.due();
       return this.broadcast();
     }
-    // The children set off first and walk quicker; Hesta comes up behind at her own pace (Ladi, 27 Nov).
+    // The children set off first and run ahead; Hesta comes up behind at her own pace (Ladi, 27 Nov).
     if (t === POND.enterAt) this.walk(NELL_ID, this.spots.gather.nell);
     if (t === POND.enterAt + POND.enterGap) this.walk(SEFA_ID, this.spots.gather.sefa);
     if (t === POND.enterAt + 2 * POND.enterGap) this.walk(HESTA_ID, this.spots.hestaVia ?? this.spots.gather.hesta);
