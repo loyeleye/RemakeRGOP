@@ -1,12 +1,12 @@
 // The testing panel on the home screen: every switch the page reads from its address (?part1=7-8a,
 // ?nopull and the rest), as a real control, so that nobody has to type a link. OPTIONS below is the
 // whole list, and the panel is built from it: adding a switch is one line there. Each control only
-// builds the link; a run sees an option once the page is loaded with it (Apply). The two marked
-// `saved` (the ending and walking round water) are also remembered in this browser and take effect
-// at once, as they always have.
+// builds the link; a run sees an option once the page is loaded with it (Apply). The one marked
+// `saved` (the ending) is also remembered in this browser and takes effect at once, as it always has.
+// Settled by Ladi on 27 Nov and taken out of the panel: walking speed on the walks (1.5 times, now
+// the walks' own, POND_WALK_SPEED) and tapping a wisp across water walking you round it (always on).
 // What each switch does is in the function that reads it (main.ts, client/ending.ts).
 
-import { Game } from "../engine/game.js";
 import { COVE } from "../engine/cove.js";
 import { KITE } from "../engine/kite.js";
 import { MOSS } from "../engine/mosshollow.js";
@@ -17,7 +17,7 @@ import { SHIP } from "../engine/shiphome.js";
 import { ENDING_CUTS, endingCut, setEndingCut } from "./ending.js";
 import { PART1 } from "./part1.js";
 
-export type Section = "jump" | "run1" | "run6" | "run8" | "run9" | "run10" | "rematch" | "cove" | "moss" | "tidepool" | "kite" | "p2fight" | "walks" | "other";
+export type Section = "jump" | "run1" | "run6" | "run8" | "run9" | "run10" | "rematch" | "cove" | "moss" | "tidepool" | "kite" | "p2fight" | "other";
 
 /** The panel's sections after Jump to and Story progress, in order. */
 export const SECTIONS: { id: Exclude<Section, "jump">; title: string }[] = [
@@ -32,7 +32,6 @@ export const SECTIONS: { id: Exclude<Section, "jump">; title: string }[] = [
   { id: "tidepool", title: "Optional: Tidepool Steps" },
   { id: "kite", title: "Optional: Kes's rematch on the Fell" },
   { id: "p2fight", title: "Part 2, runs 3 and 4: the offspring fight" },
-  { id: "walks", title: "Walks between runs" },
   { id: "other", title: "Other" },
 ];
 
@@ -79,17 +78,6 @@ export interface Opt {
   go?: true;
 }
 
-const WALK_ROUND_KEY = "lanternfall.walkRound";
-const walkRound: Saved = {
-  def: "1",
-  get: () => (Game.walkRound ? "1" : "0"),
-  set: (v) => {
-    Game.walkRound = v !== "0";
-    try {
-      localStorage.setItem(WALK_ROUND_KEY, Game.walkRound ? "1" : "0");
-    } catch {}
-  },
-};
 const ending: Saved = { def: "test", get: () => endingCut(), set: (v) => setEndingCut(v) };
 
 export const OPTIONS: Opt[] = [
@@ -134,10 +122,6 @@ export const OPTIONS: Opt[] = [
 
   { section: "p2fight", key: "fight", kind: "tune", of: OFFSPRING, label: "The fight's numbers", hint: "it.size is how many tiles across it is (try 4). knockdown.on: 0 turns the knockdown off. One tick is 0.6 s." },
 
-  { section: "walks", key: "walkspeed", kind: "choice", label: "Walking speed on the walks", values: [["", "Normal"], ["1.5", "1.5 times"], ["2", "Twice"], ["2.5", "2.5 times"]] },
-  { section: "walks", key: "only", kind: "flag", on: "rook", label: "Only Rook's stride is longer; the walk's beat stays as it is" },
-
-  { section: "other", key: "walkround", kind: "flag", on: "1", off: "0", id: "walk-round", saved: walkRound, label: "Tapping a wisp across water walks you round it", hint: "Remembered in this browser too." },
   { section: "other", key: "nostills", kind: "flag", label: "Leave the pictures out of runs 8, 9 and 10" },
   { section: "other", key: "reward", kind: "flag", on: "1", label: "Show the placeholder reward on an optional run's first win" },
   { section: "other", key: "dbg", kind: "flag", label: "Expose the 3D world as window.__world, for checks in a headless browser" },
@@ -281,12 +265,6 @@ function control(o: Opt, onGo: (key: string, value: string) => void): { c: Contr
  * or the Part 2 fight from run 3 or 4, as ?part2= does.
  */
 export function buildTesting(play: (key: string, value: string) => void) {
-  // As before: the address, else this browser, says whether tapping across water walks round it.
-  try {
-    const v = new URLSearchParams(location.search).get("walkround") ?? localStorage.getItem(WALK_ROUND_KEY);
-    if (v !== null) Game.walkRound = v !== "0";
-  } catch {}
-
   const panel = document.getElementById("progress") as HTMLDetailsElement;
   const url = document.getElementById("t-url") as HTMLTextAreaElement;
   const status = document.getElementById("t-status")!;

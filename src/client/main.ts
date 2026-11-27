@@ -157,18 +157,12 @@ function connectPractice(name: string) {
 
 let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | TidepoolRoom | MossRoom | FightRoom | null = null;
 
-/** The walkable map, at the speed on trial: ?walkspeed=1.5, 2 or 2.5 shortens the map's beat; with &only=rook only his stride is longer. */
 /** Back from a job (an optional job run), the walk starts by the sky skiff (Ladi, 26 Nov). */
 let walkFromJob = false;
 function pondRoom(walk: number) {
   const r = new PondRoom(undefined, undefined, walk);
   r.chain = chainAt >= 0 && chainBack === null;
   if (walkFromJob) (r.startAt = "landing"), (walkFromJob = false);
-  const q = new URLSearchParams(location.search), f = Number(q.get("walkspeed"));
-  if ([1.5, 2, 2.5].includes(f)) {
-    if (q.get("only") === "rook") r.rookStride = f;
-    else r.beatMs = TICK_MS / f;
-  }
   return r;
 }
 

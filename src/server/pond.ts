@@ -6,6 +6,9 @@
 
 import { Mover, Tile, pt, type Board, type Pt } from "../engine/board.js";
 import { Game, Rng, TICK_MS, type Action, type Guild } from "../engine/game.js";
+
+/** How much faster the walkable map's beat is than a run's (Ladi, 27 Nov: locked at 1.5). */
+export const POND_WALK_SPEED = 1.5;
 import { GRANNY } from "../engine/granny.js";
 import { shrineById } from "../engine/maps.js";
 import type { ClientMsg, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
@@ -174,12 +177,10 @@ export class PondRoom {
   /** Where Rook starts instead of the walk's own start (back from a job, by the sky skiff: Ladi, 26 Nov). */
   startAt: Anchor | null = null;
   /**
-   * A trial of Rook's speed on the walkable map (the page's ?walkspeed=1.5, 2 or 2.5): either the
-   * map's whole beat is shortened, so he and everyone on it stay in step, or (with &only=rook) only
-   * his stride is longer. Never inside a run.
+   * The walkable map's beat: 1.5 times a run's, so Rook and everyone on it walk faster and stay in
+   * step (locked by Ladi, 27 Nov, after the ?walkspeed trial). Never inside a run.
    */
-  beatMs = TICK_MS;
-  rookStride = 1;
+  beatMs = TICK_MS / POND_WALK_SPEED;
   /** Lines for this walk's people, by name. */
   private walkLines = new Map<string, string[]>();
   /** A note for the player once the thing that goes on is tapped, when what's next isn't built. */
@@ -244,7 +245,6 @@ export class PondRoom {
     ];
     // No wisps and a clock that never runs out: nothing happens unless the player does something.
     this.game = new Game(shrine, roster, this.seed(), [0, 0], 1e9);
-    if (this.rookStride !== 1) this.game.stride.set(ROOK_ID, this.rookStride);
     const S = (this.spots = pondSpots(this.game.board, shrine.starts, shrine.house));
     const place = (id: number, at: Pt) => {
       const p = this.player(id);
@@ -269,7 +269,6 @@ export class PondRoom {
     const shrine = shrineById(POND.shrine);
     const roster = [{ id: ROOK_ID, guild: 0 as Guild, name: "Rook" }, ...W.people.map((p, i) => ({ id: 10 + i, guild: (p.name === "Hesta" ? 1 : 0) as Guild, name: p.name }))];
     this.game = new Game(shrine, roster, this.seed(), [0, 0], 1e9);
-    if (this.rookStride !== 1) this.game.stride.set(ROOK_ID, this.rookStride);
     this.spots = pondSpots(this.game.board, shrine.starts, shrine.house);
     this.gatheredAt = 1e9;
     const taken: Pt[] = [];

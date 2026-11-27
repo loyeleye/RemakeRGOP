@@ -416,8 +416,6 @@ export class Game {
   static waterLaw: "all" | "deep" | "off" = "all";
   /** Extend the laws to every board, practice too. */
   static waterLawEverywhere = false;
-  /** Brainstorm, to judge by feel: a pull across water walks you round to a dry line first (off: it stops at the bank). */
-  static walkRound = true;
   waterLawHere = false;
   /** Who carries a water light (Lumi): she holds on any water. The tide puller always does too. */
   waterLight: number | null = null;
@@ -1262,7 +1260,7 @@ export class Game {
    * sight, preferring the brazier's side of the wisp. Null when nothing is in the way.
    */
   roundWater(p: Lamplighter, w: Wisp): Pt | null {
-    if (!Game.walkRound || p.mode !== "pull" || !this.lawOn() || this.hasLight(p.id) || this.lawWater(w.pos)) return null;
+    if (p.mode !== "pull" || !this.lawOn() || this.hasLight(p.id) || this.lawWater(w.pos)) return null;
     if (this.hasLight(w.holder) || w.pullers.some((id) => this.hasLight(id))) return null;
     const wet = (q: Pt) => this.board.lineTiles(q, w.pos).some((t) => this.lawWater(t));
     if (!wet(p.pos)) return null;
