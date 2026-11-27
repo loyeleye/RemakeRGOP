@@ -20,6 +20,7 @@ import { DYING, crowdSpot, terraceHeight } from "../engine/dying.js";
 import { DRESS, dressVerge, quarryPit, sieveGrain, sieveMask, sievePaths, wellLoop } from "./sieve-dress.js";
 import { SIEVE } from "../engine/sieve.js";
 import { RESCUE_LOOK, RescueFx, type VillagerRig } from "./rescue-dress.js";
+import { OffspringFx } from "./offspring-dress.js";
 import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villagers.js";
 import { RematchFx } from "./rematch-dress.js";
 import { CoveFx } from "./cove-dress.js";
@@ -70,6 +71,8 @@ export interface DrawState {
   opt?: NonNullable<import("../engine/protocol.js").StoryView["opt"]>;
   /** Run 10, the ship home (see StoryView.ship). */
   ship?: NonNullable<import("../engine/protocol.js").StoryView["ship"]>;
+  /** Part 2, runs 3 and 4, the offspring fight (see StoryView.fight). */
+  fight?: NonNullable<import("../engine/protocol.js").StoryView["fight"]>;
   /** The walk on the island (1 to 5): the Willing Girl has ribbons from walk 3, fresh flowers in walk 5. */
   walk?: number;
   /** A walk's people who face somewhere while they stand (Maudie toward the dock in walk 7). */
@@ -3142,6 +3145,24 @@ export class World {
     this.rescueFx.step({ r, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, wisps: this.wisps, players: this.players });
   }
 
+  /** Part 2, runs 3 and 4: the offspring, her light, the boy's, the shard (offspring-dress.ts, placeholder shapes). */
+  private fightFx: OffspringFx | null = null;
+  private stepFight(st: DrawState, time: number) {
+    const f = st.fight;
+    if (!f) {
+      if (this.fightFx) (this.fightFx.dispose(), (this.fightFx = null));
+      return;
+    }
+    if (!this.fightFx) {
+      this.fightFx = new OffspringFx(glowSprite);
+      this.scene.add(this.fightFx.all);
+    }
+    // The brazier is dead: it gives light only for what has been banked in it.
+    this.brazierLight.intensity = f.banked * 6;
+    const b = st.shrine.board;
+    this.fightFx.step({ f, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, rook: this.players.get(st.me)?.root ?? null });
+  }
+
   /** Run 10, the ship home: the cloud sea, the patch ahead, the hull and its lamp, the hooded figure, home at the end (ship-dress.ts), and the light going from night to grey. */
   private shipFx: ShipFx | null = null;
   private stepShip(st: DrawState, time: number) {
@@ -4228,6 +4249,7 @@ export class World {
     this.stepKite(st, time);
     this.stepTidepool(st, time);
     this.stepShip(st, time);
+    this.stepFight(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
     // Watchers: story figures standing off the plaza, turning slowly to keep you in view.

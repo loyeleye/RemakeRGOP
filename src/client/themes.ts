@@ -148,6 +148,11 @@ export const THEMES: Record<string, Theme> = {
     const base = THEMES["tidepool-steps"]!;
     return { ...base, name: "Kite Fell", floor: "kite-fell", grass: "#7fa850", dressed: true, decorate() {} };
   },
+  // Solenne's yard (Part 2, runs 3 and 4, the offspring fight): placeholder, the low one's dusk on plain grass.
+  get "solenne-yard"() {
+    const base = THEMES["low-one"]!;
+    return { ...base, name: "Solenne's yard", grass: "#5f7a4c", exposure: 0.85, particles: null, dressed: true, decorate() {} };
+  },
   // The Sieve (run 8): the palest, quietest place. Bleached chalk under a low, washed-out morning; nothing growing, no colour.
   get sieve() {
     const base = THEMES["tidepool-steps"]!;

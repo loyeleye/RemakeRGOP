@@ -89,6 +89,8 @@ export interface OptCell {
   mark?: number;
   /** A tide mark instead of pips: how high the water stands (0 to 1), whether the tide is in, how much of this tide is left (1 to 0), and whether it is about to turn. */
   tide?: { level: number; in: boolean; share: number; soon: boolean };
+  /** A tug of war instead of plain pips (the offspring fight): `mine` lit on its side from the left, `bank` lit on the brazier's side from the right, `loose` dim in the middle, the rest unlit. */
+  tug?: { mine: number; loose: number; bank: number };
 }
 
 export interface StoryView {
@@ -152,6 +154,34 @@ export interface StoryView {
     /** Moss Hollow (optional run 3a): the moss over each covered wisp (its tile from the brazier, the strokes left in it and what it began with, and its patch), and the last stroke (where, and on which tick). */
     moss?: { x: number; y: number; hp: number; of: number; patch: number }[];
     chip?: { x: number; y: number; tick: number; by: "rook" | "lumi" };
+    /** A meter on the ground at someone's feet (the offspring fight: Solenne's light): its tile, how full (0 to 1), and the mark she needs for what comes next (0 to 1). */
+    feet?: { x: number; y: number; f: number; mark: number };
+  };
+  /**
+   * Part 2, runs 3 and 4, the offspring fight (gameplay/part2/runs3-4-fight-brief.md). `run`: 3 or
+   * 4. `part`: the opening pull, play, her flare between the runs, or the kill (all its light in
+   * the brazier). `it`: the offspring, in tiles (fractional), its facing (radians, 0 east, y south),
+   * what it is after, how much light is inside it (0 to 10), whether her blast holds it, how open
+   * the wound is (0 to 1), and the tick it was last knocked back. `her`: Solenne, her light (0 to
+   * `full`), how bright she looks, what she is doing and the ticks of it left, and her last shove,
+   * blast or save. `fen`: the boy and his light. `shard`: run 4, whether it is uncovered and how
+   * bright it is. `banked`: wisps in the brazier. `cycle`: run 4's blast cycle. `catches`: times it
+   * has had Rook. `down`: ticks Rook is still down. `pulling`: ticks left of a pull from the wound.
+   */
+  fight?: {
+    run: 3 | 4;
+    part: "open" | "play" | "flare" | "kill";
+    tick: number;
+    it: { x: number; y: number; face: number; after: "her" | "fen" | "wisp" | "brazier" | "shard" | null; to?: { x: number; y: number }; inside: number; held: boolean; wound: number; knocked?: number; eating?: boolean };
+    her: { x: number; y: number; light: number; full: number; glow: number; doing: "rest" | "windup" | "hold"; left: number; of: number; flash?: { kind: "shove" | "blast" | "save" | "flare"; tick: number } };
+    fen: { x: number; y: number; light: number };
+    shard?: { shown: boolean; glow: number; of: number };
+    banked: number;
+    wisps: number;
+    cycle: number;
+    catches: number;
+    down: number;
+    pulling: number;
   };
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };
@@ -255,6 +285,8 @@ export type ClientMsg =
   | { t: "on" }
   /** Story run 2: call the partner to a tile. */
   | { t: "call"; x: number; y: number }
+  /** Part 2, run 4: show or hide the shard, or pull a wisp out of the offspring's wound. */
+  | { t: "fight"; shard?: boolean; pull?: boolean }
   /** A walk: the answer to its "Play ...?" question. */
   | { t: "answer"; yes: boolean; pick?: number }
   | { t: "ping"; at: number };

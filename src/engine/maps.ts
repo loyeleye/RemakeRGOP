@@ -10,6 +10,7 @@
 
 import { DYING, craterBoard, craterTiles } from "./dying.js";
 import { SV_WELLS, sieveRows, svCoast, svOutline } from "./sieve.js";
+import { OFFSPRING, oyCoast, oyOutline, yardRows } from "./offspring.js";
 import { LO_FRAME, LO_OVAL, RESCUE, loCoast, loFromSlip, loOutline, lowOneRows } from "./rescue.js";
 import { SHIP, SHIP_DECK, SHIP_FRAME, shipRows } from "./shiphome.js";
 import { KF_FAR, KF_OVAL, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
@@ -1409,7 +1410,17 @@ export const STORY_SHRINES: Shrine[] = [
   cove(),
   // Optional run 3b, the tide job: Tidepool Steps, terraced (see tidepool.ts).
   tidepoolTerraces(),
+  // Part 2, runs 3 and 4: the offspring fight in Solenne's yard (see offspring.ts).
+  solenneYard(),
 ];
+
+/** Solenne's yard (Part 2, runs 3 and 4): a plain oval round the dead brazier. Placeholder ground. */
+function solenneYard(): Shrine {
+  const rows = yardRows();
+  const def: ShrineDef = { id: OFFSPRING.shrine, name: "Solenne's yard", blurb: "A yard round a dead brazier, and something in it that eats light.", full: true, scale: 1, rings: [], spawnBand: [3, 12], rows };
+  const sh = finish(def, rows, 2, null);
+  return { ...sh, coast: oyCoast, outline: oyOutline, arms: true, lobes: [], core: { x: 0, y: 0, outline: oyOutline } };
+}
 
 /** The Kindling ground with the crater in it: everything else as run 1's island. */
 function kindlingCrater(): Shrine {

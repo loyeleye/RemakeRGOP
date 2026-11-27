@@ -14,7 +14,7 @@ interface Cam { w: number; h: number; compact: boolean; toScreen(tx: number, ty:
 export const OPT_HUD = {
   /** A cell of the strip: its width, the gap between cells, and a pip's size. */
   cell: 112, gap: 8, pip: 5.4,
-  us: "#ffd98a", her: "#d7c4ff", chalk: "#f3f1e8", water: "#7fd0e0", unlit: "rgba(255,255,255,0.14)",
+  us: "#ffd98a", her: "#d7c4ff", it: "#ff7a4a", chalk: "#f3f1e8", water: "#7fd0e0", unlit: "rgba(255,255,255,0.14)",
   /** A wisp left on wet stone: the ring under it. */
   stranded: "rgba(255,217,138,0.9)",
   /** Her eye on a wisp: the line's colour and dashes, and the ring's size on the wisp. */
@@ -208,6 +208,26 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
     }
   }
 
+  // A meter at someone's feet: a ring on the ground, how full, and a notch at the level that is needed (Solenne's light).
+  if (o.feet) {
+    const F = o.feet, rad = 1.25, f = Math.max(0, Math.min(1, F.f)), short = f < F.mark;
+    g.lineCap = "round";
+    g.lineWidth = 6;
+    g.strokeStyle = "rgba(10,8,20,0.55)";
+    ground(g, cam, F.x + 0.5, F.y + 0.5, rad);
+    g.lineWidth = 4;
+    g.strokeStyle = short ? "rgba(207,230,255,0.55)" : "rgba(207,230,255,0.98)";
+    if (f > 0.01) ground(g, cam, F.x + 0.5, F.y + 0.5, rad, f);
+    // The notch where the next shove or blast is.
+    const a = -Math.PI / 2 + F.mark * Math.PI * 2, i0 = cam.toScreen(F.x + 0.5 + Math.cos(a) * (rad - 0.35), F.y + 0.5 + Math.sin(a) * (rad - 0.35), 0.15), o0 = cam.toScreen(F.x + 0.5 + Math.cos(a) * (rad + 0.35), F.y + 0.5 + Math.sin(a) * (rad + 0.35), 0.15);
+    g.lineWidth = 3;
+    g.strokeStyle = "#ffffff";
+    g.beginPath();
+    g.moveTo(i0.x, i0.y);
+    g.lineTo(o0.x, o0.y);
+    g.stroke();
+  }
+
   // The Cove, with the tide out: how many are in each pool, so that the next place to stand can be
   // chosen with the whole cove not in sight. A pool off the screen has its count at the edge, with an arrow.
   if (o.pools && o.tide && !o.tide.in) for (const p of o.pools) if (p.n) pill(g, cam, p.x + 0.5, p.y + 0.5, p.n, p.n >= 2, now);
@@ -277,6 +297,19 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
         const mx = bx + bw * Math.max(0, Math.min(1, c.mark));
         g.fillStyle = "#ffffff";
         g.fillRect(mx - 1 * k, by - 2.5 * k, 2 * k, bh + 5 * k);
+      }
+    } else if (c.tug) {
+      // A tug of war: its side lit from the left, the brazier's from the right, strays dim between.
+      const T = c.tug, gap = 3 * k, r = Math.min(H.pip * k, (cw - (c.of - 1) * gap) / (c.of * 2));
+      for (let p = 0; p < c.of; p++) {
+        const px = cx + r + p * (r * 2 + gap), side = p < T.mine ? H.it : p >= c.of - T.bank ? H.us : p < T.mine + T.loose ? "loose" : null;
+        g.beginPath();
+        g.arc(px, py, r, 0, Math.PI * 2);
+        g.fillStyle = side === "loose" ? "rgba(255,255,255,0.45)" : side ?? H.unlit;
+        if (side && side !== "loose") (g.shadowColor = side), (g.shadowBlur = 6 * k);
+        g.fill();
+        g.shadowBlur = 0;
+        if (!side) (g.strokeStyle = "rgba(255,255,255,0.3)"), (g.lineWidth = 1), g.stroke();
       }
     } else if (c.tone === "chalk") tallies(g, cx + 3 * k, py - 9 * k, c.n, 17 * k, color);
     else if (c.group) {

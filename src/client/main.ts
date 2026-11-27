@@ -26,6 +26,8 @@ import { loadOpt, loadProgress, reach, resetOpts, resetProgress, saveOpt } from 
 import { RematchRoom } from "../server/rematch.js";
 import { REMATCH } from "../engine/rematch.js";
 import { CoveRoom } from "../server/cove.js";
+import { FightRoom } from "../server/offspring.js";
+import { OFFSPRING } from "../engine/offspring.js";
 import { COVE } from "../engine/cove.js";
 import { KiteRoom } from "../server/kite.js";
 import { TidepoolRoom } from "../server/tidepool.js";
@@ -153,7 +155,7 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | TidepoolRoom | MossRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | TidepoolRoom | MossRoom | FightRoom | null = null;
 
 /** The walkable map, at the speed on trial: ?walkspeed=1.5, 2 or 2.5 shortens the map's beat; with &only=rook only his stride is longer. */
 /** Back from a job (an optional job run), the walk starts by the sky skiff (Ladi, 26 Nov). */
@@ -194,6 +196,23 @@ function rematchRoom() {
  * lessons there have been are kept in this browser. Any number in COVE can be set from the link to
  * judge it by feel: ?cove=tide.in:10,tide.out:14,reach:10 and so on.
  */
+/** Part 2, runs 3 and 4, the offspring fight (a prototype): ?fight=key:val overrides OFFSPRING (dots for nested keys), and ?fight=start:4 starts on run 4. */
+function fightRoom() {
+  const q = new URLSearchParams(location.search);
+  let start: 3 | 4 = 3;
+  for (const part of (q.get("fight") ?? "").split(",").filter(Boolean)) {
+    const [k, v] = part.split(":"), path = (k ?? "").split("."), last = path.pop()!;
+    if (k === "start") {
+      start = v === "4" ? 4 : 3;
+      continue;
+    }
+    let at = OFFSPRING as unknown as Record<string, unknown>;
+    for (const step of path) at = (at?.[step] ?? {}) as Record<string, unknown>;
+    if (typeof at[last] === "number" && Number.isFinite(Number(v))) at[last] = Number(v);
+  }
+  return new FightRoom(undefined, undefined, start);
+}
+
 function coveRoom() {
   const r = new CoveRoom();
   const q = new URLSearchParams(location.search), rec = loadOpt(COVE.id);
@@ -293,12 +312,12 @@ function noteOpt() {
 }
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" | "o3a" | "o3b" | "o3c" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" | "o3a" | "o3b" | "o3c" | "p2fight" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
   sound.preloadVoices();
-  const r = run === "o3a" ? mossRoom() : run === "o3b" ? tidepoolRoom() : run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "p2fight" ? fightRoom() : run === "o3a" ? mossRoom() : run === "o3b" ? tidepoolRoom() : run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   // ?nostills: every run's reaction stills off (runs 8 to 10 also read it where they are built).
   if ("stillsOn" in r && new URLSearchParams(location.search).has("nostills")) r.stillsOn = false;
   // Run 5 after walk 7, where Kes's challenge was said: its opening leaves those lines out.
@@ -1593,6 +1612,13 @@ function renderPad(s: GameSnapshot | null) {
   $("mode").textContent = p?.mode === "push" ? "→ Pull" : "→ Push";
   if (!document.body.classList.contains("touch")) $("mode").textContent = p?.mode === "push" ? "Push" : "Pull";
   $("mode").style.display = room?.story?.opt?.noPush ? "none" : "";
+  // Part 2, run 4: the one show/hide button for the shard.
+  const sh = room?.story?.fight?.shard;
+  $("shard").hidden = !sh;
+  if (sh) {
+    $("shard").textContent = sh.shown ? "Hide shard" : "Show shard";
+    $("shard").classList.toggle("on", sh.shown);
+  }
 }
 
 const fmtTime = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -1699,6 +1725,12 @@ function targetAt(sx: number, sy: number, tap = false): { action: Action; wisp: 
     const place = world?.placeAt(sx, sy);
     const on = place === "house" ? home.house && { x: home.house.x + Math.floor(home.house.w / 2), y: home.house.y + Math.floor(home.house.h / 2) } : place ? props.find((q) => q.kind === place) : null;
     if (on) return { action: { kind: "walk", to: { x: on.x, y: on.y } }, wisp: null };
+  }
+  // Part 2, run 4: with the wound open, a tap on the offspring pulls a wisp out of it (he stays where he is).
+  const fit = room.story?.fight?.it;
+  if (fit && fit.wound > 0) {
+    const c = cam.toScreen(fit.x + 0.5, fit.y + 0.5, 1.2);
+    if (Math.hypot(c.x - sx, c.y - sy) <= Math.max(bigTapRadius(), cam.scale * OFFSPRING.it.size * 0.7)) return tap && link?.send({ t: "fight", pull: true }), null;
   }
   // Run 10: a tap on the ferryman (about his middle) does not walk Rook anywhere; it is answered, and he does not turn.
   const ferry = ferryAt();
@@ -1839,6 +1871,7 @@ window.addEventListener("keydown", (e) => {
   if (k === "`") return void (toggleDebug(), e.preventDefault());
   if (room.story?.canCall && (k === "c" || (k === "escape" && callMode))) return void (setCallMode(k === "c" ? !callMode : false), e.preventDefault());
   if (k === "o") setFocusMode(!focusMode);
+  else if (k === "h" && room.story?.fight?.shard) shardToggle();
   else if (k === "q") act({ toggleMode: true });
   else if (k === "r") act({ toggleRun: true });
   else if (k === " " || k === "s") act({ action: { kind: "idle" } });
@@ -1856,6 +1889,12 @@ window.addEventListener("keydown", (e) => {
 });
 
 $("mode").onclick = () => act({ toggleMode: true });
+/** Part 2, run 4: show or hide the shard (the button, or H). */
+function shardToggle() {
+  if (room?.phase !== "playing" || !room.story?.fight?.shard) return;
+  link?.send({ t: "fight", shard: true });
+}
+$("shard").onclick = shardToggle;
 $("run").onclick = () => act({ toggleRun: true });
 $("run2").onclick = () => act({ toggleRun: true });
 
@@ -2022,6 +2061,7 @@ $("story-o2").onclick = () => connectStory(playerName(), "o2");
 $("story-o3c").onclick = () => connectStory(playerName(), "o3c");
 $("story-o3b").onclick = () => connectStory(playerName(), "o3b");
 $("story-o3a").onclick = () => connectStory(playerName(), "o3a");
+$("story-p2fight").onclick = () => connectStory(playerName(), "p2fight");
 $("story-pond").onclick = () => connectStory(playerName(), "pond");
 // Saved progress: continue from where this browser got to, jump to any walk, or start over.
 function renderProgress() {
@@ -2774,7 +2814,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), staticOn: staticCut && now < staticCut.until ? staticCut.player : undefined, steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, opt: room?.story?.opt, ship: room?.story?.ship, walk: room?.story?.pond?.walk, looks: room?.story?.pond?.looks };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), staticOn: staticCut && now < staticCut.until ? staticCut.player : undefined, steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, opt: room?.story?.opt, ship: room?.story?.ship, fight: room?.story?.fight, walk: room?.story?.pond?.walk, looks: room?.story?.pond?.looks };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.
