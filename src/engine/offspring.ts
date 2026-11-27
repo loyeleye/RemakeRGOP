@@ -63,8 +63,8 @@ export const OFFSPRING = {
     brazierEdge: 2,
     /** A shove also dazes it this many ticks. */
     shoveDaze: 3,
-    /** After the first hold in run 4 it stands dazed this many ticks (until she can blast again), so cycle 1 is safe. */
-    daze1: 15,
+    /** After the first hold in run 4 it stood dazed this many ticks, so cycle 1 was safe. 0 (was 15): Ladi, 27 Nov 3:51 PM, "Take out the two seconds completely its way too easy and theres no danger". */
+    daze1: 0,
   },
   /** How much light each thing has, in the most-light step: Solenne's is her light, the brazier's a wisp each. */
   light: {

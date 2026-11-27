@@ -274,12 +274,10 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(f().teach?.hint).toBe("cover");
     expect(said()).toContain(T.say.cover);
     expect(p.room.storyView().opt?.feet?.[0]?.flash).toBe(true);
-    // Left out through the dazed gap, the shard snaps its eye to him.
+    // Left out when she lets go, there is no dazed gap (Ladi, 27 Nov 3:51 PM): it is free at once.
     for (let i = 0; i < 20 && p.x.her.doing === "hold"; i++) p.tick();
     p.tick();
-    const me = p.me.pos, it = p.x.it;
-    expect(Math.abs(Math.atan2(me.y - it.y, me.x - it.x) - it.face)).toBeLessThan(1e-6);
-    expect(said()).toContain(T.say.sees);
+    expect(p.x.it.dazed).toBeLessThanOrEqual(p.g.tick);
   });
 
   it("on a retry of run 4, hints only: no orders from her", () => {
@@ -304,6 +302,8 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   });
 
   it("before each blast her flare draws it: it leaps to her landing mark, and he can't strike from the brazier's far side", () => {
+    // The landing, not the gap after round 1: keep it standing through the gap, as the old daze did.
+    OFFSPRING.it.daze1 = 15;
     const p = play(4);
     p.x.teach.pulled = true;
     p.x.her.left = 0;
@@ -330,9 +330,12 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     }
     p.me.pos = p.me.prev = pt(Math.round(it.x - Math.cos(it.face) * 2.5), Math.round(it.y - Math.sin(it.face) * 2.5));
     expect(p.room.storyView().fight!.it.strike).toBe(2);
+    OFFSPRING.it.daze1 = 0;
   });
 
   it("round 1's hold ends after three pulls, and a landing on him knocks him aside", () => {
+    // The landing, not the gap after round 1: keep it standing through the gap, as the old daze did.
+    OFFSPRING.it.daze1 = 15;
     const p = play(4), b0 = p.x.it;
     p.me.pos = p.me.prev = pt(Math.round(b0.x - Math.cos(b0.face) * 3), Math.round(b0.y - Math.sin(b0.face) * 3));
     p.send({ t: "fight", shard: true });
@@ -354,9 +357,12 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     for (let i = 0; i < 5; i++) (p.tick(), (down = Math.max(down, p.room.state.down)));
     expect(down).toBe(OFFSPRING.knockdown.down);
     expect(Math.hypot(p.me.pos.x - to.x, p.me.pos.y - to.y)).toBeGreaterThan(OFFSPRING.it.size / 2);
+    OFFSPRING.it.daze1 = 0;
   });
 
   it("waiting just behind where it lands is safe: the landing knocks down only under its body", () => {
+    // The landing, not the gap after round 1: keep it standing through the gap, as the old daze did.
+    OFFSPRING.it.daze1 = 15;
     const p = play(4);
     p.x.teach.pulled = true;
     p.x.her.left = 0;
@@ -367,6 +373,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     let down = 0;
     for (let i = 0; i < 5; i++) (p.tick(), (down = Math.max(down, p.room.state.down)));
     expect(down).toBe(0);
+    OFFSPRING.it.daze1 = 0;
   });
 
   it("out of her hold it jumps now and then to a random spot or onto a lit wisp, never near Rook, and not while it eats at the brazier", () => {
