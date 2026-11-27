@@ -25,10 +25,15 @@ export const POND = {
   idleEvery: [6, 28] as [number, number],
   /** Ticks before Hesta and the children start walking in, and before Lumi runs over. */
   enterAt: 4,
-  /** Ticks between Hesta, Nell and Sefa setting off, so they come up the path in single file, not on one tile (Ladi, 26 Nov). */
+  /** Ticks between Nell, Sefa and Hesta setting off, so they come up the path in single file, not on one tile (Ladi, 26 Nov). */
   enterGap: 3,
-  /** Hesta's line(s) if Rook taps her before she reaches the pond (round and round). Waiting on the story thread; empty says nothing. */
-  hestaOnTheWay: [] as string[],
+  /** The children's stride on the way in, against Hesta's 1: they reach the pond before her (Ladi, 27 Nov). */
+  kidStride: 1.5,
+  /**
+   * Hesta's lines if Rook taps her before she reaches the pond: the story thread's three (27 Nov), all of
+   * them at Ladi's word ("Use them all. She picks one at random and then cycles between them."). Unvoiced.
+   */
+  hestaOnTheWay: ["Not here, dear. At the pond. The little ones are waiting.", "These knees get there when they get there.", "Hands off the honey drops. I've counted them."] as string[],
   lumiAt: 12,
   /** Tap reach: within this many tiles (either way, diagonals count as one) they answer at once. */
   reach: 2,
@@ -89,7 +94,10 @@ export function pondSpots(board: Board, starts: readonly Pt[][], house?: { x: nu
   const rook = open(starts[0]![0]!);
   // Lumi's lantern: by Rook's door if the island has his house (door on its east side), else on the pool's west shore.
   const lantern = house ? open(pt(house.x + house.w, doorY(house) + 1)) : open(pt(minX - 1, midY));
-  return { rook, lumi: open(pt(rook.x - 1, rook.y), [rook]), enter, gather: { hesta, nell, sefa, lumi: lumiAt }, lantern };
+  // Coming up from the south, Hesta goes between the children, not through either: first to the tile
+  // two below her spot (between and below them), then straight up.
+  const hestaVia = ey > hesta.y ? open(pt(hesta.x, hesta.y + 2), [nell, sefa]) : null;
+  return { rook, lumi: open(pt(rook.x - 1, rook.y), [rook]), enter, gather: { hesta, nell, sefa, lumi: lumiAt }, hestaVia, lantern };
 }
 
 /** Placeholder lines (the story thread will write them). Each tap gives the next one, round and round. */
@@ -138,6 +146,8 @@ export class PondRoom {
   private idleNext = new Map<string, number>();
   private taps = new Map<string, number>();
   private gatheredAt = -1;
+  /** Walk 1: Hesta has passed her waypoint between the children (PondSpots.hestaVia). */
+  private hestaPastVia = false;
   private lastSefa = -99;
   /** Once Hesta is tapped: Granny's game, which this room hands everything to. */
   /** The run the walk has gone on to (Granny's game from walks 1 and 2, the job from walk 2's skiff), played inside this room. */
@@ -249,6 +259,7 @@ export class PondRoom {
     place(SEFA_ID, S.enter[2]!);
     this.player(HESTA_ID).run = false;
     this.player(NELL_ID).run = this.player(SEFA_ID).run = false;
+    if (this.walkDef.n === 1) for (const id of [NELL_ID, SEFA_ID]) this.game.stride.set(id, POND.kidStride);
     this.endClock();
     this.stop = this.clock.every(this.beatMs, () => this.onTick());
     this.broadcast();
@@ -408,9 +419,15 @@ export class PondRoom {
       this.due();
       return this.broadcast();
     }
-    if (t === POND.enterAt) this.walk(HESTA_ID, this.spots.gather.hesta);
-    if (t === POND.enterAt + POND.enterGap) this.walk(NELL_ID, this.spots.gather.nell);
-    if (t === POND.enterAt + 2 * POND.enterGap) this.walk(SEFA_ID, this.spots.gather.sefa);
+    // The children set off first and walk quicker; Hesta comes up behind at her own pace (Ladi, 27 Nov).
+    if (t === POND.enterAt) this.walk(NELL_ID, this.spots.gather.nell);
+    if (t === POND.enterAt + POND.enterGap) this.walk(SEFA_ID, this.spots.gather.sefa);
+    if (t === POND.enterAt + 2 * POND.enterGap) this.walk(HESTA_ID, this.spots.hestaVia ?? this.spots.gather.hesta);
+    const via = this.spots.hestaVia;
+    if (via && !this.hestaPastVia && near(this.player(HESTA_ID).pos, via, 0)) {
+      this.hestaPastVia = true;
+      this.walk(HESTA_ID, this.spots.gather.hesta);
+    }
     if (t === POND.lumiAt) this.walk(LUMI_ID, this.spots.gather.lumi);
     g.step();
     const rook = this.player(ROOK_ID);
@@ -548,8 +565,11 @@ export class PondRoom {
       // Not until she has reached the pond (Ladi, 27 Nov): on the way down she only has a line (POND.hestaOnTheWay).
       if (!near(this.player(HESTA_ID).pos, this.spots.gather.hesta, 0)) {
         const early = POND.hestaOnTheWay;
-        if (early.length) this.say("Hesta", early[(this.taps.get("Hesta early") ?? 0) % early.length]!);
-        this.taps.set("Hesta early", (this.taps.get("Hesta early") ?? 0) + 1);
+        // The first is a random one, then round in order from there.
+        if (!this.taps.has("Hesta early")) this.taps.set("Hesta early", Math.floor(this.rand() * early.length));
+        const n = this.taps.get("Hesta early")!;
+        if (early.length) this.say("Hesta", early[n % early.length]!);
+        this.taps.set("Hesta early", n + 1);
         return;
       }
       return sure ? this.startGame() : this.ask(thing, W.ask);

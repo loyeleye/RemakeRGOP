@@ -29,6 +29,29 @@ describe("The pond, between runs", () => {
     expect(at("Lumi")).toEqual(room.spots.gather.lumi);
   });
 
+  it("won't start Granny's game before Hesta reaches the pond: she has a line instead, a random one, then round in turn", () => {
+    const { room, said, tap } = open();
+    const asked = () => (room as unknown as { asking: unknown }).asking;
+    const hestaAt = () => room.state.game.players.find((p) => p.name === "Hesta")!.pos;
+    const atPond = () => { const h = hestaAt(), g = room.spots.gather.hesta; return h.x === g.x && h.y === g.y; };
+    const early = () => said().filter((l) => l.who === "Hesta").map((l) => l.text);
+    for (let i = 0; i < 6; i++) room.onTick();
+    const LINES = ["Not here, dear. At the pond. The little ones are waiting.", "These knees get there when they get there.", "Hands off the honey drops. I've counted them."];
+    // Tap her (wherever she is now) until she has answered three times, all before she reaches the pond.
+    for (let i = 0; i < 200 && early().length < 3 && !atPond(); i++) {
+      const before = early().length;
+      const h = hestaAt();
+      tap(h.x, h.y);
+      for (let j = 0; j < 40 && early().length === before && !atPond(); j++) room.onTick();
+    }
+    const got = early();
+    expect(asked()).toBeFalsy();
+    expect(got.length).toBeGreaterThanOrEqual(2);
+    const first = LINES.indexOf(got[0]!);
+    expect(first).toBeGreaterThanOrEqual(0);
+    got.forEach((t, i) => expect(t).toBe(LINES[(first + i) % 3]));
+  });
+
   it("answers a tap from afar once Rook has walked up, and tapping Hesta starts Granny's game", () => {
     const { room, said, tap, answer } = open();
     for (let i = 0; i < 80; i++) room.onTick();
