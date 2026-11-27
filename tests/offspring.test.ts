@@ -454,6 +454,8 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.tick(W.pull);
     expect(p.x.inside.size).toBe(before);
     expect(p.room.storyView().opt?.hit?.live).toBe(false);
+    // And not silently: the "too far" hint.
+    expect(p.room.storyView().fight!.teach?.hint).toBe("far");
     // Covering the shard shuts it.
     p.send({ t: "fight", shard: true });
     p.tick();

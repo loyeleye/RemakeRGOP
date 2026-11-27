@@ -65,7 +65,7 @@ export class FightRoom {
    * round 3 on, a whole hold went by with no pull, so this hold gets its step hint once. `said`: the
    * captions given. `lure`: round 2's hint given. `timed`: a hint up until a tick. `hint`: the hint now.
    */
-  private teach = { retry: false, pulled: false, pulls: 0, held: false, remind: false, reminded: false, said: new Set<string>(), lure: false, loose: -1, timed: null as { id: Hint; until: number } | null, hint: null as Hint | null, wait: 0 };
+  private teach = { retry: false, pulled: false, pulls: 0, held: false, remind: false, reminded: false, said: new Set<string>(), lure: false, loose: -1, far: -1, timed: null as { id: Hint; until: number } | null, hint: null as Hint | null, wait: 0 };
 
   constructor(
     private clock: Clock = realClock,
@@ -199,7 +199,7 @@ export class FightRoom {
     this.cycle = 0;
     this.fenLight = O.light.fen4;
     this.shard = { shown: false, glow: 0 };
-    this.teach = { retry: this.teach.retry, pulled: false, pulls: 0, held: false, remind: false, reminded: false, said: new Set(), lure: false, loose: -1, timed: null, hint: null, wait: 0 };
+    this.teach = { retry: this.teach.retry, pulled: false, pulls: 0, held: false, remind: false, reminded: false, said: new Set(), lure: false, loose: -1, far: -1, timed: null, hint: null, wait: 0 };
     this.her = { light: O.her.afterBlast, dipUntil: -1, doing: "rest", left: 0, of: 0, flash: undefined };
     if (!this.at4) this.at4 = { rook: this.player(YOU).pos, it: { x: this.it.x, y: this.it.y, face: this.it.face } };
     this.blast(g.tick);
@@ -699,7 +699,8 @@ export class FightRoom {
     if (this.down > 0) return;
     if (this.wound.open) {
       if (this.pulling || !this.inside.size) return;
-      if (!this.inReach()) return;
+      // Out of reach a tap is not silent: the "too far" hint for a moment (its ring is already dim).
+      if (!this.inReach()) return void (this.teach.far = this.game.tick + OFFSPRING.teach.farTicks);
       this.pulling = OFFSPRING.wound.pull;
       this.game.command(YOU, { action: { kind: "idle" } });
       return;
@@ -726,8 +727,10 @@ export class FightRoom {
       if (this.cycle === 1) id = t.pulled ? (this.shard.shown && her.left <= T.coverAt ? "cover" : null) : steps();
       else if (t.remind && !t.held) id = steps();
     }
+    // A tap on the wound from too far: say so, over any other hint, while the wound is open.
+    if (g.tick < t.far && this.wound.open) id = "far";
     // The first loose wound: her word as she lets go, and the hint while it stays open.
-    if (t.loose === this.cycle && this.wound.open && !it.held && her.doing === "rest") id = "loose";
+    else if (t.loose === this.cycle && this.wound.open && !it.held && her.doing === "rest") id = "loose";
     // Round 2: the first time it eats from the brazier, the lure.
     if (this.cycle === 2 && !t.lure && her.doing === "rest" && it.after === "brazier" && it.eat > 0) {
       t.lure = true;
@@ -736,7 +739,7 @@ export class FightRoom {
     if (!id && t.timed && g.tick < t.timed.until) id = t.timed.id;
     // Her order: at once for the shard, the cover, the lure and the loose wound; the strike and the pull only if he waits.
     t.wait = id !== t.hint ? 0 : id === "pull" || (id === "strike" && this.behind()) ? t.wait + 1 : t.wait;
-    if (id && (id === "strike" || id === "pull" ? t.wait >= T.wait : id !== t.hint)) this.say(id);
+    if (id && id !== "far" && (id === "strike" || id === "pull" ? t.wait >= T.wait : id !== t.hint)) this.say(id);
     t.hint = id;
   }
 

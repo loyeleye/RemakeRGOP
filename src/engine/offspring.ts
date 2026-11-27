@@ -158,8 +158,8 @@ export const OFFSPRING = {
     looseFrom: 2,
     /** Its speed while the wound is open and she is not holding it, and for shard.dim ticks after he covers (tiles a tick; 0 for its usual speed). 0.8, was 0.6 (Ladi 27 Nov 3:32 PM: "increase the crawl speed"); at 1 only a frame-perfect player lives. */
     crawl: 0.8,
-    /** A pull works only within this many tiles of its back edge, held or loose (0 for from anywhere). */
-    reach: 6,
+    /** A pull works only within this many tiles of its back edge, held or loose (0 for from anywhere). 8.5 (was 6, which left only the tiles against the fire, so round 1 could hang): a middle distance up to 10, as far as the staff's pull reaches (the gameplay thread, 27 Nov). */
+    reach: 8.5,
   },
   /**
    * Teaching run 4's three steps: show the shard, strike its back, pull the light out (Ladi, 27 Nov
@@ -193,6 +193,7 @@ export const OFFSPRING = {
       cover: { key: "Press Space to cover the shard.", tap: "Tap Hide shard." },
       lure: { key: "Space shows the shard and draws it off. Hide it before it reaches you.", tap: "Show the shard to draw it off. Hide it before it reaches you." },
       loose: { key: "Keep pulling. Press Space to cover the shard before it reaches you.", tap: "Keep pulling. Hide the shard before it reaches you." },
+      far: { key: "Too far to pull. Get closer to its back.", tap: "Too far to pull. Get closer to its back." },
     },
     /** The same on a retry, shortened. */
     short: {
@@ -202,6 +203,7 @@ export const OFFSPRING = {
       cover: { key: "Space: cover it.", tap: "Hide shard." },
       lure: { key: "Space: draw it off, then hide.", tap: "Show to draw it off, then hide." },
       loose: { key: "Pull, then Space to cover.", tap: "Pull, then hide." },
+      far: { key: "Too far. Get closer.", tap: "Too far. Get closer." },
     },
     /** Ticks he waits at a step before she says the strike or pull order. */
     wait: 3,
@@ -209,10 +211,12 @@ export const OFFSPRING = {
     coverAt: 4,
     /** Round 1's hold ends (down to the cover step) after this many pulls (3, was 5: with 5 the fight was over in three rounds; the gameplay thread, 27 Nov). */
     pulls1: 3,
+    /** Ticks the "too far" hint stays up after a tap on the wound out of reach. */
+    farTicks: 4,
     /** Ticks the lure hint stays up. */
     hintTicks: 9,
-    /** Round 1's mark where to stand: on the line from it through the brazier, this many tiles past the brazier's middle, or further out of the bank zone while still within wound.reach of its back (2, was 3: from 3 it is out of reach). */
-    mark: 2,
+    /** Round 1's mark where to stand: on the line from it through the brazier, this many tiles past the brazier's middle, off the bank zone and within wound.reach of its back where it can be. */
+    mark: 3,
   },
   /**
    * Where it stands for each blast (Ladi, 27 Nov 2:41 PM: on the brazier run 4 was too easy; "the
