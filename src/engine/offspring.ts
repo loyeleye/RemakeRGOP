@@ -173,8 +173,8 @@ export const OFFSPRING = {
       sees: "With that uncovered you are the brightest thing it can see.",
       /** Round 2, as it starts eating from the brazier. Always. */
       lure: "Draw it off the brazier with the shard, and hide it before it reaches you.",
-      /** The first loose wound, as she lets go. PLACEHOLDER: the gameplay thread's draft (27 Nov), not yet the story thread's or judged by Ladi. */
-      loose: "It is loose, Salvage. Take what you can and cover the shard before it reaches you.",
+      /** The first loose wound, as she lets go: the story thread's draft 1, picked by Ladi (27 Nov 3:35 PM). Text only, no voice. */
+      loose: "It is still open, and it is coming for the shard. Pull while it walks, and cover before it reaches you.",
     },
     /** The hint bubbles: PLACEHOLDER WORDING, the gameplay thread's to word. */
     hint: {
