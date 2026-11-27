@@ -175,8 +175,6 @@ export const OFFSPRING = {
       lure: "Draw it off the brazier with the shard, and hide it before it reaches you.",
       /** The first loose wound, as she lets go. PLACEHOLDER: the gameplay thread's draft (27 Nov), not yet the story thread's or judged by Ladi. */
       loose: "It is loose, Salvage. Take what you can and cover the shard before it reaches you.",
-      /** Round 3's blast (not used: her flare draws it to her every round now, Ladi 27 Nov 2:41 PM). */
-      placed: "I am done placing it for you, Salvage.",
     },
     /** The hint bubbles: PLACEHOLDER WORDING, the gameplay thread's to word. */
     hint: {
