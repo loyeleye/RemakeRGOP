@@ -31,6 +31,8 @@ export interface Theme {
   place?: boolean;
   /** A shrine that is played on but dressed with a place's props (Kite Fell). */
   dressed?: boolean;
+  /** Tiles to one repeat of the floor texture (6 if not given). */
+  floorTiles?: number;
   /** Tint for the plain wall/boulder models, if the island wants them darker or paler. */
   tint?: string;
   /** What deflector stones inside the archways look like, if not the island's boulders. */
@@ -148,10 +150,10 @@ export const THEMES: Record<string, Theme> = {
     const base = THEMES["tidepool-steps"]!;
     return { ...base, name: "Kite Fell", floor: "kite-fell", grass: "#7fa850", dressed: true, decorate() {} };
   },
-  // Solenne's yard (Part 2, runs 3 and 4, the offspring fight): placeholder, the low one's dusk on plain grass.
+  // The crew's yard (Part 2, runs 3 and 4, the offspring fight): the low one's dusk, on the maps thread's packed earth (4 tiles to a repeat).
   get "solenne-yard"() {
     const base = THEMES["low-one"]!;
-    return { ...base, name: "Solenne's yard", grass: "#5f7a4c", exposure: 0.85, particles: null, dressed: true, decorate() {} };
+    return { ...base, name: "The crew's yard", floor: "crew-yard", floorTiles: 4, grass: "#5f6b4c", exposure: 0.9, hemi: ["#c4c0cc", "#6e5a44", 0.95] as [string, string, number], particles: null, dressed: true, decorate() {} };
   },
   // The Sieve (run 8): the palest, quietest place. Bleached chalk under a low, washed-out morning; nothing growing, no colour.
   get sieve() {

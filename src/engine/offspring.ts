@@ -229,6 +229,8 @@ export const OY_YARD = {
   cover: [10, -5, 12, -4] as const,
   cage: [-4, 9, 2, 10] as const,
   breach: { x: -13, y: [1, 7] as const },
+  /** Crates and barrels against the walls (solid; the plan's crate tiles). */
+  crates: [[-11, -9], [-10, -9], [11, 9], [10, 9], [-11, 9], [-3, -9], [6, 9], [7, 9]] as readonly (readonly [number, number])[],
   /** The lit ground's edge (tiles), and how round its corners are. */
   apron: { x: 16, n: -15, s: 13, round: 3 },
 };
@@ -262,7 +264,8 @@ export function yardRows(): string[] {
   const g: string[][] = Array.from({ length: OY_SIZE.h }, (_, by) =>
     Array.from({ length: OY_SIZE.w }, (_, bx) => {
       const x = bx - HALF_W, y = by - HALF_H;
-      return inBox(x, y, [...Y.inside]) && !inBox(x, y, [...Y.cover]) && !inBox(x, y, [...Y.cage]) ? "." : "!";
+      const crate = Y.crates.some(([cx, cy]) => cx === x && cy === y);
+      return inBox(x, y, [...Y.inside]) && !inBox(x, y, [...Y.cover]) && !inBox(x, y, [...Y.cage]) && !crate ? "." : "!";
     }),
   );
   const put = (x: number, y: number, ch: string, what: string) => {

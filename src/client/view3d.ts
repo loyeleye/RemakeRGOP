@@ -21,6 +21,8 @@ import { DRESS, dressVerge, quarryPit, sieveGrain, sieveMask, sievePaths, wellLo
 import { SIEVE } from "../engine/sieve.js";
 import { RESCUE_LOOK, RescueFx, type VillagerRig } from "./rescue-dress.js";
 import { OffspringFx } from "./offspring-dress.js";
+import { dressYard } from "./yard-dress.js";
+import { OFFSPRING } from "../engine/offspring.js";
 import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villagers.js";
 import { RematchFx } from "./rematch-dress.js";
 import { CoveFx } from "./cove-dress.js";
@@ -1986,12 +1988,12 @@ export class World {
     this.sieveDressed = dressed;
     if (dressed) loadTilda();
     // The plaza: flagstones laid right up to the island's edge.
-    const floorTex = tex(`textures/floor-${th.floor}.webp`, 1 / 6, `textures/floor-${shrine.id}.webp`);
+    const floorTex = tex(`textures/floor-${th.floor}.webp`, 1 / (th.floorTiles ?? 6), `textures/floor-${shrine.id}.webp`);
     const floorShape = new THREE.Shape();
     // Tentacle islands: trace the edge from the rules' own coast field instead of a radius.
     const coastField = shrine.arms && shrine.coast ? shrine.coast : null;
     const traced = (out: number) =>
-      contourLoops((x, y) => coastField!(x, y) - out, -W / 2 - 3, -H / 2 - 3, W / 2 + 3, H / 2 + 3, 0.5);
+      contourLoops((x, y) => coastField!(x, y) - out, -W / 2 - 6, -H / 2 - 6, W / 2 + 6, H / 2 + 6, 0.5);
     if (coastField) {
       // The longest loop is the outer edge; the rest are the gaps of sky between routes.
       const [outer, ...holes] = traced(0.35);
@@ -2071,6 +2073,12 @@ export class World {
     g.add(island);
     if (shrine.deck) island.visible = false;
     if (dressed) this.dressSieveIsland(island, this.low ? 128 : 220);
+    // The crew's yard (Part 2, runs 3 and 4): the maps thread's ruin, carts and cage (yard-dress.ts).
+    if (shrine.id === OFFSPRING.shrine) {
+      const yard = new THREE.Group();
+      g.add(yard);
+      dressYard(yard);
+    }
     // Each arm is a chain of overlapping plateaus that shrink toward the tip.
     if (shrine.isle?.arms?.length) {
       const pts = armSamples(shrine.isle);
