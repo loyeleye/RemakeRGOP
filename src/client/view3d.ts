@@ -85,6 +85,9 @@ export interface DrawState {
  * A tilted perspective camera that keeps the old 2D camera's interface: `scale` is roughly
  * pixels per tile at the look-at point, `cx, cy` is the tile it looks at.
  */
+/** The brazier's fire, its parts. */
+type FireParts = { fire: THREE.Object3D; embers: THREE.Object3D; glow: THREE.Sprite; pillar: THREE.Mesh } | null;
+
 export class Camera {
   scale = 30;
   cx = 13;
@@ -1417,7 +1420,7 @@ export class World {
   private stopFx = new Map<number, { at: number; player: number; x: number; y: number }>();
   private stopSnap: GameSnapshot | null = null;
   /** The brazier's fire, kept so a flame level (runs 6 and 7) can shrink and grow it. */
-  private fireParts: { fire: THREE.Object3D; embers: THREE.Object3D; glow: THREE.Sprite; pillar: THREE.Mesh } | null = null;
+  private fireParts: FireParts = null;
   private fireAt = new THREE.Vector3();
   private brazierLight = new THREE.PointLight("#ff9a4a", 60, 30, 1.6);
   private rim: THREE.LineSegments | null = null;
@@ -3147,18 +3150,35 @@ export class World {
 
   /** Part 2, runs 3 and 4: the offspring, her light, the boy's, the shard (offspring-dress.ts, placeholder shapes). */
   private fightFx: OffspringFx | null = null;
+  /** The fire the fight put out, so leaving the fight lights that one again and no other. */
+  private fightFire: FireParts = null;
   private stepFight(st: DrawState, time: number) {
     const f = st.fight;
     if (!f) {
-      if (this.fightFx) (this.fightFx.dispose(), (this.fightFx = null));
+      if (this.fightFx) {
+        this.fightFx.dispose();
+        this.fightFx = null;
+        if (this.fireParts && this.fireParts === this.fightFire) {
+          const p = this.fireParts;
+          p.fire.visible = p.embers.visible = p.glow.visible = p.pillar.visible = true;
+          p.fire.scale.setScalar(1);
+        }
+      }
       return;
     }
     if (!this.fightFx) {
       this.fightFx = new OffspringFx(glowSprite);
       this.scene.add(this.fightFx.all);
     }
-    // The brazier is dead: it gives light only for what has been banked in it.
+    // The brazier is dead: it gives light only for what has been banked in it, and with none no fire shows.
     this.brazierLight.intensity = f.banked * 6;
+    this.fightFire = this.fireParts;
+    if (this.fireParts) {
+      const p = this.fireParts, k = Math.min(1, f.banked / 4), on = f.banked > 0;
+      p.fire.visible = p.embers.visible = p.glow.visible = on;
+      p.pillar.visible = false;
+      if (on) p.fire.scale.set(0.4 + 0.6 * k, 0.2 + 0.8 * k, 0.4 + 0.6 * k);
+    }
     const b = st.shrine.board;
     this.fightFx.step({ f, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, rook: this.players.get(st.me)?.root ?? null });
   }
@@ -4207,9 +4227,11 @@ export class World {
         flick = 1 + (0.07 + 0.33 * tired * tired) * n - (tired > 0.75 && Math.sin(time * 31 + ph) > 0.6 ? 0.35 : 0);
       }
       // Moss Hollow: one under moss glows low through it, so the moss reads and the wisps can still be counted.
-      const mossed = mossedWisps?.has(w.id) ? 0.4 : 1;
+      // The offspring fight: a wisp nobody has pulled is asleep, low and breathing slowly.
+      const sleeping = !!st.fight?.asleep.includes(w.id), asleep = sleeping ? 0.3 * (0.85 + 0.15 * Math.sin(time * 1.3 + w.id)) : 1;
+      const mossed = (mossedWisps?.has(w.id) ? 0.4 : 1) * asleep;
       const low = (h === undefined ? 1 : flick) * mossed;
-      rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1) * (h === undefined ? 1 : (0.8 + 0.3 * h) * FALL.big * (0.92 + 0.08 * flick)));
+      rig.core.scale.setScalar(s * (st.hoverWisp === w.id ? 1.3 : 1) * (sleeping ? 0.5 : 1) * (h === undefined ? 1 : (0.8 + 0.3 * h) * FALL.big * (0.92 + 0.08 * flick)));
       rig.halo.material.opacity = Math.min(1, 0.85 * s * dim * dim * low);
       rig.light.intensity = 6 * s * dim * low;
       if (rig.aura) {

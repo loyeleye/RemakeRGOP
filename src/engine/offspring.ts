@@ -23,7 +23,14 @@ export const OFFSPRING = {
   /** Rook walks one tile a tick (he never runs here). */
   rookRuns: false as boolean,
 
-  /** The offspring. Speed in tiles a tick (3 tiles every 2 ticks). */
+  /**
+   * The offspring. What it goes for (the gameplay thread's rule from its bot runs, 27 Nov 2 PM,
+   * gameplay/part2/fight-sim/README.md, replacing brightness over distance): the first of these
+   * that there is. In the kill, the brazier only. Then the uncovered shard, from anywhere. Then
+   * food, nearest first: a lit loose wisp (one Rook has pulled, or torn from the wound; the rest
+   * sleep and it can't see them), and the brazier for `flare` ticks after a bank and while it is
+   * eating there. Otherwise the most light of Solenne, Fen and the brazier, as plain amounts.
+   */
   it: {
     /**
      * How big it is, in tiles across (Ladi, 27 Nov 1:22 PM: "at least 3x3 tiles wide. Maybe even
@@ -31,7 +38,11 @@ export const OFFSPRING = {
      * (or its back edge, for behind it), so changing this one number is enough to try 4.
      */
     size: 3,
+    /** Speed in tiles a tick: `slow` with nothing inside it, rising to `speed` with all ten (faster the more it has eaten). */
+    slow: 0.6,
     speed: 1.5,
+    /** Ticks the brazier counts as food after a wisp is banked in it ("it flares when fed"). */
+    flare: 10,
     /**
      * How fast it turns, in degrees a tick, and how near it has to be facing what it is after before
      * it moves. It turns on the spot first, so the turn is the tell for where it goes next (the
@@ -43,23 +54,25 @@ export const OFFSPRING = {
     reach: 0.8,
     reachBrazier: 2.5,
     /** Ticks to eat a loose wisp, and a banked one. */
-    eatLoose: 1,
-    eatBanked: 3,
-    /** The light it is after counts this much more than the rest, so it doesn't dither between two near-equal ones. */
+    eatLoose: 3,
+    eatBanked: 6,
+    /** The light it is after keeps its place this much against an equal one, so it doesn't dither. */
     stick: 1.25,
-    /** The brazier's light counts from its rim, this far out from the middle (tiles). */
+    /** The brazier counts from its rim, this far out from the middle (tiles), when it is nearest-first food. */
     brazierEdge: 2,
-    /** Distance counts as max(d, this) (tiles), so nothing it is on top of counts for infinity. */
-    nearest: 1,
+    /** A shove also dazes it this many ticks. */
+    shoveDaze: 3,
+    /** After the first hold in run 4 it stands dazed this many ticks (until she can blast again), so cycle 1 is safe. */
+    daze1: 15,
   },
-  /** Brightness of each light. What it chases is the brightest by brightness / distance. */
+  /** How much light each thing has, in the most-light step: Solenne's is her light, the brazier's a wisp each. */
   light: {
     shard: 12,
     wisp: 1,
     /** The brazier: this much for each wisp banked. */
     banked: 1,
     fen3: 1,
-    /** Fen in run 4: from `fen4` at the flare, rising `fenRise` a tick from cycle `fenFrom` on, up to `fenMax`. Until then, while it sits on her, nothing ends the fight but his lure. */
+    /** Fen in run 4: from `fen4` at the flare, rising `fenRise` a tick from cycle `fenFrom` on, up to `fenMax`. */
     fen4: 1,
     fenRise: 0.05,
     fenMax: 10,
@@ -75,23 +88,19 @@ export const OFFSPRING = {
     /** How near its front edge has to come to her or the boy before she shoves (tiles). */
     shoveAt: 1,
     regen3: 0.05,
-    /**
-     * How bright she looks right after a shove or a blast, for `dipTicks`, whatever her light.
-     * The brief has about 2; at 2 her three tiles beat a one-wisp brazier at six under brightness
-     * over distance, so the opening pull could not turn it. 0.5 lets it.
-     */
+    /** How bright she looks right after a blast, for `dipTicks`, whatever her light (run 3 has no dip). */
     dip: 0.5,
     dipTicks: 4,
     /** Run 4. The flare and a blast leave her at `afterBlast`. She climbs `regen4` a tick while it leaves her alone, and drains `drain` a tick while it is after her. */
     afterBlast: 2,
     regen4: 0.5,
     drain: 0.25,
-    /** While it is on her, her light goes `eaten` a tick, down to `floor`. */
+    /** While it is on her, her light goes `eaten` a tick, down to `floor`; at 0 it moves on to the brazier or the boy. */
     eaten: 1,
-    floor: 0.5,
+    floor: 0,
     /** The wind-up (ticks), then the hold (ticks). */
     windup: 3,
-    hold: 8,
+    hold: 12,
     /** The save: what she has left after knocking it off him (a quarter of full), and how far it goes. */
     afterSave: 2,
     saveKnock: 3,
@@ -106,8 +115,8 @@ export const OFFSPRING = {
   shard: {
     /** A hidden shard takes this many ticks to dim to nothing. */
     dim: 3,
-    /** Each tick it is uncovered during her hold takes this many more ticks off the hold. */
-    holdCost: 1,
+    /** Each tick it is uncovered during her hold takes this many more ticks off the hold (0: struck by the gameplay thread, 27 Nov). */
+    holdCost: 0,
   },
   wound: {
     /** Ticks behind it with the shard uncovered before the wound opens. */
@@ -121,11 +130,11 @@ export const OFFSPRING = {
      */
     near: 9,
     behind: 110,
-    /** Ticks for each pull: one wisp torn out of the wound, flying toward him. */
+    /** Ticks for each pull: one wisp torn out of the wound, which flies to him on its own (a tile a tick), so the next pull can follow at once. */
     pull: 2,
   },
-  /** Cycles 1 to `placed`: her blast also puts it in place, `at` tiles in front of her toward the brazier. Cycle 1: it doesn't go for the brazier. */
-  cycles: { placed: 2, at: 3, noBrazier: 1 },
+  /** Cycles 1 to `placed`: her blast also puts it in place, `at` tiles in front of her toward the brazier. */
+  cycles: { placed: 2, at: 3 },
   /** Her three lines after a save (approved wording, Ladi 27 Nov 12:48 PM; no voice take yet). One at random. */
   saved: ["I can't do that twice, Salvage.", "Next time it has you, I keep what's left for the boy.", "That cost more than you're worth. Stay behind it."],
   /** Text on the short card. Placeholder wording, not story lines. */

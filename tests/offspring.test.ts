@@ -57,15 +57,19 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(p.room.storyView().fight!.her.light).toBeGreaterThanOrEqual(OFFSPRING.her.start3);
   });
 
-  it("goes for the brightest by brightness over distance: while she is dim after a shove, a wisp at its front beats her", () => {
+  it("goes for food, nearest first: an asleep wisp at its front it can't see, but once he has pulled it, it beats the fire", () => {
     const p = opened();
     const it0 = p.x.it, w = p.g.wisps[3]!;
     moveWisp(w, pt(Math.round(it0.x + Math.cos(it0.face) * 2.5), Math.round(it0.y + Math.sin(it0.face) * 2.5)));
-    p.x.her.dipUntil = 1e9;
+    p.tick();
+    expect(p.room.storyView().fight!.it.after).toBe("brazier");
+    expect(p.room.storyView().fight!.asleep).toContain(w.id);
+    p.x.lit.add(w.id);
     p.tick();
     expect(p.room.storyView().fight!.it.after).toBe("wisp");
-    // And eats what it reaches: a loose wisp in a tick, and it stays inside it.
-    for (let i = 0; i < 6 && !p.g.away.has(w.id); i++) p.tick();
+    expect(p.room.storyView().fight!.asleep).not.toContain(w.id);
+    // And eats what it reaches, and it stays inside it.
+    for (let i = 0; i < 12 && !p.g.away.has(w.id); i++) p.tick();
     expect(p.g.away.has(w.id)).toBe(true);
     expect(p.room.state.inside).toBeGreaterThanOrEqual(1);
   });
@@ -97,11 +101,13 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   it("the tenth wisp eaten: she flares whatever her light, and run 4 starts on the spot with all ten inside it", () => {
     const p = opened();
     p.x.her.light = 4;
-    // Feed it everything: each loose wisp set down at its eye, the banked one eaten from the brazier.
+    // Feed it everything: each loose wisp lit and set down at its eye, the banked one eaten from the brazier.
     for (let i = 0; i < 200 && p.room.state.run === 3; i++) {
       const loose = p.g.wisps.find((w) => !p.g.away.has(w.id));
+      if (loose) p.x.lit.add(loose.id);
       if (loose) moveWisp(loose, pt(Math.round(p.x.it.x + Math.cos(p.x.it.face) * 2), Math.round(p.x.it.y + Math.sin(p.x.it.face) * 2)));
-      p.x.her.light = 4;
+      // With nothing loose left, she dims to nothing so the fire is the most light, and it goes back for the banked one.
+      p.x.her.light = loose ? 4 : 0;
       p.tick();
     }
     expect(p.room.state.run).toBe(4);
@@ -114,14 +120,14 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(f.shard).toEqual({ shown: false, glow: 0, of: OFFSPRING.light.shard });
   });
 
-  it("run 4: the wound opens only behind it with the shard uncovered, a pull tears a wisp out to him, and the shard shortens her hold", () => {
-    // In front of it: no wound, even with the shard out. And the uncovered shard takes a tick more off her hold each tick.
+  it("run 4: the wound opens only behind it with the shard uncovered, and a pull tears a wisp out that flies to him on its own", () => {
+    // In front of it: no wound, even with the shard out (and the shard no longer shortens her hold).
     const a = play(4), f0 = a.x.it;
     a.me.pos = a.me.prev = pt(Math.round(f0.x + Math.cos(f0.face) * 3), Math.round(f0.y + Math.sin(f0.face) * 3));
     a.send({ t: "fight", shard: true });
     a.tick(2);
     expect(a.room.state.wound).toBe(false);
-    expect(a.x.her.left).toBe(OFFSPRING.her.hold - 2 * (1 + OFFSPRING.shard.holdCost));
+    expect(a.x.her.left).toBe(OFFSPRING.her.hold - 2);
     // Behind it, across the brazier, the shard out: the wound opens.
     const p = play(4);
     p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
@@ -131,13 +137,14 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.send({ t: "fight", pull: true });
     p.tick(OFFSPRING.wound.pull);
     expect(p.room.state.inside).toBe(9);
-    expect(p.me.action.kind).toBe("staff");
+    expect(p.me.action.kind).not.toBe("staff");
     expect(p.x.torn.size).toBe(1);
+    expect(p.x.lit.size).toBeGreaterThanOrEqual(1);
     // It flies to him through the fire, and banks.
     for (let i = 0; i < 12 && p.room.state.banked === 0; i++) p.tick();
     expect(p.room.state.banked).toBe(1);
-    // The hold ends and the wound shuts with it.
-    p.tick(2);
+    // The hold ends and the wound shuts with it; in cycle 1 it then stands dazed.
+    p.tick(OFFSPRING.her.hold);
     expect(p.room.state.wound).toBe(false);
     expect(p.x.her.doing).not.toBe("hold");
   });
@@ -150,7 +157,10 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     for (const id of [...p.x.inside]) p.x.inside.delete(id);
     p.me.pos = p.me.prev = pt(Math.round(p.x.it.x) - 4, Math.round(p.x.it.y));
     p.send({ t: "fight", shard: true });
-    for (let i = 0; i < 20 && p.room.state.catches === 0; i++) p.tick();
+    // Cycle 1: it stands dazed first, then goes for the shard.
+    p.tick(OFFSPRING.it.daze1 - 2);
+    expect(p.room.state.catches).toBe(0);
+    for (let i = 0; i < 30 && p.room.state.catches === 0; i++) p.tick();
     expect(p.room.state.catches).toBe(1);
     expect(p.x.her.light).toBe(OFFSPRING.her.afterSave);
     expect(OFFSPRING.saved).toContain(p.lines.at(-1)?.text);
@@ -178,6 +188,42 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.tick(3);
     expect(p.room.state.phase).toBe("results");
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
+  });
+
+  it("the kill also comes when the tenth banks with the wound already open", () => {
+    const p = play(4);
+    for (const id of [...p.x.inside].slice(1)) (p.x.inside.delete(id), p.x.banked.add(id));
+    p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
+    p.send({ t: "fight", shard: true });
+    p.tick();
+    expect(p.room.state.wound).toBe(true);
+    p.send({ t: "fight", pull: true });
+    for (let i = 0; i < 20 && p.room.state.phase === "playing"; i++) p.tick();
+    expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
+  });
+
+  it("slow when empty, faster the more it has eaten; and a shove dazes it", () => {
+    const p = opened();
+    for (const w of p.g.wisps) if (!p.g.away.has(w.id)) p.g.away.set(w.id, 1e9);
+    p.x.banked.clear();
+    const sol = p.g.players.find((q) => q.id === 2)!.pos;
+    const step = (inside: number) => {
+      p.x.inside.clear();
+      for (let i = 0; i < inside; i++) p.x.inside.add(i);
+      p.x.it.x = sol.x - 9;
+      p.x.it.y = sol.y;
+      p.x.it.face = 0;
+      p.x.it.dazed = -1;
+      const x0 = p.x.it.x;
+      p.tick();
+      return p.x.it.x - x0;
+    };
+    expect(step(0)).toBeCloseTo(OFFSPRING.it.slow, 5);
+    expect(step(10)).toBeCloseTo(OFFSPRING.it.speed, 5);
+    p.x.it.x = sol.x - 3;
+    p.x.her.light = OFFSPRING.her.full;
+    for (let i = 0; i < 5 && p.x.her.light === OFFSPRING.her.full; i++) p.tick();
+    expect(p.x.it.dazed - p.g.tick).toBeGreaterThanOrEqual(OFFSPRING.it.shoveDaze - 1);
   });
 
   it("in its way: a run through his tile throws him clear and he is down three ticks (never hurt); off with knockdown.on 0", () => {

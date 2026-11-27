@@ -14,7 +14,7 @@ interface Cam { w: number; h: number; compact: boolean; toScreen(tx: number, ty:
 export const OPT_HUD = {
   /** A cell of the strip: its width, the gap between cells, and a pip's size. */
   cell: 112, gap: 8, pip: 5.4,
-  us: "#ffd98a", her: "#d7c4ff", it: "#ff7a4a", chalk: "#f3f1e8", water: "#7fd0e0", unlit: "rgba(255,255,255,0.14)",
+  us: "#ffd98a", her: "#d7c4ff", it: "#ff7a4a", fen: "#ffe1b0", chalk: "#f3f1e8", water: "#7fd0e0", unlit: "rgba(255,255,255,0.14)",
   /** A wisp left on wet stone: the ring under it. */
   stranded: "rgba(255,217,138,0.9)",
   /** Her eye on a wisp: the line's colour and dashes, and the ring's size on the wisp. */
@@ -208,16 +208,17 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
     }
   }
 
-  // A meter at someone's feet: a ring on the ground, how full, and a notch at the level that is needed (Solenne's light).
-  if (o.feet) {
-    const F = o.feet, rad = 1.25, f = Math.max(0, Math.min(1, F.f)), short = f < F.mark;
+  // Meters at people's feet: a ring on the ground, how full, and a notch at the level that is needed (Solenne's light; the boy's).
+  for (const F of o.feet ?? []) {
+    const rad = F.tone === "fen" ? 1 : 1.25, f = Math.max(0, Math.min(1, F.f)), short = F.mark !== undefined && f < F.mark, rgb = F.tone === "fen" ? "255,217,160" : "207,230,255";
     g.lineCap = "round";
     g.lineWidth = 6;
     g.strokeStyle = "rgba(10,8,20,0.55)";
     ground(g, cam, F.x + 0.5, F.y + 0.5, rad);
     g.lineWidth = 4;
-    g.strokeStyle = short ? "rgba(207,230,255,0.55)" : "rgba(207,230,255,0.98)";
+    g.strokeStyle = `rgba(${rgb},${short ? 0.55 : 0.98})`;
     if (f > 0.01) ground(g, cam, F.x + 0.5, F.y + 0.5, rad, f);
+    if (F.mark === undefined) continue;
     // The notch where the next shove or blast is.
     const a = -Math.PI / 2 + F.mark * Math.PI * 2, i0 = cam.toScreen(F.x + 0.5 + Math.cos(a) * (rad - 0.35), F.y + 0.5 + Math.sin(a) * (rad - 0.35), 0.15), o0 = cam.toScreen(F.x + 0.5 + Math.cos(a) * (rad + 0.35), F.y + 0.5 + Math.sin(a) * (rad + 0.35), 0.15);
     g.lineWidth = 3;
@@ -310,6 +311,18 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
         g.fill();
         g.shadowBlur = 0;
         if (!side) (g.strokeStyle = "rgba(255,255,255,0.3)"), (g.lineWidth = 1), g.stroke();
+      }
+      // The boy's light, a marker counted in from the brazier's end.
+      if (T.fen !== undefined && T.fen > 0) {
+        const right = cx + c.of * (r * 2 + gap) - gap, mx = right - Math.min(c.of, T.fen) * (r * 2 + gap) + gap / 2;
+        g.fillStyle = H.fen;
+        g.fillRect(mx - 1.2 * k, py - r - 4 * k, 2.4 * k, r * 2 + 8 * k);
+        g.beginPath();
+        g.moveTo(mx - 4 * k, py - r - 7 * k);
+        g.lineTo(mx + 4 * k, py - r - 7 * k);
+        g.lineTo(mx, py - r - 2 * k);
+        g.closePath();
+        g.fill();
       }
     } else if (c.tone === "chalk") tallies(g, cx + 3 * k, py - 9 * k, c.n, 17 * k, color);
     else if (c.group) {

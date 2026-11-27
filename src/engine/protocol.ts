@@ -90,7 +90,7 @@ export interface OptCell {
   /** A tide mark instead of pips: how high the water stands (0 to 1), whether the tide is in, how much of this tide is left (1 to 0), and whether it is about to turn. */
   tide?: { level: number; in: boolean; share: number; soon: boolean };
   /** A tug of war instead of plain pips (the offspring fight): `mine` lit on its side from the left, `bank` lit on the brazier's side from the right, `loose` dim in the middle, the rest unlit. */
-  tug?: { mine: number; loose: number; bank: number };
+  tug?: { mine: number; loose: number; bank: number; /** The boy's light, as a marker counted in from the brazier's end: the brazier is brighter than him once its pips pass it. */ fen?: number };
 }
 
 export interface StoryView {
@@ -154,8 +154,8 @@ export interface StoryView {
     /** Moss Hollow (optional run 3a): the moss over each covered wisp (its tile from the brazier, the strokes left in it and what it began with, and its patch), and the last stroke (where, and on which tick). */
     moss?: { x: number; y: number; hp: number; of: number; patch: number }[];
     chip?: { x: number; y: number; tick: number; by: "rook" | "lumi" };
-    /** A meter on the ground at someone's feet (the offspring fight: Solenne's light): its tile, how full (0 to 1), and the mark she needs for what comes next (0 to 1). */
-    feet?: { x: number; y: number; f: number; mark: number };
+    /** Meters on the ground at people's feet (the offspring fight: Solenne's light, and the boy's in run 4): the tile, how full (0 to 1), the mark needed for what comes next (0 to 1), and whose colour. */
+    feet?: { x: number; y: number; f: number; mark?: number; tone: "her" | "fen" }[];
   };
   /**
    * Part 2, runs 3 and 4, the offspring fight (gameplay/part2/runs3-4-fight-brief.md). `run`: 3 or
@@ -178,6 +178,8 @@ export interface StoryView {
     shard?: { shown: boolean; glow: number; of: number };
     banked: number;
     wisps: number;
+    /** Loose wisps still asleep (he has not pulled them): it can't see them. */
+    asleep: number[];
     cycle: number;
     catches: number;
     down: number;
