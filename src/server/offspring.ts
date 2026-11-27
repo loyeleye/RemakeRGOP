@@ -106,7 +106,10 @@ export class FightRoom {
         if (this.phase === "results") this.begin(this.end?.summary === OFFSPRING.card.again4 ? 4 : this.startAt);
         return;
       case "act": {
-        if (this.phase !== "playing" || this.down > 0 || this.pulling > 0 || this.part === "flare") return;
+        if (this.phase !== "playing") return;
+        // Walking or running: his to switch at any time (it was never passed on, so the button did nothing).
+        if (msg.toggleRun) this.game.command(YOU, { toggleRun: true });
+        if (this.down > 0 || this.pulling > 0 || this.part === "flare") return;
         const action = cleanAction(msg.action, this.game);
         if (!action) return;
         if (action.kind === "staff" && this.game.away.has(action.wisp)) return;

@@ -462,4 +462,17 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(p.x.shard.shown).toBe(false);
     expect(p.x.wound.open).toBe(false);
   });
+
+  it("the run button works in the fight: he starts walking and can switch to running and back", () => {
+    for (const run of [3, 4] as const) {
+      const p = play(run);
+      expect(p.me.run).toBe(false);
+      p.send({ t: "act", toggleRun: true });
+      p.tick();
+      expect(p.me.run).toBe(true);
+      p.send({ t: "act", toggleRun: true });
+      p.tick();
+      expect(p.me.run).toBe(false);
+    }
+  });
 });

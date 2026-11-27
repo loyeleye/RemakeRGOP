@@ -20,7 +20,7 @@ export const OFFSPRING = {
   start: [6, -1] as readonly [number, number],
   /** The 10 wisps, the same 10 every time. The first is the marked one: pulled to where Rook starts, it flies through the brazier. */
   wisps: [[4, 0], [-3, -6], [-9, -2], [-7, 6], [2, 7], [6, 6], [5, -6], [-1, -8], [-11, 1], [1, 4]] as readonly (readonly [number, number])[],
-  /** Rook walks one tile a tick (he never runs here). */
+  /** Rook starts walking (one tile a tick); the run button switches him to running and back, as on every other board. */
   rookRuns: false as boolean,
 
   /**
