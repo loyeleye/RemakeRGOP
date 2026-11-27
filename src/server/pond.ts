@@ -27,6 +27,8 @@ export const POND = {
   enterAt: 4,
   /** Ticks between Hesta, Nell and Sefa setting off, so they come up the path in single file, not on one tile (Ladi, 26 Nov). */
   enterGap: 3,
+  /** Hesta's line(s) if Rook taps her before she reaches the pond (round and round). Waiting on the story thread; empty says nothing. */
+  hestaOnTheWay: [] as string[],
   lumiAt: 12,
   /** Tap reach: within this many tiles (either way, diagonals count as one) they answer at once. */
   reach: 2,
@@ -542,7 +544,16 @@ export class PondRoom {
     const W = this.walkDef;
     const offers = W.people.find((p) => p.name === thing.name)?.offer;
     if (offers && !sure) return this.offer(offers);
-    if (W.n === 1 && thing.name === "Hesta") return sure ? this.startGame() : this.ask(thing, W.ask);
+    if (W.n === 1 && thing.name === "Hesta") {
+      // Not until she has reached the pond (Ladi, 27 Nov): on the way down she only has a line (POND.hestaOnTheWay).
+      if (!near(this.player(HESTA_ID).pos, this.spots.gather.hesta, 0)) {
+        const early = POND.hestaOnTheWay;
+        if (early.length) this.say("Hesta", early[(this.taps.get("Hesta early") ?? 0) % early.length]!);
+        this.taps.set("Hesta early", (this.taps.get("Hesta early") ?? 0) + 1);
+        return;
+      }
+      return sure ? this.startGame() : this.ask(thing, W.ask);
+    }
     // Walk 2's skiff: off to the first job (run 4), with Lumi's "I won. So I'm coming." behind it.
     if (W.n === 2 && thing.name === W.go && W.next === 4) {
       if (!sure) return this.ask(thing, W.ask, "Set out");
