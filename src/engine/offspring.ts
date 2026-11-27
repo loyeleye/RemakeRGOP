@@ -215,29 +215,56 @@ export const OFFSPRING = {
 
 // ------------------------------------------------------------------ the yard
 
-/** The yard: a plain oval round the dead brazier, the edge where Solenne and Fen stand to the east. */
-export const OY_OVAL = { rx: 13, ry: 10 };
-const HALF_W = 15, HALF_H = 12;
+/**
+ * The crew's yard in its third state (the maps thread's plan 2, sogni/lanternfall/production/places/
+ * crew-yard/, 27 Nov): a ruin 25 by 21 inside its low walls (x -12..12, y -10..10), the cold brazier
+ * in the middle, the west wall breached at y 1..7, an overturned cart on the east wall at x 10..12,
+ * y -5..-4 beside Solenne and the boy, and the back cart (the cage) with the hoods on the south wall
+ * at x -4..2, y 9..10. Lit ground (the apron) runs out past the walls, deeper in the north; past it,
+ * dark. The offspring keeps to the clear ground, x -12..12, y -9..9, and off the cart.
+ */
+export const OY_YARD = {
+  inside: [-12, -10, 12, 10] as const,
+  clear: [-12, -9, 12, 9] as const,
+  cover: [10, -5, 12, -4] as const,
+  cage: [-4, 9, 2, 10] as const,
+  breach: { x: -13, y: [1, 7] as const },
+  /** The lit ground's edge (tiles), and how round its corners are. */
+  apron: { x: 16, n: -15, s: 13, round: 3 },
+};
+const HALF_W = 13, HALF_H = 11;
 export const OY_SIZE = { w: HALF_W * 2 + 1, h: HALF_H * 2 + 1 };
-const wob = (a: number) => 1 + 0.03 * Math.sin(3 * a + 0.7) + 0.02 * Math.sin(5 * a + 2.1);
-const land = (x: number, y: number) => Math.hypot(x / OY_OVAL.rx, y / OY_OVAL.ry) <= wob(Math.atan2(y, x));
-export const oyLand = land;
+const inBox = (x: number, y: number, b: readonly [number, number, number, number]) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
 
-/** About how far (x, y) is outside the yard, in tiles, negative inside. */
+/** About how far (x, y) is outside the lit ground, in tiles, negative inside (the island's edge for drawing). */
 export function oyCoast(x: number, y: number) {
-  const g = Math.hypot(x / OY_OVAL.rx, y / OY_OVAL.ry) || 1e-6;
-  return (g - wob(Math.atan2(y, x))) / (Math.hypot(x / OY_OVAL.rx ** 2, y / OY_OVAL.ry ** 2) / g) - 0.5;
+  const A = OY_YARD.apron, cy = (A.n + A.s) / 2, hx = A.x - A.round, hy = (A.s - A.n) / 2 - A.round;
+  const qx = Math.abs(x) - hx, qy = Math.abs(y - cy) - hy;
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - A.round - 0.5;
 }
-/** How far the edge is from the brazier at each angle. */
+/** How far the lit ground's edge is from the brazier at each angle. */
 export function oyOutline(a: number) {
   let r = 6;
-  while (r < 30 && land(Math.cos(a) * r, Math.sin(a) * r)) r += 0.25;
+  while (r < 40 && oyCoast(Math.cos(a) * r, Math.sin(a) * r) < 0) r += 0.25;
   return r;
 }
+/** How far (x, y) is outside the ground the offspring can stand on (its middle), negative inside: the clear yard, off the cart. */
+export function oyRoom(x: number, y: number) {
+  const C = OY_YARD.clear, K = OY_YARD.cover;
+  const out = Math.max(C[0] - 0.5 - x, x - C[2] - 0.5, C[1] - 0.5 - y, y - C[3] - 0.5);
+  const offCart = Math.max(K[0] - 0.5 - x, x - K[2] - 0.5, K[1] - 0.5 - y, y - K[3] - 0.5);
+  return Math.max(out, -offCart);
+}
 
-/** The yard as map rows: open ground, the brazier, and Rook's start. */
+/** The yard as map rows: open ground inside the walls, everything else solid (the dress draws the walls, carts and the rest), the brazier, and the starts. */
 export function yardRows(): string[] {
-  const g: string[][] = Array.from({ length: OY_SIZE.h }, (_, by) => Array.from({ length: OY_SIZE.w }, (_, bx) => (land(bx - HALF_W, by - HALF_H) ? "." : " ")));
+  const Y = OY_YARD;
+  const g: string[][] = Array.from({ length: OY_SIZE.h }, (_, by) =>
+    Array.from({ length: OY_SIZE.w }, (_, bx) => {
+      const x = bx - HALF_W, y = by - HALF_H;
+      return inBox(x, y, [...Y.inside]) && !inBox(x, y, [...Y.cover]) && !inBox(x, y, [...Y.cage]) ? "." : "!";
+    }),
+  );
   const put = (x: number, y: number, ch: string, what: string) => {
     if (g[y + HALF_H]?.[x + HALF_W] !== ".") throw new Error(`solenne-yard: ${what} at ${x},${y} is not on open ground`);
     g[y + HALF_H]![x + HALF_W] = ch;

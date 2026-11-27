@@ -8,7 +8,7 @@
 import { Tile, pt, samePt, type Pt } from "../engine/board.js";
 import { Game, Rng, TICK_MS, type Guild, type Wisp } from "../engine/game.js";
 import { shrineById } from "../engine/maps.js";
-import { OFFSPRING, oyCoast } from "../engine/offspring.js";
+import { OFFSPRING, oyRoom } from "../engine/offspring.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
 import { cleanAction, moveWisp } from "./granny.js";
 import { realClock, type Clock } from "./room.js";
@@ -416,7 +416,7 @@ export class FightRoom {
   }
 
   private moveTo(nx: number, ny: number) {
-    const c = this.game.board.center, ok = (x: number, y: number) => oyCoast(x - c.x, y - c.y) < -OFFSPRING.it.size / 2;
+    const c = this.game.board.center, ok = (x: number, y: number) => oyRoom(x - c.x, y - c.y) < -OFFSPRING.it.size / 2;
     if (ok(nx, ny)) (this.it.x = nx), (this.it.y = ny);
     else if (ok(nx, this.it.y)) this.it.x = nx;
     else if (ok(this.it.x, ny)) this.it.y = ny;
@@ -569,7 +569,7 @@ export class FightRoom {
   private spotFor(cycle: number) {
     const O = OFFSPRING, g = this.game, c = g.board.center, sol = this.spot(SOL_ID), me = this.spot(YOU);
     const a0 = Math.atan2(c.y - sol.y, c.x - sol.x), side = (O.cycles.side * Math.PI) / 180;
-    const ok = (p: { x: number; y: number }) => oyCoast(p.x - c.x, p.y - c.y) < -O.it.size / 2;
+    const ok = (p: { x: number; y: number }) => oyRoom(p.x - c.x, p.y - c.y) < -O.it.size / 2;
     const at = (a: number, d: number) => ({ x: sol.x + Math.cos(a) * d, y: sol.y + Math.sin(a) * d });
     const angles = cycle <= 1 ? [a0] : [a0 + side, a0 - side].sort((p, q) => Math.hypot(at(q, O.cycles.at).x - me.x, at(q, O.cycles.at).y - me.y) - Math.hypot(at(p, O.cycles.at).x - me.x, at(p, O.cycles.at).y - me.y));
     for (const a of [...angles, a0]) for (let d = O.cycles.at; d >= 1.5; d -= 0.5) if (ok(at(a, d))) return at(a, d);
@@ -610,7 +610,7 @@ export class FightRoom {
     if (it.key === "brazier" && Math.hypot(c.x - it.x, c.y - it.y) <= I.reachBrazier + I.size / 2 + 0.1) return false;
     const me = this.spot(YOU), sol = this.spot(SOL_ID), fen = this.spot(FEN_ID);
     const fits = (p: { x: number; y: number }) =>
-      oyCoast(p.x - c.x, p.y - c.y) < -I.size / 2 &&
+      oyRoom(p.x - c.x, p.y - c.y) < -I.size / 2 &&
       Math.hypot(p.x - me.x, p.y - me.y) > I.size / 2 + H.clear &&
       Math.min(Math.hypot(p.x - sol.x, p.y - sol.y), Math.hypot(p.x - fen.x, p.y - fen.y)) > I.size / 2 + OFFSPRING.her.shoveAt + 1 &&
       Math.max(Math.abs(p.x - c.x), Math.abs(p.y - c.y)) > 2 + I.size / 2;

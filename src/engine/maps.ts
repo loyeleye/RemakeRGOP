@@ -349,7 +349,7 @@ export function ringWalls(ring: Ring): Pt[] {
 export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling"
   | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat" | "path-lamp" | "ladder"
   | "beehive" | "garden-plot" | "mat-rack" | "baskets" | "wheelbarrow" | "pane-crate" | "cargo-crates" | "streamer" | "streamer-blue" | "kes-house" | "wind-vane" | "bent-tree" | "referee-stand"
-  | "cold-brazier" | "low-lamp" | "low-house" | "ship-figure";
+  | "cold-brazier" | "low-lamp" | "low-house" | "ship-figure" | "yard-solid";
 export const PROP_CHARS: Record<string, PropKind> = {
   F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling",
   // The horseshoe island's houses, the Offering stone, and the one boat at its mooring.
@@ -365,6 +365,8 @@ export const PROP_CHARS: Record<string, PropKind> = {
   "9": "cold-brazier", "0": "low-lamp", "?": "low-house",
   // The ship home (run 10) once had its figure on the deck here; he now stands in the prow, off the map (shiphome.ts SHIP.figure).
   "$": "ship-figure",
+  // The crew's yard (the offspring fight): solid ground the yard's own dress draws (walls, carts, the cage).
+  "!": "yard-solid",
   q: "beehive", p: "garden-plot", m: "mat-rack", s: "baskets", w: "wheelbarrow", n: "pane-crate", r: "cargo-crates",
 };
 /** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
@@ -883,6 +885,7 @@ const TILE_OF: Record<string, Tile> = {
   w: Tile.Wall,
   n: Tile.Wall,
   r: Tile.Wall,
+  "!": Tile.Wall,
   // Story places: a fence, a wash-line post, a bench (solid), and a worn path (open ground).
   F: Tile.Wall,
   Y: Tile.Wall,
@@ -1414,10 +1417,10 @@ export const STORY_SHRINES: Shrine[] = [
   solenneYard(),
 ];
 
-/** Solenne's yard (Part 2, runs 3 and 4): a plain oval round the dead brazier. Placeholder ground. */
+/** The crew's yard, breached (Part 2, runs 3 and 4): its walls, carts and cage drawn by yard-dress.ts. */
 function solenneYard(): Shrine {
   const rows = yardRows();
-  const def: ShrineDef = { id: OFFSPRING.shrine, name: "Solenne's yard", blurb: "A yard round a dead brazier, and something in it that eats light.", full: true, scale: 1, rings: [], spawnBand: [3, 12], rows };
+  const def: ShrineDef = { id: OFFSPRING.shrine, name: "The crew's yard", blurb: "A ruin round a cold brazier, its west wall broken in, and something in it that eats light.", full: true, scale: 1, rings: [], spawnBand: [3, 12], rows };
   const sh = finish(def, rows, 2, null);
   return { ...sh, coast: oyCoast, outline: oyOutline, arms: true, lobes: [], core: { x: 0, y: 0, outline: oyOutline } };
 }

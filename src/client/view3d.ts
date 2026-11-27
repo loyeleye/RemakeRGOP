@@ -1165,7 +1165,7 @@ function setWindows(on: boolean) {
 }
 
 /** Yard props: each its own model, one a tile (the rest are drawn as one block per place). */
-const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "streamer", "streamer-blue", "wind-vane", "bent-tree", "referee-stand", "cold-brazier", "low-lamp", "low-house", "ship-figure"]);
+const YARD = new Set(["fence", "post", "bench", "barrel", "woodpile", "flowerbed", "shrine-wall", "tree", "lamp", "basin", "statue", "lookout", "rail", "path-lamp", "ladder", "beehive", "garden-plot", "mat-rack", "baskets", "wheelbarrow", "pane-crate", "cargo-crates", "streamer", "streamer-blue", "wind-vane", "bent-tree", "referee-stand", "cold-brazier", "low-lamp", "low-house", "ship-figure", "yard-solid"]);
 /** Yard things drawn from their own model: tiles wide and deep, and the block-out's height. */
 const YARD_THINGS: Record<string, [number, number, number]> = {
   beehive: [1, 1, 1], "garden-plot": [3, 2, 0.3], "mat-rack": [2, 1, 1.9], baskets: [1, 1, 0.4], wheelbarrow: [1, 1, 0.7], "pane-crate": [1, 1, 0.7], "cargo-crates": [1, 1, 1.3],
