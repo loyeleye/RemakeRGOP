@@ -3,6 +3,12 @@
 // file (music/p2-fight.pack.json, base64 .wav by name) so the preview page stays under its file
 // count. Every loop is a whole number of ticks long, so `loop` keeps it on the grid. The numbers in
 // FIGHT_MUSIC are the gameplay thread's drafts.
+//
+// The game ticks on the page's timer and the music on the audio clock, and the two can run at
+// slightly different speeds (in a headless Chromium here the audio clock ran 0.4% slow: 0.74 s
+// behind after 300 ticks). So the player keeps its own music time, compares each tick's arrival
+// with where the grid says it should be, and when they part by more than `drift.start` it nudges
+// every source's speed, by at most `drift.most`, until they are back within `drift.stop`.
 
 import type { StoryView } from "../engine/protocol.js";
 import { SOUND, audioOut } from "./sound.js";
@@ -15,16 +21,21 @@ export const FIGHT_MUSIC = {
   bar: 2.4,
   /** How long a layer takes to come in or go out (s). */
   ramp: 0.015,
-  /** Run 3: each layer plays until it has eaten this many (the knock always). */
+  /** Run 3: each layer plays until it has eaten this many (the knock always, from the start of the fight). */
   run3: { breath: 9, heart: 7, tone: 4 },
-  /** The flare's held note starts this many ticks after the chord. */
+  /** The flare's held note starts this many ticks after the chord, and holds until he first shows the shard in run 4, or this many ticks. */
   noteAfter: 2,
-  /** Run 4: bars of the locked line for the first strike, the second, and the third on. */
+  noteHold: 10,
+  /** Run 4: bars of the locked line for the first strike, the second, and the third on (it ends sooner, at a bar line, if the wound closes). */
   locks: [1, 2, 4],
+  /** Keeping in step with the ticks: how many ticks a reading looks back over, the error (s) that starts a nudge and the one that ends it, the largest change of speed, and how many seconds a nudge aims to take back the error in. */
+  drift: { window: 10, start: 0.04, stop: 0.01, most: 0.01, over: 4 },
 };
 
 const STEMS = ["p2-run3-knock", "p2-run3-heart", "p2-run3-breath", "p2-run3-tone", "p2-flare-chord", "p2-flare-note", "p2-flare-far-knocks", "p2-run4-her", "p2-run4-him", "p2-run4-locked"] as const;
 type Stem = (typeof STEMS)[number];
+const BED = ["p2-run3-heart", "p2-run3-breath", "p2-run3-tone"] as const;
+const LINES = ["p2-run4-her", "p2-run4-him"] as const;
 
 let buffers: Partial<Record<Stem, AudioBuffer>> | null = null;
 let asked = false;
@@ -52,65 +63,98 @@ interface Layer {
   on: boolean;
 }
 
-/** One fight's music, from its first loop to the silence. */
+/** One fight's music, from its first knock to the silence. Times called `m` are music time (seconds from bar 1). */
 class Score {
   layers = new Map<Stem, Layer>();
-  /** When bar 1 started (audio clock). */
-  t0: number;
-  run3 = false;
+  /** One-shots left to play out, still stopped dead with the rest. */
+  spent: AudioBufferSourceNode[] = [];
+  /** The audio clock against music time: from audio time `a` (music time `m`) the music runs at `r`. */
+  seg: { a: number; m: number; r: number };
+  /** The fight's tick at bar 1; how late the last few ticks arrived on the grid, the least of the first few (the fixed delay), and how far off it is now. */
+  tick0: number;
+  lates: number[] = [];
+  base: number | null = null;
+  err = 0;
+  bed = false;
   flared = false;
   run4 = false;
+  shown = false;
   strikes = 0;
   wound = false;
-  /** When the last locked line ends. */
-  lockEnd = 0;
+  /** The locked line now playing or due: when it ends, and whether her and his lines are already on their way back. */
+  lock: { end: number; back: boolean } | null = null;
   bus: GainNode;
   constructor(
     private c: AudioContext,
     out: GainNode,
     private b: Partial<Record<Stem, AudioBuffer>>,
+    tick: number,
   ) {
-    this.t0 = c.currentTime + 0.05;
+    this.seg = { a: c.currentTime + 0.05, m: 0, r: 1 };
+    this.tick0 = tick;
     this.bus = c.createGain();
     this.bus.gain.value = SOUND.musicGain;
     this.bus.connect(out);
   }
-  /** The next bar line from now. */
+  now() {
+    return this.pos(this.c.currentTime);
+  }
+  pos(a: number) {
+    return this.seg.m + (a - this.seg.a) * this.seg.r;
+  }
+  /** The audio time of music time m (at today's speed). */
+  at(m: number) {
+    return this.seg.a + (m - this.seg.m) / this.seg.r;
+  }
+  /** The next bar line, and the next tick, from now (music time). */
   nextBar() {
-    const B = FIGHT_MUSIC.bar, k = Math.ceil((this.c.currentTime + 0.02 - this.t0) / B);
-    return this.t0 + Math.max(0, k) * B;
+    const B = FIGHT_MUSIC.bar;
+    return Math.max(0, Math.ceil((this.now() + 0.02) / B)) * B;
   }
-  /** The next tick from now, on the same grid. */
   nextTick() {
-    const T = FIGHT_MUSIC.tick, k = Math.ceil((this.c.currentTime + 0.02 - this.t0) / T);
-    return this.t0 + Math.max(0, k) * T;
+    const T = FIGHT_MUSIC.tick;
+    return Math.max(0, Math.ceil((this.now() + 0.02) / T)) * T;
   }
-  /** Start a stem at `at`, looping or once (for `len` seconds when given), heard or silent. */
-  play(n: Stem, at: number, loop: boolean, on = true, len?: number) {
+  /** Start a stem at music time m, looping or once (for `len` seconds of it when given), heard or silent. */
+  play(n: Stem, m: number, loop: boolean, on = true, len?: number) {
     const buf = this.b[n];
     if (!buf) return;
+    // A one-shot still sounding (a lock a new one waits on) plays out; anything else stops.
+    const old = this.layers.get(n);
+    if (len !== undefined && old && !old.src.loop) (this.spent.push(old.src), this.layers.delete(n));
     this.cut(n);
     const src = this.c.createBufferSource(), g = this.c.createGain();
     src.buffer = buf;
     src.loop = loop;
+    src.playbackRate.value = this.seg.r;
     g.gain.value = on ? 1 : 0;
     src.connect(g).connect(this.bus);
-    if (len !== undefined) src.start(at, 0, len);
-    else src.start(at);
+    const a = Math.max(this.c.currentTime, this.at(m));
+    if (len !== undefined) src.start(a, 0, len);
+    else src.start(a);
     this.layers.set(n, { src, g, on });
   }
-  /** Bring a looping layer in or out at `at`, with the short ramp. */
-  set(n: Stem, on: boolean, at: number) {
+  /** Bring a layer in or out at music time m, with the short ramp. */
+  set(n: Stem, on: boolean, m: number) {
     const l = this.layers.get(n);
     if (!l || l.on === on) return;
     l.on = on;
-    l.g.gain.setValueAtTime(on ? 0 : 1, at);
-    l.g.gain.linearRampToValueAtTime(on ? 1 : 0, at + FIGHT_MUSIC.ramp);
+    const a = this.at(m);
+    l.g.gain.setValueAtTime(on ? 0 : 1, a);
+    l.g.gain.linearRampToValueAtTime(on ? 1 : 0, a + FIGHT_MUSIC.ramp);
   }
-  /** Stop a stem dead. */
-  cut(n: Stem) {
+  /** Stop a stem dead (at music time m, or now). */
+  cut(n: Stem, m?: number) {
     const l = this.layers.get(n);
     if (!l) return;
+    if (m !== undefined) {
+      try {
+        l.src.stop(this.at(m));
+      } catch {
+        /* already stopping */
+      }
+      return;
+    }
     try {
       l.src.stop();
     } catch {
@@ -122,66 +166,121 @@ class Score {
   }
   silence() {
     for (const n of [...this.layers.keys()]) this.cut(n);
+    for (const src of this.spent)
+      try {
+        src.stop();
+      } catch {
+        /* done */
+      }
     this.bus.disconnect();
+  }
+  /** Change every source's speed from now. */
+  rate(r: number) {
+    if (r === this.seg.r) return;
+    const a = this.c.currentTime;
+    this.seg = { a, m: this.pos(a), r };
+    for (const l of this.layers.values()) l.src.playbackRate.setValueAtTime(r, a);
+  }
+  /**
+   * This tick arrived now: how far is the music from where the grid says, and nudge its speed if too
+   * far. A tick can arrive late (the page busy drawing) but never early, so the reading is the least
+   * lateness over the last `window` ticks, against the least over the first `window`.
+   */
+  keepStep(tick: number) {
+    const D = FIGHT_MUSIC.drift, late = this.now() - (tick - this.tick0) * FIGHT_MUSIC.tick;
+    this.lates.push(late);
+    if (this.lates.length > D.window) this.lates.shift();
+    const least = Math.min(...this.lates);
+    if (this.base === null) {
+      if (this.lates.length === D.window) this.base = least;
+      return;
+    }
+    const e = (this.err = least - this.base), nudging = this.seg.r !== 1;
+    if (Math.abs(e) > D.start || (nudging && Math.abs(e) > D.stop)) this.rate(1 - Math.max(-D.most, Math.min(D.most, e / D.over)));
+    else if (nudging) this.rate(1);
   }
 
   step(f: Fight) {
     const M = FIGHT_MUSIC;
-    if (f.run === 3 && !this.run3 && f.part !== "open") {
-      // From the first pull: the whole bed together.
-      this.run3 = true;
-      for (const n of ["p2-run3-knock", "p2-run3-heart", "p2-run3-breath", "p2-run3-tone"] as const) this.play(n, this.t0, true);
-    }
-    if (this.run3 && f.run === 3) {
-      const eaten = f.it.inside, at = this.nextBar();
-      this.set("p2-run3-breath", eaten < M.run3.breath, at);
-      this.set("p2-run3-heart", eaten < M.run3.heart, at);
-      this.set("p2-run3-tone", eaten < M.run3.tone, at);
+    this.keepStep(f.tick);
+    if (f.run === 3) {
+      if (!this.layers.has("p2-run3-knock")) this.play("p2-run3-knock", 0, true);
+      // From the first bank (the fight past its opening pull): the rest of the bed, at the next bar line.
+      if (!this.bed && f.part !== "open") {
+        this.bed = true;
+        const m = this.nextBar();
+        for (const n of BED) this.play(n, m, true);
+      }
+      if (this.bed && f.part !== "flare") {
+        const eaten = f.it.inside, m = this.nextBar();
+        this.set("p2-run3-breath", eaten < M.run3.breath, m);
+        this.set("p2-run3-heart", eaten < M.run3.heart, m);
+        this.set("p2-run3-tone", eaten < M.run3.tone, m);
+      }
     }
     if (f.part === "flare" && !this.flared) {
-      // Her flare: the chord once, the held note after it, and the far knocks from now on.
+      // Her flare: the chord once, the far knocks from now on, and the held note after the chord.
       this.flared = true;
-      const at = this.nextTick();
-      if (!this.run3) this.play("p2-run3-knock", this.t0, true);
-      for (const n of ["p2-run3-heart", "p2-run3-breath", "p2-run3-tone"] as const) this.set(n, false, at);
-      this.play("p2-flare-chord", at, false);
-      this.play("p2-flare-far-knocks", at, true);
-      this.play("p2-flare-note", at + M.noteAfter * M.tick, true);
+      const m = this.nextTick(), note = m + M.noteAfter * M.tick;
+      for (const n of BED) this.set(n, false, m);
+      this.play("p2-flare-chord", m, false);
+      this.play("p2-flare-far-knocks", m, true);
+      this.play("p2-flare-note", note, true);
+      this.cut("p2-flare-note", note + M.noteHold * M.tick);
     }
-    if (f.run === 4 && f.part !== "flare" && !this.run4) {
-      this.run4 = true;
-      // He has the shard: the held note stops dead. A run 4 begun on its own (again) starts its knocks now.
-      this.cut("p2-flare-note");
-      if (!this.layers.has("p2-run3-knock")) this.play("p2-run3-knock", this.t0, true);
-      if (!this.layers.has("p2-flare-far-knocks")) this.play("p2-flare-far-knocks", this.t0, true);
-      const at = this.layers.size > 2 || this.flared ? this.nextBar() : this.t0;
-      this.play("p2-run4-her", at, true);
-      this.play("p2-run4-him", at, true);
-      this.wound = f.it.wound > 0;
-    }
-    if (this.run4) {
-      const open = f.it.wound > 0;
-      if (open && !this.wound) {
-        // A strike: at the next bar line the two lines lock together, longer each time, then come back.
-        const bars = M.locks[Math.min(this.strikes, M.locks.length - 1)]!, len = bars * M.bar;
-        let at = this.nextBar();
-        while (at < this.lockEnd - 0.01) at += M.bar;
-        this.strikes++;
-        this.set("p2-run4-her", false, at);
-        this.set("p2-run4-him", false, at);
-        this.play("p2-run4-locked", at, false, true, len);
-        this.lockEnd = at + len;
-        // Back on after it, scheduled now (the gain flags say off until then).
-        const her = this.layers.get("p2-run4-her"), him = this.layers.get("p2-run4-him");
-        for (const l of [her, him]) {
-          if (!l) continue;
-          l.g.gain.setValueAtTime(0, at + len);
-          l.g.gain.linearRampToValueAtTime(1, at + len + M.ramp);
-          l.on = true;
-        }
+    if (f.run === 4 && f.part !== "flare") {
+      if (!this.run4) {
+        this.run4 = true;
+        // Run 4 begun on its own (again): its knocks with it, from bar 1. After the flare: the two lines at the next bar line.
+        if (!this.layers.has("p2-run3-knock")) this.play("p2-run3-knock", 0, true);
+        if (!this.layers.has("p2-flare-far-knocks")) this.play("p2-flare-far-knocks", 0, true);
+        const m = this.flared ? this.nextBar() : 0;
+        for (const n of LINES) this.play(n, m, true);
+        this.wound = f.it.wound > 0;
       }
-      this.wound = open;
+      // He shows the shard: it's his, and the held note stops dead.
+      if (f.shard?.shown && !this.shown) (this.shown = true), this.cut("p2-flare-note");
+      this.stepLocks(f.it.wound > 0);
     }
+  }
+
+  /** A strike locks her line and his together at the next bar line, longer each time; they part again after it, or at the first bar line after the wound closes. */
+  stepLocks(open: boolean) {
+    const M = FIGHT_MUSIC;
+    if (open && !this.wound) {
+      const bars = M.locks[Math.min(this.strikes, M.locks.length - 1)]!, len = bars * M.bar;
+      this.strikes++;
+      // A strike while the last lock is still sounding waits for it, and keeps the lines away.
+      let m = this.nextBar();
+      if (this.lock && this.lock.end > this.now()) {
+        m = Math.max(m, this.lock.end);
+        if (this.lock.back) for (const n of LINES) this.hold(n);
+      } else for (const n of LINES) this.set(n, false, m);
+      this.play("p2-run4-locked", m, false, true, len);
+      this.lock = { end: m + len, back: false };
+    }
+    if (!open && this.wound && this.lock && !this.lock.back) {
+      const m = this.nextBar();
+      if (m < this.lock.end - 0.01) {
+        this.lock.end = m;
+        this.cut("p2-run4-locked", m);
+      }
+    }
+    this.wound = open;
+    // The lock's last bar line is next: the two lines come back on it.
+    if (this.lock && !this.lock.back && this.lock.end <= this.nextBar() + 0.01) {
+      this.lock.back = true;
+      for (const n of LINES) this.set(n, true, this.lock.end);
+    }
+  }
+  /** Undo a line's scheduled return: it stays off. */
+  hold(n: Stem) {
+    const l = this.layers.get(n);
+    if (!l) return;
+    const a = this.c.currentTime;
+    l.g.gain.cancelScheduledValues(a);
+    l.g.gain.setValueAtTime(0, a);
+    l.on = false;
   }
 }
 
@@ -199,8 +298,6 @@ export function fightMusic(f: Fight | undefined, playing: boolean) {
     return;
   }
   if (!buffers) return;
-  // Run 3's opening pull is quiet: the grid starts with the music.
-  if (!score && f.run === 3 && f.part === "open") return;
-  score ??= new Score(o.c, o.o, buffers);
+  score ??= new Score(o.c, o.o, buffers, f.tick);
   score.step(f);
 }
