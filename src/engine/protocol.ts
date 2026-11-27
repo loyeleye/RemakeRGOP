@@ -155,7 +155,11 @@ export interface StoryView {
     moss?: { x: number; y: number; hp: number; of: number; patch: number }[];
     chip?: { x: number; y: number; tick: number; by: "rook" | "lumi" };
     /** Meters on the ground at people's feet (the offspring fight: Solenne's light, and the boy's in run 4): the tile, how full (0 to 1), the mark needed for what comes next (0 to 1), and whose colour. */
-    feet?: { x: number; y: number; f: number; mark?: number; tone: "her" | "fen" }[];
+    /** Where to tap on the offspring's back (run 4): its back held with the shard out, `live` when a tap would strike or pull. */
+    hit?: { x: number; y: number; live: boolean };
+    /** A mark on the ground where to stand (the offspring fight, round 1 of run 4). */
+    stand?: { x: number; y: number };
+    feet?: { x: number; y: number; f: number; mark?: number; tone: "her" | "fen"; /** It flashes (her hold nearly spent, while he is taught to cover the shard). */ flash?: boolean }[];
   };
   /**
    * Part 2, runs 3 and 4, the offspring fight (gameplay/part2/runs3-4-fight-brief.md). `run`: 3 or
@@ -172,7 +176,7 @@ export interface StoryView {
     run: 3 | 4;
     part: "open" | "play" | "flare" | "kill";
     tick: number;
-    it: { x: number; y: number; face: number; after: "her" | "fen" | "wisp" | "brazier" | "shard" | null; to?: { x: number; y: number }; inside: number; held: boolean; wound: number; knocked?: number; eating?: boolean };
+    it: { x: number; y: number; face: number; after: "her" | "fen" | "wisp" | "brazier" | "shard" | null; to?: { x: number; y: number }; inside: number; held: boolean; wound: number; knocked?: number; eating?: boolean; /** Its back glows where to strike: 1 held with the shard out, 2 and he is behind it (a tap strikes). */ strike?: 1 | 2 };
     her: { x: number; y: number; light: number; full: number; glow: number; doing: "rest" | "windup" | "hold"; left: number; of: number; flash?: { kind: "shove" | "blast" | "save" | "flare"; tick: number } };
     fen: { x: number; y: number; light: number };
     shard?: { shown: boolean; glow: number; of: number };
@@ -184,6 +188,8 @@ export interface StoryView {
     catches: number;
     down: number;
     pulling: number;
+    /** Run 4's teaching (OFFSPRING.teach): the hint bubble to show now, and round 1's mark where to stand. */
+    teach?: { hint?: "show" | "strike" | "pull" | "cover" | "lure"; /** Run 4 again after a loss: the short hints. */ retry?: boolean; stand?: { x: number; y: number } };
   };
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };
@@ -288,7 +294,7 @@ export type ClientMsg =
   /** Story run 2: call the partner to a tile. */
   | { t: "call"; x: number; y: number }
   /** Part 2, run 4: show or hide the shard, or pull a wisp out of the offspring's wound. */
-  | { t: "fight"; shard?: boolean; pull?: boolean }
+  | { t: "fight"; shard?: boolean; pull?: boolean; /** A tap on its back: a strike from behind with the shard out, or a pull with the wound open. */ hit?: boolean }
   /** A walk: the answer to its "Play ...?" question. */
   | { t: "answer"; yes: boolean; pick?: number }
   | { t: "ping"; at: number };

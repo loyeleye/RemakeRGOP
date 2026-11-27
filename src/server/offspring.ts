@@ -19,6 +19,7 @@ const GONE = 1e9;
 
 type After = NonNullable<StoryView["fight"]>["it"]["after"];
 type Fight = NonNullable<StoryView["fight"]>;
+type Hint = NonNullable<NonNullable<Fight["teach"]>["hint"]>;
 
 export class FightRoom {
   private send: ((m: ServerMsg) => void) | null = null;
@@ -54,6 +55,13 @@ export class FightRoom {
   private wound = { open: false, timer: 0 };
   /** Where things stood at the flare, for a retry of run 4. */
   private at4: { rook: Pt; it: { x: number; y: number; face: number } } | null = null;
+  /**
+   * Run 4's teaching (OFFSPRING.teach). `retry`: run 4 again after a loss (hints only, no captions).
+   * `pulled`: a pull done in round 1 (its hold waits for one). `held`: a pull in this hold. `remind`:
+   * round 3 on, a whole hold went by with no pull, so this hold gets its step hint once. `said`: the
+   * captions given. `lure`: round 2's hint given. `timed`: a hint up until a tick. `hint`: the hint now.
+   */
+  private teach = { retry: false, pulled: false, held: false, remind: false, reminded: false, said: new Set<string>(), lure: false, timed: null as { id: Hint; until: number } | null, hint: null as Hint | null, wait: 0 };
 
   constructor(
     private clock: Clock = realClock,
@@ -105,10 +113,7 @@ export class FightRoom {
       case "fight": {
         if (this.phase !== "playing" || this.run !== 4 || this.part === "flare") return;
         if (msg.shard) this.shard.shown = !this.shard.shown;
-        if (msg.pull && this.wound.open && !this.pulling && this.inside.size && this.down <= 0) {
-          this.pulling = OFFSPRING.wound.pull;
-          this.game.command(YOU, { action: { kind: "idle" } });
-        }
+        if (msg.hit || msg.pull) this.hit();
         return;
       }
     }
@@ -165,6 +170,7 @@ export class FightRoom {
       this.at4 = null;
     } else {
       // Run 4 on its own, or again: everything as it stood at the flare.
+      this.teach.retry = !!this.at4;
       for (const w of g.wisps) (this.inside.add(w.id), g.away.set(w.id, GONE));
       if (this.at4) {
         const me = this.player(YOU);
@@ -188,6 +194,7 @@ export class FightRoom {
     this.cycle = 0;
     this.fenLight = O.light.fen4;
     this.shard = { shown: false, glow: 0 };
+    this.teach = { retry: this.teach.retry, pulled: false, held: false, remind: false, reminded: false, said: new Set(), lure: false, timed: null, hint: null, wait: 0 };
     this.her = { light: O.her.afterBlast, dipUntil: -1, doing: "rest", left: 0, of: 0, flash: undefined };
     if (!this.at4) this.at4 = { rook: this.player(YOU).pos, it: { x: this.it.x, y: this.it.y, face: this.it.face } };
     this.blast(g.tick);
@@ -213,7 +220,7 @@ export class FightRoom {
     const g = this.game, O = OFFSPRING;
     if (this.part === "flare") {
       g.step();
-      if (--this.her.left <= 0) this.startRun4();
+      if (--this.her.left <= 0) (this.teach.retry = false), this.startRun4();
       this.flush();
       this.broadcastTick();
       return;
@@ -240,6 +247,7 @@ export class FightRoom {
       if (this.phase === "playing" && this.run === 3) this.stepHer3();
       if (this.phase === "playing" && this.run === 4) this.stepWound();
     }
+    if (this.phase === "playing" && this.run === 4) this.stepTeach();
     if (this.phase === "playing" && this.run === 4 && this.part === "play" && this.banked.size === O.wisps.length) this.part = "kill";
     this.flush();
     if (this.phase === "playing") this.broadcastTick();
@@ -327,7 +335,15 @@ export class FightRoom {
       it.face = Math.atan2(sol.y - it.y, sol.x - it.x);
       return;
     }
-    if (g.tick < it.dazed) return;
+    if (g.tick < it.dazed) {
+      // Dazed, it can't move; but with the shard out its eye snaps to him.
+      if (this.run === 4 && this.shard.shown) {
+        const me = this.spot(YOU);
+        it.face = Math.atan2(me.y - it.y, me.x - it.x);
+        if (this.cycle === 1) this.say("sees");
+      }
+      return;
+    }
     const l = this.choose();
     if (!l) return;
     if (l.key !== it.key) it.eat = 0;
@@ -477,6 +493,7 @@ export class FightRoom {
     this.her.doing = "hold";
     this.her.left = this.her.of = H.hold;
     this.her.flash = { kind: this.cycle === 1 ? "flare" : "blast", tick };
+    if (this.cycle === O.cycles.placed + 1) this.say("placed");
     it.held = true;
     it.eat = 0;
     // Cycles 1 and 2: she puts it in place, in front of her toward the brazier, its back to the fire.
@@ -492,12 +509,18 @@ export class FightRoom {
     const O = OFFSPRING, H = O.her, L = O.light, g = this.game, it = this.it, her = this.her;
     if (this.cycle >= L.fenFrom) this.fenLight = Math.min(L.fenMax, this.fenLight + L.fenRise);
     if (her.doing === "hold") {
+      // Round 1's hold waits until he has shown the shard, struck and pulled once.
+      if (this.cycle === 1 && !this.teach.pulled) return;
       her.left -= 1 + (this.shard.shown ? O.shard.holdCost : 0);
       if (her.left <= 0) {
         her.doing = "rest";
         her.left = 0;
         it.held = false;
         this.wound = { open: false, timer: 0 };
+        // Round 3 on: a whole hold with no pull, and the next hold gets its step hint (once).
+        if (this.cycle >= 3 && !this.teach.held && !this.teach.reminded) this.teach.remind = true;
+        else this.teach.remind = false;
+        this.teach.held = false;
         // After the first hold it stands dazed until she can blast again: cycle 1 is safe.
         if (this.cycle === 1) it.dazed = g.tick + O.it.daze1;
       }
@@ -524,26 +547,67 @@ export class FightRoom {
     this.shard.glow = this.shard.shown ? full : Math.max(0, this.shard.glow - full / S.dim);
   }
 
-  /** Behind it with the shard uncovered while it is held: the wound opens. In the kill, that is the last press. */
+  /** The wound shuts when her hold ends or the shard is covered. The tenth wisp banked with it still open is the last press. */
   private stepWound() {
-    const W = OFFSPRING.wound, it = this.it, me = this.spot(YOU);
-    if (!it.held || !this.shard.shown) {
+    if (!this.it.held || !this.shard.shown) {
       this.wound = { open: false, timer: 0 };
       this.pulling = 0;
       return;
     }
-    // The tenth wisp banked with the wound already open: that is the last press.
     if (this.wound.open && this.part === "kill") return this.win();
-    if (this.wound.open) return;
+  }
+
+  /** Whether he is behind it, near enough to strike (OFFSPRING.wound). */
+  private behind() {
+    const W = OFFSPRING.wound, it = this.it, me = this.spot(YOU);
     const d = Math.hypot(me.x - it.x, me.y - it.y);
     let off = Math.atan2(me.y - it.y, me.x - it.x) - it.face;
     while (off > Math.PI) off -= 2 * Math.PI;
     while (off < -Math.PI) off += 2 * Math.PI;
-    const behind = d <= W.near + OFFSPRING.it.size / 2 && Math.abs(off) >= (W.behind * Math.PI) / 180;
-    this.wound.timer = behind ? this.wound.timer + 1 : 0;
-    if (this.wound.timer < W.open) return;
+    return d <= W.near + OFFSPRING.it.size / 2 && Math.abs(off) >= (W.behind * Math.PI) / 180;
+  }
+
+  /** A tap on its back. With the wound open, a pull. Held, with the shard out and him behind it, a strike: the wound opens (in the kill, the last press). */
+  private hit() {
+    if (this.down > 0) return;
+    if (this.wound.open) {
+      if (this.pulling || !this.inside.size) return;
+      this.pulling = OFFSPRING.wound.pull;
+      this.game.command(YOU, { action: { kind: "idle" } });
+      return;
+    }
+    if (!this.it.held || !this.shard.shown || !this.behind()) return;
     if (this.part === "kill") return this.win();
     this.wound.open = true;
+  }
+
+  /** Solenne's order for a teaching step, once a run, and never on a retry. */
+  private say(key: keyof typeof OFFSPRING.teach.say) {
+    if (this.teach.retry || this.teach.said.has(key)) return;
+    this.teach.said.add(key);
+    // Over her, as her other lines are; text only, no voice yet.
+    this.lines.push({ who: SOLENNE, text: OFFSPRING.teach.say[key], player: SOL_ID, quiet: true });
+  }
+
+  /** Run 4's teaching: which step's hint is up, and its caption the first time. */
+  private stepTeach() {
+    const T = OFFSPRING.teach, g = this.game, t = this.teach, her = this.her, it = this.it;
+    let id: Hint | null = null;
+    const steps = (): Hint => (!this.shard.shown ? "show" : !this.wound.open ? "strike" : "pull");
+    if (her.doing === "hold" && this.part !== "kill") {
+      if (this.cycle === 1) id = t.pulled ? (this.shard.shown && her.left <= T.coverAt ? "cover" : null) : steps();
+      else if (t.remind && !t.held) id = steps();
+    }
+    // Round 2: the first time it eats from the brazier, the lure.
+    if (this.cycle === 2 && !t.lure && her.doing === "rest" && it.after === "brazier" && it.eat > 0) {
+      t.lure = true;
+      t.timed = { id: "lure", until: g.tick + T.hintTicks };
+    }
+    if (!id && t.timed && g.tick < t.timed.until) id = t.timed.id;
+    // Her order: at once for the shard, the cover and the lure; the strike and the pull only if he waits.
+    t.wait = id !== t.hint ? 0 : id === "pull" || (id === "strike" && this.behind()) ? t.wait + 1 : t.wait;
+    if (id && (id === "strike" || id === "pull" ? t.wait >= T.wait : id !== t.hint)) this.say(id);
+    t.hint = id;
   }
 
   /** A pull: one wisp torn out of the wound, lit, flying to him on its own wherever he stands (fly). */
@@ -559,6 +623,8 @@ export class FightRoom {
     moveWisp(w, at);
     this.torn.add(id);
     this.lit.add(id);
+    this.teach.pulled = this.teach.held = true;
+    if (this.teach.remind) (this.teach.remind = false), (this.teach.reminded = true);
   }
 
   /** It reached him while it was after the shard. The first time she saves him. */
@@ -616,7 +682,7 @@ export class FightRoom {
       run: this.run,
       part: this.part,
       tick: g.tick,
-      it: { x: it.x, y: it.y, face: it.face, after: it.held ? "her" : it.after, ...(l ? { to: { x: l.at.x, y: l.at.y } } : {}), inside: this.inside.size, held: it.held, wound: this.wound.open ? 1 : 0, knocked: it.knocked, ...(it.eat > 0 ? { eating: true } : {}) },
+      it: { x: it.x, y: it.y, face: it.face, after: it.held ? "her" : it.after, ...(l ? { to: { x: l.at.x, y: l.at.y } } : {}), inside: this.inside.size, held: it.held, wound: this.wound.open ? 1 : 0, knocked: it.knocked, ...(it.eat > 0 ? { eating: true } : {}), ...(this.run === 4 && it.held && this.shard.shown && !this.wound.open && this.part !== "flare" ? { strike: this.behind() ? (2 as const) : (1 as const) } : {}) },
       her: { x: sol.x, y: sol.y, light: this.her.light, full: O.her.full, glow: this.herGlow(), doing: this.part === "flare" ? "hold" : this.her.doing, left: this.her.left, of: this.her.of, ...(this.her.flash ? { flash: this.her.flash } : {}) },
       fen: { x: fen.x, y: fen.y, light: this.fenLight },
       ...(this.run === 4 ? { shard: { shown: this.shard.shown, glow: this.shard.glow, of: O.light.shard } } : {}),
@@ -627,7 +693,19 @@ export class FightRoom {
       catches: this.catches,
       down: this.down,
       pulling: this.pulling,
+      ...(this.run === 4 ? { teach: { ...(this.teach.hint ? { hint: this.teach.hint } : {}), ...(this.teach.retry ? { retry: true } : {}), ...(this.standAt() ? { stand: this.standAt()! } : {}) } } : {}),
     };
+  }
+
+  /** Round 1's mark where to stand: past the brazier from it, while the steps are not done. */
+  private standAt() {
+    if (this.cycle !== 1 || this.her.doing !== "hold" || this.teach.pulled) return null;
+    const g = this.game, c = g.board.center, it = this.it, a = Math.atan2(c.y - it.y, c.x - it.x);
+    for (let k = OFFSPRING.teach.mark; k <= OFFSPRING.teach.mark + 3; k++) {
+      const at = pt(Math.round(c.x + Math.cos(a) * k), Math.round(c.y + Math.sin(a) * k));
+      if (g.board.inside(at) && g.board.tile(at) === Tile.Floor && !g.board.inBankZone(at)) return { x: at.x, y: at.y };
+    }
+    return null;
   }
 
   storyView(): StoryView {
@@ -643,8 +721,10 @@ export class FightRoom {
     if (f.her.doing !== "rest") strip.push({ label: f.her.doing === "hold" ? "Her hold" : "Solenne: winding up", n: 0, of: 0, tone: "her", bar: f.her.of ? Math.max(0, f.her.left / f.her.of) : 0, steady: true });
     if (f.shard) strip.push({ label: f.shard.shown ? "Shard: uncovered" : f.shard.glow > 0 ? "Shard: dimming" : "Shard: hidden", n: 0, of: 0, tone: "chalk", bar: f.shard.glow / f.shard.of, steady: true });
     // In run 4 the boy's light matters too: a marker on the bar from the brazier's end, and a ring at his feet.
-    const feet: NonNullable<NonNullable<StoryView["opt"]>["feet"]> = [{ x: f.her.x, y: f.her.y, f: f.her.light / f.her.full, mark: (this.run === 3 ? O.her.shove : f.her.full) / f.her.full, tone: "her" }];
+    const feet: NonNullable<NonNullable<StoryView["opt"]>["feet"]> = [{ x: f.her.x, y: f.her.y, f: f.her.light / f.her.full, mark: (this.run === 3 ? O.her.shove : f.her.full) / f.her.full, tone: "her", ...(f.teach?.hint === "cover" ? { flash: true } : {}) }];
     if (this.run === 4) feet.push({ x: f.fen.x, y: f.fen.y, f: f.fen.light / O.light.fenMax, tone: "fen" });
+    // Where to tap: its back, held with the shard out (live from behind it), or the open wound.
+    const back = O.it.size * 0.25, hit = f.it.strike || f.it.wound ? { x: f.it.x - Math.cos(f.it.face) * back, y: f.it.y - Math.sin(f.it.face) * back, live: f.it.strike === 2 || f.it.wound > 0 } : null;
     return {
       run: this.run === 3 ? O.run3 : O.run4,
       movement: 0,
@@ -653,7 +733,7 @@ export class FightRoom {
       mark: this.part === "open" ? { wisp: 0, who: ROOK } : null,
       kes: 0,
       end: this.end,
-      opt: { id: "fight", noPush: true, strip, feet, ...(caption.length ? { caption } : {}) },
+      opt: { id: "fight", noPush: true, strip, feet, ...(hit ? { hit } : {}), ...(f.teach?.stand ? { stand: f.teach.stand } : {}), ...(caption.length ? { caption } : {}) },
       fight: f,
     };
   }
@@ -685,7 +765,7 @@ export class FightRoom {
 
   /** For tests: the live state itself, to set up a moment. */
   get inner() {
-    return { it: this.it, her: this.her, shard: this.shard, inside: this.inside, banked: this.banked, torn: this.torn, lit: this.lit };
+    return { it: this.it, her: this.her, shard: this.shard, inside: this.inside, banked: this.banked, torn: this.torn, lit: this.lit, teach: this.teach };
   }
 
   /** For tests. */

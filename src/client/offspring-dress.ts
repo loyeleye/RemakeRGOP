@@ -24,6 +24,8 @@ export const FIGHT_LOOK = {
   her: "#cfe6ff",
   fen: "#ffd9a0",
   shard: "#bfefff",
+  /** Where to strike on its back. */
+  strike: "#5fe3ff",
   /** How high the body rides, and the eye's middle (world units). */
   ride: 1.0,
   eyeAt: 1.55,
@@ -43,6 +45,9 @@ export class OffspringFx {
   private backGlow: THREE.Sprite;
   private slit: THREE.Mesh;
   private slitGlow: THREE.Sprite;
+  /** Where to strike: its back glows, held with the shard out, and pulses when a tap would strike. */
+  private strikeGlow: THREE.Sprite;
+  private strikeRing: THREE.Mesh;
   private herGlow: THREE.Sprite;
   private fenGlow: THREE.Sprite;
   private shardGlow: THREE.Sprite;
@@ -101,6 +106,15 @@ export class OffspringFx {
     this.slitGlow = glow(L.wound, S * 0.9, 0);
     this.slitGlow.position.set(-S * 0.2, L.ride + 0.9, 0);
     this.it.add(this.slitGlow);
+    this.strikeGlow = glow(L.strike, S * 0.9, 0);
+    this.strikeGlow.position.set(-S * 0.3, L.ride + 0.95, 0);
+    this.it.add(this.strikeGlow);
+    // And a ring drawn over the back, on top of everything, so it reads through the light inside it.
+    this.strikeRing = new THREE.Mesh(new THREE.RingGeometry(S * 0.16, S * 0.22, 40), new THREE.MeshBasicMaterial({ color: L.strike, transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+    this.strikeRing.rotation.x = -Math.PI / 2;
+    this.strikeRing.position.set(-S * 0.2, L.ride + 0.3 + S * 0.26, 0);
+    this.strikeRing.renderOrder = 10;
+    this.it.add(this.strikeRing);
     this.all.add(this.it);
     // Her light, the boy's, the shard, her flash, and the beam of her hold.
     this.herGlow = glow(L.her, 1.5, 0.9);
@@ -144,6 +158,12 @@ export class OffspringFx {
     this.slit.visible = this.wound > 0.02;
     this.slit.scale.z = Math.max(0.01, this.wound);
     this.slitGlow.material.opacity = this.wound * (0.8 + 0.2 * Math.sin(o.time * 12));
+    // Where to strike: faint while it is held with the shard out, pulsing once he is behind it.
+    const st = f.it.strike ?? 0;
+    this.strikeGlow.material.opacity = st === 2 ? 0.55 + 0.4 * Math.sin(o.time * 8) : st === 1 ? 0.4 + 0.1 * Math.sin(o.time * 4) : 0;
+    this.strikeGlow.scale.setScalar(S * (st === 2 ? 0.8 + 0.15 * Math.sin(o.time * 8) : 0.7));
+    (this.strikeRing.material as THREE.MeshBasicMaterial).opacity = st === 2 ? 0.75 + 0.25 * Math.sin(o.time * 8) : st === 1 ? 0.35 : 0;
+    this.strikeRing.scale.setScalar(st === 2 ? 1 + 0.18 * Math.sin(o.time * 8) : 1);
     // Her light over her: its size is her glow, and it pulses while she winds up.
     const her = f.her, wind = her.doing === "windup" ? 1 + 0.25 * Math.sin(o.time * 18) : 1;
     this.herGlow.position.set(wx(her.x), 2.1, wz(her.y));

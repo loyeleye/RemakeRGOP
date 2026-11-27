@@ -120,21 +120,26 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(f.shard).toEqual({ shown: false, glow: 0, of: OFFSPRING.light.shard });
   });
 
-  it("run 4: the wound opens only behind it with the shard uncovered, and a pull tears a wisp out that flies to him on its own", () => {
-    // In front of it: no wound, even with the shard out (and the shard no longer shortens her hold).
+  it("run 4: a tap on its back strikes only from behind it with the shard out, and a pull tears a wisp out that flies to him on its own", () => {
+    // In front of it: a tap does nothing, even with the shard out.
     const a = play(4), f0 = a.x.it;
     a.me.pos = a.me.prev = pt(Math.round(f0.x + Math.cos(f0.face) * 3), Math.round(f0.y + Math.sin(f0.face) * 3));
     a.send({ t: "fight", shard: true });
-    a.tick(2);
+    a.tick();
+    expect(a.room.storyView().fight!.it.strike).toBe(1);
+    a.send({ t: "fight", hit: true });
+    a.tick();
     expect(a.room.state.wound).toBe(false);
-    expect(a.x.her.left).toBe(OFFSPRING.her.hold - 2);
-    // Behind it, across the brazier, the shard out: the wound opens.
+    // Behind it, across the brazier, the shard out: its back glows to strike, and a tap opens the wound (never by itself).
     const p = play(4);
     p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
     p.send({ t: "fight", shard: true });
-    p.tick();
+    p.tick(2);
+    expect(p.room.state.wound).toBe(false);
+    expect(p.room.storyView().fight!.it.strike).toBe(2);
+    p.send({ t: "fight", hit: true });
     expect(p.room.state.wound).toBe(true);
-    p.send({ t: "fight", pull: true });
+    p.send({ t: "fight", hit: true });
     p.tick(OFFSPRING.wound.pull);
     expect(p.room.state.inside).toBe(9);
     expect(p.me.action.kind).not.toBe("staff");
@@ -151,6 +156,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
 
   it("caught once, she saves him with one of her three lines; caught again, the card offers run 4 again", () => {
     const p = play(4);
+    p.x.teach.pulled = true;
     p.x.her.left = 0;
     p.tick();
     // Out of her hold, with only the shard to see, near him.
@@ -175,6 +181,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   it("the kill: all ten in the brazier holds its eye, she blasts at full, and the shard in its back ends it", () => {
     const p = play(4);
     for (const id of [...p.x.inside]) (p.x.inside.delete(id), p.x.banked.add(id));
+    p.x.teach.pulled = true;
     p.x.her.left = 0;
     p.tick();
     expect(p.room.state.part).toBe("kill");
@@ -185,7 +192,8 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     const it0 = p.x.it;
     p.me.pos = p.me.prev = pt(Math.round(it0.x - Math.cos(it0.face) * 3), Math.round(it0.y - Math.sin(it0.face) * 3));
     p.send({ t: "fight", shard: true });
-    p.tick(3);
+    p.tick();
+    p.send({ t: "fight", hit: true });
     expect(p.room.state.phase).toBe("results");
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
   });
@@ -196,8 +204,9 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
     p.send({ t: "fight", shard: true });
     p.tick();
+    p.send({ t: "fight", hit: true });
     expect(p.room.state.wound).toBe(true);
-    p.send({ t: "fight", pull: true });
+    p.send({ t: "fight", hit: true });
     for (let i = 0; i < 20 && p.room.state.phase === "playing"; i++) p.tick();
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
   });
@@ -224,6 +233,66 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.x.her.light = OFFSPRING.her.full;
     for (let i = 0; i < 5 && p.x.her.light === OFFSPRING.her.full; i++) p.tick();
     expect(p.x.it.dazed - p.g.tick).toBeGreaterThanOrEqual(OFFSPRING.it.shoveDaze - 1);
+  });
+
+  it("round 1 teaches the three steps: the hold waits for them, each with her order and a hint, and a mark where to stand", () => {
+    const p = play(4), T = OFFSPRING.teach, said = () => p.lines.filter((l) => l.who === "Solenne").map((l) => l.text);
+    p.tick(20);
+    // The hold waits.
+    expect(p.x.her.doing).toBe("hold");
+    expect(p.x.her.left).toBe(OFFSPRING.her.hold);
+    const f = () => p.room.storyView().fight!;
+    expect(f().teach?.hint).toBe("show");
+    expect(p.x.teach.said.has("show")).toBe(true);
+    const stand = f().teach!.stand!;
+    expect(p.room.storyView().opt?.stand).toEqual(stand);
+    // On the mark, behind it; the shard out: the strike, her order only once he has waited.
+    p.me.pos = p.me.prev = pt(stand.x, stand.y);
+    p.send({ t: "fight", shard: true });
+    p.tick();
+    expect(f().teach?.hint).toBe("strike");
+    expect(f().it.strike).toBe(2);
+    expect(said()).not.toContain(T.say.strike);
+    p.tick(T.wait);
+    expect(said()).toContain(T.say.strike);
+    p.send({ t: "fight", hit: true });
+    p.tick();
+    expect(f().teach?.hint).toBe("pull");
+    p.send({ t: "fight", hit: true });
+    p.tick(OFFSPRING.wound.pull);
+    // The hold runs now, and near its end she says to cover the shard, her ring flashing.
+    expect(f().teach?.stand).toBeUndefined();
+    for (let i = 0; i < 20 && f().teach?.hint !== "cover"; i++) p.tick();
+    expect(f().teach?.hint).toBe("cover");
+    expect(said()).toContain(T.say.cover);
+    expect(p.room.storyView().opt?.feet?.[0]?.flash).toBe(true);
+    // Left out through the dazed gap, the shard snaps its eye to him.
+    for (let i = 0; i < 20 && p.x.her.doing === "hold"; i++) p.tick();
+    p.tick();
+    const me = p.me.pos, it = p.x.it;
+    expect(Math.abs(Math.atan2(me.y - it.y, me.x - it.x) - it.face)).toBeLessThan(1e-6);
+    expect(said()).toContain(T.say.sees);
+  });
+
+  it("on a retry of run 4, hints only: no orders from her", () => {
+    const p = play(4);
+    p.x.teach.pulled = true;
+    p.x.her.left = 0;
+    p.tick();
+    for (const id of [...p.x.inside]) p.x.inside.delete(id);
+    p.me.pos = p.me.prev = pt(Math.round(p.x.it.x) - 4, Math.round(p.x.it.y));
+    p.send({ t: "fight", shard: true });
+    for (let i = 0; i < 200 && p.room.state.phase === "playing"; i++) {
+      if (p.room.state.catches) p.x.it.dazed = -1;
+      p.tick();
+    }
+    expect(p.room.state.end?.summary).toBe(OFFSPRING.card.again4);
+    p.lines.length = 0;
+    p.send({ t: "lobby" });
+    for (let i = 0; i < 5 && p.room.state.phase !== "playing"; i++) p.room.onTick();
+    p.tick();
+    expect(p.room.storyView().fight!.teach).toMatchObject({ hint: "show", retry: true });
+    expect(p.lines.filter((l) => Object.values(OFFSPRING.teach.say).includes(l.text))).toEqual([]);
   });
 
   it("in its way: a run through his tile throws him clear and he is down three ticks (never hurt); off with knockdown.on 0", () => {

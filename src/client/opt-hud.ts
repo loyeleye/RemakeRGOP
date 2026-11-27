@@ -208,10 +208,50 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
     }
   }
 
+  // Where to tap on the offspring's back: a cyan ring over it, drawn over its light; beating when a tap would land.
+  if (o.hit) {
+    const beat = o.hit.live ? 0.5 + 0.5 * Math.sin(now / 160) : 0, q = cam.toScreen(o.hit.x + 0.5, o.hit.y + 0.5, 1.9), e = cam.toScreen(o.hit.x + 1, o.hit.y + 0.5, 1.9), r = Math.max(14, Math.hypot(e.x - q.x, e.y - q.y) * (0.9 + 0.2 * beat));
+    g.save();
+    g.lineWidth = 5;
+    g.strokeStyle = "rgba(10,8,20,0.5)";
+    g.beginPath();
+    g.ellipse(q.x, q.y, r, r * 0.6, 0, 0, Math.PI * 2);
+    g.stroke();
+    g.lineWidth = 3;
+    g.strokeStyle = o.hit.live ? `rgba(95,227,255,${0.75 + 0.25 * beat})` : "rgba(95,227,255,0.45)";
+    if (!o.hit.live) g.setLineDash([6, 6]);
+    g.beginPath();
+    g.ellipse(q.x, q.y, r, r * 0.6, 0, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+  }
+
+  // Where to stand: a gold ring on the ground, its dashes running, breathing in and out.
+  if (o.stand) {
+    const beat = 0.5 + 0.5 * Math.sin(now / 300);
+    g.save();
+    g.lineCap = "round";
+    g.lineWidth = 6;
+    g.strokeStyle = "rgba(10,8,20,0.5)";
+    ground(g, cam, o.stand.x + 0.5, o.stand.y + 0.5, 0.75);
+    g.setLineDash([8, 6]);
+    g.lineDashOffset = -now / 60;
+    g.lineWidth = 3.5;
+    g.strokeStyle = `rgba(255,211,106,${0.7 + 0.3 * beat})`;
+    ground(g, cam, o.stand.x + 0.5, o.stand.y + 0.5, 0.6 + 0.12 * beat);
+    g.restore();
+  }
+
   // Meters at people's feet: a ring on the ground, how full, and a notch at the level that is needed (Solenne's light; the boy's).
   for (const F of o.feet ?? []) {
     const rad = F.tone === "fen" ? 1 : 1.25, f = Math.max(0, Math.min(1, F.f)), short = F.mark !== undefined && f < F.mark, rgb = F.tone === "fen" ? "255,217,160" : "207,230,255";
     g.lineCap = "round";
+    // Flashing: a bright ring outside it, on and off (her hold nearly spent).
+    if (F.flash && Math.floor(now / 250) % 2 === 0) {
+      g.lineWidth = 3;
+      g.strokeStyle = "rgba(255,255,255,0.95)";
+      ground(g, cam, F.x + 0.5, F.y + 0.5, rad + 0.35);
+    }
     g.lineWidth = 6;
     g.strokeStyle = "rgba(10,8,20,0.55)";
     ground(g, cam, F.x + 0.5, F.y + 0.5, rad);

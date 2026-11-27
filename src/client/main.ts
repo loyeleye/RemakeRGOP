@@ -1614,7 +1614,12 @@ function renderPad(s: GameSnapshot | null) {
   const sh = room?.story?.fight?.shard;
   $("shard").hidden = !sh;
   if (sh) {
-    $("shard").textContent = sh.shown ? "Hide shard" : "Show shard";
+    // The key on the button, on a keyboard (Space; H as well).
+    const label = sh.shown ? "Hide shard" : "Show shard", key = document.body.classList.contains("touch") ? "" : "Space";
+    if ($("shard").dataset.label !== label + key) {
+      $("shard").dataset.label = label + key;
+      $("shard").innerHTML = key ? `${label}<small class="key">${key}</small>` : label;
+    }
     $("shard").classList.toggle("on", sh.shown);
   }
 }
@@ -1724,11 +1729,12 @@ function targetAt(sx: number, sy: number, tap = false): { action: Action; wisp: 
     const on = place === "house" ? home.house && { x: home.house.x + Math.floor(home.house.w / 2), y: home.house.y + Math.floor(home.house.h / 2) } : place ? props.find((q) => q.kind === place) : null;
     if (on) return { action: { kind: "walk", to: { x: on.x, y: on.y } }, wisp: null };
   }
-  // Part 2, run 4: with the wound open, a tap on the offspring pulls a wisp out of it (he stays where he is).
+  // Part 2, run 4: a tap on its back. From behind it with the shard out, a strike (the wound opens);
+  // on the open wound, a pull (he stays where he is). Not behind it, the tap walks him as usual.
   const fit = room.story?.fight?.it;
-  if (fit && fit.wound > 0) {
+  if (fit && (fit.wound > 0 || fit.strike === 2)) {
     const c = cam.toScreen(fit.x + 0.5, fit.y + 0.5, 1.2);
-    if (Math.hypot(c.x - sx, c.y - sy) <= Math.max(bigTapRadius(), cam.scale * OFFSPRING.it.size * 0.7)) return tap && link?.send({ t: "fight", pull: true }), null;
+    if (Math.hypot(c.x - sx, c.y - sy) <= Math.max(bigTapRadius(), cam.scale * OFFSPRING.it.size * 0.7)) return tap && link?.send({ t: "fight", hit: true }), null;
   }
   // Run 10: a tap on the ferryman (about his middle) does not walk Rook anywhere; it is answered, and he does not turn.
   const ferry = ferryAt();
@@ -1869,7 +1875,7 @@ window.addEventListener("keydown", (e) => {
   if (k === "`") return void (toggleDebug(), e.preventDefault());
   if (room.story?.canCall && (k === "c" || (k === "escape" && callMode))) return void (setCallMode(k === "c" ? !callMode : false), e.preventDefault());
   if (k === "o") setFocusMode(!focusMode);
-  else if (k === "h" && room.story?.fight?.shard) shardToggle();
+  else if ((k === "h" || k === " ") && room.story?.fight?.shard) shardToggle();
   else if (k === "q") act({ toggleMode: true });
   else if (k === "r") act({ toggleRun: true });
   else if (k === " " || k === "s") act({ action: { kind: "idle" } });
@@ -1887,7 +1893,7 @@ window.addEventListener("keydown", (e) => {
 });
 
 $("mode").onclick = () => act({ toggleMode: true });
-/** Part 2, run 4: show or hide the shard (the button, or H). */
+/** Part 2, run 4: show or hide the shard (the button, Space, or H; S still stops). */
 function shardToggle() {
   if (room?.phase !== "playing" || !room.story?.fight?.shard) return;
   link?.send({ t: "fight", shard: true });
@@ -3173,15 +3179,18 @@ function drawBigTaps(g: CanvasRenderingContext2D, push: boolean, guild: number |
 // ------------------------------------------------------------------ control hints
 // One line of help at a time, with the button it is about pulsing. Play never stops for one.
 
-type HintId = "focus" | "run" | "walking" | "rescue";
+type HintId = "focus" | "run" | "walking" | "rescue" | "fight";
 let hintUp: { id: HintId; until: number; btn: HTMLElement | null } | null = null;
 let lastHintAt = -1e9;
+/** The fight's teaching hint now on screen (its step, and whether it is the short one). */
+let shownFight: string | null = null;
 /** This run: when he started walking, whether he has been reminded, the misses in a row, and whether the focus hint has come back. */
 let runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
 
-function showHint(id: HintId, text: string, btn: HTMLElement | null) {
+function showHint(id: HintId, text: string, btn: HTMLElement | null, force = false) {
   const now = performance.now();
-  if (hintUp || now - lastHintAt < CONTROLS.hints.gapMs) return false;
+  if (force) hideHint();
+  else if (hintUp || now - lastHintAt < CONTROLS.hints.gapMs) return false;
   const el = $("tip");
   el.textContent = text;
   el.hidden = false;
@@ -3203,7 +3212,18 @@ function hintsFrame(now: number) {
   const p = snap?.players.find((q) => q.id === me);
   const playing = room?.phase === "playing";
   // A hint goes when its time is up, or when he has done the thing.
-  if (hintUp) {
+  // Part 2, run 4's teaching: the server says which step's hint is up, and it stays while the step does.
+  const teach = playing ? room?.story?.fight?.teach : undefined, fightHint = teach?.hint ? `${teach.retry ? "s" : "h"}:${teach.hint}` : null;
+  if (fightHint !== shownFight) {
+    if (hintUp?.id === "fight") hideHint();
+    shownFight = fightHint;
+    if (teach?.hint) {
+      const H = (teach.retry ? OFFSPRING.teach.short : OFFSPRING.teach.hint)[teach.hint];
+      showHint("fight", touch ? H.tap : H.key, teach.hint === "show" || teach.hint === "cover" || teach.hint === "lure" ? $("shard") : null, true);
+      if (hintUp) hintUp.until = Infinity;
+    }
+  }
+  if (hintUp && hintUp.id !== "fight") {
     const done = hintUp.id === "run" ? p?.run === false : hintUp.id === "walking" ? p?.run !== false : focusMode;
     if (now >= hintUp.until || !playing || done) hideHint();
   }

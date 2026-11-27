@@ -119,8 +119,6 @@ export const OFFSPRING = {
     holdCost: 0,
   },
   wound: {
-    /** Ticks behind it with the shard uncovered before the wound opens. */
-    open: 1,
     /**
      * How near its back edge he has to be (tiles), and how far round from its face counts as behind
      * (degrees from straight ahead). The brief has him "behind it" and then "anywhere" once it is
@@ -130,8 +128,57 @@ export const OFFSPRING = {
      */
     near: 9,
     behind: 110,
-    /** Ticks for each pull: one wisp torn out of the wound, which flies to him on its own (a tile a tick), so the next pull can follow at once. */
+    /** A tap on its back strikes (opens the wound) from behind it with the shard out. Ticks for each pull: one wisp torn out of the wound, which flies to him on its own (a tile a tick), so the next pull can follow at once. */
     pull: 2,
+  },
+  /**
+   * Teaching run 4's three steps: show the shard, strike its back, pull the light out (Ladi, 27 Nov
+   * 2:01 PM: "we definitely need some explanation"; the gameplay thread's draft, brief "Teaching it").
+   * Round 1's hold waits until he has done all three once. Each step gets one order from Solenne
+   * (`say`, never on a retry) and one hint bubble naming the key or the tap (`hint`, and `short` on a retry).
+   */
+  teach: {
+    /** Her lines: the story thread's drafts (27 Nov 2:04 PM), not judged by Ladi. Text only, no voice. */
+    say: {
+      /** Round 1's hold starts, the shard thrown. Always. */
+      show: "Get behind it and uncover the shard, Salvage.",
+      /** Behind it with the shard out: only if he waits `wait` ticks. */
+      strike: "Strike its back.",
+      /** The wound open: only if he waits `wait` ticks. */
+      pull: "Pull its light out and bank it.",
+      /** Round 1's hold nearly spent. Always. */
+      cover: "Cover the shard. I am letting go.",
+      /** Round 1's dazed gap: he uncovers the shard and its eye snaps to him though it can't move. */
+      sees: "With that uncovered you are the brightest thing it can see.",
+      /** Round 2, as it starts eating from the brazier. Always. */
+      lure: "Draw it off the brazier with the shard, and hide it before it reaches you.",
+      /** Round 3's blast, the first she doesn't place. */
+      placed: "I am done placing it for you, Salvage.",
+    },
+    /** The hint bubbles: PLACEHOLDER WORDING, the gameplay thread's to word. */
+    hint: {
+      show: { key: "Press Space to show the shard.", tap: "Tap Show shard." },
+      strike: { key: "From behind it, click its glowing back to strike.", tap: "From behind it, tap its glowing back to strike." },
+      pull: { key: "Click the wound to pull the light out.", tap: "Tap the wound to pull the light out." },
+      cover: { key: "Press Space to cover the shard.", tap: "Tap Hide shard." },
+      lure: { key: "Space shows the shard and draws it off. Hide it before it reaches you.", tap: "Show the shard to draw it off. Hide it before it reaches you." },
+    },
+    /** The same on a retry, shortened. */
+    short: {
+      show: { key: "Space: the shard.", tap: "Show shard." },
+      strike: { key: "Click its back.", tap: "Tap its back." },
+      pull: { key: "Click the wound.", tap: "Tap the wound." },
+      cover: { key: "Space: cover it.", tap: "Hide shard." },
+      lure: { key: "Space: draw it off, then hide.", tap: "Show to draw it off, then hide." },
+    },
+    /** Ticks he waits at a step before she says the strike or pull order. */
+    wait: 3,
+    /** Round 1: the cover step comes with this many ticks of her hold left (and her ring flashes). */
+    coverAt: 4,
+    /** Ticks the lure hint stays up. */
+    hintTicks: 9,
+    /** Round 1's mark where to stand: on the line from it through the brazier, this many tiles past the brazier's middle. */
+    mark: 3,
   },
   /** Cycles 1 to `placed`: her blast also puts it in place, `at` tiles in front of her toward the brazier. */
   cycles: { placed: 2, at: 3 },
