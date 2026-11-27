@@ -432,11 +432,22 @@ export const VOICE_LINES: Record<string, string> = {
   // Maudie, 26 Nov: Gemini, the Laomedeia voice, Ladi's pick.
   "Maudie|Your Granny was up before the birds. Shooed me off her step.": "voice/part1-late-2.mp3#t=29.10,33.21",
   "Maudie|Nobody shoos me.": "voice/part1-late-2.mp3#t=34.11,37.33",
+  // Nell's and Sefa's map lines, 27 Nov (gameplay/voice/handoff-2026-11-27.md), at Ladi's word: "give the kids their own full voice lines on the walkable map", still none during Granny's game. Sogni.
+  "Nell|Rematch? Lumi says no rocks this time.": "voice/part1-late-2.mp3#t=38.23,41.56",
+  "Nell|Did they pay you?": "voice/part1-late-2.mp3#t=42.46,43.59",
+  "Nell|Lumi says you're good. Are you?": "voice/part1-late-2.mp3#t=44.49,46.82",
+  "Nell|I'm on Lumi's side. Always.": "voice/part1-late-2.mp3#t=47.72,49.65",
+  "Sefa|Is it the best of three now?": "voice/part1-late-2.mp3#t=50.55,52.24",
+  "Sefa|Did you see a fish?": "voice/part1-late-2.mp3#t=53.14,54.45",
+  "Sefa|We need four!": "voice/part1-late-2.mp3#t=55.35,56.49",
+  "Sefa|Are you playing? Say yes.": "voice/part1-late-2.mp3#t=57.39,59.50",
+  "Nell|Are the lamps going to be all right?": "voice/part1-late-2.mp3#t=60.40,62.19",
 };
 
 /**
  * Speakers who have a few short voiced sounds in place of whole lines (Ladi's rule, 25 Nov: Nell and
- * Sefa, unless a line gives an instruction for a run). One is played on any of their lines that has
+ * Sefa, unless a line gives an instruction for a run; since 26 Nov their walkable-map lines have whole
+ * clips too, and only their lines in Granny's game use these). One is played on any of their lines that has
  * no clip of its own, while the bubble shows the full line: one that suits the line where `for`
  * matches it, else any, never the same twice running. Files in project files gameplay/voice/final/stock.
  */

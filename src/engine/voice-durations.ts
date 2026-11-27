@@ -412,4 +412,13 @@ export const VOICE_SECONDS: Record<string, number> = {
   "Manu|My mother won't get in a boat before the children do. Make her.": 3.82,
   "Maudie|Your Granny was up before the birds. Shooed me off her step.": 3.91,
   "Maudie|Nobody shoos me.": 3.02,
+  "Nell|Rematch? Lumi says no rocks this time.": 3.13,
+  "Nell|Did they pay you?": 0.93,
+  "Nell|Lumi says you're good. Are you?": 2.13,
+  "Nell|I'm on Lumi's side. Always.": 1.73,
+  "Sefa|Is it the best of three now?": 1.49,
+  "Sefa|Did you see a fish?": 1.11,
+  "Sefa|We need four!": 0.94,
+  "Sefa|Are you playing? Say yes.": 1.91,
+  "Nell|Are the lamps going to be all right?": 1.59,
 };
