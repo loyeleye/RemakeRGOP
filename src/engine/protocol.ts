@@ -191,7 +191,7 @@ export interface StoryView {
     down: number;
     pulling: number;
     /** Run 4's teaching (OFFSPRING.teach): the hint bubble to show now, and round 1's mark where to stand. */
-    teach?: { hint?: "show" | "strike" | "pull" | "cover" | "lure"; /** Run 4 again after a loss: the short hints. */ retry?: boolean; stand?: { x: number; y: number } };
+    teach?: { hint?: "show" | "strike" | "pull" | "cover" | "lure" | "loose"; /** Run 4 again after a loss: the short hints. */ retry?: boolean; stand?: { x: number; y: number } };
   };
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };

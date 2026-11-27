@@ -100,8 +100,8 @@ export const OFFSPRING = {
     floor: 0,
     /** The wind-up (ticks), then the hold (ticks). */
     windup: 3,
-    /** 18: with the strike from close behind and the pull from across the fire, a player a tick or two slow still wins (the gameplay thread's bots on v282, 27 Nov). */
-    hold: 18,
+    /** 10 (was 18): she held it for almost half the fight, so there was no danger (Ladi, 27 Nov 3:25 PM, "Let's try 1"); from round 2 the wound stays open after it (wound.loose). */
+    hold: 10,
     /** The save: what she has left after knocking it off him (a quarter of full), and how far it goes. */
     afterSave: 2,
     saveKnock: 3,
@@ -140,6 +140,17 @@ export const OFFSPRING = {
     behind: 110,
     /** A tap on its back strikes (opens the wound) from behind it with the shard out. Ticks for each pull: one wisp torn out of the wound, which flies to him on its own (a tile a tick), so the next pull can follow at once. */
     pull: 2,
+    /**
+     * Pulling while it is loose (the gameplay thread's idea 1, Ladi 27 Nov 3:25 PM "Let's try 1"):
+     * from round `looseFrom`, when her hold ends the wound stays open for as long as the shard is
+     * out, and he keeps pulling while it comes for the shard. Round 1 is as before. 0 for off.
+     */
+    loose: 1,
+    looseFrom: 2,
+    /** Its speed while the wound is open and she is not holding it, and for shard.dim ticks after he covers (tiles a tick; 0 for its usual speed). */
+    crawl: 0.6,
+    /** A pull works only within this many tiles of its back edge, held or loose (0 for from anywhere). */
+    reach: 6,
   },
   /**
    * Teaching run 4's three steps: show the shard, strike its back, pull the light out (Ladi, 27 Nov
@@ -162,6 +173,8 @@ export const OFFSPRING = {
       sees: "With that uncovered you are the brightest thing it can see.",
       /** Round 2, as it starts eating from the brazier. Always. */
       lure: "Draw it off the brazier with the shard, and hide it before it reaches you.",
+      /** The first loose wound, as she lets go. PLACEHOLDER: the gameplay thread's draft (27 Nov), not yet the story thread's or judged by Ladi. */
+      loose: "It is loose, Salvage. Take what you can and cover the shard before it reaches you.",
       /** Round 3's blast (not used: her flare draws it to her every round now, Ladi 27 Nov 2:41 PM). */
       placed: "I am done placing it for you, Salvage.",
     },
@@ -172,6 +185,7 @@ export const OFFSPRING = {
       pull: { key: "Click the wound to pull the light out.", tap: "Tap the wound to pull the light out." },
       cover: { key: "Press Space to cover the shard.", tap: "Tap Hide shard." },
       lure: { key: "Space shows the shard and draws it off. Hide it before it reaches you.", tap: "Show the shard to draw it off. Hide it before it reaches you." },
+      loose: { key: "Keep pulling. Press Space to cover the shard before it reaches you.", tap: "Keep pulling. Hide the shard before it reaches you." },
     },
     /** The same on a retry, shortened. */
     short: {
@@ -180,6 +194,7 @@ export const OFFSPRING = {
       pull: { key: "Click the wound.", tap: "Tap the wound." },
       cover: { key: "Space: cover it.", tap: "Hide shard." },
       lure: { key: "Space: draw it off, then hide.", tap: "Show to draw it off, then hide." },
+      loose: { key: "Pull, then Space to cover.", tap: "Pull, then hide." },
     },
     /** Ticks he waits at a step before she says the strike or pull order. */
     wait: 3,
@@ -189,8 +204,8 @@ export const OFFSPRING = {
     pulls1: 5,
     /** Ticks the lure hint stays up. */
     hintTicks: 9,
-    /** Round 1's mark where to stand: on the line from it through the brazier, this many tiles past the brazier's middle. */
-    mark: 3,
+    /** Round 1's mark where to stand: on the line from it through the brazier, this many tiles past the brazier's middle, or further out of the bank zone while still within wound.reach of its back (2, was 3: from 3 it is out of reach). */
+    mark: 2,
   },
   /**
    * Where it stands for each blast (Ladi, 27 Nov 2:41 PM: on the brazier run 4 was too easy; "the

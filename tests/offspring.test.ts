@@ -140,7 +140,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.send({ t: "fight", hit: true });
     expect(p.room.state.wound).toBe(true);
     // Then round the fire to pull, so the wisps fly through it.
-    p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
+    p.me.pos = p.me.prev = pt(p.c.x - 2, p.c.y);
     p.send({ t: "fight", hit: true });
     p.tick(OFFSPRING.wound.pull);
     expect(p.room.state.inside).toBe(9);
@@ -208,7 +208,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.tick();
     p.send({ t: "fight", hit: true });
     expect(p.room.state.wound).toBe(true);
-    p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
+    p.me.pos = p.me.prev = pt(p.c.x - 2, p.c.y);
     p.send({ t: "fight", hit: true });
     for (let i = 0; i < 20 && p.room.state.phase === "playing"; i++) p.tick();
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
@@ -338,7 +338,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.send({ t: "fight", shard: true });
     p.tick();
     p.send({ t: "fight", hit: true });
-    p.me.pos = p.me.prev = pt(p.c.x - 3, p.c.y);
+    p.me.pos = p.me.prev = pt(p.c.x - 2, p.c.y);
     for (let n = 0; n < OFFSPRING.teach.pulls1; n++) {
       p.send({ t: "fight", hit: true });
       p.tick(OFFSPRING.wound.pull);
@@ -422,5 +422,42 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       } else expect(downSeen).toBe(0);
     }
     OFFSPRING.knockdown.on = 1;
+  });
+
+  it("from round 2 the wound stays open, loose, after her hold while the shard is out: it crawls, he pulls only within reach, and a cover or a catch shuts it", () => {
+    const p = play(4), W = OFFSPRING.wound;
+    p.tick(20);
+    // Round 2's hold, nearly spent, the wound open and the shard out.
+    p.x.teach.pulled = true;
+    p.x.cycle = 2;
+    p.x.her.doing = "hold";
+    p.x.her.left = 1;
+    p.x.it.held = true;
+    p.x.shard.shown = true;
+    p.x.shard.glow = 3;
+    p.x.wound.open = true;
+    p.tick();
+    expect(p.x.her.doing).toBe("rest");
+    expect(p.x.wound.open).toBe(true);
+    expect(p.room.storyView().fight!.teach?.hint).toBe("loose");
+    expect(p.lines.some((l) => l.text === OFFSPRING.teach.say.loose)).toBe(true);
+    // It crawls at wound.crawl while loose.
+    const a = { x: p.x.it.x, y: p.x.it.y };
+    p.tick();
+    expect(Math.hypot(p.x.it.x - a.x, p.x.it.y - a.y)).toBeLessThanOrEqual(W.crawl + 1e-6);
+    // Out of reach, a tap pulls nothing, and the wound's mark is not live.
+    const it = p.x.it, far = W.reach + OFFSPRING.it.size / 2 + 2;
+    const out = [pt(Math.round(it.x + far), Math.round(it.y)), pt(Math.round(it.x - far), Math.round(it.y)), pt(Math.round(it.x), Math.round(it.y + far)), pt(Math.round(it.x), Math.round(it.y - far))].find((q) => p.g.board.inside(q) && p.g.board.tile(q) === Tile.Floor)!;
+    p.me.pos = p.me.prev = out;
+    const before = p.x.inside.size;
+    p.send({ t: "fight", hit: true });
+    p.tick(W.pull);
+    expect(p.x.inside.size).toBe(before);
+    expect(p.room.storyView().opt?.hit?.live).toBe(false);
+    // Covering the shard shuts it.
+    p.send({ t: "fight", shard: true });
+    p.tick();
+    expect(p.x.shard.shown).toBe(false);
+    expect(p.x.wound.open).toBe(false);
   });
 });
