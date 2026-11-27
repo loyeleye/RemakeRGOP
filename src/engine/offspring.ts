@@ -100,8 +100,8 @@ export const OFFSPRING = {
     floor: 0,
     /** The wind-up (ticks), then the hold (ticks). */
     windup: 3,
-    /** 16: with the strike from close behind, enough for 3 or 4 pulls (the gameplay thread's bots, 27 Nov). */
-    hold: 16,
+    /** 18: with the strike from close behind and the pull from across the fire, a player a tick or two slow still wins (the gameplay thread's bots on v282, 27 Nov). */
+    hold: 18,
     /** The save: what she has left after knocking it off him (a quarter of full), and how far it goes. */
     afterSave: 2,
     saveKnock: 3,
@@ -186,7 +186,7 @@ export const OFFSPRING = {
     /** Round 1: the cover step comes with this many ticks of her hold left (and her ring flashes). */
     coverAt: 4,
     /** Round 1's hold ends (down to the cover step) after this many pulls. */
-    pulls1: 3,
+    pulls1: 5,
     /** Ticks the lure hint stays up. */
     hintTicks: 9,
     /** Round 1's mark where to stand: on the line from it through the brazier, this many tiles past the brazier's middle. */
@@ -198,7 +198,8 @@ export const OFFSPRING = {
    * right before she starts her energy blast"). As she winds up she flares and it leaps, over the
    * wind-up, to `at` tiles in front of her toward the brazier, facing her, its back to the fire,
    * dropping whatever it was doing. The landing is marked on the ground through the wind-up, and if
-   * Rook is on it he is knocked aside (run 3's knockdown). `side` (degrees, 0 off): from round 2 the
+   * Rook is under its body as it lands (no margin: the close strike has him waiting just behind it)
+   * he is knocked aside (run 3's knockdown). `side` (degrees, 0 off): from round 2 the
    * spot swings that far round her, on her side away from Rook, so the fire is off to its side and
    * the wisps come out loose to him (try 75). The leap is `jump` tiles high at the top. Not in the
    * kill: there it stares at the fire.

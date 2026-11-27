@@ -576,12 +576,13 @@ export class FightRoom {
     return at(a0, O.cycles.at);
   }
 
-  /** It lands where he stands: run 3's knockdown, thrown clear of it (never hurt). */
+  /** It lands on him: run 3's knockdown, thrown clear of it (never hurt). */
   private landedOn() {
     const K = OFFSPRING.knockdown, g = this.game, it = this.it, me = this.player(YOU);
     if (!K.on || this.down > 0) return;
     const d = Math.hypot(me.pos.x - it.x, me.pos.y - it.y);
-    if (d > OFFSPRING.it.size / 2 + K.near + 0.5) return;
+    // Only under its body: he may wait right behind where it lands.
+    if (d >= OFFSPRING.it.size / 2) return;
     const c = g.board.center, a = d > 0.01 ? Math.atan2(me.pos.y - it.y, me.pos.x - it.x) : Math.atan2(c.y - it.y, c.x - it.x);
     const clear = Math.ceil(OFFSPRING.it.size / 2) + K.aside;
     for (let k = clear; k >= 1; k--) {

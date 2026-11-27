@@ -356,6 +356,19 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(Math.hypot(p.me.pos.x - to.x, p.me.pos.y - to.y)).toBeGreaterThan(OFFSPRING.it.size / 2);
   });
 
+  it("waiting just behind where it lands is safe: the landing knocks down only under its body", () => {
+    const p = play(4);
+    p.x.teach.pulled = true;
+    p.x.her.left = 0;
+    p.tick();
+    for (let i = 0; i < 80 && p.x.her.doing !== "windup"; i++) p.tick();
+    const to = p.room.storyView().opt!.land!, sol = p.g.players.find((q) => q.id === 2)!.pos, a = Math.atan2(sol.y - to.y, sol.x - to.x);
+    p.me.pos = p.me.prev = pt(Math.round(to.x - Math.cos(a) * 2), Math.round(to.y - Math.sin(a) * 2));
+    let down = 0;
+    for (let i = 0; i < 5; i++) (p.tick(), (down = Math.max(down, p.room.state.down)));
+    expect(down).toBe(0);
+  });
+
   it("out of her hold it jumps now and then to a random spot or onto a lit wisp, never near Rook, and not while it eats at the brazier", () => {
     const p = play(4);
     p.x.teach.pulled = true;
