@@ -124,7 +124,7 @@ describe("The later walks", () => {
 });
 
 describe("Walk 3's ordinary morning", () => {
-  it("offers Moth's two jobs after his lines, opens the one picked, and Maudie's yes goes on", () => {
+  it("offers Moth's two jobs after her lines, opens the one picked, and Maudie's yes goes on", () => {
     let s = 7;
     const room = new PondRoom(manualClock(), () => (s = (s * 48271) % 2147483647), 6);
     room.chain = true;

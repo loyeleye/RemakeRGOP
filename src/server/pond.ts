@@ -102,7 +102,7 @@ const LINES: Record<string, string[]> = {
   stall: ["Orrin's stall. He's off somewhere, arguing."],
   "orrin-house": ["Orrin's workshop. Panes everywhere, and him nowhere."],
   "maudie-house": ["Maudie's door. Shut. Geraniums keeping watch."],
-  "moth-house": ["Moth's door. His poles are gone, so he's out."],
+  "moth-house": ["Moth's door. Her poles are gone, so she's out."],
   "mabry-house": ["Mabry's room. Bells, herbs, and a shut door."],
   "nell-house": ["Nell's family's house. Honey jars in the hatch."],
   "sefa-house": ["Sefa's family's house. Somebody's singing inside."],
