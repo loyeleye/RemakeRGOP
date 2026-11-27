@@ -397,7 +397,7 @@ export class FightRoom {
       }
       case "brazier": {
         if (this.part === "kill") return;
-        if (++it.eat < I.eatBanked) return;
+        if (++it.eat < (this.run === 4 ? I.eatBanked4 : I.eatBanked)) return;
         const id = [...this.banked].pop()!;
         this.banked.delete(id);
         this.inside.add(id);
@@ -510,7 +510,9 @@ export class FightRoom {
     this.her.light = H.afterBlast;
     this.her.dipUntil = tick + H.dipTicks;
     this.her.doing = "hold";
-    this.her.left = this.her.of = H.hold;
+    // She tires: from the round after the first loose one, each hold a little shorter, never under holdMin. Its bar is out of the full hold, so it starts shorter.
+    this.her.left = Math.max(Math.min(H.hold, H.holdMin), H.hold - H.tire * Math.max(0, this.cycle - O.wound.looseFrom));
+    this.her.of = H.hold;
     this.her.flash = { kind: this.cycle === 1 ? "flare" : "blast", tick };
     it.held = true;
     it.eat = 0;

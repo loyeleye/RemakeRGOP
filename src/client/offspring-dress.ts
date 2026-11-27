@@ -31,6 +31,8 @@ export const FIGHT_LOOK = {
   eyeAt: 1.55,
   /** Seconds a flash takes to grow and fade. */
   flash: 0.7,
+  /** Feeding at the fire: the light streaming from the brazier into its eye (how many motes, how fast they go, seconds the stream lasts after a bite), and the dip at the fire as each light goes. */
+  sap: { motes: 12, speed: 1.4, hold: 1.4, color: "#ffc070", dip: 0.6 },
 };
 
 type Glow = (color: string, size: number, opacity?: number) => THREE.Sprite;
@@ -53,6 +55,12 @@ export class OffspringFx {
   private shardGlow: THREE.Sprite;
   private flash: THREE.Sprite;
   private beam: THREE.Mesh;
+  private motes: THREE.Sprite[] = [];
+  private sapUntil = -1;
+  private sapLevel = 0;
+  private dip: THREE.Sprite;
+  private dipAt = -99;
+  private banked = -1;
   private from = { x: 0, y: 0, face: 0 };
   private to = { x: 0, y: 0, face: 0 };
   private seen = -1;
@@ -123,6 +131,14 @@ export class OffspringFx {
     this.flash = glow(L.her, 1, 0);
     this.beam = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: L.her, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.all.add(this.herGlow, this.fenGlow, this.shardGlow, this.flash, this.beam);
+    for (let i = 0; i < L.sap.motes; i++) {
+      const m = glow(L.sap.color, 0.45, 0);
+      this.motes.push(m);
+      this.all.add(m);
+    }
+    this.dip = glow(L.sap.color, 2.5, 0);
+    this.dip.position.set(0, 1.2, 0);
+    this.all.add(this.dip);
   }
 
   step(o: { f: Fight; t: number; time: number; half: { w: number; h: number }; rook: THREE.Object3D | null }) {
@@ -199,6 +215,24 @@ export class OffspringFx {
       this.flash.material.opacity = 1 - age / L.flash;
       this.flash.visible = true;
     } else this.flash.visible = false;
+    // Feeding at the fire: light streams from the brazier into its eye, and the fire dips as each one goes.
+    const P = L.sap;
+    if (f.it.eating && f.it.after === "brazier") this.sapUntil = o.time + P.hold;
+    this.sapLevel += ((o.time < this.sapUntil ? 1 : 0) - this.sapLevel) * Math.min(1, dt * 6);
+    const ex = wx(x) + Math.cos(face) * S * 0.38, ez = wz(y) + Math.sin(face) * S * 0.38;
+    this.motes.forEach((m, i) => {
+      const k = (o.time * P.speed + i / this.motes.length) % 1;
+      m.visible = this.sapLevel > 0.02;
+      if (!m.visible) return;
+      m.position.set(ex * k, 1.2 + (L.eyeAt - 1.2) * k + Math.sin(Math.PI * k) * 0.8, ez * k);
+      m.scale.setScalar(0.25 + 0.3 * (1 - k));
+      m.material.opacity = this.sapLevel * Math.sin(Math.PI * k) * 0.9;
+    });
+    if (this.banked >= 0 && f.banked < this.banked) this.dipAt = o.time;
+    this.banked = f.banked;
+    const da = o.time - this.dipAt;
+    this.dip.material.opacity = da < P.dip ? 0.8 * (1 - da / P.dip) : 0;
+    this.dip.scale.setScalar(2.5 * (1 - 0.6 * Math.min(1, da / P.dip)));
     // The hold: a beam from her to its eye.
     const hold = f.it.held && her.doing === "hold";
     (this.beam.material as THREE.MeshBasicMaterial).opacity = hold ? 0.45 + 0.15 * Math.sin(o.time * 14) : 0;

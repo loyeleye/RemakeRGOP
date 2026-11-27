@@ -53,9 +53,10 @@ export const OFFSPRING = {
     /** How near its front edge has to come to reach a light (tiles): a wisp, Rook, her or the boy; and the brazier, from the brazier's middle. */
     reach: 0.8,
     reachBrazier: 2.5,
-    /** Ticks to eat a loose wisp, and a banked one. */
+    /** Ticks to eat a loose wisp, and a banked one (in run 3, and in run 4: 2, was 6, about one banked light a second, so it saps the fire; Ladi 27 Nov 3:32 PM). */
     eatLoose: 3,
     eatBanked: 6,
+    eatBanked4: 2,
     /** The light it is after keeps its place this much against an equal one, so it doesn't dither. */
     stick: 1.25,
     /** The brazier counts from its rim, this far out from the middle (tiles), when it is nearest-first food. */
@@ -100,8 +101,16 @@ export const OFFSPRING = {
     floor: 0,
     /** The wind-up (ticks), then the hold (ticks). */
     windup: 3,
-    /** 10 (was 18): she held it for almost half the fight, so there was no danger (Ladi, 27 Nov 3:25 PM, "Let's try 1"); from round 2 the wound stays open after it (wound.loose). */
-    hold: 10,
+    /**
+     * Her hold (ticks): 18 at first; 10 when the wound began to stay open after it (wound.loose; she
+     * held it for almost half the fight, Ladi 27 Nov 3:25 PM); now 12, and she tires (Ladi 3:34 PM,
+     * "Shorten the pull each time", read by the gameplay thread as her hold): from the round after
+     * wound.looseFrom each hold is `tire` shorter, never under `holdMin` (under 9 he can't get round
+     * the fire).
+     */
+    hold: 12,
+    tire: 1,
+    holdMin: 9,
     /** The save: what she has left after knocking it off him (a quarter of full), and how far it goes. */
     afterSave: 2,
     saveKnock: 3,
@@ -147,8 +156,8 @@ export const OFFSPRING = {
      */
     loose: 1,
     looseFrom: 2,
-    /** Its speed while the wound is open and she is not holding it, and for shard.dim ticks after he covers (tiles a tick; 0 for its usual speed). */
-    crawl: 0.6,
+    /** Its speed while the wound is open and she is not holding it, and for shard.dim ticks after he covers (tiles a tick; 0 for its usual speed). 0.8, was 0.6 (Ladi 27 Nov 3:32 PM: "increase the crawl speed"); at 1 only a frame-perfect player lives. */
+    crawl: 0.8,
     /** A pull works only within this many tiles of its back edge, held or loose (0 for from anywhere). */
     reach: 6,
   },
@@ -198,8 +207,8 @@ export const OFFSPRING = {
     wait: 3,
     /** Round 1: the cover step comes with this many ticks of her hold left (and her ring flashes). */
     coverAt: 4,
-    /** Round 1's hold ends (down to the cover step) after this many pulls. */
-    pulls1: 5,
+    /** Round 1's hold ends (down to the cover step) after this many pulls (3, was 5: with 5 the fight was over in three rounds; the gameplay thread, 27 Nov). */
+    pulls1: 3,
     /** Ticks the lure hint stays up. */
     hintTicks: 9,
     /** Round 1's mark where to stand: on the line from it through the brazier, this many tiles past the brazier's middle, or further out of the bank zone while still within wound.reach of its back (2, was 3: from 3 it is out of reach). */
