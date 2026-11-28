@@ -923,4 +923,25 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       expect(p.room.storyView().fight!.shut).toBeUndefined();
     });
   });
+  it("the run 3 trial hunt.nearest3 (off by default): it goes for the nearest light, and she and the boy are lights", () => {
+    expect(OFFSPRING.hunt.nearest3).toBe(0);
+    OFFSPRING.hunt.nearest3 = 1;
+    try {
+      const p = opened();
+      for (const w of p.g.wisps) if (!p.g.away.has(w.id)) p.g.away.set(w.id, 1e9);
+      p.x.her.dipUntil = -1;
+      const sol = p.g.players.find((q) => q.id === 2)!.pos, fen = p.g.players.find((q) => q.id === 3)!.pos;
+      // On the far side of each from the other, so the one is plainly the nearer.
+      for (const [who, at, from] of [["fen", fen, sol], ["her", sol, fen]] as const) {
+        const d = Math.hypot(at.x - from.x, at.y - from.y), r = OFFSPRING.it.size / 2 + 1.5;
+        p.x.it.x = at.x + ((at.x - from.x) / d) * r;
+        p.x.it.y = at.y + ((at.y - from.y) / d) * r;
+        p.x.it.dazed = -1;
+        p.tick();
+        expect(p.x.it.after).toBe(who);
+      }
+    } finally {
+      OFFSPRING.hunt.nearest3 = 0;
+    }
+  });
 });

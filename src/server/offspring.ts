@@ -491,6 +491,11 @@ export class FightRoom {
     if (shard) return shard;
     const c = this.game.board.center, atMeal = it.key === "brazier" && Math.hypot(c.x - it.x, c.y - it.y) <= I.reachBrazier + I.size / 2 + 0.1;
     const food = L.filter((l) => (l.after === "wisp" && this.lit.has(Number(l.key.slice(1)))) || (l.after === "brazier" && (this.game.tick < this.flareUntil || atMeal)));
+    // TRIAL (gameplay thread, 28 Nov; Ladi asked for ways to make run 3 bite): in run 3 it goes for the nearest light, and she and the boy are lights.
+    if (this.run === 3 && OFFSPRING.hunt.nearest3) {
+      const cand = [...food, ...L.filter((l) => l.key === "her" || l.key === "fen")];
+      return cand.sort((x, y) => gap(x) / (x.key === it.key ? I.stick : 1) - gap(y) / (y.key === it.key ? I.stick : 1))[0] ?? null;
+    }
     // The hunt: loose light before the fire. Only with no stray left does it go back to drink.
     const strays = OFFSPRING.hunt.on && OFFSPRING.hunt.straysFirst && this.run === 4 ? food.filter((l) => l.after === "wisp") : [];
     // TRIAL (Ladi, 28 Nov 1:07 AM): the boy's light at fenOver or more, and loose light no longer holds it: it goes for him (through her).
