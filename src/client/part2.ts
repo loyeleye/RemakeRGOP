@@ -13,8 +13,8 @@ import type { Held, Piece } from "./part1.js";
 const DRAFT = "Draft: not ruled by Ladi yet.";
 
 export const PART2: Piece[] = [
-  // Pictures A4 and A5 (locked by Ladi); A1 to A3 are not locked, so the first thought is on the black for now.
-  { id: "0", name: "The wake", kind: "card", scene: "held", card: { heading: "The wake", summary: "Black, the last light of Part 1 going out. Rook on his back in a new net in a rotten wreck, Lumi's dark lantern beside him. \"She sent me the long way.\" He sits up: \"Ground doesn't just go. Not like that.\"", ruled: "Part ruled: the net, the lantern beside him and both thoughts are Ladi's. Pictures A4 and A5 are locked; A1 to A3 are not." } },
+  // Pictures A3, A4 and A5 (locked by Ladi); A1 is the black, A2 is not locked yet.
+  { id: "0", name: "The wake", kind: "card", scene: "held", card: { heading: "The wake", summary: "Black, the last light of Part 1 going out. Rook on his back in a new net in a rotten wreck, Lumi's dark lantern beside him. \"She sent me the long way.\" He sits up: \"Ground doesn't just go. Not like that.\"", ruled: "Part ruled: the net, the lantern beside him and both thoughts are Ladi's. Pictures A3, A4 and A5 are locked; A2 is not." } },
   { id: "1", name: "Run 1, the dark run", kind: "card", card: { heading: "Run 1, the dark run", summary: "Alone in the wreck with short sight and no voice, he relights the dead brazier. Nightshades snuff the lights at the edge. The brazier catches and the dark draws back.", ruled: "Part ruled: the two thoughts are Ladi's. That it can't be lost is the gameplay thread's recommendation, not ruled. The map is designed, not in the game yet." } },
   // Pictures B1 (v2), B2, B3, locked by Ladi. Outrider's two lines are draft, so none is shown.
   { id: "1e", name: "The lamps find him", kind: "card", scene: "held", card: { heading: "The lamps find him", summary: "Lamps come through the gap toward his light. Outrider looks up at the net, not at him, then comes down with the grin.", ruled: "Part ruled: that somebody says the rope is new is Ladi's. Outrider's lines are draft and not in yet. The three pictures are locked." } },
@@ -35,13 +35,14 @@ export const PART2: Piece[] = [
 /** The held pictures of Part 2's picture pieces, by piece id (an empty slot is a black frame). */
 export const HELD2: Record<string, Held> = {
   "0": {
-    tag: "A4 and A5 locked by Ladi; A1 to A3 are black for now",
+    tag: "A3 to A5 locked by Ladi; A2 to come",
     fade: 0.8,
     lead: 1.2,
     line: 3,
     gap: 0.6,
     pictures: [
-      { slot: "", hold: 1.2, lines: [{ who: ["Rook"], text: "She sent me the long way.", quiet: true }] },
+      { slot: "", hold: 1.5 },
+      { slot: "part2-a3-v1", hold: 1.2, lines: [{ who: ["Rook"], text: "She sent me the long way.", quiet: true }] },
       { slot: "part2-a4-v1", hold: 1.2, lines: [{ who: ["Rook"], text: "Ground doesn't just go. Not like that.", quiet: true }] },
       { slot: "part2-a5-v1", hold: 3.5 },
     ],
