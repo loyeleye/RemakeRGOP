@@ -13,13 +13,13 @@ import type { Held, Piece } from "./part1.js";
 const DRAFT = "Draft: not ruled by Ladi yet.";
 
 export const PART2: Piece[] = [
-  // Pictures A3, A4 and A5 (locked by Ladi); A1 is the black, A2 is not locked yet.
-  { id: "0", name: "The wake", kind: "card", scene: "held", card: { heading: "The wake", summary: "Black, the last light of Part 1 going out. Rook on his back in a new net in a rotten wreck, Lumi's dark lantern beside him. \"She sent me the long way.\" He sits up: \"Ground doesn't just go. Not like that.\"", ruled: "Part ruled: the net, the lantern beside him and both thoughts are Ladi's. Pictures A3, A4 and A5 are locked; A2 is not." } },
+  // Pictures A2 to A5 (locked by Ladi); A1 is the black.
+  { id: "0", name: "The wake", kind: "card", scene: "held", card: { heading: "The wake", summary: "Black, the last light of Part 1 going out. Rook on his back in a new net in a rotten wreck, Lumi's dark lantern beside him. \"She sent me the long way.\" He sits up: \"Ground doesn't just go. Not like that.\"", ruled: "Part ruled: the net, the lantern beside him and both thoughts are Ladi's. Pictures A2 to A5 are locked." } },
   { id: "1", name: "Run 1, the dark run", kind: "card", card: { heading: "Run 1, the dark run", summary: "Alone in the wreck with short sight and no voice, he relights the dead brazier. Nightshades snuff the lights at the edge. The brazier catches and the dark draws back.", ruled: "Part ruled: the two thoughts are Ladi's. That it can't be lost is the gameplay thread's recommendation, not ruled. The map is designed, not in the game yet." } },
   // Pictures B1 (v2), B2, B3, locked by Ladi. Outrider's two lines are draft, so none is shown.
   { id: "1e", name: "The lamps find him", kind: "card", scene: "held", card: { heading: "The lamps find him", summary: "Lamps come through the gap toward his light. Outrider looks up at the net, not at him, then comes down with the grin.", ruled: "Part ruled: that somebody says the rope is new is Ladi's. Outrider's lines are draft and not in yet. The three pictures are locked." } },
-  // Picture C1 locked; C2 and C3 not yet.
-  { id: "1-2a", name: "At the crew's fire", kind: "card", scene: "held", card: { heading: "At the crew's fire", summary: "A bowl pushed at him; the fire with the boy at its edge; Outrider pricing him.", ruled: "Part ruled: the boy in plain sight is Ladi's. Picture C1 is locked; the other two are not drawn or not locked." } },
+  // Pictures C1 and C3 locked; C2 is not drawn yet.
+  { id: "1-2a", name: "At the crew's fire", kind: "card", scene: "held", card: { heading: "At the crew's fire", summary: "A bowl pushed at him; the fire with the boy at its edge; Outrider pricing him.", ruled: "Part ruled: the boy in plain sight is Ladi's. Pictures C1 and C3 are locked; C2 is not drawn yet." } },
   { id: "1-2b", name: "The camp walk", kind: "card", card: { heading: "The camp walk", summary: "The warm camp: seven things to tap, each with one thought (\"Five of them, and the boy makes six.\"), the gate standing open with nightshades past it, and at the gateway: \"Not without the kid.\" Tapping Outrider at the cold brazier ends it.", ruled: "Part ruled: the feeling, the open gate, the gate thought and the nightshades are Ladi's. The crew's lines are draft. The yard's warm state is drawn by the maps thread, not built yet." } },
   // Pictures D1 and D4, locked; D2 and D3 are not drawn yet.
   { id: "1-2c", name: "The ask", kind: "card", scene: "held", card: { heading: "The ask", summary: "Outrider at the cold brazier asks for one run. The boy is put to bed in the back cart, the gate is barred. Rook looks from the gate to the cart to the brazier.", ruled: "Part ruled: Rook's thought is Ladi's; the crew's lines are draft and not in yet. Pictures D1 and D4 are locked." } },
@@ -35,16 +35,17 @@ export const PART2: Piece[] = [
 /** The held pictures of Part 2's picture pieces, by piece id (an empty slot is a black frame). */
 export const HELD2: Record<string, Held> = {
   "0": {
-    tag: "A3 to A5 locked by Ladi; A2 to come",
+    tag: "Pictures locked by Ladi",
     fade: 0.8,
     lead: 1.2,
     line: 3,
     gap: 0.6,
     pictures: [
       { slot: "", hold: 1.5 },
+      { slot: "part2-a2-v1", hold: 3.5 },
       { slot: "part2-a3-v1", hold: 1.2, lines: [{ who: ["Rook"], text: "She sent me the long way.", quiet: true }] },
-      { slot: "part2-a4-v1", hold: 1.2, lines: [{ who: ["Rook"], text: "Ground doesn't just go. Not like that.", quiet: true }] },
-      { slot: "part2-a5-v1", hold: 3.5 },
+      { slot: "part2-a4-v2", hold: 1.2, lines: [{ who: ["Rook"], text: "Ground doesn't just go. Not like that.", quiet: true }] },
+      { slot: "part2-a5-v2", hold: 3.5 },
     ],
   },
   "1e": {
@@ -60,12 +61,15 @@ export const HELD2: Record<string, Held> = {
     ],
   },
   "1-2a": {
-    tag: "Picture C1 locked by Ladi; C2 and C3 to come",
+    tag: "Pictures locked by Ladi; C2 to come",
     fade: 0.7,
     lead: 0,
     line: 3,
     gap: 0.4,
-    pictures: [{ slot: "part2-c1-v1", hold: 4 }],
+    pictures: [
+      { slot: "part2-c1-v1", hold: 3.5 },
+      { slot: "part2-c3-v1", hold: 3.5 },
+    ],
   },
   "1-2c": {
     tag: "Pictures locked by Ladi; the crew's draft lines not in yet",
@@ -85,7 +89,7 @@ export const HELD2: Record<string, Held> = {
     line: 3,
     gap: 0.4,
     pictures: [
-      { slot: "part2-d7-v1", hold: 3.5 },
+      { slot: "part2-d7-v2", hold: 3.5 },
       { slot: "part2-d8-v1", hold: 4 },
     ],
   },
