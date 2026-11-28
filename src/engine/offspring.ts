@@ -339,6 +339,8 @@ export const OFFSPRING = {
   /** The kill (Ladi, 27 Nov 6:27 PM: "a dramatic kill scene where the light dissipates it"): play holds this many ticks while its light tears out of it and it comes apart, then the card. The gameplay thread's pick. */
   death: { ticks: 6 },
   card: { won: "It's down.", again3: "Again, from the first pull.", again4: "Again, from her flare." },
+  /** Where a loss in run 4 starts again: run 3's first pull (Ladi, 28 Nov 1:29 PM: "Cut #3", the gameplay thread's list item "Losing run 4 restarts run 4 only"), or 4 for her flare as before. A dial for comparing. */
+  retryFrom: 3 as 3 | 4,
   /** Seconds a caption stays up (in ticks). */
   captionTicks: 6,
 };

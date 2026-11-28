@@ -37,6 +37,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     OFFSPRING.dark.on = 0;
   });
   afterEach(() => {
+    OFFSPRING.retryFrom = 3;
     OFFSPRING.dark.on = 1;
     OFFSPRING.hunt.on = 1;
     OFFSPRING.hunt.block = 0;
@@ -197,6 +198,20 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(f.thrown).toMatchObject({ tick: f.tick, ticks: H.save.down });
     expect(v.opt?.strip.some((c) => c.label === "Her save: spent" && c.n === 0)).toBe(true);
     for (let i = 0; i < 30 && p.room.state.phase === "playing"; i++) p.tick();
+    // A loss in run 4 starts again from run 3's first pull (Ladi, "Cut #3").
+    expect(p.room.state.end?.summary).toBe(OFFSPRING.card.again3);
+    p.send({ t: "lobby" });
+    expect(p.room.state.run).toBe(3);
+    // Her teaching was said the first time through: hints only now.
+    expect(p.x.teach.retry).toBe(true);
+  });
+
+  it("with the dial at 4, a loss in run 4 starts again from her flare, as it stood", () => {
+    OFFSPRING.retryFrom = 4;
+    const p = play(4);
+    p.x.her.left = 0;
+    p.tick();
+    p.room.debug("lose");
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.again4);
     p.send({ t: "lobby" });
     expect(p.room.state.run).toBe(4);
@@ -263,7 +278,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(p.x.it).toMatchObject(at);
     p.tick();
     expect(p.room.state.phase).toBe("results");
-    expect(p.room.state.end?.summary).toBe(OFFSPRING.card.again4);
+    expect(p.room.state.end?.summary).toBe(OFFSPRING.card.again3);
     expect(p.room.lostTo).toBe("fen");
   });
 
@@ -413,6 +428,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
 
   it("on a retry of run 4, hints only: no orders from her", () => {
     OFFSPRING.hunt.on = 0;
+    OFFSPRING.retryFrom = 4;
     const p = play(4);
     p.x.teach.pulled = true;
     p.x.her.left = 0;

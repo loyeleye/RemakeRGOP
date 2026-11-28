@@ -78,6 +78,8 @@ export class FightRoom {
   private wound = { open: false, timer: 0 };
   /** Where things stood at the flare, for a retry of run 4. */
   private at4: { rook: Pt; it: { x: number; y: number; face: number } } | null = null;
+  /** Run 3 again after a loss in run 4 (OFFSPRING.retryFrom 3): her teaching lines are not said twice. */
+  private replay = false;
   /**
    * Run 4's teaching (OFFSPRING.teach). `retry`: run 4 again after a loss (hints only, no captions).
    * `pulled`: a pull done in round 1 (its hold waits for one). `held`: a pull in this hold. `remind`:
@@ -122,7 +124,11 @@ export class FightRoom {
         send({ t: "welcome", you: YOU, token: "" });
         return this.begin(this.startAt);
       case "lobby":
-        if (this.phase === "results") this.begin(this.end?.summary === OFFSPRING.card.again4 ? 4 : this.startAt);
+        if (this.phase !== "results") return;
+        // Lost in run 4: from her flare, or (OFFSPRING.retryFrom 3) from run 3's first pull, with nothing kept from the flare and no teaching lines again.
+        if (this.end?.summary === OFFSPRING.card.again4) return this.begin(4);
+        if (this.run === 4 && this.end?.summary === OFFSPRING.card.again3) return (this.at4 = null), (this.replay = true), this.begin(3);
+        this.begin(this.startAt);
         return;
       case "act": {
         if (this.phase !== "playing") return;
@@ -168,6 +174,7 @@ export class FightRoom {
   debug(cmd: "restart3" | "restart4" | "win" | "lose" | "catch" | "drain" | "lunge") {
     if (cmd === "restart3" || cmd === "restart4") {
       this.at4 = null;
+      this.replay = false;
       return this.begin(cmd === "restart4" ? 4 : 3);
     }
     if (this.phase !== "playing" || this.dying || this.draining) return;
@@ -267,6 +274,8 @@ export class FightRoom {
       // She has just shoved it off: half her light.
       this.her = { light: O.her.start3, dipUntil: -1, doing: "rest", left: 0, of: 0, flash: undefined };
       this.at4 = null;
+      // Played again after a run 4 loss: hints only, her teaching lines were said the first time through.
+      this.teach.retry = this.replay;
     } else {
       // Run 4 on its own, or again: everything as it stood at the flare.
       this.teach.retry = !!this.at4;
@@ -335,7 +344,7 @@ export class FightRoom {
     if (this.part === "flare") {
       g.step();
       this.stepLeap();
-      if (--this.her.left <= 0) (this.teach.retry = false), this.startRun4();
+      if (--this.her.left <= 0) (this.teach.retry = this.replay), this.startRun4();
       this.flush();
       this.broadcastTick();
       return;
@@ -1255,7 +1264,7 @@ export class FightRoom {
 
   private lose() {
     this.lostTo = this.catches >= 2 ? "caught" : "fen";
-    this.finish(this.run === 3 ? OFFSPRING.card.again3 : OFFSPRING.card.again4);
+    this.finish(this.run === 3 || OFFSPRING.retryFrom === 3 ? OFFSPRING.card.again3 : OFFSPRING.card.again4);
   }
 
   private win() {
