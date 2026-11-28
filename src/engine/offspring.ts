@@ -300,18 +300,22 @@ export const OFFSPRING = {
  * The crew's yard in its third state (the maps thread's plan 2, sogni/lanternfall/production/places/
  * crew-yard/, 27 Nov): a ruin 25 by 21 inside its low walls (x -12..12, y -10..10), the cold brazier
  * in the middle, the west wall breached at y 1..7, an overturned cart on the east wall at x 10..12,
- * y -5..-4 beside Solenne and the boy, and the back cart (the cage) with the hoods on the south wall
- * at x -4..2, y 9..10. Lit ground (the apron) runs out past the walls, deeper in the north; past it,
- * dark. The offspring keeps to the clear ground, x -12..12, y -9..9, and off the cart.
+ * y -5..-4 beside Solenne and the boy, and the back cart north-south against the south wall at
+ * x -4..-2, y 7..10, the hoods beside it at x -6..-5, y 9..10 (the maps thread's changes, 28 Nov).
+ * Lit ground (the apron) runs out past the walls, deeper in the north; past it, dark. The offspring
+ * keeps to the clear ground, x -12..12, y -9..9, and off both carts.
  */
 export const OY_YARD = {
   inside: [-12, -10, 12, 10] as const,
   clear: [-12, -9, 12, 9] as const,
   cover: [10, -5, 12, -4] as const,
-  cage: [-4, 9, 2, 10] as const,
+  cage: [-4, 7, -2, 10] as const,
+  hoods: [-6, 9, -5, 10] as const,
   breach: { x: -13, y: [1, 7] as const },
   /** Crates and barrels against the walls (solid; the plan's crate tiles). */
   crates: [[-11, -9], [-10, -9], [11, 9], [10, 9], [-11, 9], [-3, -9], [6, 9], [7, 9]] as readonly (readonly [number, number])[],
+  /** The gate's bar, leaning on the wall east of the gateway (solid too). */
+  bar: [3, -9] as const,
   /** The lit ground's edge (tiles), and how round its corners are. */
   apron: { x: 16, n: -15, s: 13, round: 3 },
 };
@@ -333,10 +337,10 @@ export function oyOutline(a: number) {
 }
 /** How far (x, y) is outside the ground the offspring can stand on (its middle), negative inside: the clear yard, off the cart. */
 export function oyRoom(x: number, y: number) {
-  const C = OY_YARD.clear, K = OY_YARD.cover;
+  const C = OY_YARD.clear;
   const out = Math.max(C[0] - 0.5 - x, x - C[2] - 0.5, C[1] - 0.5 - y, y - C[3] - 0.5);
-  const offCart = Math.max(K[0] - 0.5 - x, x - K[2] - 0.5, K[1] - 0.5 - y, y - K[3] - 0.5);
-  return Math.max(out, -offCart);
+  const off = (K: readonly number[]) => Math.max(K[0]! - 0.5 - x, x - K[2]! - 0.5, K[1]! - 0.5 - y, y - K[3]! - 0.5);
+  return Math.max(out, -off(OY_YARD.cover), -off(OY_YARD.cage));
 }
 
 /** The yard as map rows: open ground inside the walls, everything else solid (the dress draws the walls, carts and the rest), the brazier, and the starts. */
@@ -345,8 +349,8 @@ export function yardRows(): string[] {
   const g: string[][] = Array.from({ length: OY_SIZE.h }, (_, by) =>
     Array.from({ length: OY_SIZE.w }, (_, bx) => {
       const x = bx - HALF_W, y = by - HALF_H;
-      const crate = Y.crates.some(([cx, cy]) => cx === x && cy === y);
-      return inBox(x, y, [...Y.inside]) && !inBox(x, y, [...Y.cover]) && !inBox(x, y, [...Y.cage]) && !crate ? "." : "!";
+      const crate = Y.crates.some(([cx, cy]) => cx === x && cy === y) || (x === Y.bar[0] && y === Y.bar[1]);
+      return inBox(x, y, [...Y.inside]) && !inBox(x, y, [...Y.cover]) && !inBox(x, y, [...Y.cage]) && !inBox(x, y, [...Y.hoods]) && !crate ? "." : "!";
     }),
   );
   const put = (x: number, y: number, ch: string, what: string) => {

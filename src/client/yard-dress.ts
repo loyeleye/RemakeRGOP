@@ -1,8 +1,10 @@
 // The crew's yard in its third state (Part 2, runs 3 and 4): the maps thread's models (project files
-// sogni/lanternfall/production/places/crew-yard/, 27 Nov) placed on their plan 2. The ruin's walls
-// with the west wall broken in, the carts still standing in the gaps, the overturned cart Solenne and
-// the boy stand by, the cage cart open with the hoods beside it, the gate, the crates, and the stake
-// out on the apron. The lamps are out. All the models come in one file (models/crew-yard.pack.json,
+// sogni/lanternfall/production/places/crew-yard/, 27 Nov, and its "Changes, 28 Nov" in the README:
+// the cart remade as still D7, the gate remade, the walls without the south hole, ruin stubs past
+// the walls). The ruin's walls with the west wall broken in, the carts still standing in the gaps,
+// the overturned cart Solenne and the boy stand by, the back cart open (north-south, its door to the
+// brazier) with the hoods beside it, the gate with its east leaf in, its bar leaning on the wall, the
+// crates, the stake out on the apron, and a few ruin pieces past the walls. The lamps are out. All the models come in one file (models/crew-yard.pack.json,
 // base64 glbs by name) so the preview page stays under its file count. World units are tiles, the
 // origin at the brazier, x east and z south.
 
@@ -18,12 +20,14 @@ export const YARD_PIECES: readonly { m: string; at: [number, number]; yaw?: numb
   { m: "yard-wagon", at: [13, -5], yaw: -90 },
   { m: "yard-wagon", at: [13, 4], yaw: -90 },
   { m: "yard-wagon-overturned", at: [11, -4.5], yaw: -90 },
-  { m: "yard-cage-cart-open", at: [0, 9.5] },
-  { m: "yard-hood-pile", at: [-3.5, 9.5] },
-  // The west leaf shut, the east leaf forced open along the wall, the bar gone.
-  { m: "yard-gate-leaf", at: [-0.75, -11] },
-  { m: "yard-gate-leaf", at: [2.1, -10.2], yaw: 90 },
+  { m: "yard-cage-cart-open", at: [-3, 8.6], yaw: 180 },
+  { m: "yard-hood-pile", at: [-5.6, 9.3] },
+  // The gate: the west leaf shut, the east leaf swung in; its bar leaning on the wall east of it.
+  { m: "yard-gate-open", at: [0, -11] },
+  { m: "yard-gate-bar", at: [3.2, -9.4] },
   { m: "yard-stake", at: [0, -15] },
+  // A few ruin pieces past the walls, then dark (Ladi's pick).
+  ...([[-15.8, -13.2, 25], [-8.5, -13.6, -10], [8.5, -13.8, 40], [15.6, -8, 80], [-15.8, 1, 95], [15.8, 7, -75], [-15, 13.4, 150], [6, 13.4, 175], [15, 13.2, -140]] as const).map(([x, y, yaw]) => ({ m: "yard-wall-stub", at: [x, y] as [number, number], yaw })),
   ...OY_YARD.crates.map(([x, y], i) => ({ m: i % 3 === 1 ? "yard-barrel" : "yard-crate", at: [x, y] as [number, number], yaw: (i * 37) % 90 - 45 })),
 ];
 
