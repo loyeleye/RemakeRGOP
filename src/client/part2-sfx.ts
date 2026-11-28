@@ -19,7 +19,7 @@ export const PART2_SFX = {
   /** Each loop at full (build's guesses, for Ladi's ear). */
   /** Run 1: the wreck's air (the quietest thing in the game), fading as the flame tone comes up; the hush full within `near` tiles of a nightshade and gone past 3 (the README). */
   run1: { air: 0.22, airUnderFlame: 0.4, tone: 0.5, hush: { full: 1, gone: 3 } },
-  gains: { "wreck-air": 1, "flame-tone": 1, snuff: 0.7, "ember-catch": 0.8, "lamps-come": 0.8, "camp-fire": 0.55, "shade-hush": 0.5, fizz: 0.7, cheer: 0.8, "light-lines": 0.9, "cage-light": 0.9, hands: 0.8 } as Record<string, number>,
+  gains: { "wreck-air": 1, "flame-tone": 1, snuff: 0.7, "ember-catch": 0.8, "lamps-come": 0.8, hold: 0.8, mark: 0.8, "dark-close": 0.9, "camp-fire": 0.55, "shade-hush": 0.5, fizz: 0.7, cheer: 0.8, "light-lines": 0.9, "cage-light": 0.9, hands: 0.8 } as Record<string, number>,
   /** Run 2's cheer has voices in it (a small crowd, no words found): Ladi's to allow or drop. Off, the music's last phrase carries the end. */
   cheer: true,
   /** The fire is full within `full` tiles and gone past `gone` (build). */
@@ -30,7 +30,7 @@ export const PART2_SFX = {
   follow: 0.25,
 };
 
-const NAMES = ["wreck-air", "shade-hush", "snuff", "ember-catch", "flame-tone", "lamps-come", "camp-fire", "gate-bar", "cart-latch", "fizz", "cheer", "light-lines", "cage-light", "hands"] as const;
+const NAMES = ["wreck-air", "shade-hush", "snuff", "ember-catch", "flame-tone", "lamps-come", "camp-fire", "gate-bar", "cart-latch", "fizz", "cheer", "light-lines", "cage-light", "hands", "hold", "mark", "dark-close"] as const;
 type Name = (typeof NAMES)[number];
 
 let buffers: Partial<Record<Name, AudioBuffer>> | null = null;
@@ -186,4 +186,9 @@ export function run1Sfx(r: Run1 | undefined) {
   if (r.snuffed && r.snuffed.tick !== p.snuffed?.tick) s.once("snuff");
   if (r.banks === 1 && p.banks === 0) s.once("ember-catch");
   if (r.end?.lamps && !p.end?.lamps) s.once("lamps-come");
+  // A nightshade takes hold (once a hold); each mark of warmth that goes; the dark closing over him.
+  const held = new Set(p.shades.filter((q) => q.on).map((q) => q.id));
+  if (r.shades.some((q) => q.on && !held.has(q.id))) s.once("hold");
+  if (r.marked !== undefined && r.marked !== p.marked) s.once("mark");
+  if (closing && p.closing === undefined) s.once("dark-close");
 }

@@ -24,6 +24,8 @@ export const WRECK_LOOK = {
   shade: { height: 2.3 },
   snuff: { color: "#fff1c8", size: 1.1, sec: 0.6 },
   lamp: { power: 4, reach: 5, color: "#ffb468", h: 1.3 },
+  /** When a mark goes, his three diamonds flash over him once (the gameplay thread): this high, this long. */
+  marks: { h: 3.5, sec: 1.4, size: 1.5 },
 };
 
 let pieces: Promise<Record<string, THREE.Object3D>> | null = null;
@@ -71,12 +73,43 @@ export class Run1Fx {
   private lastSnuff = -1;
   private lamps: { light: THREE.PointLight; halo: THREE.Sprite }[] = [];
   private last = 0;
+  private marks: THREE.Sprite;
+  private markTex: THREE.CanvasTexture;
+  private markCtx: CanvasRenderingContext2D | null;
+  private lastMark = -1;
+  private markAt = -99;
 
   constructor(private glow: (color: string, size: number, opacity?: number) => THREE.Sprite) {
     const R = WRECK_LOOK.rook;
     this.rookLight = new THREE.PointLight(R.color, R.power, R.reach, 1.4);
     this.all.add(this.rookLight);
     void loadShade().then((g) => (this.model = g));
+    const cv = document.createElement("canvas");
+    cv.width = 192;
+    cv.height = 64;
+    this.markCtx = cv.getContext("2d");
+    this.markTex = new THREE.CanvasTexture(cv);
+    this.marks = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.markTex, transparent: true, depthTest: false, opacity: 0 }));
+    this.marks.scale.set(WRECK_LOOK.marks.size * 3, WRECK_LOOK.marks.size, 1);
+    this.marks.renderOrder = 10;
+    this.all.add(this.marks);
+  }
+
+  /** His three diamonds, the ones left lit. */
+  private drawMarks(on: number, of: number) {
+    const g = this.markCtx;
+    if (!g) return;
+    g.clearRect(0, 0, 192, 64);
+    for (let i = 0; i < of; i++) {
+      const x = 32 + i * 64, y = 32;
+      g.beginPath();
+      g.moveTo(x, y - 22), g.lineTo(x + 18, y), g.lineTo(x, y + 22), g.lineTo(x - 18, y), g.closePath();
+      g.fillStyle = i < on ? "#ffb15c" : "rgba(170,205,240,0.55)";
+      g.strokeStyle = i < on ? "#ffe2b0" : "#e4f2ff";
+      g.lineWidth = 3;
+      g.fill(), g.stroke();
+    }
+    this.markTex.needsUpdate = true;
   }
 
   private figure(): ShadeFig {
@@ -116,6 +149,15 @@ export class Run1Fx {
     // His glow goes with him.
     if (o.rook) this.rookLight.position.set(o.rook.position.x, WRECK_LOOK.rook.h, o.rook.position.z);
     this.rookLight.intensity = r.end ? 0 : WRECK_LOOK.rook.power;
+    // A mark lost: the diamonds over him, once.
+    if (r.marked !== undefined && r.marked !== this.lastMark) {
+      this.lastMark = r.marked;
+      this.markAt = time;
+      this.drawMarks(r.warmth, r.of3);
+    }
+    const mk = (time - this.markAt) / WRECK_LOOK.marks.sec;
+    (this.marks.material as THREE.SpriteMaterial).opacity = mk >= 0 && mk < 1 ? Math.min(1, (1 - mk) * 2.5) : 0;
+    if (o.rook) this.marks.position.set(o.rook.position.x, WRECK_LOOK.marks.h, o.rook.position.z);
     // The nightshades: each stands where the room has it, turned to him, held still between jumps (no glide).
     const live = new Set<number>();
     for (const s of r.shades) {
