@@ -302,6 +302,8 @@ export const OFFSPRING = {
   /** Her three lines after a save (approved wording, Ladi 27 Nov 12:48 PM; no voice take yet). One at random. */
   saved: ["I can't do that twice, Salvage.", "Next time it has you, I keep what's left for the boy.", "That cost more than you're worth. Stay behind it."],
   /** Text on the short card. Placeholder wording, not story lines. */
+  /** The kill (Ladi, 27 Nov 6:27 PM: "a dramatic kill scene where the light dissipates it"): play holds this many ticks while its light tears out of it and it comes apart, then the card. The gameplay thread's pick. */
+  death: { ticks: 6 },
   card: { won: "It's down.", again3: "Again, from the first pull.", again4: "Again, from her flare." },
   /** Seconds a caption stays up (in ticks). */
   captionTicks: 6,

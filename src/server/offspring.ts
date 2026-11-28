@@ -181,6 +181,7 @@ export class FightRoom {
     this.catches = 0;
     this.down = 0;
     this.thrown = null;
+    this.dying = null;
     this.pulling = 0;
     this.wound = { open: false, timer: 0 };
     this.eye = 0;
@@ -254,6 +255,13 @@ export class FightRoom {
     }
     if (this.phase !== "playing") return;
     const g = this.game, O = OFFSPRING;
+    // The kill: the clock runs on and nothing else does, until its death has played out.
+    if (this.dying) {
+      g.tick++;
+      if (g.tick >= this.dying.t0 + this.dying.ticks) return this.win();
+      this.broadcastTick();
+      return;
+    }
     if (this.part === "flare") {
       g.step();
       this.stepLeap();
@@ -1022,8 +1030,20 @@ export class FightRoom {
   }
 
   private win() {
+    // Its death plays out first: nothing moves while its light leaves it, then the card.
+    const D = OFFSPRING.death;
+    if (D.ticks > 0 && !this.dying) {
+      this.dying = { t0: this.game.tick, ticks: D.ticks };
+      this.eye = this.gaze = 0;
+      this.broadcastTick();
+      return;
+    }
+    // A tap while it dies changes nothing.
+    if (this.dying && this.game.tick < this.dying.t0 + this.dying.ticks) return;
     this.finish(OFFSPRING.card.won);
   }
+  /** The kill under way (OFFSPRING.death), or null. */
+  private dying: { t0: number; ticks: number } | null = null;
 
   private finish(summary: string) {
     this.phase = "results";
@@ -1075,6 +1095,7 @@ export class FightRoom {
       ...(this.run === 4 && O.hunt.on && O.eye.on && (this.eye > 0 || this.gaze > 0) ? { eye: { left: this.eye, of: O.eye.ticks, cone: O.eye.cone, r: O.eye.range + O.eye.slack, ...(this.eye === 0 ? { gaze: this.gaze, hold: O.eye.hold } : {}) } } : {}),
       ...(dark ? { dark: this.pools() } : {}),
       ...(B ? { bolt: B } : {}),
+      ...(this.dying ? { dying: this.dying } : {}),
       // Away after its jump: untouchable for `left` of `of` ticks, and her charge waits as long.
       ...(safe ? { safe: { left: this.awayUntil - g.tick, of: O.hunt.boltTicks + O.hunt.away, ...(g.tick - this.wardAt <= 1 ? { ward: this.wardAt } : {}) } } : {}),
       ...(this.run === 4 && O.hunt.on && O.hunt.block && this.onFire() ? { shut: true } : {}),

@@ -1094,9 +1094,9 @@ function storyPhaseSound(was: string | undefined) {
   // The fight's music stops dead the moment play stops (the kill's last press, a loss, the results).
   if (phase !== "playing") {
     fightMusic(undefined, false);
-    // Its last sound: the kill, or the loss when it caught him twice.
+    // Its last sound: the loss when it caught him twice, or the kill if its death did not already play it.
     const f = room!.story?.fight, won = room!.story?.end?.summary === OFFSPRING.card.won;
-    offspringSfx(undefined, false, phase === "results" && f ? { won, caught: !won && f.catches >= 2 } : undefined);
+    offspringSfx(undefined, false, phase === "results" && f ? { won: won && !f.dying, caught: !won && f.catches >= 2 } : undefined);
   }
   // The dying brazier has no bell and no music: only the fire. The Sieve has only the wind.
   if (room!.story?.dying) return;
@@ -1129,7 +1129,7 @@ function storyTickSound(s: GameSnapshot) {
   else if (st.sieve) void 0;
   else if (st.rescue) rescueSound(st.rescue);
   else if (st.ship) shipSound(st.ship);
-  else if (st.fight) (fightMusic(st.fight, room!.phase === "playing"), offspringSfx(st.fight, room!.phase === "playing"));
+  else if (st.fight) (fightMusic(st.fight, room!.phase === "playing" && !st.fight.dying), offspringSfx(st.fight, room!.phase === "playing"));
   else if (room!.phase === "playing" && musicFor !== st.movement) {
     musicFor = st.movement;
     sound.playMusic(st.movement); // starts on a tick, so the beat lines up with the 600 ms steps

@@ -205,6 +205,8 @@ export interface StoryView {
     safe?: { left: number; of: number; ward?: number };
     /** Run 4, the jump: it fled hurt from `from` to `to`, leaving tick `t0` for `ticks`, and stays away `away` ticks after. */
     bolt?: { from: { x: number; y: number }; to: { x: number; y: number }; t0: number; ticks: number; away: number };
+    /** The kill: from which tick, for how many, its light tearing out of it and it coming apart (OFFSPRING.death). */
+    dying?: { t0: number; ticks: number };
     flung?: { id: number; from: { x: number; y: number }; to: { x: number; y: number }; tick: number }[];
     teach?: { hint?: "show" | "strike" | "pull" | "cover" | "lure" | "loose" | "far" | "home" | "eye"; /** Run 4 again after a loss: the short hints. */ retry?: boolean; stand?: { x: number; y: number } };
   };

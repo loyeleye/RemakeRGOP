@@ -209,6 +209,16 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.send({ t: "fight", shard: true });
     p.tick();
     p.send({ t: "fight", hit: true });
+    // Its death plays out first (OFFSPRING.death): nothing moves, a tap changes nothing, then the card.
+    const D = OFFSPRING.death, f0 = p.room.storyView().fight!;
+    expect(p.room.state.phase).toBe("playing");
+    expect(f0.dying).toEqual({ t0: f0.tick, ticks: D.ticks });
+    const at = { x: p.x.it.x, y: p.x.it.y };
+    p.tick(D.ticks - 1);
+    p.send({ t: "fight", hit: true });
+    expect(p.room.state.phase).toBe("playing");
+    expect(p.x.it).toMatchObject(at);
+    p.tick();
     expect(p.room.state.phase).toBe("results");
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
   });

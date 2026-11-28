@@ -120,6 +120,17 @@ class Sfx {
     const S = OFFSPRING_SFX, p = this.last, at = place(f), it = f.it;
     this.last = f;
     if (!p || f.tick <= p.tick) return;
+    // The kill: its death cry and the chimes as its light leaves it, at once; every loop let go; nothing else.
+    if (f.dying) {
+      if (!p.dying) {
+        this.play("kill");
+        this.drink = this.stop(this.drink, 0.2);
+        this.held = this.stop(this.held, 0.2);
+        this.gaze = this.stop(this.gaze);
+        duckFightMusic(false);
+      }
+      return;
+    }
     // Walking (one step every other tick), or the hurt crawl and the limp back (a scrape every third).
     const moved = Math.hypot(it.x - p.it.x, it.y - p.it.y) > 0.05 && !it.leap;
     if (moved && it.crawl) (this.walked = 0), ++this.limped % S.limpEvery === 1 && this.play("limp", at);

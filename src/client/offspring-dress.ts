@@ -81,6 +81,13 @@ export const FIGHT_LOOK = {
    * high), how far over he goes (degrees back), how long it takes him to get up at the end (ticks), and his daze:
    * stars round his head while he is down, and a puff of dust where he lands. The gameplay thread's starting picks.
    */
+  /**
+   * Its death (OFFSPRING.death; Ladi, 27 Nov 6:27 PM: "a dramatic kill scene where the light dissipates it"), in
+   * seconds from the last press: a flash, then it shakes and burns white from inside (`hot`), its light tears out
+   * of it and spirals up (`motes`, `rise`, `spread`), it comes apart and fades (`fade`: from, to), and a ring of
+   * light runs out over the ground (`ring`: at, speed). The gameplay thread's starting picks.
+   */
+  death: { flash: "#fff4d6", hot: "#ffe2a0", heat: 1.6, shake: 0.07, motes: 56, rise: 4.2, spread: 3.2, size: 0.5, fade: [1.5, 3.1] as const, ring: [2.4, 7] as const, ringColor: "#ffd890" },
   thrown: { flight: 0.6, high: 0.9, tilt: 78, rise: 0.9, stars: 3, starSize: 0.42, starSpin: 5, starColor: "#ffe38a", dust: "#b9a58a", dustSize: 2.2 },
   /**
    * The model: how wide (tiles) it is drawn; the back's stages (how many lights show, and the back's
@@ -229,6 +236,8 @@ export class OffspringFx {
   private leapT0 = -1;
   /** His throw: the stars of his daze and the dust where he lands (made on the first throw), and whether his root is tilted now. */
   private daze: { stars: THREE.Sprite[]; dust: THREE.Sprite } | null = null;
+  /** Its death under way: when it began (s), the light leaving it, the flash, the ring, and its own materials (cloned, so fading them fades only this one). */
+  private death: { at: number; motes: { s: THREE.Sprite; a: number; up: number; out: number; t0: number }[]; flash: THREE.Sprite; ring: THREE.Mesh; mats: THREE.MeshStandardMaterial[] } | null = null;
   private tilted: THREE.Object3D | null = null;
 
   constructor(glow: Glow) {
@@ -376,6 +385,7 @@ export class OffspringFx {
     this.eye.visible = !hidden || !!f.eye;
     this.stepPools(f, o, wx, wz);
     this.stepWarp(f, o.t, o.time, wx(x), wz(y), face);
+    this.stepDeath(f, o.time, wx(x), wz(y));
     // Untouchable: the shell breathes while it is away, and a tap on it throws a ring off the shell.
     const SF = L.safe, sm = this.shell.material as THREE.MeshBasicMaterial, rm = this.wardRing.material as THREE.MeshBasicMaterial;
     sm.opacity = f.safe ? SF.shell * (0.7 + 0.3 * Math.sin((o.time * 2 * Math.PI) / SF.breathe)) * Math.min(1, f.safe.left / 2) : 0;
@@ -657,7 +667,7 @@ export class OffspringFx {
       if (a) a.timeScale = 1.8 / Math.max(0.6, lp.ticks * 0.6);
     }
     if (M.once && o.time >= M.once.until) M.once = null;
-    const want = M.once?.name ?? (it.held ? "stunned" : it.eating ? "feed" : moving && it.crawl ? "crawl" : moving || up > 0.05 ? "walk" : "idle");
+    const want = f.dying && M.acts.has("die") ? "die" : M.once?.name ?? (it.held ? "stunned" : it.eating ? "feed" : moving && it.crawl ? "crawl" : moving || up > 0.05 ? "walk" : "idle");
     if (want !== M.now && M.acts.has(want)) {
       const from = M.acts.get(M.now), to = M.acts.get(want)!;
       to.reset().play();
@@ -690,6 +700,70 @@ export class OffspringFx {
     const hidden = !!it.hidden;
     M.root.visible = !hidden || !!f.eye;
     for (const m of M.parts) m.visible = !hidden || m === M.eye ? m.name.startsWith("light_") ? m.visible : true : false;
+  }
+
+  /** Its death: the light tears out of it and it comes apart (FIGHT_LOOK.death). */
+  private stepDeath(f: Fight, time: number, x: number, z: number) {
+    const D = FIGHT_LOOK.death, S = OFFSPRING.it.size;
+    if (!f.dying) return;
+    if (!this.death) {
+      const motes = Array.from({ length: D.motes }, (_, i) => {
+        const s = this.glow(i % 3 ? D.hot : D.flash, D.size * (0.6 + Math.random() * 0.8), 0);
+        this.all.add(s);
+        return { s, a: Math.random() * 2 * Math.PI, up: D.rise * (0.6 + Math.random() * 0.6), out: D.spread * (0.5 + Math.random() * 0.7), t0: 0.15 + (i / D.motes) * 1.9 };
+      });
+      const flash = this.glow(D.flash, S * 3, 0);
+      this.all.add(flash);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64), new THREE.MeshBasicMaterial({ color: D.ringColor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2;
+      this.all.add(ring);
+      // Its own materials, cloned so the fade is this body's alone.
+      const mats: THREE.MeshStandardMaterial[] = [];
+      (this.model?.root ?? this.it).traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !(m.material instanceof THREE.MeshStandardMaterial)) return;
+        const c = m.material.clone();
+        c.transparent = true;
+        c.userData.e0 = c.emissiveIntensity;
+        m.material = c;
+        mats.push(c);
+      });
+      this.death = { at: time, motes, flash, ring, mats };
+    }
+    const d = this.death, s = time - d.at, sm = (a: number, b: number) => Math.max(0, Math.min(1, (s - a) / (b - a)));
+    // It shakes, harder at first, as it burns white from inside.
+    const shake = D.shake * (1 - sm(0, 2));
+    this.it.position.x += (Math.random() * 2 - 1) * shake;
+    this.it.position.z += (Math.random() * 2 - 1) * shake;
+    const hot = sm(0, D.heat), gone = sm(D.fade[0], D.fade[1]);
+    for (const m of d.mats) {
+      m.emissive.set(D.hot);
+      m.emissiveIntensity = (m.userData.e0 as number) + 3.5 * hot * (1 - gone);
+      m.opacity = 1 - gone;
+    }
+    this.it.scale.setScalar(1 - 0.2 * gone);
+    // Its lights burn bright and go first.
+    if (this.model) for (const q of this.model.lights) (q.m.visible = gone < 0.6), q.m.scale.setScalar(1 + 1.5 * hot);
+    // The flash of the press, and a second as it goes.
+    const fl = Math.max(1 - sm(0, 0.4), Math.sin(Math.PI * sm(D.fade[1] - 0.5, D.fade[1] + 0.3)));
+    d.flash.position.set(x, 1.4, z);
+    d.flash.material.opacity = 0.7 * fl;
+    d.flash.scale.setScalar(S * (1.8 + 1.4 * fl));
+    // Its light, torn out of its back and spiralling up and away.
+    for (const m of d.motes) {
+      const k = sm(m.t0, m.t0 + 1.5), e = 1 - (1 - k) * (1 - k), a = m.a + e * 2.2;
+      m.s.visible = k > 0 && k < 1;
+      m.s.position.set(x + Math.cos(a) * m.out * e, 1.2 + m.up * e, z + Math.sin(a) * m.out * e);
+      m.s.material.opacity = Math.sin(Math.PI * k) * 0.95;
+    }
+    // A ring of light runs out over the ground as it is gone.
+    const r = s - D.ring[0];
+    d.ring.visible = r > 0;
+    if (r > 0) {
+      d.ring.position.set(x, 0.06, z);
+      d.ring.scale.setScalar(0.5 + D.ring[1] * r);
+      (d.ring.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.8 - r * 0.7);
+    }
   }
 
   /**
