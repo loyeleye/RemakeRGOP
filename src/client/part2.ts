@@ -42,7 +42,7 @@ export const HELD2: Record<string, Held> = {
     gap: 0.6,
     pictures: [
       { slot: "", hold: 1.5 },
-      { slot: "part2-a2-v1", hold: 3.5 },
+      { slot: "part2-a2-v2", hold: 3.5 },
       { slot: "part2-a3-v1", hold: 1.2, lines: [{ who: ["Rook"], text: "She sent me the long way.", quiet: true }] },
       { slot: "part2-a4-v2", hold: 1.2, lines: [{ who: ["Rook"], text: "Ground doesn't just go. Not like that.", quiet: true }] },
       { slot: "part2-a5-v2", hold: 3.5 },
