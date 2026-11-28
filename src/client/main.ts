@@ -25,7 +25,7 @@ import { Run2Room } from "../server/run2.js";
 import { Run1Room } from "../server/run1.js";
 import { RUN1 } from "../engine/run1.js";
 import { RUN2 } from "../engine/run2.js";
-import { campSfx, run1Sfx, run2Sfx } from "./part2-sfx.js";
+import { campSfx, p2Once, p2SfxLoad, run1Sfx, run2Sfx } from "./part2-sfx.js";
 import { campMusic, run2Music } from "./part2-music.js";
 import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
@@ -2514,6 +2514,11 @@ function heldScene(p: Piece) {
     pics[i]!.classList.add("on");
     if (m.cut) requestAnimationFrame(() => requestAnimationFrame(() => [pics[i - 1]!, pics[i]!].forEach((x) => (x.style.transition = ""))));
     if (m.hush) sound.fallsBedOff();
+    if (H.pictures.some((q) => q.sfx)) p2SfxLoad();
+    if (m.sfx) {
+      const n = m.sfx.name;
+      at(m.sfx.at, () => here() && p2Once(n));
+    }
     shake(i);
   };
   if (H.bed === "falls") sound.fallsBed();

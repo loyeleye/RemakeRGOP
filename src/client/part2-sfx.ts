@@ -19,7 +19,7 @@ export const PART2_SFX = {
   /** Each loop at full (build's guesses, for Ladi's ear). */
   /** Run 1: the wreck's air (the quietest thing in the game), fading as the flame tone comes up; the hush full within `near` tiles of a nightshade and gone past 3 (the README). */
   run1: { air: 0.22, airUnderFlame: 0.4, tone: 0.5, hush: { full: 1, gone: 3 } },
-  gains: { "wreck-air": 1, "flame-tone": 1, snuff: 0.7, "ember-catch": 0.8, "lamps-come": 0.8, hold: 0.8, mark: 0.8, "dark-close": 0.9, "camp-fire": 0.55, "shade-hush": 0.5, fizz: 0.7, cheer: 0.8, "light-lines": 0.9, "cage-light": 0.9, hands: 0.8 } as Record<string, number>,
+  gains: { "wreck-air": 1, "flame-tone": 1, snuff: 0.7, "ember-catch": 0.8, "lamps-come": 0.8, hold: 0.8, mark: 0.8, "dark-close": 0.9, "camp-fire": 0.55, "shade-hush": 0.5, fizz: 0.7, cheer: 0.8, "gate-bar": 0.8, "cart-latch": 0.8, "light-lines": 0.9, "cage-light": 0.9, hands: 0.8 } as Record<string, number>,
   /** Run 2's cheer has voices in it (a small crowd, no words found): Ladi's to allow or drop. Off, the music's last phrase carries the end. */
   cheer: true,
   /** The fire is full within `full` tiles and gone past `gone` (build). */
@@ -125,6 +125,21 @@ class CampSfx {
 }
 
 let camp: CampSfx | null = null;
+
+/** Part 2's held pictures: ask for the pack before the scene needs it. */
+export function p2SfxLoad() {
+  const o = audioOut();
+  if (o) load(o.c);
+}
+
+let scene: CampSfx | null = null;
+/** One of the pack's sounds once, now (a held picture's), if the pack is in. */
+export function p2Once(n: string) {
+  const o = audioOut();
+  if (!o || !buffers || !(NAMES as readonly string[]).includes(n)) return;
+  if (!scene || scene.bus.context !== o.c) scene = new CampSfx(o.c, o.o, buffers);
+  scene.once(n as Name);
+}
 
 /** Each frame of the camp walk: its loops. With no walk, they fade out. */
 export function campSfx(c: Camp | undefined) {

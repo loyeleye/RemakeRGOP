@@ -81,9 +81,10 @@ export interface Held {
   shape?: "four3";
   /**
    * `shake`: a layer (the same picture, alpha only where it moves) flicked on and off with a small
-   * offset while the picture is up; `cut`: in without a cross-fade; `fade`: its own cross-fade, in seconds.
+   * offset while the picture is up; `cut`: in without a cross-fade; `fade`: its own cross-fade, in seconds;
+   * `sfx`: one of Part 2's sounds (client/part2-sfx.ts), `at` seconds after the picture comes up.
    */
-  pictures: { slot: string; hold: number; lines?: { who: string[]; text: string; quiet?: true }[]; shake?: string; cut?: true; fade?: number; hush?: true }[];
+  pictures: { slot: string; hold: number; lines?: { who: string[]; text: string; quiet?: true }[]; shake?: string; cut?: true; fade?: number; hush?: true; sfx?: { name: string; at: number } }[];
   /** A sound under the whole scene: "falls", the falls, until a picture with `hush` drops it out. */
   bed?: "falls";
   /** A night goes by after it (main.ts nightPass), before the next piece opens. */
