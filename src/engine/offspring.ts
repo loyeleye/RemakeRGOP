@@ -254,11 +254,13 @@ export const OFFSPRING = {
    * (give or take `flingSpread`) off, any way, and lies lit until he taps it (within his pull's
    * reach): then it flies home to the fire by itself (`home`). It goes for the shard, then loose
    * light nearest first (`straysFirst`), and only then the fire. While it sits on the fire nothing
-   * banks (`block`): light sent home waits at the rim. The brazier is solid to its body (`solid`).
+   * banks (`block`): light sent home waits at the rim. The brazier is solid to its body (`solid`). Pinned against it for `overFire` ticks with what
+   * it wants across it, it leaps over the fire to that side in `overTicks` ticks (Ladi, 27 Nov 6:20 PM; 0 for off; the
+   * 2 and 2 are the gameplay thread's picks). Off: ?fight=hunt.overFire:0.
    * Solenne no longer holds: full, she flares and stuns it where it stands for `stun` ticks. No
    * hops while the shard glows or its eye turns (`hopShard` 0).
    */
-  hunt: { on: 1, stun: 4, tears: 3, home: 0, block: 0, hopShard: 0, fling: 6, flingSpread: 2, straysFirst: 1, solid: 1, bolt: 1, boltMin: 9, boltTicks: 3, away: 12, flingHeld: 1, safe: 1 },
+  hunt: { on: 1, stun: 4, tears: 3, home: 0, block: 0, hopShard: 0, fling: 6, flingSpread: 2, straysFirst: 1, solid: 1, bolt: 1, boltMin: 9, boltTicks: 3, away: 12, flingHeld: 1, safe: 1, overFire: 2, overTicks: 2 },
   /*
    * The jump (gameplay thread, trial-jump-delta.patch, from Ladi 27 Nov 4:46 PM: "after 2 or 3 taps it
    * jumps to safety", and "Besides tapping which feels kind of like a different game"):

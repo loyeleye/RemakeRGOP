@@ -483,7 +483,8 @@ export class FightRoom {
       const nx = it.x + (Math.cos(want) * step), ny = it.y + (Math.sin(want) * step);
       this.moveTo(nx, ny);
       this.knockdown(from, l.after);
-    }
+      if (this.overFire(l.at, Math.hypot(it.x - from.x, it.y - from.y))) return;
+    } else this.stuck = 0;
     // Reached it.
     if (Math.hypot(l.at.x - it.x, l.at.y - it.y) > reach) {
       it.eat = 0;
@@ -529,6 +530,31 @@ export class FightRoom {
     if (ok(nx, ny)) (this.it.x = nx), (this.it.y = ny);
     else if (ok(nx, this.it.y)) this.it.x = nx;
     else if (ok(this.it.x, ny)) this.it.y = ny;
+  }
+  /** Ticks in a row it has wanted to walk and not got anywhere (against the brazier). */
+  private stuck = 0;
+
+  /**
+   * Pinned against the brazier with what it wants right across it: it leaps over the fire to that side
+   * (Ladi, 27 Nov 6:20 PM: "If its stuck in the same spot it should jump to that side"). True if it leapt.
+   */
+  private overFire(to: { x: number; y: number }, moved: number) {
+    const O = OFFSPRING, J = O.hunt, c = this.game.board.center, it = this.it;
+    if (!J.on || !J.solid || this.run !== 4 || !J.overFire) return false;
+    const ring = O.it.size / 2 + 1.5, here = Math.hypot(it.x - c.x, it.y - c.y);
+    this.stuck = moved < 0.05 && here < ring + 1 ? this.stuck + 1 : 0;
+    if (this.stuck < J.overFire) return false;
+    // Over the middle of the fire, landing clear of its ring on the far side, toward what it wants.
+    const a = Math.atan2(to.y - c.y, to.x - c.x);
+    for (let d = ring + 0.5; d <= ring + 4; d += 0.5) {
+      const q = { x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d };
+      if (oyRoom(q.x - c.x, q.y - c.y) < -O.it.size / 2) {
+        this.stuck = 0;
+        this.leapTo(q, J.overTicks);
+        return true;
+      }
+    }
+    return false;
   }
 
   private eat(w: Wisp) {

@@ -24,6 +24,8 @@ export const MOODS: Record<string, readonly string[]> = {
   Moth: ["neutral", "talking", "grave"],
   Garrick: ["neutral", "talking", "pleased"],
   Marit: ["neutral", "talking", "satisfied"],
+  /** One face for now: the cast art thread's hooded "cold" draft (24 Nov), at Ladi's ask (27 Nov 6:19 PM). */
+  Solenne: ["cold"],
 };
 
 const RULES: [who: string, match: RegExp, mood: string][] = [

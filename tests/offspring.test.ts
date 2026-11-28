@@ -531,6 +531,30 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       return p;
     };
 
+    it("pinned against the brazier with him right across it, it leaps over the fire to his side (off with hunt.overFire 0)", () => {
+      const hop = OFFSPRING.hop.on;
+      OFFSPRING.hop.on = 0;
+      for (const over of [2, 0]) {
+        OFFSPRING.hunt.overFire = over;
+        const p = loose(), c = p.c;
+        p.send({ t: "fight", hit: true });
+        p.x.wound.open = false;
+        p.x.it.x = c.x - 3.2;
+        p.x.it.y = c.y;
+        p.x.it.face = 0;
+        const me = pt(c.x + 5, c.y);
+        let leapt = false;
+        for (let i = 0; i < 6; i++) (p.me.pos = p.me.prev = me), (p.x.shard.shown = true), p.tick(), (leapt ||= !!p.x.it.leap);
+        expect(leapt).toBe(over > 0);
+        if (over) {
+          p.tick(OFFSPRING.hunt.overTicks + 1);
+          expect(p.x.it.x).toBeGreaterThan(c.x + 2);
+        } else expect(p.x.it.x).toBeLessThan(c.x - 2.5);
+      }
+      OFFSPRING.hunt.overFire = 2;
+      OFFSPRING.hop.on = hop;
+    });
+
     it("her four hunt lines (Ladi's pick), each once, the first time its hint shows", () => {
       const p = play(4), H = OFFSPRING.teach.huntSay;
       for (let i = 0; i < 12; i++) p.tick();
