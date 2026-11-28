@@ -31,10 +31,10 @@ const ctx = {
     s.stop = () => log.push(`stop ${s.buffer!.n}`);
     return s;
   },
-  decodeAudioData: (b: ArrayBuffer) => Promise.resolve({ n: new TextDecoder().decode(b).replace("p2-off-", "") }),
+  decodeAudioData: (b: ArrayBuffer) => Promise.resolve({ n: new TextDecoder().decode(b).replace(/^p2-(off-)?/, "") }),
 };
 vi.mock("../src/client/sound.js", () => ({ SOUND: { musicGain: 0.45 }, audioOut: () => ({ c: ctx, o: new FakeNode() }) }));
-const names = ["step", "limp", "wake", "alert", "eat", "drink", "eye-turn", "gaze", "catch", "loss", "strike", "hurt", "tear", "light-land", "bolt", "bolt-land", "ward", "stun", "held", "hop", "land", "knockdown", "kill"].map((n) => `p2-off-${n}`);
+const names = ["step", "limp", "wake", "alert", "eat", "drink", "eye-turn", "gaze", "catch", "loss", "strike", "hurt", "tear", "light-land", "bolt", "bolt-land", "ward", "stun", "held", "hop", "land", "knockdown", "kill"].map((n) => `p2-off-${n}`).concat(["p2-rook-hit-1", "p2-rook-hit-2"]);
 globalThis.fetch = (() => Promise.resolve({ ok: true, json: () => Promise.resolve(Object.fromEntries(names.map((n) => [n, btoa(n)]))) })) as unknown as typeof fetch;
 const { offspringSfx } = await import("../src/client/offspring-sfx.js");
 
@@ -69,6 +69,12 @@ describe("the offspring's sounds", () => {
     await go((f) => ({ ...f, it: { ...f.it, x: 4, inside: 4 }, bolt: { from: { x: 4, y: 0 }, to: { x: 14, y: 0 }, t0, ticks: 3, away: 12 } }));
     for (let k = 0; k < 3; k++) await go((f) => ({ ...f, it: { ...f.it, x: 14, inside: 4, leap: { from: { x: 4, y: 0 }, to: { x: 14, y: 0 }, t0, ticks: 3 } }, bolt: { from: { x: 4, y: 0 }, to: { x: 14, y: 0 }, t0, ticks: 3, away: 12 } }));
     expect(log).toEqual(["play strike", "play hurt", "play tear", "play bolt", "play bolt-land"]);
+    log.length = 0;
+    // It throws him, twice: the hit each time, and his grunt, never the same one twice running.
+    await go((f) => ({ ...f, it: { ...f.it, x: 14, inside: 4 }, down: 3 }));
+    await go((f) => ({ ...f, it: { ...f.it, x: 14, inside: 4 }, down: 0 }));
+    await go((f) => ({ ...f, it: { ...f.it, x: 14, inside: 4 }, down: 3 }));
+    expect(log).toEqual(["play knockdown", "play rook-hit-1", "play knockdown", "play rook-hit-2"]);
     log.length = 0;
     offspringSfx(undefined, false, { won: true, caught: false });
     expect(log).toEqual(["play kill"]);

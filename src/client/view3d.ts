@@ -4465,6 +4465,11 @@ export class World {
     }
     for (const [id, rig] of this.players)
       if (!seenP.has(id)) (this.scene.remove(rig.root), this.scene.remove(rig.beam), this.players.delete(id));
+    // The offspring fight: Rook thrown by it (offspring-dress.ts), over where his figure was just put.
+    if (st.fight && this.fightFx) {
+      const b2 = st.shrine.board;
+      this.fightFx.throwRook({ f: st.fight, t: st.t, time, half: { w: b2.width / 2, h: b2.height / 2 }, rook: this.players.get(st.me)?.root ?? null });
+    }
 
     // My reach square and walk marker.
     const me = st.snap.players.find((p) => p.id === st.me);

@@ -77,6 +77,12 @@ export const FIGHT_LOOK = {
    */
   warp: { strength: 2.2, high: 2.4, pull: 0.9, shimmer: 0.35, motes: 14, color: "#e8f6ff", size: 0.35 },
   /**
+   * Rook thrown (a knockdown, Ladi 27 Nov 5:55 PM): his flight from his old spot to his new one (ticks, and how
+   * high), how far over he goes (degrees back), how long it takes him to get up at the end (ticks), and his daze:
+   * stars round his head while he is down, and a puff of dust where he lands. The gameplay thread's starting picks.
+   */
+  thrown: { flight: 0.6, high: 0.9, tilt: 78, rise: 0.9, stars: 3, starSize: 0.42, starSpin: 5, starColor: "#ffe38a", dust: "#b9a58a", dustSize: 2.2 },
+  /**
    * The model: how wide (tiles) it is drawn; the back's stages (how many lights show, and the back's
    * glow, at full, more than half, some, and empty: Ladi's four); a faint warm rim on its body and
    * arms (the cast thread's ask, for the camera above); how far the wound opens (its y
@@ -146,6 +152,27 @@ function poolTexture() {
 
 type Glow = (color: string, size: number, opacity?: number) => THREE.Sprite;
 const TMP_Q = new THREE.Quaternion(), Y_AXIS = new THREE.Vector3(0, 1, 0);
+/** A small four-pointed star, for his daze. */
+function starTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  g.translate(32, 32);
+  g.fillStyle = "#ffffff";
+  g.shadowColor = "#ffffff";
+  g.shadowBlur = 8;
+  g.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i * Math.PI) / 4, r = i % 2 ? 7 : 26;
+    g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  g.closePath();
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const TMP_V = new THREE.Vector3();
 
 export class OffspringFx {
   readonly all = new THREE.Group();
@@ -200,6 +227,9 @@ export class OffspringFx {
   private lensCone = "";
   private drawn: THREE.Sprite[] = [];
   private leapT0 = -1;
+  /** His throw: the stars of his daze and the dust where he lands (made on the first throw), and whether his root is tilted now. */
+  private daze: { stars: THREE.Sprite[]; dust: THREE.Sprite } | null = null;
+  private tilted: THREE.Object3D | null = null;
 
   constructor(glow: Glow) {
     this.glow = glow;
@@ -660,6 +690,67 @@ export class OffspringFx {
     const hidden = !!it.hidden;
     M.root.visible = !hidden || !!f.eye;
     for (const m of M.parts) m.visible = !hidden || m === M.eye ? m.name.startsWith("light_") ? m.visible : true : false;
+  }
+
+  /**
+   * After the figures are placed: Rook thrown, flown along an arc from his old spot to his new one and tipped
+   * over backwards, lying there dazed (stars round his head) while he is down, then back up.
+   */
+  throwRook(o: { f: Fight; t: number; time: number; half: { w: number; h: number }; rook: THREE.Object3D | null }) {
+    const T = FIGHT_LOOK.thrown, th = o.f.thrown, R = o.rook;
+    const e = th ? o.f.tick - th.tick + Math.max(0, Math.min(1, o.t)) : 99;
+    const on = !!th && !!R && e >= 0 && e < th.ticks + 0.05;
+    if (!on) {
+      if (this.tilted) (this.tilted.quaternion.identity(), (this.tilted = null));
+      if (this.daze) (this.daze.stars.forEach((s) => (s.visible = false)), (this.daze.dust.visible = false));
+      return;
+    }
+    if (!this.daze) {
+      const tex = starTexture(), stars: THREE.Sprite[] = [];
+      for (let i = 0; i < T.stars; i++) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: T.starColor, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+        s.scale.setScalar(T.starSize);
+        s.renderOrder = 5;
+        this.all.add(s);
+        stars.push(s);
+      }
+      const dust = this.glow(T.dust, T.dustSize, 0);
+      this.all.add(dust);
+      this.daze = { stars, dust };
+    }
+    const wx = (px: number) => px + 0.5 - o.half.w, wz = (py: number) => py + 0.5 - o.half.h;
+    const a = { x: wx(th.from.x), z: wz(th.from.y) }, b = { x: wx(th.to.x), z: wz(th.to.y) };
+    const k = Math.min(1, e / T.flight), ease = 1 - (1 - k) * (1 - k);
+    let dx = b.x - a.x, dz = b.z - a.z;
+    const len = Math.hypot(dx, dz) || 1;
+    (dx /= len), (dz /= len);
+    // In the air along the arc, then where he fell (a small bounce as he hits).
+    const bounce = k >= 1 ? Math.max(0, Math.sin(Math.min(1, (e - T.flight) / 0.25) * Math.PI)) * 0.08 : 0;
+    R.position.set(a.x + (b.x - a.x) * ease, Math.sin(Math.PI * k) * T.high + bounce, a.z + (b.z - a.z) * ease);
+    // Tipped over backwards, head along the throw; up again over the last `rise` ticks.
+    const up = Math.max(0, Math.min(1, (e - (th.ticks - T.rise)) / T.rise));
+    const tilt = ((T.tilt * Math.PI) / 180) * ease * (1 - up * up * (3 - 2 * up));
+    R.quaternion.setFromAxisAngle(TMP_V.set(dz, 0, -dx), tilt);
+    this.tilted = R;
+    // His daze: stars circling where his head is, from the moment he lands until he is up.
+    const head = TMP_V.set(0, 1.55, 0).applyQuaternion(R.quaternion).add(R.position);
+    const fade = Math.min(1, Math.max(0, (e - T.flight * 0.6) / 0.2)) * (1 - Math.max(0, up - 0.6) / 0.4);
+    this.daze.stars.forEach((s, i) => {
+      const ang = o.time * T.starSpin + (i * 2 * Math.PI) / T.stars;
+      s.visible = fade > 0.01;
+      s.position.set(head.x + Math.cos(ang) * 0.35, head.y + 0.25 + Math.sin(ang * 2) * 0.05, head.z + Math.sin(ang) * 0.35);
+      (s.material as THREE.SpriteMaterial).opacity = fade * (0.75 + 0.25 * Math.sin(o.time * 11 + i));
+      (s.material as THREE.SpriteMaterial).rotation = o.time * 3 + i;
+    });
+    // Dust where he hits the ground.
+    const d = (e - T.flight) / 0.7;
+    const D = this.daze.dust;
+    D.visible = d >= 0 && d < 1;
+    if (D.visible) {
+      D.position.set(b.x + dx * 0.8, 0.25 + d * 0.3, b.z + dz * 0.8);
+      D.scale.setScalar(T.dustSize * (0.5 + d));
+      D.material.opacity = 0.55 * (1 - d);
+    }
   }
 
   dispose() {

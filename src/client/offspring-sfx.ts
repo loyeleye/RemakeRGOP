@@ -1,4 +1,4 @@
-// Runs 3 and 4: the offspring's own sounds (the gameplay thread's DRAFT pack, 27 Nov:
+// Runs 3 and 4: the offspring's own sounds, and Rook's grunt when it throws him (p2-rook-hit-1, -2) (the gameplay thread's DRAFT pack, 27 Nov:
 // gameplay/audio/part2/offspring/, its README the cue sheet). ElevenLabs sound effects, shipped only
 // inside music/p2-fight.pack.json with the fight music stems (base64 by name), never as loose files.
 //
@@ -26,10 +26,15 @@ export const OFFSPRING_SFX = {
   drinkFade: [0.2, 0.3] as const,
   /** A flung light lands this long after it is torn out (the view's arc, offspring-dress.ts). */
   flight: 0.55,
+  /** Rook's grunt when he is thrown, this long after the hit (s): Gemini, in his voice, a semitone down. */
+  gruntAfter: 0.05,
 };
 
-const NAMES = ["step", "limp", "wake", "alert", "eat", "drink", "eye-turn", "gaze", "catch", "loss", "strike", "hurt", "tear", "light-land", "bolt", "bolt-land", "ward", "stun", "held", "hop", "land", "knockdown", "kill"] as const;
+const NAMES = ["step", "limp", "wake", "alert", "eat", "drink", "eye-turn", "gaze", "catch", "loss", "strike", "hurt", "tear", "light-land", "bolt", "bolt-land", "ward", "stun", "held", "hop", "land", "knockdown", "kill", "rook-hit-1", "rook-hit-2"] as const;
 type Name = (typeof NAMES)[number];
+
+/** Its sounds are `p2-off-<name>` in the pack; Rook's own, `p2-<name>`. */
+const key = (n: Name) => (n.startsWith("rook-") ? `p2-${n}` : `p2-off-${n}`);
 
 let buffers: Partial<Record<Name, AudioBuffer>> | null = null;
 let asked = false;
@@ -40,8 +45,8 @@ function load(c: AudioContext) {
     .then((r) => (r.ok ? (r.json() as Promise<Record<string, string>>) : Promise.reject(new Error(String(r.status)))))
     .then((b64s) =>
       Promise.all(
-        NAMES.filter((n) => b64s[`p2-off-${n}`]).map((n) =>
-          c.decodeAudioData(Uint8Array.from(atob(b64s[`p2-off-${n}`]!), (ch) => ch.charCodeAt(0)).buffer).then((b) => [n, b] as const),
+        NAMES.filter((n) => b64s[key(n)]).map((n) =>
+          c.decodeAudioData(Uint8Array.from(atob(b64s[key(n)]!), (ch) => ch.charCodeAt(0)).buffer).then((b) => [n, b] as const),
         ),
       ),
     )
@@ -69,6 +74,8 @@ class Sfx {
   held: Voice | null = null;
   gaze: Voice | null = null;
   walked = 0;
+  /** Which of Rook's two grunts is next, so a throw never sounds the same twice running. */
+  grunt = 0;
   limped = 0;
   constructor(
     private c: AudioContext,
@@ -154,8 +161,8 @@ class Sfx {
     const L = it.leap, bolt = !!f.bolt && L?.t0 === f.bolt.t0;
     if (L && !bolt && L.t0 !== p.it.leap?.t0) this.play("hop", at);
     if (L && !bolt && f.tick === L.t0 + L.ticks) this.play("land", at);
-    // It ran through him or landed on him.
-    if (f.down > p.down) this.play("knockdown");
+    // It ran through him or landed on him: the hit, and his grunt as it knocks the wind out of him.
+    if (f.down > p.down) (this.play("knockdown"), this.play(this.grunt++ % 2 ? "rook-hit-2" : "rook-hit-1", undefined, S.gruntAfter));
   }
 
   /** The fight is over: the kill, or the loss when it caught him twice. */

@@ -54,6 +54,8 @@ export class FightRoom {
   private cycle = 0;
   private catches = 0;
   private down = 0;
+  /** His last throw (a knockdown), for the view's flight. */
+  private thrown: { from: { x: number; y: number }; to: { x: number; y: number }; tick: number; ticks: number } | null = null;
   private pulling = 0;
   private hurtUntil = -1;
   private eye = 0;
@@ -178,6 +180,7 @@ export class FightRoom {
     this.hopAt = -1;
     this.catches = 0;
     this.down = 0;
+    this.thrown = null;
     this.pulling = 0;
     this.wound = { open: false, timer: 0 };
     this.eye = 0;
@@ -432,14 +435,9 @@ export class FightRoom {
     if (HU.on && E.on && (this.eye > 0 || this.gaze > 0)) {
       // Its eye is turning: it stands and stares (locked, or tracking him), and at the end he is caught if he is in its cone with the shard still lit.
       const me = this.spot(YOU);
-      if (!E.lock || E.track) {
-        const w = Math.atan2(me.y - it.y, me.x - it.x);
-        let d = w - it.face;
-        while (d > Math.PI) d -= 2 * Math.PI;
-        while (d < -Math.PI) d += 2 * Math.PI;
-        const tn = ((this.eye > 0 ? (E.lock ? E.track : I.turn) : E.sweep) * Math.PI) / 180;
-        it.face += Math.abs(d) <= tn ? d : Math.sign(d) * tn;
-      }
+      // The sweep after him comes after the look, so he is caught only by the cone he was shown (Ladi, 27 Nov 5:58 PM:
+      // the cone swung onto him and caught him on the same tick).
+      const sweepTn = ((this.eye > 0 ? (E.lock ? E.track : I.turn) : E.sweep) * Math.PI) / 180;
       // The eye turned: one look, and then the gaze holds for eye.hold more ticks, sweeping after him; he is caught on any tick he is in it.
       const turned = this.eye > 0 ? --this.eye === 0 : true;
       if (this.eye === 0 && turned) {
@@ -449,7 +447,17 @@ export class FightRoom {
         while (off > Math.PI) off -= 2 * Math.PI;
         while (off < -Math.PI) off += 2 * Math.PI;
         const d = Math.hypot(me.x - it.x, me.y - it.y) - I.size / 2;
-        if (this.shard.glow > 0 && Math.abs(off) <= (E.cone * Math.PI) / 180 && d <= E.range + E.slack) (this.stats.hits++, this.caught());
+        if (this.shard.glow > 0 && Math.abs(off) <= (E.cone * Math.PI) / 180 && d <= E.range + E.slack) {
+          this.stats.hits++;
+          return this.caught();
+        }
+      }
+      if ((!E.lock || E.track) && (this.eye > 0 || this.gaze > 0)) {
+        const w = Math.atan2(me.y - it.y, me.x - it.x);
+        let d = w - it.face;
+        while (d > Math.PI) d -= 2 * Math.PI;
+        while (d < -Math.PI) d += 2 * Math.PI;
+        it.face += Math.abs(d) <= sweepTn ? d : Math.sign(d) * sweepTn;
       }
       return;
     }
@@ -572,6 +580,7 @@ export class FightRoom {
         break;
       }
     }
+    this.thrown = { from: { x: px, y: py }, to: { x: me.pos.x, y: me.pos.y }, tick: g.tick, ticks: K.down };
     me.path = [];
     me.pathGoal = null;
     g.command(YOU, { action: { kind: "idle" } });
@@ -697,6 +706,7 @@ export class FightRoom {
   private landedOn() {
     const K = OFFSPRING.knockdown, g = this.game, it = this.it, me = this.player(YOU);
     if (!K.on || this.down > 0) return;
+    const px = me.pos.x, py = me.pos.y;
     const d = Math.hypot(me.pos.x - it.x, me.pos.y - it.y);
     // Only under its body: he may wait right behind where it lands.
     if (d >= OFFSPRING.it.size / 2) return;
@@ -709,6 +719,7 @@ export class FightRoom {
         break;
       }
     }
+    this.thrown = { from: { x: px, y: py }, to: { x: me.pos.x, y: me.pos.y }, tick: g.tick, ticks: K.down };
     me.path = [];
     me.pathGoal = null;
     g.command(YOU, { action: { kind: "idle" } });
@@ -861,11 +872,12 @@ export class FightRoom {
   }
 
   /** Solenne's order for a teaching step, once a run, and never on a retry. */
-  private say(key: keyof typeof OFFSPRING.teach.say) {
+  private say(key: keyof typeof OFFSPRING.teach.say | keyof typeof OFFSPRING.teach.huntSay) {
     if (this.teach.retry || this.teach.said.has(key)) return;
     this.teach.said.add(key);
+    const T = OFFSPRING.teach, hunt = OFFSPRING.hunt.on && this.run === 4 && key in T.huntSay;
     // Over her, as her other lines are; text only, no voice yet.
-    this.lines.push({ who: SOLENNE, text: OFFSPRING.teach.say[key], player: SOL_ID, quiet: true });
+    this.lines.push({ who: SOLENNE, text: hunt ? T.huntSay[key as keyof typeof T.huntSay] : T.say[key as keyof typeof T.say], player: SOL_ID, quiet: true });
   }
 
   /** Run 4's teaching: which step's hint is up, and its caption the first time. */
@@ -897,7 +909,9 @@ export class FightRoom {
     if (!id && t.timed && g.tick < t.timed.until) id = t.timed.id;
     // Her order: at once for the shard, the cover, the lure and the loose wound; the strike and the pull only if he waits.
     t.wait = id !== t.hint ? 0 : id === "pull" || (id === "strike" && this.behind()) ? t.wait + 1 : t.wait;
-    if (id && id !== "far" && id !== "home" && id !== "eye" && (id === "strike" || id === "pull" ? t.wait >= T.wait : id !== t.hint)) this.say(id);
+    // In the hunt, her four lines: each the first time its hint shows.
+    if (HU && id && id in T.huntSay && id !== t.hint) this.say(id as keyof typeof T.huntSay);
+    else if (id && id !== "far" && id !== "home" && id !== "eye" && !(HU && id in T.huntSay) && (id === "strike" || id === "pull" ? t.wait >= T.wait : id !== t.hint)) this.say(id);
     t.hint = id;
   }
 
@@ -946,6 +960,8 @@ export class FightRoom {
   private caught() {
     const O = OFFSPRING, H = O.her, g = this.game, me = this.spot(YOU);
     this.catches++;
+    // A catch ends its look: one gaze catches once.
+    this.eye = this.gaze = 0;
     // A catch shuts the wound and his hand closes on the shard, so the save is a real second chance.
     if (O.wound.loose) {
       this.shard = { shown: false, glow: 0 };
@@ -1027,6 +1043,7 @@ export class FightRoom {
       cycle: this.cycle,
       catches: this.catches,
       down: this.down,
+      ...(this.thrown && g.tick <= this.thrown.tick + this.thrown.ticks + 1 ? { thrown: this.thrown } : {}),
       pulling: this.pulling,
       // Its eye turning (left of of), then its gaze holding (gaze of hold, the eye fully turned), seen at any distance.
       ...(this.run === 4 && O.hunt.on && O.eye.on && (this.eye > 0 || this.gaze > 0) ? { eye: { left: this.eye, of: O.eye.ticks, cone: O.eye.cone, r: O.eye.range + O.eye.slack, ...(this.eye === 0 ? { gaze: this.gaze, hold: O.eye.hold } : {}) } } : {}),

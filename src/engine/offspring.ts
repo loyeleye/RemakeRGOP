@@ -185,6 +185,17 @@ export const OFFSPRING = {
       /** The first loose wound, as she lets go: the story thread's draft 1, picked by Ladi (27 Nov 3:35 PM). Text only, no voice. */
       loose: "It is still open, and it is coming for the shard. Pull while it walks, and cover before it reaches you.",
     },
+    /**
+     * Her lines in the hunt, in place of the strike and pull above: the story thread's four, approved by Ladi as
+     * worded (27 Nov 5:59 PM, "Those 4 lines are good"). Each once, the first time its hint shows. Text only: a
+     * voice take needs Ladi's own yes.
+     */
+    huntSay: {
+      strike: "It cannot see you. Go round it and strike its back.",
+      pull: "Tear the light out of it while the wound holds.",
+      home: "Send what falls to the fire before it eats it again.",
+      eye: "Its eye is on you. Move, or cover the shard.",
+    },
     /** The hint bubbles: PLACEHOLDER WORDING, the gameplay thread's to word. */
     hint: {
       show: { key: "Press Space to show the shard.", tap: "Tap Show shard." },

@@ -191,6 +191,8 @@ export interface StoryView {
     cycle: number;
     catches: number;
     down: number;
+    /** He was just thrown (a knockdown): from where to where, on which tick, and for how many ticks he is down. */
+    thrown?: { from: { x: number; y: number }; to: { x: number; y: number }; tick: number; ticks: number };
     pulling: number;
     /** Run 4's teaching (OFFSPRING.teach): the hint bubble to show now, and round 1's mark where to stand. */
     /** The hunt (OFFSPRING.hunt, .eye): its eye turning, ticks left of `of`, its cone either side of its facing (degrees) and how far it reaches (tiles from its front edge); the fire shut while it sits on it; light flung out of the wound lately, from its back to where it fell. */

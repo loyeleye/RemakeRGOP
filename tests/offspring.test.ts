@@ -454,12 +454,14 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       p.x.it.face = 0;
       p.me.pos = p.me.prev = pt(sol.x - 5, sol.y);
       const was = { ...p.me.pos };
-      let downSeen = 0;
-      for (let i = 0; i < 4; i++) (p.tick(), (downSeen = Math.max(downSeen, p.room.state.down)));
+      let downSeen = 0, thrown: NonNullable<ReturnType<typeof p.room.storyView>["fight"]>["thrown"];
+      for (let i = 0; i < 4; i++) (p.tick(), (downSeen = Math.max(downSeen, p.room.state.down)), (thrown ??= p.room.storyView().fight!.thrown));
       if (on) {
         expect(downSeen).toBe(OFFSPRING.knockdown.down);
+        // The view has his flight, from where he stood to where he fell, for the ticks he is down.
+        expect(thrown).toMatchObject({ from: was, to: { x: p.me.pos.x, y: p.me.pos.y }, ticks: OFFSPRING.knockdown.down });
         expect(Math.abs(p.me.pos.y - was.y)).toBeGreaterThanOrEqual(2);
-      } else expect(downSeen).toBe(0);
+      } else (expect(downSeen).toBe(0), expect(thrown).toBeUndefined());
     }
     OFFSPRING.knockdown.on = 1;
   });
@@ -528,6 +530,16 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       p.me.pos = p.me.prev = pt(Math.round(it.x - Math.cos(it.face) * d), Math.round(it.y - Math.sin(it.face) * d));
       return p;
     };
+
+    it("her four hunt lines (Ladi's pick), each once, the first time its hint shows", () => {
+      const p = play(4), H = OFFSPRING.teach.huntSay;
+      for (let i = 0; i < 12; i++) p.tick();
+      expect(p.room.storyView().fight!.teach?.hint).toBe("strike");
+      expect(p.lines.filter((l) => l.text === H.strike).length).toBe(1);
+      expect(p.lines.some((l) => l.text === OFFSPRING.teach.say.strike)).toBe(false);
+      for (let i = 0; i < 6; i++) p.tick();
+      expect(p.lines.filter((l) => l.text === H.strike).length).toBe(1);
+    });
 
     it("strikes from behind whenever it isn't looking, held or not, and each pull flings a light that lies loose and lit, to be pulled to the fire", () => {
       const p = loose();
@@ -637,6 +649,42 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       p.me.pos = p.me.prev = pt(Math.round(it.x + Math.cos(it.face) * 3), Math.round(it.y + Math.sin(it.face) * 3));
       p.tick();
       expect(p.room.state.catches).toBe(before + 1);
+    });
+
+    it("the gaze catches him only with the cone he was shown, and only once", () => {
+      const E = OFFSPRING.eye;
+      const p = loose(2);
+      p.send({ t: "fight", hit: true });
+      p.x.wound.open = false;
+      for (let i = 0; i < 30 && !p.room.storyView().fight!.eye; i++) {
+        const it = p.x.it;
+        p.me.pos = p.me.prev = pt(Math.round(it.x + Math.cos(it.face) * 2.5), Math.round(it.y + Math.sin(it.face) * 2.5));
+        p.tick();
+      }
+      const it = p.x.it, before = p.room.state.catches;
+      // Just outside the shown cone's edge, where one sweep would reach him: not caught on that tick.
+      const at = (deg: number) => {
+        const a = it.face + (deg * Math.PI) / 180;
+        p.me.pos = p.me.prev = pt(Math.round(it.x + Math.cos(a) * 4), Math.round(it.y + Math.sin(a) * 4));
+        let off = Math.atan2(p.me.pos.y - it.y, p.me.pos.x - it.x) - it.face;
+        while (off > Math.PI) off -= 2 * Math.PI;
+        while (off < -Math.PI) off += 2 * Math.PI;
+        return Math.abs(off) * 180 / Math.PI;
+      };
+      for (let i = 0; i < E.ticks; i++) {
+        // Keep him a little outside the cone as it is drawn now, each tick.
+        let deg = E.cone + 6;
+        while (at(deg) <= E.cone + 1) deg += 2;
+        p.tick();
+        expect(p.room.state.catches).toBe(before);
+      }
+      // Into the middle of its gaze: caught once, and the look ends.
+      for (let i = 0; i < E.hold; i++) {
+        at(0);
+        p.tick();
+      }
+      expect(p.room.state.catches).toBe(before + 1);
+      expect(p.room.storyView().fight!.eye).toBeUndefined();
     });
 
     it("in the dark nothing of it shows unless a light has it; its eye shows at any distance", () => {
