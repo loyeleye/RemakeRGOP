@@ -507,7 +507,8 @@ export class FightRoom {
         return;
       }
       case "brazier": {
-        if (this.part === "kill") return;
+        // In the kill it drinks at the fire but is given nothing: the look of drinking, and its back to him.
+        if (this.part === "kill") return void (it.eat = 1);
         if (++it.eat < (this.run === 4 ? I.eatBanked4 : I.eatBanked)) return;
         const id = [...this.banked].pop()!;
         this.stats.drunk++;
@@ -855,7 +856,7 @@ export class FightRoom {
     return !W.reach || Math.hypot(me.x - this.it.x, me.y - this.it.y) <= W.reach + OFFSPRING.it.size / 2;
   }
 
-  /** The wound shuts when the shard is covered, and when her hold ends (from round 2, with the shard out, not: it stays open, loose). The tenth wisp banked with it still open is the last press. */
+  /** The wound shuts when the shard is covered, and when her hold ends (from round 2, with the shard out, not: it stays open, loose). In the kill it shuts: the last press is a strike while it drinks. */
   private stepWound() {
     const keep = (OFFSPRING.hunt.on || (OFFSPRING.wound.loose && this.cycle >= OFFSPRING.wound.looseFrom)) && this.wound.open;
     if (!this.shard.shown || (!this.it.held && !keep)) {
@@ -864,7 +865,21 @@ export class FightRoom {
       this.pulling = 0;
       return;
     }
-    if (this.wound.open && this.part === "kill") return this.win();
+    // In the kill it is empty, so the wound has nothing left to give: it shuts, and the kill is a strike in its back while it drinks (Ladi, 27 Nov 10:03 PM).
+    if (this.wound.open && this.part === "kill") {
+      this.wound = { open: false, timer: 0 };
+      this.pulling = 0;
+    }
+  }
+
+  /** The kill's last press: it is at the fire drinking (empty; her blast may hold it there too), and he is behind it. */
+  private atFire() {
+    const I = OFFSPRING.it, c = this.game.board.center;
+    return Math.hypot(c.x - this.it.x, c.y - this.it.y) <= I.reachBrazier + I.size / 2 + 0.1;
+  }
+  private killable() {
+    const L = this.it.leap;
+    return this.part === "kill" && this.atFire() && this.behind() && !(L && this.game.tick - L.t0 <= L.ticks);
   }
 
   /** Whether he is behind it, near enough to strike (OFFSPRING.wound). */
@@ -877,9 +892,15 @@ export class FightRoom {
     return d <= W.near + OFFSPRING.it.size / 2 && Math.abs(off) >= (W.behind * Math.PI) / 180;
   }
 
-  /** A tap on its back. With the wound open, a pull. Held, with the shard out and him behind it, a strike: the wound opens (in the kill, the last press). */
+  /** A tap on its back. With the wound open, a pull. Held, with the shard out and him behind it, a strike: the wound opens. In the kill, a strike at the fire ends it. */
   private hit() {
     if (this.down > 0) return;
+    // The kill: only a strike in its back while it drinks at the fire ends it (Ladi, 27 Nov 10:03 PM).
+    if (this.part === "kill") {
+      if (!this.killable()) return;
+      this.shard.shown = true;
+      return this.win();
+    }
     if (this.wound.open) {
       if (this.pulling || !this.inside.size) return;
       // Out of reach a tap is not silent: the "too far" hint for a moment (its ring is already dim).
@@ -894,14 +915,12 @@ export class FightRoom {
       if ((L && this.game.tick - L.t0 <= L.ticks) || !this.behind()) return;
       // Away after its jump it can't be struck (the view shows the tap turned aside).
       if (OFFSPRING.hunt.safe && this.game.tick < this.awayUntil) return void (this.wardAt = this.game.tick);
-      if (this.part === "kill") return this.win();
       this.shard.shown = true;
       this.wound = { open: true, timer: 0 };
       this.stats.strikes++;
       return;
     }
     if (!this.it.held || !this.shard.shown || !this.behind()) return;
-    if (this.part === "kill") return this.win();
     this.wound.open = true;
   }
 
@@ -1079,7 +1098,7 @@ export class FightRoom {
       run: this.run,
       part: this.part,
       tick: g.tick,
-      it: { x: it.x, y: it.y, face: it.face, after: it.held ? "her" : it.after, ...(l ? { to: { x: l.at.x, y: l.at.y } } : {}), inside: this.inside.size, held: it.held, wound: this.wound.open ? 1 : 0, knocked: it.knocked, ...(it.eat > 0 ? { eating: true } : {}), ...(!body ? { hidden: true } : {}), ...((this.wound.open || g.tick < this.hurtUntil) && O.wound.crawl ? { crawl: true as const } : {}), ...(this.run === 4 && body && !safe && !this.wound.open && this.part !== "flare" ? (O.hunt.on ? (this.behind() && !(it.leap && g.tick <= it.leap.t0 + it.leap.ticks) ? { strike: 2 as const } : {}) : it.held && this.shard.shown ? { strike: this.behind() ? (2 as const) : (1 as const) } : {}) : {}), ...(body && it.leap && g.tick <= it.leap.t0 + it.leap.ticks + 1 ? { leap: it.leap } : {}) },
+      it: { x: it.x, y: it.y, face: it.face, after: it.held ? "her" : it.after, ...(l ? { to: { x: l.at.x, y: l.at.y } } : {}), inside: this.inside.size, held: it.held, wound: this.wound.open ? 1 : 0, knocked: it.knocked, ...(it.eat > 0 ? { eating: true } : {}), ...(!body ? { hidden: true } : {}), ...((this.wound.open || g.tick < this.hurtUntil) && O.wound.crawl ? { crawl: true as const } : {}), ...(this.run === 4 && body && !safe && !this.wound.open && this.part !== "flare" ? (O.hunt.on ? (this.behind() && (this.part !== "kill" || this.atFire()) && !(it.leap && g.tick <= it.leap.t0 + it.leap.ticks) ? { strike: 2 as const } : {}) : it.held && this.shard.shown ? { strike: this.behind() ? (2 as const) : (1 as const) } : {}) : {}), ...(body && it.leap && g.tick <= it.leap.t0 + it.leap.ticks + 1 ? { leap: it.leap } : {}) },
       her: { x: sol.x, y: sol.y, light: this.her.light, full: O.her.full, glow: this.herGlow(), doing: this.part === "flare" ? "hold" : this.her.doing, left: this.her.left, of: this.her.of, ...(this.her.flash ? { flash: this.her.flash } : {}) },
       fen: { x: fen.x, y: fen.y, light: this.fenLight },
       ...(this.run === 4 ? { shard: { shown: this.shard.shown, glow: this.shard.glow, of: O.light.shard } } : {}),

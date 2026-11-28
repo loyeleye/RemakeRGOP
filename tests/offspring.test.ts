@@ -193,7 +193,13 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(p.room.state.inside).toBe(10);
   });
 
-  it("the kill: all ten in the brazier holds its eye, she blasts at full, and the shard in its back ends it", () => {
+  const atFire = (p: ReturnType<typeof play>) => Math.hypot(p.c.x - p.x.it.x, p.c.y - p.x.it.y) <= OFFSPRING.it.reachBrazier + OFFSPRING.it.size / 2 + 0.1;
+  const behindIt = (p: ReturnType<typeof play>) => {
+    const it = p.x.it;
+    p.me.pos = p.me.prev = pt(Math.round(it.x - Math.cos(it.face) * 3), Math.round(it.y - Math.sin(it.face) * 3));
+  };
+
+  it("the kill: all ten in the brazier holds its eye, it drinks at the fire for nothing, and the shard in its back there ends it", () => {
     const p = play(4);
     for (const id of [...p.x.inside]) (p.x.inside.delete(id), p.x.banked.add(id));
     p.x.teach.pulled = true;
@@ -204,8 +210,17 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     for (let i = 0; i < 40 && p.x.her.doing !== "hold"; i++) p.tick();
     expect(p.x.her.doing).toBe("hold");
     expect(p.room.state.banked).toBe(10);
-    const it0 = p.x.it;
-    p.me.pos = p.me.prev = pt(Math.round(it0.x - Math.cos(it0.face) * 3), Math.round(it0.y - Math.sin(it0.face) * 3));
+    // Away from the fire a strike does nothing (Ladi, 27 Nov 10:03 PM: the kill comes only while it drinks).
+    p.x.it.x = p.c.x + 9;
+    p.x.it.y = p.c.y;
+    behindIt(p);
+    p.send({ t: "fight", hit: true });
+    expect(p.room.storyView().fight!.dying).toBeUndefined();
+    for (let i = 0; i < 60 && !(atFire(p) && p.room.storyView().fight!.it.eating); i++) p.tick();
+    expect(atFire(p)).toBe(true);
+    expect(p.room.storyView().fight!.it.eating).toBe(true);
+    expect(p.room.state.banked).toBe(10);
+    behindIt(p);
     p.send({ t: "fight", shard: true });
     p.tick();
     p.send({ t: "fight", hit: true });
@@ -223,7 +238,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
   });
 
-  it("the kill also comes when the tenth banks with the wound already open", () => {
+  it("the tenth banked with the wound open does not end it: the wound shuts, and the kill is a strike while it drinks", () => {
     const p = play(4);
     for (const id of [...p.x.inside].slice(1)) (p.x.inside.delete(id), p.x.banked.add(id));
     const b0 = p.x.it;
@@ -239,7 +254,16 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     // Torn out, it lies loose (hunt.home 0): he pulls it to the fire like any light.
     expect(p.x.inside.has(last)).toBe(false);
     p.send({ t: "act", action: { kind: "staff", wisp: last } });
-    for (let i = 0; i < 40 && p.room.state.phase === "playing"; i++) p.tick();
+    for (let i = 0; i < 40 && p.room.state.part !== "kill"; i++) p.tick();
+    expect(p.room.state.part).toBe("kill");
+    p.tick();
+    expect(p.room.state.phase).toBe("playing");
+    expect(p.room.state.wound).toBe(false);
+    for (let i = 0; i < 80 && !atFire(p); i++) p.tick();
+    expect(atFire(p)).toBe(true);
+    behindIt(p);
+    p.send({ t: "fight", hit: true });
+    p.tick(OFFSPRING.death.ticks + 1);
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
   });
 
