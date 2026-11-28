@@ -80,6 +80,8 @@ export const OFFSPRING = {
     fenRise: 0.05,
     fenMax: 10,
     fenFrom: 3,
+    /** TRIAL: 1, and her blast puts his light back to fen4 (a clock for each of her rounds). */
+    fenReset: 0,
   },
   /** Solenne's light: her charge and her stamina, one number. */
   her: {
@@ -286,7 +288,13 @@ export const OFFSPRING = {
    * Solenne no longer holds: full, she flares and stuns it where it stands for `stun` ticks. No
    * hops while the shard glows or its eye turns (`hopShard` 0).
    */
-  hunt: { on: 1, stun: 4, tears: 3, home: 0, block: 0, hopShard: 0, fling: 6, flingSpread: 2, straysFirst: 1, solid: 1, bolt: 1, boltMin: 9, boltTicks: 3, away: 12, flingHeld: 1, safe: 1, overFire: 2, overTicks: 2 },
+  /*
+   * TRIALS (gameplay thread, 28 Nov 1:30 AM, from Ladi's 1:07 AM message; numbers mine):
+   * round 1: with the fire between it and its mark it walks round the ring the short way; a pinned leap over the fire tries more landing angles.
+   * idle 16: he has made no pull, strike or shard tap for this many ticks and is not pulling now: loose light no longer holds it, it goes for her (the boy if she is down). 0 off.
+   * fenOver (0 off): Ladi's question, tested. 2: the boy's light at 2 or more and it leaves loose light for him. -1: only when his light is more than the loose lights together.
+   */
+  hunt: { on: 1, stun: 4, tears: 3, home: 0, block: 0, hopShard: 0, fling: 6, flingSpread: 2, straysFirst: 1, solid: 1, bolt: 1, boltMin: 9, boltTicks: 3, away: 12, flingHeld: 1, safe: 1, overFire: 2, overTicks: 2, round: 1, fenOver: 0, idle: 16 },
   /*
    * The jump (gameplay thread, trial-jump-delta.patch, from Ladi 27 Nov 4:46 PM: "after 2 or 3 taps it
    * jumps to safety", and "Besides tapping which feels kind of like a different game"):

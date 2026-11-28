@@ -51,6 +51,7 @@ export class FightRoom {
   /** The lunge at her or the boy: the tick it goes, while it gathers itself (-1: not gathering). */
   private lungeAt = -1;
   private herDown = false;
+  private lastAct = 0;
   private her = { light: 0, dipUntil: -1, doing: "rest" as "rest" | "windup" | "hold", left: 0, of: 0, flash: undefined as Fight["her"]["flash"] };
   private fenLight = 0;
   private shard = { shown: false, glow: 0 };
@@ -140,12 +141,14 @@ export class FightRoom {
           // The jump: his first pull on light the wound let go of is the "home" step done.
           if (OFFSPRING.hunt.on && !OFFSPRING.hunt.home && this.strays().some((w) => w.id === action.wisp)) this.teach.homed = true;
           this.lit.add(action.wisp);
+          this.lastAct = this.game.tick;
         }
         this.game.command(YOU, { action });
         return;
       }
       case "fight": {
         if (this.phase !== "playing" || this.run !== 4 || this.part === "flare") return;
+        this.lastAct = this.game.tick;
         if (msg.shard) this.shard.shown = !this.shard.shown;
         if (msg.hit || msg.pull) this.hit();
         return;
@@ -233,6 +236,7 @@ export class FightRoom {
     this.hopAt = -1;
     this.lungeAt = -1;
     this.herDown = false;
+    this.lastAct = this.game ? this.game.tick : 0;
     this.catches = 0;
     this.down = 0;
     this.thrown = null;
@@ -479,6 +483,19 @@ export class FightRoom {
     const food = L.filter((l) => (l.after === "wisp" && this.lit.has(Number(l.key.slice(1)))) || (l.after === "brazier" && (this.game.tick < this.flareUntil || atMeal)));
     // The hunt: loose light before the fire. Only with no stray left does it go back to drink.
     const strays = OFFSPRING.hunt.on && OFFSPRING.hunt.straysFirst && this.run === 4 ? food.filter((l) => l.after === "wisp") : [];
+    // TRIAL (Ladi, 28 Nov 1:07 AM): the boy's light at fenOver or more, and loose light no longer holds it: it goes for him (through her).
+    // fenOver -1: only when his light is more than the loose lights on the ground together.
+    const FO = OFFSPRING.hunt.fenOver;
+    // TRIAL: he has done nothing for hunt.idle ticks (no pull, no strike, no shard): loose light no longer holds it.
+    const IDL = OFFSPRING.hunt.idle;
+    if (strays.length && IDL && this.run === 4 && this.game.tick - this.lastAct >= IDL && this.player(YOU).action.kind !== "staff") {
+      const m = L.find((l) => l.key === (this.herDown ? "fen" : "her"));
+      if (m) return m;
+    }
+    if (strays.length && FO && this.run === 4 && (FO > 0 ? this.fenLight >= FO : this.fenLight > strays.length)) {
+      const m = L.find((l) => l.key === (this.herDown ? "fen" : "her"));
+      if (m) return m;
+    }
     if (strays.length) return strays.sort((a, b) => gap(a) / (a.key === it.key ? I.stick : 1) - gap(b) / (b.key === it.key ? I.stick : 1))[0]!;
     if (food.length) return food.sort((a, b) => gap(a) / (a.key === it.key ? I.stick : 1) - gap(b) / (b.key === it.key ? I.stick : 1))[0]!;
     // TRIAL: once it is on her, or she is down and it is on the boy, it stays there. Only the shard or loose light takes it off.
@@ -588,7 +605,26 @@ export class FightRoom {
     it.key = l.key;
     it.after = l.after;
     // In the kill it has only the brazier's light, and stares at it.
-    const want = Math.atan2(l.at.y - it.y, l.at.x - it.x);
+    let want = Math.atan2(l.at.y - it.y, l.at.x - it.x);
+    // TRIAL (Ladi, 28 Nov 1:07 AM: "It gets stuck on the Brazier a lot going after stray wisps"): with the fire between it and
+    // its mark it walks round the fire's ring, the short way, instead of pressing into it.
+    if (HU.on && HU.solid && HU.round && this.run === 4 && l.after !== "brazier") {
+      const c = g.board.center, ring = I.size / 2 + 1.5, ax = it.x - c.x, ay = it.y - c.y, bx = l.at.x - c.x, by = l.at.y - c.y;
+      const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy, u = len2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+      const near = Math.hypot(ax + dx * u, ay + dy * u);
+      if (near < ring - 0.05 && u > 0.02 && u < 1 && Math.hypot(ax, ay) >= ring - 0.3) {
+        const th = Math.atan2(ay, ax);
+        let d = Math.atan2(by, bx) - th;
+        while (d > Math.PI) d -= 2 * Math.PI;
+        while (d < -Math.PI) d += 2 * Math.PI;
+        const rc = Math.hypot(ax, ay), R = ring + 0.3;
+        for (const sgn of [Math.sign(d) || 1, -(Math.sign(d) || 1)]) {
+          // On the ring: along it, leaning 15 degrees outward. Off it: the tangent line to the ring on that side.
+          const h = rc < R + 0.3 ? th + (sgn * 75 * Math.PI) / 180 : th + Math.PI - sgn * Math.asin(Math.min(1, R / rc));
+          if (oyRoom(it.x + Math.cos(h) * 1.5 - c.x, it.y + Math.sin(h) * 1.5 - c.y) < -I.size / 2) { want = h; break; }
+        }
+      }
+    }
     let diff = want - it.face;
     while (diff > Math.PI) diff -= 2 * Math.PI;
     while (diff < -Math.PI) diff += 2 * Math.PI;
@@ -671,8 +707,9 @@ export class FightRoom {
     this.stuck = moved < 0.05 && here < ring + 1 ? this.stuck + 1 : 0;
     if (this.stuck < J.overFire) return false;
     // Over the middle of the fire, landing clear of its ring on the far side, toward what it wants.
-    const a = Math.atan2(to.y - c.y, to.x - c.x);
-    for (let d = ring + 0.5; d <= ring + 4; d += 0.5) {
+    const a0 = Math.atan2(to.y - c.y, to.x - c.x);
+    for (const da of J.round ? [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2] : [0]) for (let d = ring + 0.5; d <= ring + 4; d += 0.5) {
+      const a = a0 + da;
       const q = { x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d };
       if (oyRoom(q.x - c.x, q.y - c.y) < -O.it.size / 2) {
         this.stuck = 0;
@@ -771,6 +808,7 @@ export class FightRoom {
     const O = OFFSPRING, H = O.her, g = this.game, it = this.it, sol = this.spot(SOL_ID);
     this.cycle++;
     this.her.light = H.afterBlast;
+    if (O.light.fenReset && this.run === 4) this.fenLight = O.light.fen4;
     this.her.dipUntil = tick + H.dipTicks;
     this.her.doing = "hold";
     // She tires: from the round after the first loose one, each hold a little shorter, never under holdMin. Its bar is out of the full hold, so it starts shorter.
