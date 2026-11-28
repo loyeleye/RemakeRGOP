@@ -68,6 +68,15 @@ export const FIGHT_LOOK = {
   /** The jump: it flees hurt, dripping light along its arc; the drops (how many, colour, size) lie on the ground and fade out over the ticks it stays away. */
   trail: { drops: 16, color: "#ffc070", size: 0.55, glow: 0.85 },
   /**
+   * Its gaze drinking the light (Ladi, 27 Nov 5:49 PM: "make the cone that is sucking up light start to
+   * gradually distort the area that is in the cone? As well as show a sucking animation by the eye"):
+   * the ground and all in the cone seen through a warping lens, more the longer it looks (its strength
+   * at the full gaze, how tall the lens stands, how fast its ripples run in toward the eye, how bright
+   * they shimmer at the full gaze, so it reads in the dark), and motes
+   * of light streaming in to the pupil (how many, their colour and size).
+   */
+  warp: { strength: 2.2, high: 2.4, pull: 0.9, shimmer: 0.35, motes: 14, color: "#e8f6ff", size: 0.35 },
+  /**
    * The model: how wide (tiles) it is drawn; the back's stages (how many lights show, and the back's
    * glow, at full, more than half, some, and empty: Ladi's four); a faint warm rim on its body and
    * arms (the cast thread's ask, for the camera above); how far the wound opens (its y
@@ -78,6 +87,47 @@ export const FIGHT_LOOK = {
   /** Untouchable after its jump: a pale shell round it (its strength, and how slowly it breathes), and a tap turned aside: a ring off the shell (how far it spreads, seconds). */
   safe: { color: "#dfe8ff", shell: 0.22, breathe: 2.2, ward: { spread: 0.8, sec: 0.5 } },
 };
+
+/** The gaze's lens: a tiling field of soft bumps as a normal map, to bend what is seen through it. */
+let warpTex: THREE.Texture | null = null;
+function warpNormals() {
+  if (warpTex) return warpTex;
+  const n = 128, c = document.createElement("canvas");
+  c.width = c.height = n;
+  const x = c.getContext("2d")!, img = x.createImageData(n, n);
+  // A height field of a few waves that tile, and its slopes as the normal.
+  const h = (u: number, v: number) => Math.sin(2 * Math.PI * (u * 3 + v)) + 0.6 * Math.sin(2 * Math.PI * (v * 4 - u * 2)) + 0.4 * Math.sin(2 * Math.PI * (u * 5 + v * 3));
+  for (let j = 0; j < n; j++)
+    for (let i = 0; i < n; i++) {
+      const u = i / n, v = j / n, e = 1 / n, dx = (h(u + e, v) - h(u - e, v)) / (2 * e), dy = (h(u, v + e) - h(u, v - e)) / (2 * e);
+      const len = Math.hypot(dx * 0.02, dy * 0.02, 1), o = (j * n + i) * 4;
+      img.data[o] = 128 + 127 * ((-dx * 0.02) / len);
+      img.data[o + 1] = 128 + 127 * ((-dy * 0.02) / len);
+      img.data[o + 2] = 255 / len;
+      img.data[o + 3] = 255;
+    }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(0.5, 0.5);
+  // The same waves as a faint shimmer, so the warp reads in the dark too (nothing lit to bend there).
+  const c2 = document.createElement("canvas");
+  c2.width = c2.height = n;
+  const x2 = c2.getContext("2d")!, im2 = x2.createImageData(n, n);
+  for (let j = 0; j < n; j++)
+    for (let i = 0; i < n; i++) {
+      const v = Math.max(0, h(i / n, j / n) / 2), o = (j * n + i) * 4;
+      im2.data[o] = im2.data[o + 1] = im2.data[o + 2] = Math.round(255 * Math.min(1, v * v));
+      im2.data[o + 3] = 255;
+    }
+  x2.putImageData(im2, 0, 0);
+  const t2 = new THREE.CanvasTexture(c2);
+  t2.wrapS = t2.wrapT = THREE.RepeatWrapping;
+  t2.repeat.set(0.5, 0.5);
+  shimmerTex = t2;
+  return (warpTex = t);
+}
+let shimmerTex: THREE.Texture | null = null;
 
 /** A soft round pool of light on the ground (the dark's lit pools). */
 let poolTex: THREE.Texture | null = null;
@@ -145,6 +195,10 @@ export class OffspringFx {
     eye: THREE.Mesh | null; back: THREE.Mesh | null; wound: THREE.Mesh | null; lights: { m: THREE.Mesh; rest: THREE.Quaternion }[]; parts: THREE.Mesh[];
   } | null = null;
   private struck = 0;
+  /** The gaze's lens: a wedge the shape of the cone, of glass that bends what is behind it, and the light it draws in. */
+  private lens: THREE.Mesh | null = null;
+  private lensCone = "";
+  private drawn: THREE.Sprite[] = [];
   private leapT0 = -1;
 
   constructor(glow: Glow) {
@@ -291,6 +345,7 @@ export class OffspringFx {
     for (const ch of this.it.children) if (ch !== this.eye) ch.visible = ch === this.slit ? this.slit.visible && !hidden : !hidden;
     this.eye.visible = !hidden || !!f.eye;
     this.stepPools(f, o, wx, wz);
+    this.stepWarp(f, o.t, o.time, wx(x), wz(y), face);
     // Untouchable: the shell breathes while it is away, and a tap on it throws a ring off the shell.
     const SF = L.safe, sm = this.shell.material as THREE.MeshBasicMaterial, rm = this.wardRing.material as THREE.MeshBasicMaterial;
     sm.opacity = f.safe ? SF.shell * (0.7 + 0.3 * Math.sin((o.time * 2 * Math.PI) / SF.breathe)) * Math.min(1, f.safe.left / 2) : 0;
@@ -379,6 +434,60 @@ export class OffspringFx {
       this.beam.scale.set(1, len, 1);
       this.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.sub(a).normalize());
     }
+  }
+
+  /** Its gaze: the cone's lens warping more as it looks (the eye's turn, then its hold), the warp running in toward the eye, and light streaming in to it. */
+  private stepWarp(f: Fight, t: number, time: number, x: number, z: number, face: number) {
+    const W = FIGHT_LOOK.warp, E = f.eye, S = OFFSPRING.it.size;
+    const on = !!E && !f.it.held;
+    // How long it has looked, of the whole turn and hold.
+    const k = E ? Math.min(1, (E.of - E.left + (E.gaze !== undefined && E.hold ? E.hold - E.gaze : 0) + Math.max(0, Math.min(1, t))) / (E.of + (E.hold ?? 0))) : 0;
+    if (on && E) {
+      const key = `${E.cone}:${E.r}`;
+      if (!this.lens || this.lensCone !== key) {
+        this.lens?.removeFromParent();
+        this.lens?.geometry.dispose();
+        const near = S / 2, far = S / 2 + E.r, a = (E.cone * Math.PI) / 180, sh = new THREE.Shape();
+        sh.moveTo(Math.cos(-a) * near, Math.sin(-a) * near);
+        sh.absarc(0, 0, far, -a, a, false);
+        sh.lineTo(Math.cos(a) * near, Math.sin(a) * near);
+        sh.absarc(0, 0, near, a, -a, true);
+        const geo = new THREE.ExtrudeGeometry(sh, { depth: W.high, bevelEnabled: false, curveSegments: 24 });
+        // The shape is drawn in x, y; stood up so y is the ground's z and the depth is up.
+        geo.rotateX(Math.PI / 2);
+        geo.translate(0, W.high, 0);
+        const nm = warpNormals();
+        const mat = new THREE.MeshPhysicalMaterial({ color: "#ffffff", metalness: 0, roughness: 0, transmission: 1, thickness: 1.2, ior: 1.25, normalMap: nm, normalScale: new THREE.Vector2(0, 0), emissive: new THREE.Color(FIGHT_LOOK.mirror), emissiveMap: shimmerTex, emissiveIntensity: 0, transparent: true, opacity: 1, depthWrite: false });
+        this.lens = new THREE.Mesh(geo, mat);
+        this.lens.renderOrder = 5;
+        this.all.add(this.lens);
+        this.lensCone = key;
+      }
+      const m = this.lens.material as THREE.MeshPhysicalMaterial;
+      this.lens.visible = true;
+      this.lens.position.set(x, 0, z);
+      this.lens.rotation.y = -face;
+      m.normalScale.setScalar(W.strength * k * k);
+      // The ripples run in toward the eye, and shimmer faintly as they go.
+      m.normalMap!.offset.set(time * W.pull, time * 0.13);
+      m.emissiveMap?.offset.copy(m.normalMap!.offset);
+      m.emissiveIntensity = W.shimmer * k;
+    } else if (this.lens) this.lens.visible = false;
+    // Light drawn in: motes from across the cone streaming to its eye.
+    while (on && this.drawn.length < W.motes) {
+      const m = this.glow(W.color, W.size, 0);
+      this.all.add(m);
+      this.drawn.push(m);
+    }
+    const ex = x + Math.cos(face) * S * 0.25, ez = z + Math.sin(face) * S * 0.25;
+    this.drawn.forEach((m, i) => {
+      m.visible = on;
+      if (!on || !E) return;
+      const u = (time * (0.7 + 0.5 * k) + i / W.motes) % 1, a = ((((i * 37) % 11) / 10) * 2 - 1) * (E.cone * Math.PI) / 180, r = S / 2 + E.r * (1 - u) * (0.4 + 0.6 * (((i * 53) % 7) / 6));
+      m.position.set(x + Math.cos(face + a * (1 - u)) * r * (1 - u) + (ex - x) * u, 0.3 + 1.0 * u, z + Math.sin(face + a * (1 - u)) * r * (1 - u) + (ez - z) * u);
+      m.material.opacity = (0.25 + 0.7 * k) * Math.sin(Math.PI * u);
+      m.scale.setScalar(W.size * (1.2 - 0.7 * u));
+    });
   }
 
   /** The jump: drops of light fall from it along its arc as it flees, then fade on the ground until it comes back. */
