@@ -2619,6 +2619,10 @@ renderPart1();
 buildTesting((key, v) => (key === "part2" ? playFight(v === "4" ? 4 : 3) : playPiece(pieceIndex(v))));
 // The fight's debug menu (prototype only): its button shows while the Part 2 fight is on.
 initFightDebug(() => (storyRoom instanceof FightRoom && room?.story?.fight ? storyRoom : null));
+/** ?fight=start:4 in the link: run 4. */
+function fightStartFromLink(): 3 | 4 {
+  return /(^|,)start:4(,|$)/.test(new URLSearchParams(location.search).get("fight") ?? "") ? 4 : 3;
+}
 /** The Part 2 fight from the testing panel or ?part2=: a test jump, so saved progress doesn't move on. */
 function playFight(start: 3 | 4) {
   if (link) leave(true);
@@ -2629,9 +2633,15 @@ function playFight(start: 3 | 4) {
 {
   // ?part1=<piece>: straight into Part 1 at that piece (its id in client/part1.ts, such as 5-6 or 9-10).
   // ?part2=3 or 4: straight into the Part 2 fight, from that run.
+  // The Part 2 preview (index-p2.html sets lfPart2) holds only Part 2's files: with nothing in the link
+  // it opens straight into the fight, from the page itself, since a sandboxed preview may not let a
+  // script rewrite its address.
   const q = new URLSearchParams(location.search), at = q.get("part1"), p2 = q.get("part2");
+  const p2only = (window as { lfPart2?: boolean }).lfPart2 === true;
   if (at !== null && pieceIndex(at) >= 0) window.setTimeout(() => playPiece(pieceIndex(at)), 0);
   else if (p2 === "3" || p2 === "4") window.setTimeout(() => playFight(p2 === "4" ? 4 : 3), 0);
+  else if (p2only && !q.has("fight") && !q.has("room")) window.setTimeout(() => playFight(3), 0);
+  else if (p2only && q.has("fight")) window.setTimeout(() => playFight(fightStartFromLink()), 0);
 }
 
 $<HTMLSelectElement>("walk-pick").replaceChildren(

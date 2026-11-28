@@ -66,7 +66,7 @@ function setAt(path: string, v: number) {
   if (typeof at[last] === "number" && Number.isFinite(v)) at[last] = v;
 }
 
-/** The ?fight= value for every number now changed from the fight's own (and where it starts). */
+/** The ?fight= value for every number now changed from the fight's own (and start:4, if asked). */
 function fightParam(start: 3 | 4 | null) {
   const out = [...OWN].filter(([k, v]) => getAt(k) !== v).map(([k]) => `${k}:${+getAt(k).toFixed(4)}`);
   if (start === 4) out.unshift("start:4");
@@ -74,8 +74,8 @@ function fightParam(start: 3 | 4 | null) {
 }
 function linkNow(start: 3 | 4 | null) {
   const q = new URLSearchParams(location.search);
-  q.delete("part2");
-  const p = fightParam(start);
+  q.set("part2", start === 4 ? "4" : "3");
+  const p = fightParam(null);
   if (p) q.set("fight", p);
   else q.delete("fight");
   const s = q.toString().replace(/%2C/gi, ",").replace(/%3A/gi, ":");
