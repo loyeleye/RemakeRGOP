@@ -193,9 +193,9 @@ export class Camera {
 
 type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
-const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell", "sefa", "kes", "maudie", "mabry", "orrin", "solenne"] as const;
+const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell", "sefa", "kes", "maudie", "mabry", "orrin", "solenne", "fen"] as const;
 /** Each character's height against Rook's (models come in at one height). Lumi is nine. */
-export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95, ferryman: 1.05, tilda: 0.88, solenne: 1.04 };
+export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95, ferryman: 1.05, tilda: 0.88, solenne: 1.04, fen: 0.8 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};
@@ -1372,9 +1372,12 @@ class CastAnim {
   at(move: string) {
     return this.cur === move && !this.casting ? (this.actions.get(move)?.time ?? null) : null;
   }
+  /** A clip to stand in for idle (the boy's cower in the fight), or null for its own. */
+  idleAs: string | null = null;
   /** Ask for a move; a push already playing finishes first. */
   set(move: CastMove) {
     if (this.casting || this.held) return;
+    if (move === "idle" && this.idleAs && this.actions.has(this.idleAs)) move = this.idleAs as CastMove;
     if (move === this.cur || (this.cur === "push" && move === "idle")) return;
     const next = this.actions.get(move) ?? this.actions.get("idle");
     if (!next) return;
@@ -4493,6 +4496,10 @@ export class World {
       // Her save: her own clip, facing it (Solenne is player 2 in the fight).
       const her = this.players.get(2);
       this.fightFx.herSave({ f: st.fight, t: st.t, half: { w: b2.width / 2, h: b2.height / 2 }, her: her?.root ?? null, rig: her ? { body: her.body ?? null, anim: (her.body?.userData.anim as CastAnim | undefined) ?? null, face: (a) => (her.facing = a) } : null });
+      // The boy (player 3): he cowers while he waits, and is drained if it reaches him in run 4.
+      const boy = this.players.get(3), boyAnim = (boy?.body?.userData.anim as CastAnim | undefined) ?? null;
+      if (boyAnim) boyAnim.idleAs = "cower";
+      this.fightFx.fenDrain({ f: st.fight, t: st.t, half: { w: b2.width / 2, h: b2.height / 2 }, rig: boy ? { body: boy.body ?? null, anim: boyAnim, face: (a) => (boy.facing = a) } : null });
     }
 
     // My reach square and walk marker.

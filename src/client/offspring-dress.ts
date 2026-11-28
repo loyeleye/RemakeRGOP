@@ -104,6 +104,12 @@ export const FIGHT_LOOK = {
    * `kneel`. Rook goes down on his own clips (thrown).
    */
   save: { color: "#ffe9a8", core: 0.22, outer: 0.7, start: 0.2, cross: 0.15, hit: 0.35, beam: [1.1, 1.4] as const, burst: [0.35, 0.95] as const, burstSize: 4.5, white: 0.2, shut: 0.12, slide: [0.35, 0.7] as const, recoil: 1, streak: [0.35, 1.5] as const, sparks: 7, sparkSize: 0.5, sparkColor: "#cfe3ff", riseAt: 3, rise: 1, kneel: [0.5, 2.6] as const, kneelDrop: 0.45, kneelLean: 14 },
+  /**
+   * Run 4 lost to the boy (Ladi, 27 Nov 11:33 PM: "a being drained animation from Fen"; timed to the
+   * cast thread's drained clip): he plays drained turned to face it, and from `stream[0]` to
+   * `stream[1]` seconds his light streams out of his chest into its eye while his glow dims to nothing.
+   */
+  drain: { stream: [0.55, 1.75] as const, motes: 26, size: 0.45, color: "#ffe7b0", arc: 0.9, travel: 0.45 },
   thrown: { knockedSpeed: 1.5, getupSpeed: 1.7, flight: 0.6, high: 0.9, tilt: 78, rise: 0.9, stars: 3, starSize: 0.42, starSpin: 5, starColor: "#ffe38a", dust: "#b9a58a", dustSize: 2.2 },
   /**
    * The model: how wide (tiles) it is drawn; the back's stages (how many lights show, and the back's
@@ -265,6 +271,10 @@ export class OffspringFx {
   /** Her right hand, where the save's beam leaves from (her model's hand_R), and her clip under way. */
   private herHand: THREE.Object3D | null = null;
   private herClip: { tick: number; anim: HoldAnim; rose: boolean; done: boolean } | null = null;
+  /** The boy being drained: his chest (for the stream's start), his clip under way, and the stream's motes. */
+  private fenChest: THREE.Object3D | null = null;
+  private fenClip: number | null = null;
+  private drainMotes: THREE.Sprite[] = [];
   /** Seconds into her save (99 when none), worked out each frame for stepModel. */
   private saveSec = 99;
 
@@ -439,6 +449,12 @@ export class OffspringFx {
     this.herGlow.material.opacity = 0.35 + 0.6 * (her.glow / her.full);
     this.fenGlow.position.set(wx(f.fen.x), 1.5, wz(f.fen.y));
     this.fenGlow.scale.setScalar(0.4 + Math.min(10, f.fen.light) * 0.22);
+    // Drained, his glow goes to nothing as his light streams out.
+    const dr = f.drain, DR = L.drain, ds = dr ? (f.tick - dr.t0 + t) * 0.6 : -1;
+    const left = dr ? 1 - Math.max(0, Math.min(1, (ds - DR.stream[0]) / (DR.stream[1] - DR.stream[0]))) : 1;
+    this.fenGlow.scale.multiplyScalar(Math.max(0.02, left));
+    this.fenGlow.material.opacity = 0.8 * left;
+    this.stepDrain(f, ds, wx(x), wz(y), up);
     // The shard, in Rook's hand.
     const sh = f.shard;
     this.shardGlow.visible = !!sh && sh.glow > 0 && !!o.rook;
@@ -707,7 +723,7 @@ export class OffspringFx {
     // Her save: its recoil as her beam lands, then stunshut for as long as it is dazed.
     const SV = FIGHT_LOOK.save, ss = this.saveSec - SV.hit, dazed = !!f.save && ss >= 0 && this.saveSec < (f.save.until - f.save.tick + 1) * 0.6;
     const saved = dazed && M.acts.has("recoil") ? (ss < SV.recoil ? "recoil" : M.acts.has("stunshut") ? "stunshut" : "stunned") : null;
-    const want = f.dying && M.acts.has("die") ? "die" : saved ?? M.once?.name ?? (it.held ? "stunned" : it.eating ? "feed" : moving && it.crawl ? "crawl" : moving || up > 0.05 ? "walk" : "idle");
+    const want = f.dying && M.acts.has("die") ? "die" : f.drain && M.acts.has("feed") ? "feed" : saved ?? M.once?.name ?? (it.held ? "stunned" : it.eating ? "feed" : moving && it.crawl ? "crawl" : moving || up > 0.05 ? "walk" : "idle");
     if (want !== M.now && M.acts.has(want)) {
       const from = M.acts.get(M.now), to = M.acts.get(want)!;
       to.reset().play();
@@ -851,6 +867,58 @@ export class OffspringFx {
     if (this.herClip && !this.herClip.done) (this.herClip.done = true), this.herClip.anim.release();
     if (A) return;
     this.kneelHer(o.f, o.t, o.her);
+  }
+
+  /** The boy's part when it reaches him: his drained clip, turned to face it. Call after the players are placed. */
+  fenDrain(o: { f: Fight; t: number; half: { w: number; h: number }; rig: { body: THREE.Object3D | null; anim: HoldAnim | null; face: (a: number) => void } | null }) {
+    const d = o.f.drain;
+    this.fenChest = o.rig?.body?.getObjectByName("chest") ?? null;
+    const A = o.rig?.anim && o.rig.anim.has("drained") ? o.rig.anim : null;
+    if (!d || !A || !o.rig) {
+      if (this.fenClip !== null && A) A.release();
+      this.fenClip = null;
+      return;
+    }
+    const face = Math.atan2(o.f.it.x - o.f.fen.x, o.f.it.y - o.f.fen.y);
+    o.rig.face(face);
+    if (o.rig.body) o.rig.body.rotation.y = face;
+    if (this.fenClip !== d.t0) (this.fenClip = d.t0), A.hold("drained", 1, 0.15);
+  }
+
+  /** His light streaming from his chest into its eye (FIGHT_LOOK.drain). */
+  private stepDrain(f: Fight, sec: number, x: number, z: number, up: number) {
+    const DR = FIGHT_LOOK.drain, on = !!f.drain && sec >= DR.stream[0] && sec < DR.stream[1] + DR.travel;
+    if (!on) {
+      for (const m of this.drainMotes) m.visible = false;
+      return;
+    }
+    if (!this.drainMotes.length) {
+      for (let i = 0; i < DR.motes; i++) {
+        const m = this.glow(DR.color, DR.size, 0);
+        m.renderOrder = 6;
+        this.all.add(m);
+        this.drainMotes.push(m);
+      }
+    }
+    const a = new THREE.Vector3(), b = new THREE.Vector3();
+    if (this.fenChest) this.fenChest.getWorldPosition(a), this.all.worldToLocal(a);
+    else a.set(this.fenGlow.position.x, 1.1, this.fenGlow.position.z);
+    const eye = this.model?.eye;
+    if (eye) eye.getWorldPosition(b), this.all.worldToLocal(b);
+    else b.set(x, FIGHT_LOOK.eyeAt + up, z);
+    const span = DR.stream[1] - DR.stream[0];
+    this.drainMotes.forEach((m, i) => {
+      // Each mote leaves his chest at its own moment and takes `travel` seconds to reach its eye, on a low arc.
+      const born = DR.stream[0] + (i / DR.motes) * span, k = (sec - born) / DR.travel;
+      m.visible = k >= 0 && k < 1;
+      if (!m.visible) return;
+      const wob = Math.sin(i * 2.3 + sec * 9) * 0.25 * (1 - k);
+      m.position.lerpVectors(a, b, k);
+      m.position.y += Math.sin(Math.PI * k) * DR.arc + wob;
+      m.position.x += wob * 0.6;
+      m.scale.setScalar(DR.size * (1 - 0.5 * k));
+      m.material.opacity = 0.9 * Math.sin(Math.PI * Math.min(1, k * 1.2));
+    });
   }
 
   /** Without her clips: down a little for a moment (FIGHT_LOOK.save.kneel). */

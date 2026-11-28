@@ -56,6 +56,8 @@ export class FightRoom {
   private down = 0;
   /** His last throw (a knockdown), for the view's flight. */
   private thrown: { from: { x: number; y: number }; to: { x: number; y: number }; tick: number; ticks: number } | null = null;
+  /** It feeding on the boy before the loss (Fight.drain), or null. */
+  private draining: { t0: number; ticks: number } | null = null;
   /** Her save, for the view (Fight.save). */
   private saved: NonNullable<Fight["save"]> | null = null;
   private pulling = 0;
@@ -156,13 +158,21 @@ export class FightRoom {
    * its catches do nothing.
    */
   dbg = { paused: false, see: false, safe: false };
-  debug(cmd: "restart3" | "restart4" | "win" | "lose" | "catch") {
+  debug(cmd: "restart3" | "restart4" | "win" | "lose" | "catch" | "drain") {
     if (cmd === "restart3" || cmd === "restart4") {
       this.at4 = null;
       return this.begin(cmd === "restart4" ? 4 : 3);
     }
-    if (this.phase !== "playing" || this.dying) return;
+    if (this.phase !== "playing" || this.dying || this.draining) return;
     if (cmd === "win") return this.win();
+    // It reaches the boy on the spot, to see him drained.
+    if (cmd === "drain") {
+      if (this.run !== 4) return;
+      // Beside him first, on the side it is on, so the drain looks as it will in play.
+      const fen = this.spot(FEN_ID), it = this.it, a = Math.atan2(it.y - fen.y, it.x - fen.x), r = OFFSPRING.it.size / 2 + 1;
+      (it.x = fen.x + Math.cos(a) * r), (it.y = fen.y + Math.sin(a) * r), (it.face = a + Math.PI);
+      return this.drain();
+    }
     // A catch on the spot, to see her save (the first) or the loss (the second).
     if (cmd === "catch") return void (this.run === 4 && this.caught(), this.broadcastTick());
     this.lose();
@@ -204,6 +214,7 @@ export class FightRoom {
     this.down = 0;
     this.thrown = null;
     this.saved = null;
+    this.draining = null;
     this.dying = null;
     this.pulling = 0;
     this.wound = { open: false, timer: 0 };
@@ -279,6 +290,13 @@ export class FightRoom {
     }
     if (this.phase !== "playing") return;
     const g = this.game, O = OFFSPRING;
+    // It feeds on the boy: the clock runs on and nothing else does, then the card.
+    if (this.draining) {
+      g.tick++;
+      if (g.tick >= this.draining.t0 + this.draining.ticks) return this.lose();
+      this.broadcastTick();
+      return;
+    }
     // The kill: the clock runs on and nothing else does, until its death has played out.
     if (this.dying) {
       g.tick++;
@@ -376,7 +394,7 @@ export class FightRoom {
     const D = OFFSPRING.dark, g = this.game, it = this.it, c = g.board.center, half = OFFSPRING.it.size / 2;
     if (!D.on || this.run !== 4) return true;
     if (eyeToo && (this.eye > 0 || this.gaze > 0)) return true;
-    if (it.held || this.her.doing === "windup" || g.tick - this.ateAt < D.ateTicks || this.part === "kill" || this.saveFlood()) return true;
+    if (it.held || this.her.doing === "windup" || g.tick - this.ateAt < D.ateTicks || this.part === "kill" || this.saveFlood() || this.draining) return true;
     const near = (p: { x: number; y: number }, r: number) => Math.hypot(p.x - it.x, p.y - it.y) <= r + half;
     const me = this.spot(YOU);
     if (near(me, this.shard.shown ? D.shard : D.rook)) return true;
@@ -553,7 +571,7 @@ export class FightRoom {
         if (HU.on && E.on) return;
         return this.caught();
       case "fen":
-        if (this.run === 4) return this.lose();
+        if (this.run === 4) return this.drain();
         return;
       case "her":
         return;
@@ -1080,6 +1098,16 @@ export class FightRoom {
   private wardAt = -99;
   /** The jump: where it fled from and to, and when (for the view's trail of light it leaves). */
   private bolted: { from: { x: number; y: number }; to: { x: number; y: number }; t0: number; ticks: number; away: number } | null = null;
+  /** It has reached the boy in run 4: it feeds on him (OFFSPRING.her.fenDrain), then the loss. */
+  private drain() {
+    const D = OFFSPRING.her.fenDrain;
+    if (D.ticks <= 0) return this.lose();
+    this.draining = { t0: this.game.tick, ticks: D.ticks };
+    this.eye = this.gaze = 0;
+    this.it.eat = 1;
+    this.broadcastTick();
+  }
+
   private lose() {
     this.lostTo = this.catches >= 2 ? "caught" : "fen";
     this.finish(this.run === 3 ? OFFSPRING.card.again3 : OFFSPRING.card.again4);
@@ -1147,6 +1175,7 @@ export class FightRoom {
       down: this.down,
       ...(this.thrown && g.tick <= this.thrown.tick + this.thrown.ticks + 1 ? { thrown: this.thrown } : {}),
       ...(this.saved && g.tick <= this.saved.until + 1 ? { save: this.saved } : {}),
+      ...(this.draining ? { drain: this.draining } : {}),
       pulling: this.pulling,
       // Its eye turning (left of of), then its gaze holding (gaze of hold, the eye fully turned), seen at any distance.
       ...(this.run === 4 && O.hunt.on && O.eye.on && (this.eye > 0 || this.gaze > 0) ? { eye: { left: this.eye, of: O.eye.ticks, cone: O.eye.cone, r: O.eye.range + O.eye.slack, ...(this.eye === 0 ? { gaze: this.gaze, hold: O.eye.hold } : {}) } } : {}),
@@ -1175,7 +1204,7 @@ export class FightRoom {
     ];
     if (this.banked.size) pools.push({ k: "fire", x: c.x, y: c.y, r: D.brazier + D.perBanked * this.banked.size + half });
     for (const w of g.wisps) if (!g.away.has(w.id) && !this.banked.has(w.id) && this.lit.has(w.id)) pools.push({ k: "wisp", x: w.pos.x, y: w.pos.y, r: D.wisp + half });
-    const flood = it.held || this.her.doing === "windup" || this.part === "kill" || this.saveFlood();
+    const flood = it.held || this.her.doing === "windup" || this.part === "kill" || this.saveFlood() || !!this.draining;
     return { pools, hear: { d: Math.max(0, Math.hypot(it.x - me.x, it.y - me.y) - half), dx: it.x - me.x, dy: it.y - me.y }, ...(flood ? { flood: true as const } : {}) };
   }
 

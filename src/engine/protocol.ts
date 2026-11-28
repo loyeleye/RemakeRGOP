@@ -193,6 +193,8 @@ export interface StoryView {
     down: number;
     /** He was just thrown (a knockdown): from where to where, on which tick, and for how many ticks he is down. */
     thrown?: { from: { x: number; y: number }; to: { x: number; y: number }; tick: number; ticks: number };
+    /** Run 4 lost to the boy: it feeds on him from tick `t0` for `ticks`, then the card. */
+    drain?: { t0: number; ticks: number };
     /** Solenne's save: the tick, where it was and where it was knocked to, where she stood, and the tick its daze ends. */
     save?: { tick: number; from: { x: number; y: number }; to: { x: number; y: number }; sol: { x: number; y: number }; until: number };
     pulling: number;

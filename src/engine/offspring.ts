@@ -128,6 +128,12 @@ export const OFFSPRING = {
      * lifts so she, her beam and it can be seen wherever they are. The look is FIGHT_LOOK.save.
      */
     save: { down: 2, flood: 3 },
+    /**
+     * Run 4 lost to the boy, shown (Ladi, 27 Nov 11:33 PM: "We also need a being drained animation
+     * from Fen"): when it reaches him, play stops this many ticks while it feeds on him and his light
+     * streams out of him (his drained clip, 3.2 s), then the card. The build's number.
+     */
+    fenDrain: { ticks: 6 },
   },
   /**
    * Random jumps (Ladi, 27 Nov 2:52 PM: "random jumps where he jumps to a random spot on the map if he

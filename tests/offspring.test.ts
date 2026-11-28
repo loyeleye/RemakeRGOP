@@ -246,6 +246,25 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
   });
 
+  it("reaching the boy in run 4: it feeds on him for its ticks, nothing else moves, then the card", () => {
+    const p = play(4);
+    p.x.teach.pulled = true;
+    p.x.her.left = 0;
+    p.tick();
+    p.room.debug("drain");
+    const D = OFFSPRING.her.fenDrain, f0 = p.room.storyView().fight!;
+    expect(f0.drain).toEqual({ t0: f0.tick, ticks: D.ticks });
+    expect(f0.it.hidden).toBeUndefined();
+    const at = { x: p.x.it.x, y: p.x.it.y };
+    p.tick(D.ticks - 1);
+    expect(p.room.state.phase).toBe("playing");
+    expect(p.x.it).toMatchObject(at);
+    p.tick();
+    expect(p.room.state.phase).toBe("results");
+    expect(p.room.state.end?.summary).toBe(OFFSPRING.card.again4);
+    expect(p.room.lostTo).toBe("fen");
+  });
+
   it("the tenth banked with the wound open does not end it: the wound shuts, and the kill is a strike while it drinks", () => {
     const p = play(4);
     for (const id of [...p.x.inside].slice(1)) (p.x.inside.delete(id), p.x.banked.add(id));

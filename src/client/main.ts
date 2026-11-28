@@ -1098,7 +1098,7 @@ function storyPhaseSound(was: string | undefined) {
     fightMusic(undefined, false);
     // Its last sound: the loss when it caught him twice, or the kill if its death did not already play it.
     const f = room!.story?.fight, won = room!.story?.end?.summary === OFFSPRING.card.won;
-    offspringSfx(undefined, false, phase === "results" && f ? { won: won && !f.dying, caught: !won && f.catches >= 2 } : undefined);
+    offspringSfx(undefined, false, phase === "results" && f ? { won: won && !f.dying, caught: !won && (f.catches >= 2 || !!f.drain) } : undefined);
   }
   // The dying brazier has no bell and no music: only the fire. The Sieve has only the wind.
   if (room!.story?.dying) return;
@@ -2996,7 +2996,7 @@ function castOf(): Map<number, string> | undefined {
   const m = new Map<number, string>();
   for (const p of room.players) {
     const name = p.name.toLowerCase();
-    const who = ["rook", "lumi", "wick", "moth", "kes", "hesta", "nell", "sefa", "maudie", "mabry", "orrin", "tilda", "solenne"].find((n) => name.startsWith(n));
+    const who = ["rook", "lumi", "wick", "moth", "kes", "hesta", "nell", "sefa", "maudie", "mabry", "orrin", "tilda", "solenne", "fen"].find((n) => name.startsWith(n));
     if (who) m.set(p.id, who);
   }
   if (room.story.run === "The Grand Kindling") m.set(me, "rook");
