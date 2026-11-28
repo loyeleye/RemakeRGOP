@@ -3224,7 +3224,7 @@ function hintsFrame(now: number) {
     shownFight = fightHint;
     if (teach?.hint) {
       const H = (teach.retry ? OFFSPRING.teach.short : OFFSPRING.teach.hint)[teach.hint];
-      showHint("fight", touch ? H.tap : H.key, teach.hint === "show" || teach.hint === "cover" || teach.hint === "lure" || teach.hint === "loose" ? $("shard") : null, true);
+      showHint("fight", touch ? H.tap : H.key, teach.hint === "show" || teach.hint === "cover" || teach.hint === "lure" || teach.hint === "loose" || teach.hint === "eye" ? $("shard") : null, true);
       if (hintUp) hintUp.until = Infinity;
     }
   }

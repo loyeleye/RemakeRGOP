@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { Tile, pt } from "../src/engine/board.js";
 import { shrineById } from "../src/engine/maps.js";
 import { OFFSPRING } from "../src/engine/offspring.js";
@@ -31,6 +31,13 @@ function opened(start: 3 | 4 = 3) {
 }
 
 describe("Part 2, runs 3 and 4: the offspring fight", () => {
+  // Tests of run 4's rounds of holds (OFFSPRING.hunt off, v291) switch the hunt off; every test ends with the defaults back.
+  afterEach(() => {
+    OFFSPRING.hunt.on = 1;
+    OFFSPRING.it.daze1 = 0;
+    OFFSPRING.her.regen4 = 0.2;
+    OFFSPRING.it.eatBanked4 = 4;
+  });
   it("the yard: open ground round a dead brazier, everyone and the same ten wisps on open ground", () => {
     const b = shrineById(OFFSPRING.shrine).board, c = b.center;
     expect(b.tile(c)).toBe(Tile.Brazier);
@@ -121,6 +128,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   });
 
   it("run 4: a tap on its back strikes only from behind it with the shard out, and a pull tears a wisp out that flies to him on its own", () => {
+    OFFSPRING.hunt.on = 0;
     // In front of it: a tap does nothing, even with the shard out.
     const a = play(4), f0 = a.x.it;
     a.me.pos = a.me.prev = pt(Math.round(f0.x + Math.cos(f0.face) * 3), Math.round(f0.y + Math.sin(f0.face) * 3));
@@ -239,6 +247,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   });
 
   it("round 1 teaches the three steps: the hold waits for them, each with her order and a hint, and a mark where to stand", () => {
+    OFFSPRING.hunt.on = 0;
     const p = play(4), T = OFFSPRING.teach, said = () => p.lines.filter((l) => l.who === "Solenne").map((l) => l.text);
     p.tick(20);
     // The hold waits.
@@ -281,6 +290,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   });
 
   it("on a retry of run 4, hints only: no orders from her", () => {
+    OFFSPRING.hunt.on = 0;
     const p = play(4);
     p.x.teach.pulled = true;
     p.x.her.left = 0;
@@ -302,8 +312,12 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   });
 
   it("before each blast her flare draws it: it leaps to her landing mark, and he can't strike from the brazier's far side", () => {
+    OFFSPRING.hunt.on = 0;
     // The landing, not the gap after round 1: keep it standing through the gap, as the old daze did.
     OFFSPRING.it.daze1 = 15;
+    // And her old, quicker recharge, so the wind-up comes inside the loop.
+    OFFSPRING.her.regen4 = 0.5;
+    OFFSPRING.it.eatBanked4 = 2;
     const p = play(4);
     p.x.teach.pulled = true;
     p.x.her.left = 0;
@@ -334,8 +348,12 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   });
 
   it("round 1's hold ends after three pulls, and a landing on him knocks him aside", () => {
+    OFFSPRING.hunt.on = 0;
     // The landing, not the gap after round 1: keep it standing through the gap, as the old daze did.
     OFFSPRING.it.daze1 = 15;
+    // And her old, quicker recharge, so the wind-up comes inside the loop.
+    OFFSPRING.her.regen4 = 0.5;
+    OFFSPRING.it.eatBanked4 = 2;
     const p = play(4), b0 = p.x.it;
     p.me.pos = p.me.prev = pt(Math.round(b0.x - Math.cos(b0.face) * 3), Math.round(b0.y - Math.sin(b0.face) * 3));
     p.send({ t: "fight", shard: true });
@@ -361,8 +379,12 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   });
 
   it("waiting just behind where it lands is safe: the landing knocks down only under its body", () => {
+    OFFSPRING.hunt.on = 0;
     // The landing, not the gap after round 1: keep it standing through the gap, as the old daze did.
     OFFSPRING.it.daze1 = 15;
+    // And her old, quicker recharge, so the wind-up comes inside the loop.
+    OFFSPRING.her.regen4 = 0.5;
+    OFFSPRING.it.eatBanked4 = 2;
     const p = play(4);
     p.x.teach.pulled = true;
     p.x.her.left = 0;
@@ -432,6 +454,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   });
 
   it("from round 2 the wound stays open, loose, after her hold while the shard is out: it crawls, he pulls only within reach, and a cover or a catch shuts it", () => {
+    OFFSPRING.hunt.on = 0;
     const p = play(4), W = OFFSPRING.wound;
     p.tick(20);
     // Round 2's hold, nearly spent, the wound open and the shard out.
@@ -481,5 +504,99 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       p.tick();
       expect(p.me.run).toBe(false);
     }
+  });
+
+  describe("the hunt (OFFSPRING.hunt, the gameplay thread's trial)", () => {
+    /** Run 4, past round 1's stun: it walks free, and Rook stands `d` tiles behind it. */
+    const loose = (d = 2.5) => {
+      const p = play(4);
+      p.x.teach.pulled = p.x.teach.homed = p.x.teach.eyed = true;
+      p.x.her.left = 0;
+      p.tick();
+      const it = p.x.it;
+      p.me.pos = p.me.prev = pt(Math.round(it.x - Math.cos(it.face) * d), Math.round(it.y - Math.sin(it.face) * d));
+      return p;
+    };
+
+    it("strikes from behind whenever it isn't looking, held or not, and each pull flings a light that lies lit until a tap sends it home", () => {
+      const p = loose();
+      expect(p.x.it.held).toBe(false);
+      expect(p.room.storyView().fight!.it.strike).toBe(2);
+      p.send({ t: "fight", hit: true });
+      expect(p.x.wound.open).toBe(true);
+      expect(p.x.shard.shown).toBe(true);
+      const n = p.x.inside.size;
+      p.send({ t: "fight", hit: true });
+      let flung: { id: number; to: { x: number; y: number } } | undefined;
+      for (let i = 0; i < OFFSPRING.wound.pull + 1 && !flung; i++) (p.tick(), (flung = p.room.storyView().fight!.flung?.[0]));
+      expect(p.x.inside.size).toBe(n - 1);
+      expect(flung).toBeDefined();
+      const w = p.g.wisps[flung!.id]!;
+      expect(w.pos).toMatchObject(flung!.to);
+      // Not on its way home by itself, and not banked where it lies.
+      expect(p.x.torn.has(flung!.id)).toBe(false);
+      expect(p.g.noBank.has(flung!.id)).toBe(true);
+      // A tap from near it sends it home.
+      p.me.pos = p.me.prev = pt(w.pos.x, w.pos.y);
+      p.send({ t: "act", action: { kind: "staff", wisp: flung!.id } });
+      expect(p.x.torn.has(flung!.id)).toBe(true);
+      expect(p.x.teach.homed).toBe(true);
+    });
+
+    it("the wound shuts after a few tears; her blast stuns it for a few ticks, not a long hold", () => {
+      const p = loose();
+      p.send({ t: "fight", hit: true });
+      for (let k = 0; k < OFFSPRING.hunt.tears && p.x.wound.open; k++) {
+        // Stand at its back each time: the fling, not his place, decides where the light lands.
+        const it = p.x.it;
+        p.me.pos = p.me.prev = pt(Math.round(it.x - Math.cos(it.face) * 2.5), Math.round(it.y - Math.sin(it.face) * 2.5));
+        p.send({ t: "fight", hit: true });
+        p.tick(OFFSPRING.wound.pull + 1);
+      }
+      expect(p.x.wound.open).toBe(false);
+      const q = play(4);
+      expect(q.x.her.doing).toBe("hold");
+      expect(q.x.her.left).toBeLessThanOrEqual(OFFSPRING.hunt.stun);
+    });
+
+    it("its eye: it faces him with the shard out, takes its ticks to turn, and catches him only if he is still in its cone", () => {
+      const E = OFFSPRING.eye;
+      for (const dodge of [false, true]) {
+        const p = loose(2);
+        p.send({ t: "fight", hit: true });
+        // Wound shut by hand: it turns on the lit shard.
+        p.x.wound.open = false;
+        let seen = 0;
+        for (let i = 0; i < 30 && !p.room.storyView().fight!.eye; i++) {
+          // Keep him in front of it and near, shard lit.
+          const it = p.x.it;
+          p.me.pos = p.me.prev = pt(Math.round(it.x + Math.cos(it.face) * 2.5), Math.round(it.y + Math.sin(it.face) * 2.5));
+          p.tick();
+        }
+        const f = p.room.storyView().fight!;
+        expect(f.eye).toMatchObject({ of: E.ticks, cone: E.cone });
+        expect(p.room.storyView().opt!.cone).toBeDefined();
+        seen = f.eye!.left;
+        expect(seen).toBeGreaterThan(0);
+        const before = p.room.state.catches;
+        if (dodge) {
+          // Out round its back.
+          const it = p.x.it;
+          p.me.pos = p.me.prev = pt(Math.round(it.x - Math.cos(it.face) * 3), Math.round(it.y - Math.sin(it.face) * 3));
+        }
+        for (let i = 0; i < E.ticks + 1; i++) p.tick();
+        expect(p.room.state.catches > before).toBe(!dodge);
+      }
+    });
+
+    it("the fire is shut while it stands at the brazier", () => {
+      const p = loose();
+      const c = p.c;
+      p.x.it.x = c.x + 1;
+      p.x.it.y = c.y;
+      expect(p.room.storyView().fight!.shut).toBe(true);
+      p.x.it.x = c.x + 8;
+      expect(p.room.storyView().fight!.shut).toBeUndefined();
+    });
   });
 });

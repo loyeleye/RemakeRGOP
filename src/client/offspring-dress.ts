@@ -33,6 +33,9 @@ export const FIGHT_LOOK = {
   flash: 0.7,
   /** Feeding at the fire: the light streaming from the brazier into its eye (how many motes, how fast they go, seconds the stream lasts after a bite), and the dip at the fire as each light goes. */
   sap: { motes: 12, speed: 1.4, hold: 1.4, color: "#ffc070", dip: 0.6 },
+  /** The hunt: its eye turning reflective (the colour it goes, and its glint), and light flung out of the wound (how high it arcs, seconds in the air). */
+  mirror: "#e8f6ff",
+  fling: { up: 2.2, sec: 0.55, color: "#ffd58a" },
 };
 
 type Glow = (color: string, size: number, opacity?: number) => THREE.Sprite;
@@ -43,6 +46,10 @@ export class OffspringFx {
   private body: THREE.Mesh;
   private legs: THREE.Mesh[] = [];
   private eye = new THREE.Group();
+  private ball: THREE.Mesh;
+  private glint: THREE.Sprite;
+  private flungMotes = new Map<number, { s: THREE.Sprite; from: { x: number; y: number }; to: { x: number; y: number }; at: number }>();
+  private glow: Glow;
   private backSkin: THREE.Mesh;
   private backGlow: THREE.Sprite;
   private slit: THREE.Mesh;
@@ -69,6 +76,7 @@ export class OffspringFx {
   private last = 0;
 
   constructor(glow: Glow) {
+    this.glow = glow;
     const L = FIGHT_LOOK, S = OFFSPRING.it.size;
     const mat = (c: string, e?: string) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, ...(e ? { emissive: new THREE.Color(e), emissiveIntensity: 0 } : {}) });
     // The body: a low rounded block, its front (+x) the eye's.
@@ -85,8 +93,12 @@ export class OffspringFx {
       this.it.add(leg);
     }
     // The eye: the biggest thing about it, on the front edge. A plain eye: no needle, no tell but the turn.
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(S * 0.3, 28, 20), new THREE.MeshStandardMaterial({ color: L.eye, roughness: 0.3, emissive: new THREE.Color(L.eye), emissiveIntensity: 0.25 }));
+    const ball = (this.ball = new THREE.Mesh(new THREE.SphereGeometry(S * 0.3, 28, 20), new THREE.MeshStandardMaterial({ color: L.eye, roughness: 0.3, emissive: new THREE.Color(L.eye), emissiveIntensity: 0.25 })));
     this.eye.add(ball);
+    // Its glint as the eye turns reflective.
+    this.glint = glow(L.mirror, S * 0.9, 0);
+    this.glint.position.x = S * 0.32;
+    this.eye.add(this.glint);
     const iris = new THREE.Mesh(new THREE.CircleGeometry(S * 0.15, 24), new THREE.MeshStandardMaterial({ color: L.iris, roughness: 0.4, emissive: new THREE.Color(L.iris), emissiveIntensity: 0.3 }));
     iris.rotation.y = Math.PI / 2;
     iris.position.x = S * 0.3 + 0.01;
@@ -215,6 +227,32 @@ export class OffspringFx {
       this.flash.material.opacity = 1 - age / L.flash;
       this.flash.visible = true;
     } else this.flash.visible = false;
+    // The hunt: its eye turns reflective step by step (eye.left of eye.of), whitening and glinting; at the last step it flashes.
+    const ey = f.eye, em = this.ball.material as THREE.MeshStandardMaterial;
+    const turned = ey ? Math.min(1, (ey.of - ey.left + t) / ey.of) : 0;
+    em.emissive.set(ey ? L.mirror : L.eye);
+    em.emissiveIntensity = ey ? 0.4 + 2.4 * turned : 0.25;
+    em.metalness = ey ? 0.6 * turned : 0;
+    this.glint.material.opacity = ey ? 0.25 + 0.7 * turned * (0.75 + 0.25 * Math.sin(o.time * 20)) : 0;
+    this.glint.scale.setScalar(S * (0.5 + 0.9 * turned));
+    // Light flung out of the wound: a mote arcing from its back to where the light fell.
+    for (const q of f.flung ?? []) {
+      if (this.flungMotes.has(q.id) && this.flungMotes.get(q.id)!.to.x === q.to.x && this.flungMotes.get(q.id)!.to.y === q.to.y) continue;
+      this.flungMotes.get(q.id)?.s.removeFromParent();
+      const m = this.glow(L.fling.color, 0.7, 0.95);
+      this.all.add(m);
+      this.flungMotes.set(q.id, { s: m, from: q.from, to: q.to, at: o.time });
+    }
+    for (const [id, q] of this.flungMotes) {
+      const k = (o.time - q.at) / L.fling.sec;
+      if (k >= 1) {
+        q.s.removeFromParent();
+        q.s.material.dispose();
+        this.flungMotes.delete(id);
+        continue;
+      }
+      q.s.position.set(wx(q.from.x + (q.to.x - q.from.x) * k), 0.8 + Math.sin(Math.PI * k) * L.fling.up, wz(q.from.y + (q.to.y - q.from.y) * k));
+    }
     // Feeding at the fire: light streams from the brazier into its eye, and the fire dips as each one goes.
     const P = L.sap;
     if (f.it.eating && f.it.after === "brazier") this.sapUntil = o.time + P.hold;

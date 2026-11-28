@@ -3179,11 +3179,13 @@ export class World {
       this.scene.add(this.fightFx.all);
     }
     // The brazier is dead: it gives light only for what has been banked in it, and with none no fire shows.
-    this.brazierLight.intensity = f.banked * 6;
+    // In the hunt, while it sits on the fire, the fire is smothered: no flame, a low glow.
+    this.brazierLight.intensity = f.banked * (f.shut ? 1 : 6);
     this.fightFire = this.fireParts;
     if (this.fireParts) {
       const p = this.fireParts, k = Math.min(1, f.banked / 4), on = f.banked > 0;
-      p.fire.visible = p.embers.visible = p.glow.visible = on;
+      p.fire.visible = p.glow.visible = on && !f.shut;
+      p.embers.visible = on;
       p.pillar.visible = false;
       if (on) p.fire.scale.set(0.4 + 0.6 * k, 0.2 + 0.8 * k, 0.4 + 0.6 * k);
     }

@@ -53,10 +53,10 @@ export const OFFSPRING = {
     /** How near its front edge has to come to reach a light (tiles): a wisp, Rook, her or the boy; and the brazier, from the brazier's middle. */
     reach: 0.8,
     reachBrazier: 2.5,
-    /** Ticks to eat a loose wisp, and a banked one (in run 3, and in run 4: 2, was 6, about one banked light a second, so it saps the fire; Ladi 27 Nov 3:32 PM). */
+    /** Ticks to eat a loose wisp, and a banked one (in run 3, and in run 4: 4 with the hunt, where it sits on the fire; it was 2, then 6 before that). */
     eatLoose: 3,
     eatBanked: 6,
-    eatBanked4: 2,
+    eatBanked4: 4,
     /** The light it is after keeps its place this much against an equal one, so it doesn't dither. */
     stick: 1.25,
     /** The brazier counts from its rim, this far out from the middle (tiles), when it is nearest-first food. */
@@ -94,7 +94,7 @@ export const OFFSPRING = {
     dipTicks: 4,
     /** Run 4. The flare and a blast leave her at `afterBlast`. She climbs `regen4` a tick while it leaves her alone, and drains `drain` a tick while it is after her. */
     afterBlast: 2,
-    regen4: 0.5,
+    regen4: 0.2,
     drain: 0.25,
     /** While it is on her, her light goes `eaten` a tick, down to `floor`; at 0 it moves on to the brazier or the boy. */
     eaten: 1,
@@ -194,6 +194,8 @@ export const OFFSPRING = {
       lure: { key: "Space shows the shard and draws it off. Hide it before it reaches you.", tap: "Show the shard to draw it off. Hide it before it reaches you." },
       loose: { key: "Keep pulling. Press Space to cover the shard before it reaches you.", tap: "Keep pulling. Hide the shard before it reaches you." },
       far: { key: "Too far to pull. Get closer to its back.", tap: "Too far to pull. Get closer to its back." },
+      home: { key: "Click the fallen light to send it home to the fire.", tap: "Tap the fallen light to send it home to the fire." },
+      eye: { key: "Its eye is turning. Get out of its sight, or press Space to cover the shard.", tap: "Its eye is turning. Get out of its sight, or hide the shard." },
     },
     /** The same on a retry, shortened. */
     short: {
@@ -204,6 +206,8 @@ export const OFFSPRING = {
       lure: { key: "Space: draw it off, then hide.", tap: "Show to draw it off, then hide." },
       loose: { key: "Pull, then Space to cover.", tap: "Pull, then hide." },
       far: { key: "Too far. Get closer.", tap: "Too far. Get closer." },
+      home: { key: "Click the light: home.", tap: "Tap the light: home." },
+      eye: { key: "Its eye: out of sight, or Space.", tap: "Its eye: out of sight, or hide." },
     },
     /** Ticks he waits at a step before she says the strike or pull order. */
     wait: 3,
@@ -231,6 +235,29 @@ export const OFFSPRING = {
    * kill: there it stares at the fire.
    */
   cycles: { at: 5, side: 0, jump: 2 },
+  /**
+   * Run 4 as a hunt (the gameplay thread's rules; Ladi chose "Try the hunt", 27 Nov 3:55 PM). 0 for
+   * off gives back the rounds of holds (v291). He strikes its back from behind whenever it is not
+   * mid-leap, held or not; the strike brings the shard out and opens the wound, which shuts after
+   * `tears` tears (not counted while she stuns it) or when he covers. Torn light is `fling` tiles
+   * (give or take `flingSpread`) off, any way, and lies lit until he taps it (within his pull's
+   * reach): then it flies home to the fire by itself (`home`). It goes for the shard, then loose
+   * light nearest first (`straysFirst`), and only then the fire. While it sits on the fire nothing
+   * banks (`block`): light sent home waits at the rim. The brazier is solid to its body (`solid`).
+   * Solenne no longer holds: full, she flares and stuns it where it stands for `stun` ticks. No
+   * hops while the shard glows or its eye turns (`hopShard` 0).
+   */
+  hunt: { on: 1, stun: 4, tears: 3, home: 1, block: 1, hopShard: 0, fling: 6, flingSpread: 2, straysFirst: 1, solid: 1 },
+  /**
+   * Its eye, in place of the touch catch (Ladi, 27 Nov 3:57 PM: "it should have to face you then its
+   * eye takes 3 or 4 ticks to turn reflective then you are dead if you are in it's cone of vision").
+   * After the shard it walks to within `range` tiles of him (from its front edge) and turns to face
+   * him (within `aim` degrees). Then the eye turns over `ticks`, while it stands and follows him only
+   * `track` degrees a tick (`lock`). At the end he is caught (the save, then the loss) if the shard
+   * still glows and he is within `cone` degrees either side of its facing and `range` + `slack` tiles
+   * of its front. If the shard goes dark first the eye lets go.
+   */
+  eye: { on: 1, ticks: 3, cone: 35, aim: 15, range: 1.5, lock: 1, slack: 2, track: 8 },
   /** Her three lines after a save (approved wording, Ladi 27 Nov 12:48 PM; no voice take yet). One at random. */
   saved: ["I can't do that twice, Salvage.", "Next time it has you, I keep what's left for the boy.", "That cost more than you're worth. Stay behind it."],
   /** Text on the short card. Placeholder wording, not story lines. */

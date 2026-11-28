@@ -226,6 +226,30 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
     g.restore();
   }
 
+  // The hunt: its eye's cone on the ground while the eye turns, filling as it turns, so "step out of it" can be read.
+  if (o.cone) {
+    const C = o.cone, a0 = C.face - (C.deg * Math.PI) / 180, a1 = C.face + (C.deg * Math.PI) / 180, n = 18;
+    const at = (a: number, r: number) => cam.toScreen(C.x + 0.5 + Math.cos(a) * r, C.y + 0.5 + Math.sin(a) * r, 0.05);
+    g.save();
+    g.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const p = at(a0 + ((a1 - a0) * i) / n, C.far);
+      i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y);
+    }
+    for (let i = n; i >= 0; i--) {
+      const p = at(a0 + ((a1 - a0) * i) / n, C.near);
+      g.lineTo(p.x, p.y);
+    }
+    g.closePath();
+    const beat = 0.5 + 0.5 * Math.sin(now / 90);
+    g.fillStyle = `rgba(225,240,255,${0.12 + 0.3 * C.k + 0.08 * beat * C.k})`;
+    g.fill();
+    g.lineWidth = 2.5;
+    g.strokeStyle = `rgba(240,250,255,${0.55 + 0.45 * C.k})`;
+    g.stroke();
+    g.restore();
+  }
+
   // Where it will land, through her wind-up: its size, in her colour, dashed and running.
   if (o.land) {
     const beat = 0.5 + 0.5 * Math.sin(now / 120);

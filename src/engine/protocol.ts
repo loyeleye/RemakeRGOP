@@ -157,6 +157,8 @@ export interface StoryView {
     /** Meters on the ground at people's feet (the offspring fight: Solenne's light, and the boy's in run 4): the tile, how full (0 to 1), the mark needed for what comes next (0 to 1), and whose colour. */
     /** Where to tap on the offspring's back (run 4): its back held with the shard out, `live` when a tap would strike or pull. */
     hit?: { x: number; y: number; live: boolean };
+    /** The hunt: its eye's cone on the ground while the eye turns: its middle (tiles), facing (radians), half-width (degrees), its front edge and how far the cone reaches from its middle (tiles), and how far the eye has turned (0 to 1). */
+    cone?: { x: number; y: number; face: number; deg: number; near: number; far: number; k: number };
     /** Where it will land (the offspring fight, run 4, through her wind-up): the middle and its half-width, tiles. */
     land?: { x: number; y: number; r: number };
     /** A mark on the ground where to stand (the offspring fight, round 1 of run 4). */
@@ -191,7 +193,11 @@ export interface StoryView {
     down: number;
     pulling: number;
     /** Run 4's teaching (OFFSPRING.teach): the hint bubble to show now, and round 1's mark where to stand. */
-    teach?: { hint?: "show" | "strike" | "pull" | "cover" | "lure" | "loose" | "far"; /** Run 4 again after a loss: the short hints. */ retry?: boolean; stand?: { x: number; y: number } };
+    /** The hunt (OFFSPRING.hunt, .eye): its eye turning, ticks left of `of`, its cone either side of its facing (degrees) and how far it reaches (tiles from its front edge); the fire shut while it sits on it; light flung out of the wound lately, from its back to where it fell. */
+    eye?: { left: number; of: number; cone: number; r: number };
+    shut?: boolean;
+    flung?: { id: number; from: { x: number; y: number }; to: { x: number; y: number }; tick: number }[];
+    teach?: { hint?: "show" | "strike" | "pull" | "cover" | "lure" | "loose" | "far" | "home" | "eye"; /** Run 4 again after a loss: the short hints. */ retry?: boolean; stand?: { x: number; y: number } };
   };
   /** At the end: how bright the sky got (0 to 1, run 1 only), a summary, and the closing lines. */
   end?: { banked: number; kes: number; sky?: number; summary?: string; lines: StoryLine[]; /** No result screen: the page cuts to black and goes on (run 10). */ cut?: boolean };
