@@ -47,6 +47,8 @@ export const CAMP = {
   outriderSays: 2,
   /** Called over to the nightshades, the cook goes back once Rook is this far from them without tapping (the gameplay thread). */
   cookLeaves: 6,
+  /** The taps that don't add up: the yard tune ducks under the low note (the gameplay thread's picks). */
+  wrongTaps: ["bar", "gate-inside", "boy", "lantern"] as string[],
   /** The boy keeps at least this far from Outrider (tiles), stepping away when he comes close. */
   boyKeeps: 4,
   /** Who wanders, how far from their place (tiles), and ticks between strolls (build). The cook, the lantern man and Outrider stay. */

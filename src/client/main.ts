@@ -24,6 +24,7 @@ import { CampRoom } from "../server/camp.js";
 import { Run2Room } from "../server/run2.js";
 import { RUN2 } from "../engine/run2.js";
 import { campSfx, run2Sfx } from "./part2-sfx.js";
+import { campMusic, run2Music } from "./part2-music.js";
 import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
 import { loadOpt, loadProgress, reach, resetOpts, resetProgress, saveOpt } from "./progress.js";
@@ -1153,14 +1154,10 @@ function storyTickSound(s: GameSnapshot) {
   else if (st.rescue) rescueSound(st.rescue);
   else if (st.ship) shipSound(st.ship);
   else if (st.fight) (fightMusic(st.fight, room!.phase === "playing" && !st.fight.dying), offspringSfx(st.fight, room!.phase === "playing"));
-  // The camp walk has no music: the cook's fire and, at the light's edge, the nightshades' hush.
-  else if (st.camp) campSfx(st.camp);
-  else if (st.run2) {
-    run2Sfx(st.run2);
-    // Run 2 plays the Kindling's music under its party; at full it lets go under the cheer.
-    if (st.run2.end) sound.stopMusic(2.5), (musicFor = -1);
-    else if (musicFor !== st.movement) (musicFor = st.movement), sound.playMusic(st.movement);
-  }
+  // The camp walk: the yard tune, and the cook's fire and, at the light's edge, the nightshades' hush.
+  else if (st.camp) campSfx(st.camp), campMusic(st.camp);
+  // Run 2: the crew's work song, and its last phrase with the cheer.
+  else if (st.run2) run2Sfx(st.run2), run2Music(st.run2);
   else if (room!.phase === "playing" && musicFor !== st.movement) {
     musicFor = st.movement;
     sound.playMusic(st.movement); // starts on a tick, so the beat lines up with the 600 ms steps
@@ -1556,6 +1553,8 @@ function stopStorySound() {
   offspringSfx(undefined, false);
   campSfx(undefined);
   run2Sfx(undefined);
+  campMusic(undefined);
+  run2Music(undefined);
   musicFor = -1;
 }
 

@@ -303,7 +303,9 @@ export interface StoryView {
   run2?: { filled: number; of: number; warm: number; fizz?: { tick: number; x: number; y: number }; looks?: { id: number; x: number; y: number }[]; end?: { at: number; lines?: number; lit?: number; held?: number; done?: true } };
   camp?: { goal?: string; done?: true; taps: { x: number; y: number; h: number }[]; shades: { x: number; y: number; near: boolean }[]; looks?: { id: number; x: number; y: number }[];
     /** How far Rook stands from the cook's fire and the nearest nightshade (tiles), for the loops. */
-    hear?: { fire: number; shade: number } };
+    hear?: { fire: number; shade: number };
+    /** The tick of the last tap that doesn't add up, for the music. */
+    wrong?: number };
   pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "sunset" | "night" | "dusk"; looks?: { id: number; x: number; y: number }[]; kitchen?: number;
     /** Part 1's chain: the walk's last tap was made, and the page goes on. */
     done?: boolean;

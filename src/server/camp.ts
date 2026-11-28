@@ -42,6 +42,8 @@ export class CampRoom {
   private cookOut: { to: Pt; back: number } | null = null;
   /** The nightshades tapped before the cook was there: her lines wait until she is within 2 tiles of him. */
   private shadesWait = false;
+  /** The tick of the last tap that doesn't add up (the music's duck). */
+  private wrongAt = -1;
   /** Outrider's way to the rim, by the cart (so the boy backs off in front of the player): the tick he may go on, -1 while on his way. */
   private via: { until: number } | null = null;
   private s = 1;
@@ -321,6 +323,7 @@ export class CampRoom {
     const n = this.taps.get(t.key) ?? 0;
     this.taps.set(t.key, n + 1);
     this.countTap(t.key);
+    if (CAMP.wrongTaps.includes(t.key)) this.wrongAt = this.game.tick;
     if (t.key === "shades") {
       const S = CAMP.shadesSay;
       if (n === 0) {
@@ -478,7 +481,7 @@ export class CampRoom {
       kes: 0,
       rival: null,
       note: "",
-      camp: { ...(this.goalAt >= 0 && !this.done ? { goal: CAMP.goal.text } : {}), ...(this.done ? { done: true as const } : {}), taps, shades, looks: this.looks(), hear },
+      camp: { ...(this.goalAt >= 0 && !this.done ? { goal: CAMP.goal.text } : {}), ...(this.done ? { done: true as const } : {}), taps, shades, looks: this.looks(), hear, ...(this.wrongAt >= 0 ? { wrong: this.wrongAt } : {}) },
     };
   }
 

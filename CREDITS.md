@@ -66,6 +66,17 @@ leading silence trimmed (0.1 to 0.4 s, so the first beat lands on the first tick
 
 `kindling-run-1.wav` is not used.
 
+Part 2's crew music, also Ladi's on Mureka (27 Nov 2026), cut by the gameplay thread on its bar lines (project files
+`gameplay/audio/part2/README.md`; Ladi heard and approved the cuts, 27 Nov 3:07 PM "All start on a phrase. No words." and
+3:08 PM "Both yard tunes are fine. Let's go with A."). Same licence status as the Kindling's music below: ❓.
+
+| File | Source render | Where |
+|---|---|---|
+| music/p2-run2-1.mp3, -2, -3 | run-two.wav, bars 5 to 24, 25 to 44, 65 to 84 (48 s loops, thin to full) | Run 2, moving on at banks 5 and 11 (`src/client/part2-music.ts`) |
+| music/p2-run2-end.mp3 | run-two.wav, bar 85 to the end | Run 2, at full |
+| music/p2-camp.mp3 | run-two.wav, bars 1 to 36, claps and stamps taken out with a stem separator (htdemucs) by the gameplay thread | The camp walk |
+| music/p2-low-note.wav | Made by the gameplay thread from its ElevenLabs bowed note (runs 3 and 4's single sounds, below), a 9.6 s loop, only ever played under the yard tune | The camp walk, under the tune |
+
 Licence: ❓ not confirmed. On 2026-11-23 Mureka's terms page (https://www.mureka.ai/terms-of-service)
 returned 404. The homepage (https://www.mureka.ai) offers "full commercial rights" and says paid plans
 "enjoy commercial licensing", but it doesn't say what the free plan allows or whether rights depend on
