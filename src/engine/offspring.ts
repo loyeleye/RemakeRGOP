@@ -247,13 +247,14 @@ export const OFFSPRING = {
    * Solenne no longer holds: full, she flares and stuns it where it stands for `stun` ticks. No
    * hops while the shard glows or its eye turns (`hopShard` 0).
    */
-  hunt: { on: 1, stun: 4, tears: 3, home: 0, block: 0, hopShard: 0, fling: 6, flingSpread: 2, straysFirst: 1, solid: 1, bolt: 1, boltMin: 9, boltTicks: 3, away: 16, flingHeld: 1 },
+  hunt: { on: 1, stun: 4, tears: 3, home: 0, block: 0, hopShard: 0, fling: 6, flingSpread: 2, straysFirst: 1, solid: 1, bolt: 1, boltMin: 9, boltTicks: 3, away: 8, flingHeld: 1 },
   /*
    * The jump (gameplay thread, trial-jump-delta.patch, from Ladi 27 Nov 4:46 PM: "after 2 or 3 taps it
    * jumps to safety", and "Besides tapping which feels kind of like a different game"):
    * - `bolt`: after `tears` tears the wound shuts and it leaps (`boltTicks`) to a random spot at least
    *   `boltMin` tiles from Rook, eye and gaze cleared; it stays there `away` ticks, then limps back
-   *   for dark.hurt ticks.
+   *   for dark.hurt ticks. `away` 8 (about 5 s) is the gameplay thread's pick from Ladi's "10 seconds
+   *   is a lot of time" (27 Nov 5:16 PM), not a number Ladi gave; it was 16.
    * - `home` 0 (Ladi's): no tap that sends light home; torn light is ordinary loose lit light, pulled
    *   with the staff and banked at the brazier.
    * - The gameplay thread's own calls, not Ladi's: `block` 0 (the fire no longer shuts while it sits
