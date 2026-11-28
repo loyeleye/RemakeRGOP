@@ -10,16 +10,19 @@ import type { StoryView } from "../engine/protocol.js";
 import { audioOut } from "./sound.js";
 
 type Camp = NonNullable<StoryView["camp"]>;
+type Run2 = NonNullable<StoryView["run2"]>;
 
 export const PART2_SFX = {
   /** The whole pack's level. */
   gain: 0.8,
   /** Each loop at full (build's guesses, for Ladi's ear). */
-  gains: { "camp-fire": 0.55, "shade-hush": 0.5 } as Record<string, number>,
+  gains: { "camp-fire": 0.55, "shade-hush": 0.5, fizz: 0.7, cheer: 0.8, "light-lines": 0.9, "cage-light": 0.9, hands: 0.8 } as Record<string, number>,
+  /** Run 2's cheer has voices in it (a small crowd, no words found): Ladi's to allow or drop. Off, the music's last phrase carries the end. */
+  cheer: true,
   /** The fire is full within `full` tiles and gone past `gone` (build). */
   fire: { full: 2, gone: 12 },
-  /** The hush is full within `full` tiles of a nightshade and gone past `gone` (README: within 3; build: a tile more, as the gate's reach). */
-  hush: { full: 1.5, gone: 5 },
+  /** The hush is full within `full` tiles of a nightshade and gone past `gone` (the gameplay thread, 28 Nov: he can't get nearer than 2.8). */
+  hush: { full: 3, gone: 7 },
   /** How fast a loop follows him (s). */
   follow: 0.25,
 };
@@ -59,6 +62,17 @@ interface Loop {
 }
 
 class CampSfx {
+  /** A sound once, now, at its own gain. */
+  once(n: Name) {
+    const buf = this.b[n];
+    if (!buf) return;
+    const src = this.c.createBufferSource(), g = this.c.createGain();
+    src.buffer = buf;
+    g.gain.value = PART2_SFX.gains[n] ?? 1;
+    src.connect(g).connect(this.bus);
+    src.start();
+    src.onended = () => (src.disconnect(), g.disconnect());
+  }
   bus: GainNode;
   loops: Partial<Record<Name, Loop>> = {};
   constructor(
@@ -121,4 +135,27 @@ export function campSfx(c: Camp | undefined) {
   if (!buffers) return;
   camp ??= new CampSfx(o.c, o.o, buffers);
   camp.step(c);
+}
+
+let run2: { sfx: CampSfx; last: Run2 | null } | null = null;
+
+/** Each tick of run 2: a crew light fizzing past warm; at full the cheer, the lines of light, the cage taking it, the hands on him. */
+export function run2Sfx(r: Run2 | undefined) {
+  const o = audioOut();
+  if (o && r) load(o.c);
+  if (!r || !o) {
+    run2?.sfx.silence();
+    run2 = null;
+    return;
+  }
+  if (!buffers) return;
+  run2 ??= { sfx: new CampSfx(o.c, o.o, buffers), last: null };
+  const p = run2.last, s = run2.sfx, e = r.end, pe = p?.end;
+  run2.last = r;
+  if (!p) return;
+  if (r.fizz && r.fizz.tick !== p.fizz?.tick) s.once("fizz");
+  if (e && !pe && PART2_SFX.cheer) s.once("cheer");
+  if (e?.lines !== undefined && pe?.lines === undefined) s.once("light-lines");
+  if (e?.lit !== undefined && pe?.lit === undefined) s.once("cage-light");
+  if (e?.held !== undefined && pe?.held === undefined) s.once("hands");
 }

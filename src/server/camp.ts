@@ -40,6 +40,10 @@ export class CampRoom {
   private wasOut = false;
   /** The cook, called over to the nightshades: where she was sent, and the tick she goes back (-1: not yet). */
   private cookOut: { to: Pt; back: number } | null = null;
+  /** The nightshades tapped before the cook was there: her lines wait until she is within 2 tiles of him. */
+  private shadesWait = false;
+  /** Outrider's way to the rim, by the cart (so the boy backs off in front of the player): the tick he may go on, -1 while on his way. */
+  private via: { until: number } | null = null;
   private s = 1;
 
   /** The camp's beat: the walkable map's (POND_WALK_SPEED), at CAMP.slow of it, for his slower, watchful walk. */
@@ -98,6 +102,8 @@ export class CampRoom {
     put(ROOK_ID, CAMP.rook);
     for (const p of CAMP.people) put(ID[p.key]!, p.at);
     for (const k of CAMP.wander.who) this.wanderers.set(ID[k]!, { home: this.player(ID[k]!).pos, next: 4 + Math.floor(this.rand() * CAMP.wander.every[1]) });
+    // Outrider's line by the fire, unprompted, a moment in (the gameplay thread: otherwise only heard if he is one of the first two taps).
+    this.later.push({ at: CAMP.outriderSays, f: () => this.say(CAMP.says.outrider!.first[0]!) });
     this.endClock();
     this.stop = this.clock.every(this.beatMs, () => this.onTick());
     this.broadcast();
@@ -107,6 +113,7 @@ export class CampRoom {
     const g = this.game;
     if (this.done) return;
     this.wander();
+    this.outriderWay();
     this.keepBoyClear();
     g.step();
     // The goal: after two taps, or 25 s.
@@ -166,20 +173,45 @@ export class CampRoom {
     if (this.goalAt >= 0) return;
     this.goalAt = this.game.tick;
     // Outrider gets up and goes to wait at the cold brazier's north rim: the player sees where to go because somebody went there.
-    this.walk(ID.outrider!, this.tile(CAMP.rim));
+    // By way of the cart, a pause there, then the rim (the gameplay thread, 28 Nov).
+    this.via = { until: -1 };
+    this.walk(ID.outrider!, this.tile(CAMP.outriderVia.at));
+  }
+
+  private outriderWay() {
+    const v = this.via;
+    if (!v) return;
+    const g = this.game, o = this.player(ID.outrider!).pos;
+    // There (or held up on the way for long enough), he pauses, then goes on.
+    if (v.until < 0 && (near(o, this.tile(CAMP.outriderVia.at), 1) || g.tick - this.goalAt > 20)) v.until = g.tick + CAMP.outriderVia.pause;
+    else if (v.until < 0 && this.player(ID.outrider!).action.kind !== "walk") this.walk(ID.outrider!, this.tile(CAMP.outriderVia.at));
+    if (v.until >= 0 && g.tick >= v.until) {
+      this.via = null;
+      this.walk(ID.outrider!, this.tile(CAMP.rim));
+    }
   }
 
   /** The cook comes over when Rook is within reach of the nightshades past the gate, to be there by his tap. */
   private callCook() {
     const g = this.game, rook = this.player(ROOK_ID).pos, cook = ID.cook!;
     if (this.cookOut) {
+      // He walked off without tapping them: she goes back once he is far enough from them.
+      const c = g.board.center, far = CAMP.shades.slice(0, CAMP.gateShades).every(([x, y]) => Math.hypot(c.x + x - rook.x, c.y + y - rook.y) > CAMP.cookLeaves);
+      if (this.cookOut.back < 0 && far && !this.shadesWait) this.cookOut.back = g.tick;
+      // Her lines, held until she is beside him.
+      if (this.shadesWait && near(this.player(cook).pos, rook, 2)) {
+        this.shadesWait = false;
+        const S = CAMP.shadesSay;
+        this.sayAll(S.first);
+        this.cookOut.back = g.tick + this.gap(S.first) + CAMP.cookBack;
+      }
       if (this.cookOut.back >= 0 && g.tick >= this.cookOut.back) {
         this.walk(cook, this.tile(CAMP.people.find((p) => p.key === "cook")!.at));
         this.cookOut = null;
       }
       return;
     }
-    if ((this.taps.get("shades") ?? 0) > 0 || !this.nearShade(rook)) return;
+    if (((this.taps.get("shades") ?? 0) > 0 && !this.shadesWait) || !this.nearShade(rook)) return;
     const to = this.besideOpen(rook, rook);
     this.cookOut = { to, back: -1 };
     this.walk(cook, to);
@@ -292,8 +324,14 @@ export class CampRoom {
     if (t.key === "shades") {
       const S = CAMP.shadesSay;
       if (n === 0) {
+        // Her lines wait until she is within 2 tiles of him.
+        if (!this.cookOut || !near(this.player(ID.cook!).pos, this.player(ROOK_ID).pos, 2)) {
+          this.shadesWait = true;
+          if (!this.cookOut) this.callCook();
+          return;
+        }
         this.sayAll(S.first);
-        if (this.cookOut) this.cookOut.back = this.game.tick + this.gap(S.first) + CAMP.cookBack;
+        this.cookOut.back = this.game.tick + this.gap(S.first) + CAMP.cookBack;
         return;
       }
       return this.sayAll(S.again);

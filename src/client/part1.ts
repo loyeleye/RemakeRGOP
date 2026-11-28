@@ -19,6 +19,8 @@ export interface Piece {
   walk?: number;
   /** Part 2's camp walk (server/camp.ts), in place of a home-island walk. */
   camp?: true;
+  /** Part 2's run 2, the crew's brazier (server/run2.ts). */
+  run2?: true;
   /** A card: its heading and one line on what it will be, and how much of it is ruled. */
   card?: { heading: string; summary: string; ruled: string; optional?: true; end?: true };
   /**

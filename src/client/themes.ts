@@ -165,6 +165,10 @@ export const THEMES: Record<string, Theme> = {
       fog: "#1c2030", clouds: "#3a4256", hemi: ["#6a6c88", "#3a2a1c", 0.5] as [string, string, number], sun: ["#9aa8d8", 0.35] as [string, number], exposure: 1.05,
     };
   },
+  // Run 2 on the same camp, gate barred: the same night.
+  get "crew-run2"() {
+    return { ...THEMES["warm-camp"]!, name: "The crew's brazier" };
+  },
   // The Sieve (run 8): the palest, quietest place. Bleached chalk under a low, washed-out morning; nothing growing, no colour.
   get sieve() {
     const base = THEMES["tidepool-steps"]!;

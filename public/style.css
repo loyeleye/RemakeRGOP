@@ -493,3 +493,10 @@ label.t-text { cursor: pointer; }
 @keyframes np-dawn { 0%, 66% { opacity: 0; } 100% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #night-pass .moon { display: none; } }
 body.camp-walk #run, body.camp-walk #run2, body.camp-walk #mode, body.camp-walk #staff, body.camp-walk #next, body.camp-walk #shard { display: none !important; }
+
+/* Part 2's run 2: the brazier's sixteen pips under the top bar, a gap at warm. */
+#run2-pips { position: absolute; top: 52px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; padding: 6px 10px; border-radius: 999px; background: rgba(12, 10, 18, 0.55); pointer-events: none; z-index: 5; }
+#run2-pips i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 220, 170, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 220, 170, 0.35); }
+#run2-pips i.lit { background: #ffc36b; box-shadow: 0 0 6px #ff9a3c; }
+#run2-pips i.warm { margin-left: 7px; }
+@media (max-width: 420px) { #run2-pips { gap: 3px; padding: 5px 8px; } #run2-pips i { width: 8px; height: 8px; } }

@@ -299,6 +299,8 @@ export interface StoryView {
    * aim on them), the nightshades at the light's edge, who faces where while they stand, and done once the
    * last tap is made (the page goes on).
    */
+  /** Part 2's run 2: banks that counted of how many, where warm is, the last crew light to fizz past warm (tick and board tile), who faces where, and how it ends (ticks: when it filled, the lines ran, the bars lit, both had him; done hands on). */
+  run2?: { filled: number; of: number; warm: number; fizz?: { tick: number; x: number; y: number }; looks?: { id: number; x: number; y: number }[]; end?: { at: number; lines?: number; lit?: number; held?: number; done?: true } };
   camp?: { goal?: string; done?: true; taps: { x: number; y: number; h: number }[]; shades: { x: number; y: number; near: boolean }[]; looks?: { id: number; x: number; y: number }[];
     /** How far Rook stands from the cook's fire and the nearest nightshade (tiles), for the loops. */
     hear?: { fire: number; shade: number } };

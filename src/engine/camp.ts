@@ -41,6 +41,12 @@ export const CAMP = {
   goal: { taps: 2, seconds: 25, text: "Talk to the Outrider at the cold brazier" },
   /** When the goal shows, Outrider gets up and waits at the cold brazier's north rim (the brief, 28 Nov). */
   rim: [0, -2] as const,
+  /** He goes there by way of the cart, pausing this many ticks, so the boy backs off in front of the player (the gameplay thread, 28 Nov). */
+  outriderVia: { at: [-2, 6] as const, pause: 2 },
+  /** Outrider says his line by the fire unprompted, this many ticks in (the gameplay thread). */
+  outriderSays: 2,
+  /** Called over to the nightshades, the cook goes back once Rook is this far from them without tapping (the gameplay thread). */
+  cookLeaves: 6,
   /** The boy keeps at least this far from Outrider (tiles), stepping away when he comes close. */
   boyKeeps: 4,
   /** Who wanders, how far from their place (tiles), and ticks between strolls (build). The cook, the lantern man and Outrider stay. */

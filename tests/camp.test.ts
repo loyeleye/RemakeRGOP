@@ -114,4 +114,30 @@ describe("Part 2, the camp walk", () => {
     expect(h1.fire).toBeGreaterThan(12);
     expect(h1.shade).toBeLessThan(4);
   });
+
+  it("Outrider's line by the fire comes unprompted; at the goal he goes by the cart, and the boy backs off", () => {
+    const w = walk();
+    w.tick(4);
+    expect(w.lines.some((l) => l.who === "Outrider" && l.text.startsWith("Eat."))).toBe(true);
+    w.tick(Math.ceil((CAMP.goal.seconds * 1000) / w.room.beatMs) + 1);
+    let least = 99;
+    for (let i = 0; i < 40; i++) {
+      w.tick();
+      const o = w.at(w.ids.outrider!);
+      least = Math.min(least, Math.hypot(o.x - CAMP.outriderVia.at[0], o.y - CAMP.outriderVia.at[1]));
+    }
+    expect(least).toBeLessThanOrEqual(1.5);
+    expect(w.at(w.ids.outrider!)).toEqual({ x: CAMP.rim[0], y: CAMP.rim[1] });
+  });
+
+  it("a tap on the nightshades at once: the cook's lines wait until she is beside him", () => {
+    const w = walk();
+    // Rook straight out to the apron's edge, then a tap on the nightshades.
+    w.room.state.game.players.find((p) => p.id === 1)!.pos = { x: w.c.x, y: w.c.y - 14 } as never;
+    w.tap(0, -17);
+    w.tick(2);
+    expect(w.lines.some((l) => l.text.startsWith("Those? Nightshades."))).toBe(false);
+    w.tick(80);
+    expect(w.lines.filter((l) => l.text.startsWith("Those? Nightshades.")).length).toBe(1);
+  });
 });

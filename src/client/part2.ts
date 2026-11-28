@@ -24,7 +24,8 @@ export const PART2: Piece[] = [
   { id: "1-2b", name: "The camp walk", kind: "walk", camp: true },
   // Pictures D1 and D4, locked; D2 and D3 are not drawn yet.
   { id: "1-2c", name: "The ask", kind: "card", scene: "held", card: { heading: "The ask", summary: "Outrider at the cold brazier asks for one run. The boy is put to bed in the back cart, the gate is barred. Rook looks from the gate to the cart to the brazier.", ruled: "Part ruled: Rook's thought is Ladi's; the crew's lines are draft and not in yet. Pictures D1 and D4 are locked." } },
-  { id: "2", name: "Run 2, the crew's brazier", kind: "card", card: { heading: "Run 2, the crew's brazier", summary: "A standard run on the crew's brazier, the crew on the board as weak players calling warm, slightly wrong calls. It fills, they cheer, and he is already walking for the cart.", ruled: "Part ruled: the ending, where he sees the lines of light and keeps walking, is Ladi's. The crew's calls are draft." } },
+  // Run 2 (server/run2.ts): the gameplay thread's numbers, the maps thread's board, the crew's barks drafts (marked).
+  { id: "2", name: "Run 2, the crew's brazier", kind: "run", run2: true },
   // Pictures D7 and D8, locked; D6 is not drawn yet.
   { id: "2e", name: "The cage lights", kind: "card", scene: "held", card: { heading: "The cage lights", summary: "Lines of light run from the brazier over his boots to the cart. He doesn't slow. The cart's bars light: a cage, and he has just powered it.", ruled: "Part ruled: that he doesn't slow is Ladi's. Pictures D7 and D8 are locked." } },
   { id: "2-3", name: "The den", kind: "card", card: { heading: "The den", summary: "Eleven pictures, about five minutes, ending on Solenne lifting the boy and the eye turning to follow. Straight into run 3.", ruled: "Part ruled: the staging is Ladi's (22 Nov), and the two Solenne and Rook exchanges are final. Outrider's lines are draft. The pictures are not drawn yet." } },
@@ -99,8 +100,8 @@ export const HELD2: Record<string, Held> = {
 export const piece2Index = (id: string) => PART2.findIndex((p) => p.id === id);
 
 /** The fight's piece by its run's title (OFFSPRING.run3 and run4), or -1. */
-export function piece2OfRun(title: string, run3: string, run4: string): number {
-  return title === run3 ? piece2Index("3") : title === run4 ? piece2Index("4") : -1;
+export function piece2OfRun(title: string, run3: string, run4: string, run2?: string): number {
+  return title === run3 ? piece2Index("3") : title === run4 ? piece2Index("4") : title === run2 ? piece2Index("2") : -1;
 }
 
 const KEY = "lanternfall.part2";

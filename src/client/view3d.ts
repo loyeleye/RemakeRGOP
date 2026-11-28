@@ -22,7 +22,8 @@ import { SIEVE } from "../engine/sieve.js";
 import { RESCUE_LOOK, RescueFx, type VillagerRig } from "./rescue-dress.js";
 import { OffspringFx } from "./offspring-dress.js";
 import { dressYard } from "./yard-dress.js";
-import { CampFx, dressCamp } from "./camp-dress.js";
+import { CampFx, Run2Fx, dressCamp } from "./camp-dress.js";
+import { RUN2, RUN2_PIECES } from "../engine/run2.js";
 import { CAMP } from "../engine/camp.js";
 import { OFFSPRING } from "../engine/offspring.js";
 import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villagers.js";
@@ -83,6 +84,8 @@ export interface DrawState {
   looks?: { id: number; x: number; y: number }[];
   /** Part 2, the camp walk (see StoryView.camp), and where the camera looks (board tiles), so the nightshades move only off camera. */
   camp?: NonNullable<import("../engine/protocol.js").StoryView["camp"]>;
+  /** Part 2's run 2: the brazier filling, the fizz, and how it ends. */
+  run2?: NonNullable<import("../engine/protocol.js").StoryView["run2"]>;
   camAt?: { x: number; y: number };
 }
 
@@ -2116,6 +2119,13 @@ export class World {
       g.add(yard);
       dressCamp(yard);
     }
+    // And for run 2, its gate barred.
+    if (shrine.id === RUN2.shrine) {
+      const yard = new THREE.Group();
+      g.add(yard);
+      dressCamp(yard, RUN2_PIECES);
+      this.run2Yard = yard;
+    }
     // Each arm is a chain of overlapping plateaus that shrink toward the tip.
     if (shrine.isle?.arms?.length) {
       const pts = armSamples(shrine.isle);
@@ -3250,10 +3260,14 @@ export class World {
     this.fightFx.step({ f, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, rook: this.players.get(st.me)?.root ?? null });
   }
 
-  /** Part 2, the camp walk: its lamps, the cooking fire, the nightshades; the brazier is cold. */
+  /** Part 2, the camp walk: its lamps, the cooking fire, the nightshades; the brazier is cold. Run 2: the same lamps, the brazier lit bank by bank, and its ending. */
   private campFx: CampFx | null = null;
+  private run2Fx: Run2Fx | null = null;
+  private run2Yard: THREE.Group | null = null;
   private stepCamp(st: DrawState, time: number) {
-    const c = st.camp;
+    const r = st.run2;
+    if (!r && this.run2Fx) (this.run2Fx.dispose(), (this.run2Fx = null));
+    const c = st.camp ?? (r && { taps: [], shades: [] });
     if (!c) {
       if (this.campFx) {
         this.campFx.dispose();
@@ -3261,6 +3275,7 @@ export class World {
         if (this.fireParts) {
           const p = this.fireParts;
           p.fire.visible = p.embers.visible = p.glow.visible = p.pillar.visible = true;
+          p.fire.scale.setScalar(1);
         }
       }
       return;
@@ -3269,16 +3284,27 @@ export class World {
       this.campFx = new CampFx(glowSprite);
       this.scene.add(this.campFx.all);
     }
-    // The cold brazier: no fire, no light of its own.
-    this.brazierLight.intensity = 0;
+    // The cold brazier: no fire, no light of its own. In run 2 it lights a bank at a time, full on the sixteenth.
+    const k = r ? Math.min(1, r.filled / r.of) : 0, on = !!r && r.filled > 0;
+    this.brazierLight.intensity = on ? 4 + 36 * k : 0;
     if (this.fireParts) {
       const p = this.fireParts;
-      p.fire.visible = p.embers.visible = p.glow.visible = p.pillar.visible = false;
+      p.fire.visible = p.glow.visible = p.embers.visible = on;
+      p.pillar.visible = !!r && r.filled >= r.of;
+      if (on) p.fire.scale.set(0.35 + 0.65 * k, 0.2 + 0.8 * k, 0.35 + 0.65 * k);
+      else p.fire.scale.setScalar(1);
     }
     // The boy carries no lamp in the camp either.
     for (const rig of this.players.values()) if (rig.cast === "fen") rig.lantern.visible = false;
     const b = st.shrine.board, half = { w: b.width / 2, h: b.height / 2 };
     this.campFx.step({ c, time, half, camAt: { x: (st.camAt?.x ?? half.w) - half.w, z: (st.camAt?.y ?? half.h) - half.h } });
+    if (r && this.run2Yard) {
+      if (!this.run2Fx) {
+        this.run2Fx = new Run2Fx(glowSprite, this.run2Yard);
+        this.scene.add(this.run2Fx.all);
+      }
+      this.run2Fx.step({ r, time, half, tickMs: 600 });
+    }
   }
 
   /** Run 10, the ship home: the cloud sea, the patch ahead, the hull and its lamp, the hooded figure, home at the end (ship-dress.ts), and the light going from night to grey. */
