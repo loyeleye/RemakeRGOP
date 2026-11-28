@@ -18,7 +18,7 @@ export const OFFSPRING_SFX = {
   /** The whole pack's level, under the music's. */
   gain: 0.9,
   /** Each sound's starting gain (the README's guesses; the rest 1). */
-  gains: { step: 0.35, limp: 0.5, drink: 0.5, "light-land": 0.5, tear: 0.7, "eye-turn": 0.8, gaze: 0.8 } as Record<string, number>,
+  gains: { step: 0.35, limp: 0.5, drink: 0.5, "light-land": 0.5, tear: 0.7, "eye-turn": 0.8, gaze: 0.8, "lunge-tell": 0.8, "her-hold": 0.5, "her-pip": 0.6, "her-break": 0.8, "fen-light": 0.6 } as Record<string, number>,
   /** A step every `stepEvery` ticks while it walks; the limp's scrape every `limpEvery`. */
   stepEvery: 2,
   limpEvery: 3,
@@ -30,7 +30,7 @@ export const OFFSPRING_SFX = {
   gruntAfter: 0.05,
 };
 
-const NAMES = ["step", "limp", "wake", "alert", "eat", "drink", "eye-turn", "gaze", "catch", "loss", "strike", "hurt", "tear", "light-land", "bolt", "bolt-land", "ward", "stun", "held", "hop", "land", "knockdown", "kill", "rook-hit-1", "rook-hit-2"] as const;
+const NAMES = ["step", "limp", "wake", "alert", "eat", "drink", "eye-turn", "gaze", "catch", "loss", "strike", "hurt", "tear", "light-land", "bolt", "bolt-land", "ward", "stun", "held", "hop", "land", "knockdown", "kill", "rook-hit-1", "rook-hit-2", "lunge-tell", "her-hold", "her-pip", "her-break", "fen-light"] as const;
 type Name = (typeof NAMES)[number];
 
 /** Its sounds are `p2-off-<name>` in the pack; Rook's own, `p2-<name>`. */
@@ -73,6 +73,9 @@ class Sfx {
   drink: Voice | null = null;
   held: Voice | null = null;
   gaze: Voice | null = null;
+  /** The lunge trial: her hold loop while it is on her, and the boy's light going. */
+  herHold: Voice | null = null;
+  fenLight: Voice | null = null;
   walked = 0;
   /** Which of Rook's two grunts is next, so a throw never sounds the same twice running. */
   grunt = 0;
@@ -127,6 +130,7 @@ class Sfx {
         this.drink = this.stop(this.drink, 0.2);
         this.held = this.stop(this.held, 0.2);
         this.gaze = this.stop(this.gaze);
+        this.herHold = this.stop(this.herHold, 0.2);
         duckFightMusic(false);
       }
       return;
@@ -140,7 +144,8 @@ class Sfx {
     if (it.after === "shard" && p.it.after !== "shard") this.play("alert", at);
     // A loose light eaten; the brazier drunk from, looped for as long as it drinks.
     if (it.inside > p.it.inside && it.after !== "brazier") this.play("eat", at);
-    const drinking = !!it.eating && it.after === "brazier";
+    // On her (the lunge trial) it drinks too, her own hold looped under it.
+    const drinking = (!!it.eating && it.after === "brazier") || !!f.her.fed;
     if (drinking && !this.drink) {
       this.drink = this.play("drink", at, 0, true);
       if (this.drink) (this.drink.g.gain.value = 0), this.drink.g.gain.setTargetAtTime((S.gains.drink ?? 1) * at.g, this.c.currentTime, S.drinkFade[0] / 3);
@@ -166,8 +171,15 @@ class Sfx {
     // Her blast or flare hits it; held, its trembling for as long as she holds it.
     const fl = f.her.flash;
     if (fl && (fl.kind === "blast" || fl.kind === "flare") && fl.tick !== p.her.flash?.tick) this.play("stun", at);
-    // It reaches the boy: its drink as his light streams out of him.
-    if (f.drain && !p.drain) this.play("drink", at, 0.55);
+    // It reaches the boy: his light going, from when it streams out of him, ending in silence at the black.
+    if (f.drain && !p.drain) this.fenLight = this.play("fen-light", at, 0.55);
+    if (!f.drain && p.drain) this.fenLight = this.stop(this.fenLight);
+    // The lunge trial: its tell (exactly the ticks before the leap), her hold while it is on her, a chime for each pip of her light that goes, and the break as she goes down.
+    if (f.lunge && f.lunge.go !== p.lunge?.go) this.play("lunge-tell", at);
+    if (f.her.fed && !this.herHold) this.herHold = this.play("her-hold", at, 0, true);
+    if (!f.her.fed && this.herHold) this.herHold = this.stop(this.herHold, 0.15);
+    if ((f.her.fed || f.her.down) && Math.ceil(f.her.light - 1e-6) < Math.ceil(p.her.light - 1e-6)) this.play("her-pip");
+    if (f.her.down && !p.her.down) this.play("her-break");
     // Her save: the stun as her beam lands on its eye, and its cry as it is thrown back.
     if (fl && fl.kind === "save" && fl.tick !== p.her.flash?.tick) (this.play("stun", at, 0.25), this.play("hurt", at, 0.35));
     if (it.held && !this.held) this.held = this.play("held", at, 0, true);
@@ -187,6 +199,7 @@ class Sfx {
   }
 
   silence() {
+    this.herHold = this.stop(this.herHold, 0.2);
     this.drink = this.stop(this.drink, 0.2);
     this.held = this.stop(this.held, 0.2);
     this.gaze = this.stop(this.gaze);

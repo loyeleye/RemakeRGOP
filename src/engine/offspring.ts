@@ -97,9 +97,9 @@ export const OFFSPRING = {
     /** Run 4. The flare and a blast leave her at `afterBlast`. She climbs `regen4` a tick while it leaves her alone, and drains `drain` a tick while it is after her. */
     afterBlast: 2,
     regen4: 0.2,
-    drain: 0.25,
+    drain: 0,
     /** While it is on her, her light goes `eaten` a tick, down to `floor`; at 0 it moves on to the brazier or the boy. */
-    eaten: 1,
+    eaten: 0.4,
     floor: 0,
     /** The wind-up (ticks), then the hold (ticks). */
     windup: 3,
@@ -135,6 +135,14 @@ export const OFFSPRING = {
      */
     fenDrain: { ticks: 6 },
   },
+  /**
+   * TRIAL (Ladi, 27 Nov 11:31 PM: "it takes too long to get to Solenne when you aren't distracting it... it should just jump over to Solenne").
+   * on: after her and more than `min` tiles off, it gathers `tell` ticks, facing her, then leaps to her side in `ticks`; no random jump while it is after her or the boy.
+   * guard: she guards the boy. While she stands his light draws it to HER; once on her it stays until she is down or the shard or loose light takes it off;
+   * her light out, she is down and it turns to the boy and drains him (her.fenDrain, which took the place of the trial's fenTicks) before the run is lost. She gets up only when something takes it off him.
+   * walk, noHop, nearFood, aimHop: other things tried (a faster walk instead of the jump; jumps aimed at its food). Off.
+   */
+  lunge: { on: 1, min: 2, tell: 2, ticks: 3, walk: 1, noHop: 0, nearFood: 0, guard: 1, aimHop: 0 },
   /**
    * Random jumps (Ladi, 27 Nov 2:52 PM: "random jumps where he jumps to a random spot on the map if he
    * is not currently eating from the brazier. He can jump onto wisps. He won't jump on Rook since that

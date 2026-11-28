@@ -110,6 +110,18 @@ export const FIGHT_LOOK = {
    * `stream[1]` seconds his light streams out of his chest into its eye while his glow dims to nothing.
    */
   drain: { stream: [0.55, 1.75] as const, motes: 26, size: 0.45, color: "#ffe7b0", arc: 0.9, travel: 0.45 },
+  /**
+   * The lunge trial (OFFSPRING.lunge; Ladi, 27 Nov 11:31 PM: "animate it being on Solenne... And animate it
+   * defeating Solenne and eating the light from Fen"). The beats are the gameplay thread's draft; the numbers
+   * here are the build's. The tell: it sinks by `crouch` of its height while a line of light runs from its eye
+   * to her, faint to bright (`line`, `lineW`). On her: a shell of her light round her (`shell`: its radius and
+   * strength), `strands` of her light running from the shell into its eye, her pips (her light, one each) in a
+   * ring over her head going out one by one (`pips`: radius, size, height, and the puff as one goes, s), and a
+   * ring that runs out over the ground from her every `pulse[0]` s to `pulse[1]` tiles, seen across the yard. All in `color`, a bluer light of hers that reads against the warm pools.
+   * Down: the shell breaks into `shards` that fly out and fall over `breakSec`, she plays her save clip at
+   * `downSpeed` to its knee and holds it (without clips, a full kneel), and she goes grey (`grey`, 0 to 1).
+   */
+  guard: { crouch: 0.22, line: "#dff0ff", lineW: 0.06, color: "#8fc4ff", shell: [1.35, 0.45] as const, strands: 14, strandSize: 0.45, strandSpeed: 1.1, pips: { r: 1.45, size: 0.55, at: 1.3, puff: 0.35, core: "#3d8bff" }, pulse: [1.1, 5] as const, shards: 16, shardSize: 0.4, breakSec: 0.9, downSpeed: 1.6, grey: 0.75 },
   thrown: { knockedSpeed: 1.5, getupSpeed: 1.7, flight: 0.6, high: 0.9, tilt: 78, rise: 0.9, stars: 3, starSize: 0.42, starSpin: 5, starColor: "#ffe38a", dust: "#b9a58a", dustSize: 2.2 },
   /**
    * The model: how wide (tiles) it is drawn; the back's stages (how many lights show, and the back's
@@ -277,6 +289,14 @@ export class OffspringFx {
   private drainMotes: THREE.Sprite[] = [];
   /** Seconds into her save (99 when none), worked out each frame for stepModel. */
   private saveSec = 99;
+  /** The lunge trial's look (FIGHT_LOOK.guard): the tell's line, her shell and its strands, her pips, the ground pulse, the shell's shards when it breaks. */
+  private guardFx: { line: THREE.Mesh; shell: THREE.Mesh; strands: THREE.Sprite[]; pips: { s: THREE.Sprite; core: THREE.Mesh; out: number }[]; pulse: THREE.Mesh; shards: { s: THREE.Sprite; dir: THREE.Vector3 }[] } | null = null;
+  private brokeAt = -99;
+  private wasDown = false;
+  /** Her pose in the trial: braced (push, held) while it is on her, or down (her save clip to its knee); and her materials, greyed while she is down. */
+  private guardClip: { kind: "fed" | "down"; anim: HoldAnim } | null = null;
+  private herMats: { m: THREE.MeshStandardMaterial; c: THREE.Color }[] | null = null;
+  private herGrey = 0;
 
   constructor(glow: Glow) {
     this.glow = glow;
@@ -446,7 +466,9 @@ export class OffspringFx {
     const her = f.her, wind = her.doing === "windup" ? 1 + 0.25 * Math.sin(o.time * 18) : 1;
     this.herGlow.position.set(wx(her.x), 2.1, wz(her.y));
     this.herGlow.scale.setScalar((0.5 + (her.glow / her.full) * 2.6) * wind);
-    this.herGlow.material.opacity = 0.35 + 0.6 * (her.glow / her.full);
+    this.herGlow.material.opacity = her.down ? 0.04 : 0.35 + 0.6 * (her.glow / her.full);
+    // On her (the lunge trial): her light throbs, seen across the yard.
+    if (her.fed) this.herGlow.scale.multiplyScalar(1.25 + 0.35 * Math.sin(o.time * 7));
     this.fenGlow.position.set(wx(f.fen.x), 1.5, wz(f.fen.y));
     this.fenGlow.scale.setScalar(0.4 + Math.min(10, f.fen.light) * 0.22);
     // Drained, his glow goes to nothing as his light streams out.
@@ -455,6 +477,7 @@ export class OffspringFx {
     this.fenGlow.scale.multiplyScalar(Math.max(0.02, left));
     this.fenGlow.material.opacity = 0.8 * left;
     this.stepDrain(f, ds, wx(x), wz(y), up);
+    this.stepGuard(f, t, o.time, wx, wz, wx(x), wz(y), up);
     // The shard, in Rook's hand.
     const sh = f.shard;
     this.shardGlow.visible = !!sh && sh.glow > 0 && !!o.rook;
@@ -630,16 +653,17 @@ export class OffspringFx {
       if (!p) return;
       const [color, power, high] = P.light[p.k]!, mine = i === 0 && o.rook;
       const x = mine ? o.rook!.position.x : wx(p.x), z = mine ? o.rook!.position.z : wz(p.y);
-      const shake = mine ? kick : 0;
+      // Her light out (the lunge trial, down): her pool all but goes.
+      const shake = mine ? kick : 0, out = p.k === "her" && f.her.down ? 0.15 : 1;
       q.light.color.set(color);
-      q.light.intensity = power * (1 - S.light * shake);
+      q.light.intensity = power * (1 - S.light * shake) * out;
       q.light.distance = p.r * 1.7;
       q.light.position.set(x, high, z);
       q.disc.position.set(x, 0.03, z);
       q.disc.scale.setScalar(p.r * (1 + S.size * shake * Math.sin(age * 60)));
       const m = q.disc.material as THREE.MeshBasicMaterial;
       m.color.set(color);
-      m.opacity = P.disc * (1 - S.light * shake);
+      m.opacity = P.disc * (1 - S.light * shake) * out;
     });
   }
 
@@ -865,8 +889,8 @@ export class OffspringFx {
       return;
     }
     if (this.herClip && !this.herClip.done) (this.herClip.done = true), this.herClip.anim.release();
-    if (A) return;
-    this.kneelHer(o.f, o.t, o.her);
+    if (!A) this.kneelHer(o.f, o.t, o.her);
+    this.herGuard(o);
   }
 
   /** The boy's part when it reaches him: his drained clip, turned to face it. Call after the players are placed. */
@@ -919,6 +943,132 @@ export class OffspringFx {
       m.scale.setScalar(DR.size * (1 - 0.5 * k));
       m.material.opacity = 0.9 * Math.sin(Math.PI * Math.min(1, k * 1.2));
     });
+  }
+
+  /** The lunge trial, shown (FIGHT_LOOK.guard): its tell, it on her, her down. */
+  private stepGuard(f: Fight, t: number, time: number, wx: (px: number) => number, wz: (py: number) => number, x: number, z: number, up: number) {
+    const G = FIGHT_LOOK.guard, her = f.her, L = FIGHT_LOOK;
+    if (!this.guardFx) {
+      const add = <T extends THREE.Object3D>(o: T) => (this.all.add(o), o);
+      const line = add(new THREE.Mesh(new THREE.CylinderGeometry(G.lineW, G.lineW, 1, 6, 1, true), new THREE.MeshBasicMaterial({ color: G.line, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })));
+      const shell = add(new THREE.Mesh(new THREE.SphereGeometry(G.shell[0], 28, 18), new THREE.MeshBasicMaterial({ color: G.color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })));
+      const strands = Array.from({ length: G.strands }, () => add(this.glow(G.color, G.strandSize, 0)));
+      // Each pip a solid bead in a glow, so it reads against the white of her light.
+      const pips = Array.from({ length: her.full }, () => ({ s: add(this.glow(G.color, G.pips.size, 0)), core: add(new THREE.Mesh(new THREE.SphereGeometry(G.pips.size * 0.3, 12, 8), new THREE.MeshBasicMaterial({ color: G.pips.core, transparent: true, opacity: 0 }))), out: -99 }));
+      const pulse = add(new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 56), new THREE.MeshBasicMaterial({ color: G.color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })));
+      pulse.rotation.x = -Math.PI / 2;
+      const shards = Array.from({ length: G.shards }, (_, i) => {
+        const a = (i / G.shards) * Math.PI * 2, el = 0.2 + 0.9 * ((i * 7) % G.shards) / G.shards;
+        return { s: add(this.glow(G.color, G.shardSize, 0)), dir: new THREE.Vector3(Math.cos(a) * Math.cos(el), Math.sin(el), Math.sin(a) * Math.cos(el)) };
+      });
+      this.guardFx = { line, shell, strands, pips, pulse, shards };
+    }
+    const X = this.guardFx, hx = wx(her.x), hz = wz(her.y), eye = new THREE.Vector3();
+    if (this.model?.eye) this.model.eye.getWorldPosition(eye), this.all.worldToLocal(eye);
+    else eye.set(x, L.eyeAt + up, z);
+    // The tell: it sinks, and a line of light runs from its eye to her, brighter as it gathers.
+    const lu = f.lunge, k = lu ? Math.max(0, Math.min(1, (f.tick - (lu.go - lu.of) + t) / lu.of)) : 0;
+    if (!f.dying) this.it.scale.y = this.it.scale.x * (1 - G.crouch * k);
+    const lm = X.line.material as THREE.MeshBasicMaterial;
+    lm.opacity = lu && !f.it.hidden ? (0.2 + 0.7 * k) * (0.8 + 0.2 * Math.sin(time * 30)) : 0;
+    if (lm.opacity > 0) {
+      const a = new THREE.Vector3(hx, 1.4, hz), b = eye.clone();
+      X.line.position.copy(a).add(b).multiplyScalar(0.5);
+      X.line.scale.set(1 + k, a.distanceTo(b), 1 + k);
+      X.line.quaternion.setFromUnitVectors(Y_AXIS, b.sub(a).normalize());
+    }
+    // On her: her shell, the strands of her light into its eye, and a pulse over the ground.
+    const fed = !!her.fed, frac = Math.max(0, her.light / her.full), sm = X.shell.material as THREE.MeshBasicMaterial;
+    X.shell.position.set(hx, 1.1, hz);
+    X.shell.scale.setScalar(1 + 0.04 * Math.sin(time * 9));
+    sm.opacity = fed ? G.shell[1] * (0.35 + 0.65 * frac) * (0.75 + 0.25 * Math.sin(time * 13)) : 0;
+    X.strands.forEach((m, i) => {
+      m.visible = fed && !f.it.hidden;
+      if (!m.visible) return;
+      const q = (time * G.strandSpeed + i / X.strands.length) % 1, a = i * 2.4;
+      const from = new THREE.Vector3(hx + Math.cos(a) * G.shell[0] * 0.7, 1.1 + Math.sin(i * 1.7) * 0.6, hz + Math.sin(a) * G.shell[0] * 0.7);
+      m.position.lerpVectors(from, eye, q);
+      m.position.y += Math.sin(Math.PI * q) * 0.5;
+      m.scale.setScalar(G.strandSize * (1 - 0.5 * q));
+      m.material.opacity = 0.85 * Math.sin(Math.PI * q) * (0.4 + 0.6 * frac);
+    });
+    const pa = (time % G.pulse[0]) / G.pulse[0], pm = X.pulse.material as THREE.MeshBasicMaterial;
+    X.pulse.position.set(hx, 0.07, hz);
+    X.pulse.scale.setScalar(0.6 + G.pulse[1] * pa);
+    pm.opacity = fed ? 0.7 * (1 - pa) * (0.4 + 0.6 * frac) : 0;
+    // Her pips over her head, one for each of her light, going out with a puff as she loses them.
+    const show = fed || !!her.down || (this.wasDown && time - this.brokeAt < G.breakSec);
+    X.pips.forEach((p, i) => {
+      const lit = her.light > i + 0.001;
+      if (!lit && p.out < 0) p.out = time;
+      if (lit) p.out = -99;
+      const a = (i / X.pips.length) * Math.PI * 2 + time * 0.6, gone = p.out < 0 ? 0 : (time - p.out) / G.pips.puff;
+      p.s.visible = p.core.visible = show && (lit || gone < 1);
+      if (!p.s.visible) return;
+      p.s.position.set(hx + Math.cos(a) * G.pips.r, G.pips.at, hz + Math.sin(a) * G.pips.r);
+      p.core.position.copy(p.s.position);
+      p.core.scale.setScalar(lit ? 1 : Math.max(0.01, 1 - gone));
+      (p.core.material as THREE.MeshBasicMaterial).opacity = lit ? 1 : 1 - gone;
+      p.s.scale.setScalar(G.pips.size * (lit ? 1 : 1 + 1.5 * gone));
+      p.s.material.opacity = lit ? 0.95 : 0.9 * (1 - gone);
+    });
+    // Down: the shell breaks, its pieces flying out and falling.
+    if (her.down && !this.wasDown) this.brokeAt = time;
+    this.wasDown = !!her.down;
+    const bk = (time - this.brokeAt) / G.breakSec;
+    X.shards.forEach((p) => {
+      p.s.visible = bk >= 0 && bk < 1;
+      if (!p.s.visible) return;
+      const r = G.shell[0] * (1 + 1.6 * bk);
+      p.s.position.set(hx + p.dir.x * r, Math.max(0.1, 1.1 + p.dir.y * r - 3 * bk * bk), hz + p.dir.z * r);
+      p.s.material.opacity = 0.95 * (1 - bk);
+    });
+  }
+
+  /** Her part in the lunge trial: braced while it is on her (push, held), down on a knee once her light is out (save, to its knee), greyed. */
+  private herGuard(o: { f: Fight; t: number; her: THREE.Object3D | null; rig: { body: THREE.Object3D | null; anim: HoldAnim | null; face: (a: number) => void } | null }) {
+    const G = FIGHT_LOOK.guard, f = o.f, kind = f.her.down ? "down" : f.her.fed ? "fed" : null;
+    // Grey while she is down, coming and going over a moment.
+    this.herGrey += ((kind === "down" ? G.grey : 0) - this.herGrey) * 0.08;
+    if (o.her && (this.herGrey > 0.005 || this.herMats)) {
+      if (!this.herMats) {
+        this.herMats = [];
+        o.her.traverse((n) => {
+          const m = n as THREE.Mesh;
+          if (!m.isMesh || !(m.material instanceof THREE.MeshStandardMaterial)) return;
+          m.material = m.material.clone();
+          this.herMats!.push({ m: m.material as THREE.MeshStandardMaterial, c: (m.material as THREE.MeshStandardMaterial).color.clone() });
+        });
+      }
+      for (const q of this.herMats) {
+        const l = q.c.r * 0.3 + q.c.g * 0.59 + q.c.b * 0.11;
+        q.m.color.copy(q.c).lerp(new THREE.Color(l * 0.7, l * 0.7, l * 0.75), this.herGrey);
+      }
+    }
+    const A = o.rig?.anim ?? null;
+    if (kind && o.rig) {
+      const face = Math.atan2(f.it.x - f.her.x, f.it.y - f.her.y);
+      o.rig.face(face);
+      if (o.rig.body) o.rig.body.rotation.y = face;
+    }
+    if (kind && A && A.has(kind === "down" ? "save" : "push")) {
+      if (this.guardClip?.kind !== kind) {
+        this.guardClip = { kind, anim: A };
+        kind === "down" ? A.hold("save", G.downSpeed, 0.1) : A.hold("push", 1, 0.15);
+      }
+      return;
+    }
+    if (!kind && this.guardClip) {
+      const was = this.guardClip;
+      this.guardClip = null;
+      was.anim.release();
+    }
+    if (kind === "down" && o.her && !A?.has("save")) {
+      const V = FIGHT_LOOK.save;
+      o.her.position.y -= V.kneelDrop;
+      o.her.rotation.x = (V.kneelLean * Math.PI) / 180;
+      this.knelt = o.her;
+    }
   }
 
   /** Without her clips: down a little for a moment (FIGHT_LOOK.save.kneel). */

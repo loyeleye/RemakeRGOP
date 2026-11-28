@@ -44,6 +44,8 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     OFFSPRING.her.regen4 = 0.2;
     OFFSPRING.it.eatBanked4 = 4;
     OFFSPRING.it.size = 5;
+    OFFSPRING.lunge.on = 1;
+    OFFSPRING.lunge.guard = 1;
   });
   it("the yard: open ground round a dead brazier, everyone and the same ten wisps on open ground", () => {
     const b = shrineById(OFFSPRING.shrine).board, c = b.center;
@@ -265,6 +267,54 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(p.room.lostTo).toBe("fen");
   });
 
+  it("the lunge trial: with nothing else to draw it, it gathers itself facing her, leaps to her side, feeds her light out, she goes down, then it takes the boy", () => {
+    const p = play(4);
+    p.x.teach.pulled = true;
+    p.x.her.left = 0;
+    p.tick();
+    p.x.it.dazed = -1;
+    // Nothing else lit: no loose wisps, nothing banked, the shard covered.
+    for (const w of p.g.wisps) p.g.away.set(w.id, 1e9);
+    p.x.inside.clear();
+    p.x.banked.clear();
+    const sol = p.g.players.find((q) => q.id === 2)!.pos;
+    p.x.it.x = sol.x + 12;
+    p.x.it.y = sol.y;
+    p.x.her.light = 3;
+    let told = -1, go = -1, leapt = -1, fed = -1, down = -1;
+    for (let i = 0; i < 80 && p.room.state.phase === "playing" && !p.room.storyView().fight!.drain; i++) {
+      p.tick();
+      const f = p.room.storyView().fight!;
+      if (f.lunge && told < 0) (told = f.tick), (go = f.lunge.go), expect(f.lunge.to).toEqual({ x: sol.x, y: sol.y });
+      if (f.it.leap && leapt < 0) (leapt = f.tick), expect(Math.hypot(f.it.leap.to.x - sol.x, f.it.leap.to.y - sol.y)).toBeLessThanOrEqual(OFFSPRING.it.size / 2 + OFFSPRING.it.reach);
+      if (f.her.fed && fed < 0) fed = f.tick;
+      if (f.her.down && down < 0) down = f.tick;
+    }
+    expect(told).toBeGreaterThan(0);
+    expect(leapt).toBe(go);
+    expect(fed).toBeGreaterThan(leapt);
+    expect(down).toBeGreaterThan(fed);
+    expect(p.room.stats.downs).toBe(1);
+    const f = p.room.storyView().fight!;
+    expect(f.drain).toBeTruthy();
+    expect(f.her.down).toBe(true);
+  });
+
+  it("the debug menu's lunge: it goes for her from across the fire, feeds on her, and she goes down", () => {
+    const p = play(4);
+    p.x.teach.pulled = true;
+    p.x.her.left = 0;
+    p.tick();
+    p.room.debug("lunge");
+    let lunged = false, fed = false, down = false;
+    for (let i = 0; i < 80 && p.room.state.phase === "playing" && !down; i++) {
+      p.tick();
+      const f = p.room.storyView().fight!;
+      (lunged ||= !!f.lunge), (fed ||= !!f.her.fed), (down ||= !!f.her.down);
+    }
+    expect([lunged, fed, down]).toEqual([true, true, true]);
+  });
+
   it("the tenth banked with the wound open does not end it: the wound shuts, and the kill is a strike while it drinks", () => {
     const p = play(4);
     for (const id of [...p.x.inside].slice(1)) (p.x.inside.delete(id), p.x.banked.add(id));
@@ -475,6 +525,9 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   it("out of her hold it jumps now and then to a random spot or onto a lit wisp, never near Rook, and not while it eats at the brazier", () => {
     // At its old size: at 5 the yard has few spots clear of him to land on in 120 ticks.
     OFFSPRING.it.size = 3;
+    // Without the lunge trial, which keeps it from random jumps while it is after her.
+    OFFSPRING.lunge.on = 0;
+    OFFSPRING.lunge.guard = 0;
     const p = play(4);
     p.x.teach.pulled = true;
     p.x.her.left = 0;

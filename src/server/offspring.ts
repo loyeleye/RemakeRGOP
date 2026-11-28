@@ -48,6 +48,9 @@ export class FightRoom {
   private flareUntil = -1;
   /** The tick of its next random jump (OFFSPRING.hop). */
   private hopAt = -1;
+  /** The lunge at her or the boy: the tick it goes, while it gathers itself (-1: not gathering). */
+  private lungeAt = -1;
+  private herDown = false;
   private her = { light: 0, dipUntil: -1, doing: "rest" as "rest" | "windup" | "hold", left: 0, of: 0, flash: undefined as Fight["her"]["flash"] };
   private fenLight = 0;
   private shard = { shown: false, glow: 0 };
@@ -69,7 +72,7 @@ export class FightRoom {
   private ateAt = -99;
   /** The hunt: light flung out of the wound this tick or lately: from its back to where it fell. */
   private flung: { id: number; from: { x: number; y: number }; to: { x: number; y: number }; tick: number }[] = [];
-  stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0, bolts: 0 };
+  stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0, bolts: 0, lunges: 0, downs: 0 };
   private wound = { open: false, timer: 0 };
   /** Where things stood at the flare, for a retry of run 4. */
   private at4: { rook: Pt; it: { x: number; y: number; face: number } } | null = null;
@@ -158,7 +161,7 @@ export class FightRoom {
    * its catches do nothing.
    */
   dbg = { paused: false, see: false, safe: false };
-  debug(cmd: "restart3" | "restart4" | "win" | "lose" | "catch" | "drain") {
+  debug(cmd: "restart3" | "restart4" | "win" | "lose" | "catch" | "drain" | "lunge") {
     if (cmd === "restart3" || cmd === "restart4") {
       this.at4 = null;
       return this.begin(cmd === "restart4" ? 4 : 3);
@@ -172,6 +175,24 @@ export class FightRoom {
       const fen = this.spot(FEN_ID), it = this.it, a = Math.atan2(it.y - fen.y, it.x - fen.x), r = OFFSPRING.it.size / 2 + 1;
       (it.x = fen.x + Math.cos(a) * r), (it.y = fen.y + Math.sin(a) * r), (it.face = a + Math.PI);
       return this.drain();
+    }
+    // The lunge trial on the spot: every loose light gone and nothing banked, it across the yard from her, so it gathers, leaps, and feeds on her.
+    if (cmd === "lunge") {
+      if (this.run !== 4) return;
+      const g = this.game, sol = this.spot(SOL_ID), it = this.it, c = g.board.center;
+      for (const w of g.wisps) g.away.set(w.id, 1e9);
+      this.inside.clear();
+      this.banked.clear();
+      this.her.doing = "rest";
+      this.her.light = Math.max(this.her.light, OFFSPRING.her.full / 2);
+      it.dazed = -1;
+      it.held = false;
+      // The far side of the fire from her.
+      const a = Math.atan2(sol.y - c.y, sol.x - c.x) + Math.PI, r = 8;
+      (it.x = c.x + Math.cos(a) * r), (it.y = c.y + Math.sin(a) * r), (it.face = a + Math.PI);
+      it.after = "her";
+      it.key = "her";
+      return this.broadcastTick();
     }
     // A catch on the spot, to see her save (the first) or the loss (the second).
     if (cmd === "catch") return void (this.run === 4 && this.caught(), this.broadcastTick());
@@ -210,6 +231,8 @@ export class FightRoom {
     this.lit = new Set();
     this.flareUntil = -1;
     this.hopAt = -1;
+    this.lungeAt = -1;
+    this.herDown = false;
     this.catches = 0;
     this.down = 0;
     this.thrown = null;
@@ -224,7 +247,7 @@ export class FightRoom {
     this.bolted = null;
     this.awayUntil = -1;
     this.flung = [];
-    this.stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0, bolts: 0 };
+    this.stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0, bolts: 0, lunges: 0, downs: 0 };
     this.shard = { shown: false, glow: 0 };
     this.captions = [];
     this.lines = [];
@@ -427,8 +450,14 @@ export class FightRoom {
   private lights() {
     const O = OFFSPRING, g = this.game, c = g.board.center, out: { key: string; after: After; at: { x: number; y: number }; b: number; edge: number }[] = [];
     const sol = this.spot(SOL_ID), fen = this.spot(FEN_ID);
-    out.push({ key: "her", after: "her", at: sol, b: this.herGlow(), edge: 0 });
-    out.push({ key: "fen", after: "fen", at: fen, b: this.fenLight, edge: 0 });
+    if (O.lunge.guard && this.run === 4) {
+      // TRIAL, she guards the boy: while she stands, his light draws it to her. Only with her light out is he its mark.
+      if (this.herDown) out.push({ key: "fen", after: "fen", at: fen, b: this.fenLight, edge: 0 });
+      else out.push({ key: "her", after: "her", at: sol, b: Math.max(this.herGlow(), this.fenLight), edge: 0 });
+    } else {
+      out.push({ key: "her", after: "her", at: sol, b: this.herGlow(), edge: 0 });
+      out.push({ key: "fen", after: "fen", at: fen, b: this.fenLight, edge: 0 });
+    }
     for (const w of g.wisps) if (!g.away.has(w.id) && !this.banked.has(w.id)) out.push({ key: `w${w.id}`, after: "wisp", at: w.pos, b: O.light.wisp, edge: 0 });
     if (this.banked.size) out.push({ key: "brazier", after: "brazier", at: c, b: this.banked.size * O.light.banked, edge: O.it.brazierEdge });
     if (this.run === 4 && this.shard.glow > 0) out.push({ key: "shard", after: "shard", at: this.spot(YOU), b: this.shard.glow, edge: 0 });
@@ -452,6 +481,15 @@ export class FightRoom {
     const strays = OFFSPRING.hunt.on && OFFSPRING.hunt.straysFirst && this.run === 4 ? food.filter((l) => l.after === "wisp") : [];
     if (strays.length) return strays.sort((a, b) => gap(a) / (a.key === it.key ? I.stick : 1) - gap(b) / (b.key === it.key ? I.stick : 1))[0]!;
     if (food.length) return food.sort((a, b) => gap(a) / (a.key === it.key ? I.stick : 1) - gap(b) / (b.key === it.key ? I.stick : 1))[0]!;
+    // TRIAL: once it is on her, or she is down and it is on the boy, it stays there. Only the shard or loose light takes it off.
+    if (OFFSPRING.lunge.guard && this.run === 4 && (it.key === "her" || it.key === "fen")) {
+      const me2 = L.find((l) => l.key === it.key);
+      if (me2 && gap(me2) <= I.reach + 0.05) return me2;
+    }
+    if (OFFSPRING.lunge.guard && this.run === 4 && this.herDown) {
+      const boy = L.find((l) => l.key === "fen");
+      if (boy) return boy;
+    }
     // The most light of her, the boy and the brazier, plain amounts; the nearer if they are level.
     let best: (typeof L)[number] | null = null, top = -1;
     for (const l of L) {
@@ -487,6 +525,36 @@ export class FightRoom {
     if (!l) return;
     const E = O.eye, HU = O.hunt;
     if (HU.on && E.on && l.after !== "shard") this.eye = this.gaze = 0;
+    // The lunge (Ladi, 27 Nov 11:31 PM: "it should just jump over to Solenne"): with nothing else to draw it, it
+    // doesn't walk to her or the boy. It gathers itself for lunge.tell ticks, facing them, then leaps to their side.
+    const LU = O.lunge;
+    if (LU.on && this.run === 4 && this.part === "play" && l.after === "her") {
+      const far = Math.hypot(l.at.x - it.x, l.at.y - it.y) - I.size / 2;
+      if (far > LU.min) {
+        it.key = l.key;
+        it.after = l.after;
+        it.eat = 0;
+        if (this.lungeAt < 0) this.lungeAt = g.tick + LU.tell;
+        const want = Math.atan2(l.at.y - it.y, l.at.x - it.x);
+        let diff = want - it.face;
+        while (diff > Math.PI) diff -= 2 * Math.PI;
+        while (diff < -Math.PI) diff += 2 * Math.PI;
+        const turn = (I.turn * Math.PI) / 180;
+        it.face += Math.abs(diff) <= turn ? diff : Math.sign(diff) * turn;
+        if (g.tick < this.lungeAt) return;
+        this.lungeAt = -1;
+        const c = g.board.center, R = I.size / 2 + I.reach - 0.1, base = Math.atan2(it.y - l.at.y, it.x - l.at.x);
+        for (const da of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, 2.4, -2.4, Math.PI]) {
+          const to = { x: l.at.x + Math.cos(base + da) * R, y: l.at.y + Math.sin(base + da) * R };
+          if (oyRoom(to.x - c.x, to.y - c.y) >= -I.size / 2) continue;
+          this.stats.lunges++;
+          this.hopAt = -1;
+          this.leapTo(to, LU.ticks);
+          this.stepLeap();
+          return;
+        }
+      } else this.lungeAt = -1;
+    } else this.lungeAt = -1;
     if (HU.on && E.on && (this.eye > 0 || this.gaze > 0)) {
       // Its eye is turning: it stands and stares (locked, or tracking him), and at the end he is caught if he is in its cone with the shard still lit.
       const me = this.spot(YOU);
@@ -533,7 +601,8 @@ export class FightRoom {
       return;
     }
     if (dist > reach && Math.abs(diff) - Math.min(Math.abs(diff), turn) <= (I.moveArc * Math.PI) / 180) {
-      const speed = (this.wound.open || g.tick < this.hurtUntil) && O.wound.crawl ? O.wound.crawl : I.slow + (I.speed - I.slow) * (this.inside.size / O.wisps.length);
+      let speed = (this.wound.open || g.tick < this.hurtUntil) && O.wound.crawl ? O.wound.crawl : I.slow + (I.speed - I.slow) * (this.inside.size / O.wisps.length);
+      if (this.run === 4 && (l.after === "her" || l.after === "fen")) speed *= O.lunge.walk;
       const step = Math.min(speed, dist - reach + 0.2), from = { x: it.x, y: it.y };
       const nx = it.x + (Math.cos(want) * step), ny = it.y + (Math.sin(want) * step);
       this.moveTo(nx, ny);
@@ -571,6 +640,7 @@ export class FightRoom {
         if (HU.on && E.on) return;
         return this.caught();
       case "fen":
+        // It has the boy (in the trial, only once she is down): it feeds on him (OFFSPRING.her.fenDrain), then the card.
         if (this.run === 4) return this.drain();
         return;
       case "her":
@@ -720,6 +790,13 @@ export class FightRoom {
     if (!(O.hunt.on && this.cycle > 1)) it.face = Math.atan2(sol.y - it.y, sol.x - it.x);
   }
 
+  /** Run 4: it is on her now, feeding on her light (not dazed, not mid-leap, at her side). */
+  private onHer() {
+    const it = this.it, g = this.game, sol = this.spot(SOL_ID);
+    if (this.run !== 4 || it.after !== "her" || it.held || g.tick < it.dazed || (it.leap && g.tick <= it.leap.t0 + it.leap.ticks)) return false;
+    return Math.hypot(sol.x - it.x, sol.y - it.y) <= OFFSPRING.it.reach + OFFSPRING.it.size / 2;
+  }
+
   private stepHer4() {
     const O = OFFSPRING, H = O.her, L = O.light, g = this.game, it = this.it, her = this.her;
     if (this.cycle >= L.fenFrom) this.fenLight = Math.min(L.fenMax, this.fenLight + L.fenRise);
@@ -757,9 +834,15 @@ export class FightRoom {
     // While it is dazed it is after nothing.
     const after = g.tick < it.dazed ? null : it.after;
     const sol = this.spot(SOL_ID), on = after === "her" && Math.hypot(sol.x - it.x, sol.y - it.y) <= O.it.reach + O.it.size / 2;
+    if (O.lunge.guard && this.herDown) {
+      // Down, she stays down until something else takes it off the boy.
+      if (after === "fen" || after === "her" || after === null) return;
+      this.herDown = false;
+    }
     if (on) her.light = Math.max(H.floor, her.light - H.eaten);
     else if (after === "her") her.light = Math.max(0, her.light - H.drain);
     else her.light = Math.min(H.full, her.light + H.regen4);
+    if (O.lunge.guard && her.light <= 0 && after === "her") return void ((this.herDown = true), this.stats.downs++);
     if (her.light >= H.full) {
       her.doing = "windup";
       her.left = her.of = H.windup;
@@ -823,6 +906,13 @@ export class FightRoom {
     if (g.tick < this.hopAt) return false;
     // Not while it eats at the brazier.
     if (it.key === "brazier" && Math.hypot(c.x - it.x, c.y - it.y) <= I.reachBrazier + I.size / 2 + 0.1) return false;
+    // TRIAL: no random jump while it is after her or the boy, or within nearFood tiles of the stray it is after.
+    const LU = OFFSPRING.lunge;
+    if (this.run === 4 && (LU.noHop || LU.on) && (it.after === "her" || it.after === "fen")) return false;
+    if (this.run === 4 && LU.nearFood && it.after === "wisp") {
+      const w = g.wisps[Number(it.key.slice(1))];
+      if (w && Math.hypot(w.pos.x - it.x, w.pos.y - it.y) - I.size / 2 <= LU.nearFood) return false;
+    }
     const me = this.spot(YOU), sol = this.spot(SOL_ID), fen = this.spot(FEN_ID);
     const fits = (p: { x: number; y: number }) =>
       oyRoom(p.x - c.x, p.y - c.y) < -I.size / 2 &&
@@ -830,6 +920,22 @@ export class FightRoom {
       Math.min(Math.hypot(p.x - sol.x, p.y - sol.y), Math.hypot(p.x - fen.x, p.y - fen.y)) > I.size / 2 + OFFSPRING.her.shoveAt + 1 &&
       Math.max(Math.abs(p.x - c.x), Math.abs(p.y - c.y)) > 2 + I.size / 2;
     let to: { x: number; y: number } | null = null;
+    if (this.run === 4 && LU.aimHop && it.after === "wisp") {
+      // TRIAL: after a stray, its jump is toward that stray: the nearest place it fits, and only if that is nearer than where it stands.
+      const w = g.wisps[Number(it.key.slice(1))];
+      if (w) {
+        let bd = Math.hypot(w.pos.x - it.x, w.pos.y - it.y) - 2;
+        for (let k = 0; k < 60; k++) {
+          const p = k === 0 ? { x: w.pos.x, y: w.pos.y } : { x: w.pos.x + (this.rng.next() * 2 - 1) * 5, y: w.pos.y + (this.rng.next() * 2 - 1) * 5 };
+          const d = Math.hypot(p.x - w.pos.x, p.y - w.pos.y);
+          if (d < bd && fits(p)) (bd = d), (to = p);
+        }
+        next();
+        if (!to) return false;
+        this.leapTo(to, H.ticks);
+        return this.stepLeap();
+      }
+    }
     if (this.rng.next() < H.onWisp) {
       const ws = g.wisps.filter((w) => !g.away.has(w.id) && this.lit.has(w.id) && !this.torn.has(w.id)).map((w) => ({ x: w.pos.x, y: w.pos.y })).filter(fits);
       if (ws.length) to = ws[Math.floor(this.rng.next() * ws.length)]!;
@@ -1164,7 +1270,8 @@ export class FightRoom {
       part: this.part,
       tick: g.tick,
       it: { x: it.x, y: it.y, face: it.face, after: it.held ? "her" : it.after, ...(l ? { to: { x: l.at.x, y: l.at.y } } : {}), inside: this.inside.size, held: it.held, wound: this.wound.open ? 1 : 0, knocked: it.knocked, ...(it.eat > 0 ? { eating: true } : {}), ...(!body ? { hidden: true } : {}), ...((this.wound.open || g.tick < this.hurtUntil) && O.wound.crawl ? { crawl: true as const } : {}), ...(this.run === 4 && body && !safe && !this.wound.open && this.part !== "flare" ? (O.hunt.on ? (this.behind() && (this.part !== "kill" || this.atFire()) && !(it.leap && g.tick <= it.leap.t0 + it.leap.ticks) ? { strike: 2 as const } : {}) : it.held && this.shard.shown ? { strike: this.behind() ? (2 as const) : (1 as const) } : {}) : {}), ...(body && it.leap && g.tick <= it.leap.t0 + it.leap.ticks + 1 ? { leap: it.leap } : {}) },
-      her: { x: sol.x, y: sol.y, light: this.her.light, full: O.her.full, glow: this.herGlow(), doing: this.part === "flare" ? "hold" : this.her.doing, left: this.her.left, of: this.her.of, ...(this.her.flash ? { flash: this.her.flash } : {}) },
+      her: { x: sol.x, y: sol.y, light: this.her.light, full: O.her.full, glow: this.herGlow(), doing: this.part === "flare" ? "hold" : this.her.doing, left: this.her.left, of: this.her.of, ...(this.her.flash ? { flash: this.her.flash } : {}), ...(this.herDown ? { down: true as const } : this.onHer() ? { fed: true as const } : {}) },
+      ...(this.lungeAt >= 0 ? { lunge: { go: this.lungeAt, of: O.lunge.tell, to: { x: sol.x, y: sol.y } } } : {}),
       fen: { x: fen.x, y: fen.y, light: this.fenLight },
       ...(this.run === 4 ? { shard: { shown: this.shard.shown, glow: this.shard.glow, of: O.light.shard } } : {}),
       banked: this.banked.size,
