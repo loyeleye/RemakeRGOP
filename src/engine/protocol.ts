@@ -199,6 +199,8 @@ export interface StoryView {
     /** Run 4, the dark: the pools of light (their edge is where it starts to show), where it is to be heard from, and whether her light fills the yard. */
     dark?: { pools: { k: "rook" | "shard" | "fire" | "wisp" | "her" | "fen"; x: number; y: number; r: number }[]; hear: { d: number; dx: number; dy: number }; flood?: true };
     shut?: boolean;
+    /** Run 4, the jump: it fled hurt from `from` to `to`, leaving tick `t0` for `ticks`, and stays away `away` ticks after. */
+    bolt?: { from: { x: number; y: number }; to: { x: number; y: number }; t0: number; ticks: number; away: number };
     flung?: { id: number; from: { x: number; y: number }; to: { x: number; y: number }; tick: number }[];
     teach?: { hint?: "show" | "strike" | "pull" | "cover" | "lure" | "loose" | "far" | "home" | "eye"; /** Run 4 again after a loss: the short hints. */ retry?: boolean; stand?: { x: number; y: number } };
   };

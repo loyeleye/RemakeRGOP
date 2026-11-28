@@ -63,7 +63,7 @@ export class FightRoom {
   private ateAt = -99;
   /** The hunt: light flung out of the wound this tick or lately: from its back to where it fell. */
   private flung: { id: number; from: { x: number; y: number }; to: { x: number; y: number }; tick: number }[] = [];
-  stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0 };
+  stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0, bolts: 0 };
   private wound = { open: false, timer: 0 };
   /** Where things stood at the flare, for a retry of run 4. */
   private at4: { rook: Pt; it: { x: number; y: number; face: number } } | null = null;
@@ -121,13 +121,17 @@ export class FightRoom {
         const action = cleanAction(msg.action, this.game);
         if (!action) return;
         if (action.kind === "staff" && this.game.away.has(action.wisp)) return;
-        if (OFFSPRING.hunt.on && OFFSPRING.hunt.fling && action.kind === "staff" && this.game.noBank.has(action.wisp)) {
+        if (OFFSPRING.hunt.on && OFFSPRING.hunt.home && OFFSPRING.hunt.fling && action.kind === "staff" && this.game.noBank.has(action.wisp)) {
           // The hunt: a tap on a torn light sends it home to the fire by itself.
           const w = this.game.wisps[action.wisp]!, me = this.spot(YOU);
           if (Math.max(Math.abs(w.pos.x - me.x), Math.abs(w.pos.y - me.y)) <= this.game.pullReach) (this.torn.add(action.wisp), (this.teach.homed = true));
           return;
         }
-        if (action.kind === "staff") this.lit.add(action.wisp);
+        if (action.kind === "staff") {
+          // The jump: his first pull on light the wound let go of is the "home" step done.
+          if (OFFSPRING.hunt.on && !OFFSPRING.hunt.home && this.strays().some((w) => w.id === action.wisp)) this.teach.homed = true;
+          this.lit.add(action.wisp);
+        }
         this.game.command(YOU, { action });
         return;
       }
@@ -178,8 +182,10 @@ export class FightRoom {
     this.wound = { open: false, timer: 0 };
     this.eye = 0;
     this.gaze = 0;
+    this.boltDue = false;
+    this.bolted = null;
     this.flung = [];
-    this.stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0 };
+    this.stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0, bolts: 0 };
     this.shard = { shown: false, glow: 0 };
     this.captions = [];
     this.lines = [];
@@ -261,6 +267,11 @@ export class FightRoom {
       g.command(YOU, { action: { kind: "idle" } });
       if (!this.wound.open) this.pulling = 0;
       else if (--this.pulling === 0) this.tearOut();
+    }
+    if (O.hunt.on && !O.hunt.home && this.run === 4) {
+      // Real pulls: a loose light banks at the brazier as in any run, except while it sits at the fire.
+      const shut = O.hunt.block && this.onFire();
+      for (const w of g.wisps) if (!g.away.has(w.id) && !this.banked.has(w.id)) shut ? g.noBank.add(w.id) : g.noBank.delete(w.id);
     }
     g.step();
     // Banked this tick: in the brazier now, and it flares.
@@ -638,6 +649,10 @@ export class FightRoom {
         this.teach.held = false;
         // After the first hold it stands dazed until she can blast again: cycle 1 is safe.
         if (this.cycle === 1) it.dazed = g.tick + O.it.daze1;
+        if (this.boltDue) {
+          this.boltDue = false;
+          if (O.hunt.bolt && this.inside.size) this.bolt();
+        }
       }
       return;
     }
@@ -731,6 +746,31 @@ export class FightRoom {
     if (!to) return false;
     this.leapTo(to, H.ticks);
     return this.stepLeap();
+  }
+
+  /** Hurt enough, it jumps to safety (Ladi, 27 Nov 4:46 PM): a leap to somewhere far from him, out of the light if it can. */
+  private bolt() {
+    const H = OFFSPRING.hunt, I = OFFSPRING.it, g = this.game, c = g.board.center, me = this.spot(YOU), sol = this.spot(SOL_ID), fen = this.spot(FEN_ID);
+    let best: { x: number; y: number } | null = null, score = -1;
+    for (let k = 0; k < 60; k++) {
+      const p = { x: c.x + (this.rng.next() * 2 - 1) * 12, y: c.y + (this.rng.next() * 2 - 1) * 9 };
+      if (oyRoom(p.x - c.x, p.y - c.y) >= -I.size / 2 || Math.hypot(p.x - c.x, p.y - c.y) < I.size / 2 + 3) continue;
+      if (Math.min(Math.hypot(p.x - sol.x, p.y - sol.y), Math.hypot(p.x - fen.x, p.y - fen.y)) <= I.size / 2 + OFFSPRING.her.shoveAt + 1) continue;
+      const d = Math.hypot(p.x - me.x, p.y - me.y);
+      if (d < H.boltMin) continue;
+      const s = this.rng.next();
+      if (s > score) (score = s), (best = p);
+    }
+    if (!best) return;
+    this.eye = this.gaze = 0;
+    this.hopAt = -1;
+    this.stats.bolts++;
+    // Hurt, it limps: the crawl holds for dark.hurt ticks from the jump.
+    this.hurtUntil = g.tick + H.boltTicks + H.away + OFFSPRING.dark.hurt;
+    // It stays where it lands for hunt.away ticks before it comes back for the light.
+    this.it.dazed = g.tick + H.boltTicks + H.away;
+    this.leapTo(best, H.boltTicks);
+    this.bolted = { from: { x: this.it.x, y: this.it.y }, to: best, t0: g.tick, ticks: H.boltTicks, away: H.away };
   }
 
   private leapTo(to: { x: number; y: number }, ticks: number) {
@@ -866,7 +906,8 @@ export class FightRoom {
     this.inside.delete(id);
     g.away.delete(id);
     const HU = OFFSPRING.hunt;
-    if (HU.on && HU.fling && !it.held) {
+    const flung = HU.on && HU.fling && (!it.held || (!HU.home && HU.flingHeld));
+    if (flung) {
       // Flung out of the wound: it lands some tiles off, anywhere round it, and lies there lit until he sends it home.
       const c = g.board.center;
       for (let k = 0; k < 30; k++) {
@@ -880,14 +921,19 @@ export class FightRoom {
       this.flung = [...this.flung.filter((q) => g.tick - q.tick <= 2), { id, from: { x: bx, y: by }, to: { x: at.x, y: at.y }, tick: g.tick }];
     }
     moveWisp(w, at);
-    if (!(HU.on && HU.fling && !it.held)) this.torn.add(id);
+    if (!flung && !(HU.on && !HU.home)) this.torn.add(id);
     this.lit.add(id);
-    g.noBank.add(id);
+    if (!(HU.on && !HU.home)) g.noBank.add(id);
     this.teach.pulled = this.teach.held = true;
     // Round 1's waiting hold ends after a few pulls (down to the cover step).
     if (this.cycle === 1 && ++this.teach.pulls >= OFFSPRING.teach.pulls1) this.her.left = Math.min(this.her.left, OFFSPRING.teach.coverAt);
     if (this.teach.remind) (this.teach.remind = false), (this.teach.reminded = true);
-    if (OFFSPRING.hunt.on && OFFSPRING.hunt.tears && ++this.wound.timer >= OFFSPRING.hunt.tears && !this.it.held) this.wound = { open: false, timer: 0 };
+    if (HU.on && HU.tears && ++this.wound.timer >= HU.tears && (!it.held || (!HU.home && HU.flingHeld))) {
+      this.wound = { open: false, timer: 0 };
+      // Held by her blast it can't jump yet: it goes the moment she lets go.
+      if (it.held) this.boltDue = true;
+      else if (HU.bolt && this.inside.size) this.bolt();
+    }
   }
 
   /** It reached him while it was after the shard. The first time she saves him. */
@@ -914,7 +960,12 @@ export class FightRoom {
 
   // ---------------------------------------------------------------- the end
 
+  lostTo = "";
+  private boltDue = false;
+  /** The jump: where it fled from and to, and when (for the view's trail of light it leaves). */
+  private bolted: { from: { x: number; y: number }; to: { x: number; y: number }; t0: number; ticks: number; away: number } | null = null;
   private lose() {
+    this.lostTo = this.catches >= 2 ? "caught" : "fen";
     this.finish(this.run === 3 ? OFFSPRING.card.again3 : OFFSPRING.card.again4);
   }
 
@@ -947,7 +998,9 @@ export class FightRoom {
   fightView(): Fight {
     const O = OFFSPRING, g = this.game, it = this.it, sol = this.spot(SOL_ID), fen = this.spot(FEN_ID);
     // The dark: unseen, nothing of it is drawn (no body, no back, no line to what it is after, no landing mark).
-    const dark = this.run === 4 && O.dark.on && O.hunt.on, body = !dark || this.seen(false);
+    // Its jump to safety is seen all the way (it flees hurt into the dark), and leaves a trail until it is back.
+    const B = this.bolted && g.tick <= this.bolted.t0 + this.bolted.ticks + this.bolted.away ? this.bolted : null, fleeing = !!B && g.tick <= B.t0 + B.ticks;
+    const dark = this.run === 4 && O.dark.on && O.hunt.on, body = !dark || fleeing || this.seen(false);
     const l = it.held || !body ? null : this.lights().find((x) => x.key === it.key);
     return {
       run: this.run,
@@ -967,6 +1020,7 @@ export class FightRoom {
       // Its eye turning (left of of), then its gaze holding (gaze of hold, the eye fully turned), seen at any distance.
       ...(this.run === 4 && O.hunt.on && O.eye.on && (this.eye > 0 || this.gaze > 0) ? { eye: { left: this.eye, of: O.eye.ticks, cone: O.eye.cone, r: O.eye.range + O.eye.slack, ...(this.eye === 0 ? { gaze: this.gaze, hold: O.eye.hold } : {}) } } : {}),
       ...(dark ? { dark: this.pools() } : {}),
+      ...(B ? { bolt: B } : {}),
       ...(this.run === 4 && O.hunt.on && O.hunt.block && this.onFire() ? { shut: true } : {}),
       ...(this.flung.length ? { flung: this.flung.filter((q) => g.tick - q.tick <= 2) } : {}),
       ...(this.run === 4 ? { teach: { ...(this.teach.hint ? { hint: this.teach.hint } : {}), ...(this.teach.retry ? { retry: true } : {}), ...(this.standAt() ? { stand: this.standAt()! } : {}) } } : {}),
@@ -994,6 +1048,8 @@ export class FightRoom {
   /** The hunt: light torn out that lies where it fell, lit, waiting for his tap to send it home. */
   private strays() {
     const g = this.game;
+    // With real pulls (hunt.home 0) it is any lit light lying loose: not in it, not banked, not on its way home.
+    if (!OFFSPRING.hunt.home) return g.wisps.filter((w) => this.lit.has(w.id) && !this.inside.has(w.id) && !this.banked.has(w.id) && !this.torn.has(w.id) && !g.away.has(w.id));
     return g.wisps.filter((w) => g.noBank.has(w.id) && !this.torn.has(w.id) && !g.away.has(w.id));
   }
 
@@ -1033,7 +1089,7 @@ export class FightRoom {
     const feet: NonNullable<NonNullable<StoryView["opt"]>["feet"]> = [{ x: f.her.x, y: f.her.y, f: f.her.light / f.her.full, mark: (this.run === 3 ? O.her.shove : f.her.full) / f.her.full, tone: "her", ...(f.teach?.hint === "cover" ? { flash: true } : {}) }];
     if (this.run === 4) feet.push({ x: f.fen.x, y: f.fen.y, f: f.fen.light / O.light.fenMax, tone: "fen" });
     // Where to tap: its back, held with the shard out (live from behind it), or the open wound.
-    const lp = f.it.leap, land = lp && f.tick < lp.t0 + lp.ticks ? { x: lp.to.x, y: lp.to.y, r: O.it.size / 2 } : null;
+    const lp = f.it.leap, land = lp && !f.bolt && f.tick < lp.t0 + lp.ticks ? { x: lp.to.x, y: lp.to.y, r: O.it.size / 2 } : null;
     const back = O.it.size * 0.25, hit = !f.it.hidden && (f.it.strike || f.it.wound) ? { x: f.it.x - Math.cos(f.it.face) * back, y: f.it.y - Math.sin(f.it.face) * back, live: f.it.strike === 2 || (f.it.wound > 0 && this.inReach()) } : null;
     return {
       run: this.run === 3 ? O.run3 : O.run4,

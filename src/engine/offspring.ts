@@ -194,7 +194,7 @@ export const OFFSPRING = {
       lure: { key: "Space shows the shard and draws it off. Hide it before it reaches you.", tap: "Show the shard to draw it off. Hide it before it reaches you." },
       loose: { key: "Keep pulling. Press Space to cover the shard before it reaches you.", tap: "Keep pulling. Hide the shard before it reaches you." },
       far: { key: "Too far to pull. Get closer to its back.", tap: "Too far to pull. Get closer to its back." },
-      home: { key: "Click the fallen light to send it home to the fire.", tap: "Tap the fallen light to send it home to the fire." },
+      home: { key: "Pull the fallen light to the fire while it is away.", tap: "Pull the fallen light to the fire while it is away." },
       eye: { key: "Its eye is turning. Get out of its sight: press R to run.", tap: "Its eye is turning. Get out of its sight: tap Running." },
     },
     /** The same on a retry, shortened. */
@@ -206,7 +206,7 @@ export const OFFSPRING = {
       lure: { key: "Space: draw it off, then hide.", tap: "Show to draw it off, then hide." },
       loose: { key: "Pull, then Space to cover.", tap: "Pull, then hide." },
       far: { key: "Too far. Get closer.", tap: "Too far. Get closer." },
-      home: { key: "Click the light: home.", tap: "Tap the light: home." },
+      home: { key: "Pull the light to the fire.", tap: "Pull the light to the fire." },
       eye: { key: "Its eye: run (R).", tap: "Its eye: run." },
     },
     /** Ticks he waits at a step before she says the strike or pull order. */
@@ -247,7 +247,19 @@ export const OFFSPRING = {
    * Solenne no longer holds: full, she flares and stuns it where it stands for `stun` ticks. No
    * hops while the shard glows or its eye turns (`hopShard` 0).
    */
-  hunt: { on: 1, stun: 4, tears: 3, home: 1, block: 1, hopShard: 0, fling: 6, flingSpread: 2, straysFirst: 1, solid: 1 },
+  hunt: { on: 1, stun: 4, tears: 3, home: 0, block: 0, hopShard: 0, fling: 6, flingSpread: 2, straysFirst: 1, solid: 1, bolt: 1, boltMin: 9, boltTicks: 3, away: 16, flingHeld: 1 },
+  /*
+   * The jump (gameplay thread, trial-jump-delta.patch, from Ladi 27 Nov 4:46 PM: "after 2 or 3 taps it
+   * jumps to safety", and "Besides tapping which feels kind of like a different game"):
+   * - `bolt`: after `tears` tears the wound shuts and it leaps (`boltTicks`) to a random spot at least
+   *   `boltMin` tiles from Rook, eye and gaze cleared; it stays there `away` ticks, then limps back
+   *   for dark.hurt ticks.
+   * - `home` 0 (Ladi's): no tap that sends light home; torn light is ordinary loose lit light, pulled
+   *   with the staff and banked at the brazier.
+   * - The gameplay thread's own calls, not Ladi's: `block` 0 (the fire no longer shuts while it sits
+   *   there) and `flingHeld` 1 (light torn during her stun is flung too, and three tears in a stun
+   *   shut the wound and it jumps the moment she lets go).
+   */
   /**
    * Its eye, in place of the touch catch (Ladi, 27 Nov 3:57 PM: "it should have to face you then its
    * eye takes 3 or 4 ticks to turn reflective then you are dead if you are in it's cone of vision").

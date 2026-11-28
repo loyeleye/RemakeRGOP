@@ -49,6 +49,8 @@ export const FIGHT_LOOK = {
     max: 12,
   },
   shudder: { light: 0.55, size: 0.1, sec: 0.35 },
+  /** The jump: it flees hurt, dripping light along its arc; the drops (how many, colour, size) lie on the ground and fade out over the ticks it stays away. */
+  trail: { drops: 16, color: "#ffc070", size: 0.55, glow: 0.85 },
 };
 
 /** A soft round pool of light on the ground (the dark's lit pools). */
@@ -104,6 +106,8 @@ export class OffspringFx {
   private last = 0;
   /** The dark's pools: a light and a ground disc each (made once, unused ones dark). */
   private pools: { light: THREE.PointLight; disc: THREE.Mesh }[] = [];
+  /** The jump's trail of dropped light, laid down for one jump (its t0). */
+  private trail: { drops: THREE.Sprite[]; t0: number } | null = null;
 
   constructor(glow: Glow) {
     this.glow = glow;
@@ -238,6 +242,7 @@ export class OffspringFx {
     for (const ch of this.it.children) if (ch !== this.eye) ch.visible = ch === this.slit ? this.slit.visible && !hidden : !hidden;
     this.eye.visible = !hidden || !!f.eye;
     this.stepPools(f, o, wx, wz);
+    this.stepTrail(f, o.t, wx, wz);
     // Her light over her: its size is her glow, and it pulses while she winds up.
     const her = f.her, wind = her.doing === "windup" ? 1 + 0.25 * Math.sin(o.time * 18) : 1;
     this.herGlow.position.set(wx(her.x), 2.1, wz(her.y));
@@ -316,6 +321,33 @@ export class OffspringFx {
       this.beam.scale.set(1, len, 1);
       this.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.sub(a).normalize());
     }
+  }
+
+  /** The jump: drops of light fall from it along its arc as it flees, then fade on the ground until it comes back. */
+  private stepTrail(f: Fight, t: number, wx: (x: number) => number, wz: (y: number) => number) {
+    const T = FIGHT_LOOK.trail, B = f.bolt;
+    if (!B || (this.trail && this.trail.t0 !== B.t0)) {
+      this.trail?.drops.forEach((d) => (d.removeFromParent(), d.material.dispose()));
+      this.trail = null;
+    }
+    if (!B) return;
+    if (!this.trail) {
+      const drops: THREE.Sprite[] = [];
+      for (let i = 0; i < T.drops; i++) {
+        const d = this.glow(T.color, T.size * (0.6 + 0.8 * ((i * 7) % 5) / 4), 0);
+        // A little to either side of the line, as it lands where it falls.
+        const k = (i + 0.5) / T.drops, side = (((i * 13) % 7) / 6 - 0.5) * 0.9;
+        const dx = B.to.x - B.from.x, dy = B.to.y - B.from.y, n = Math.hypot(dx, dy) || 1;
+        d.position.set(wx(B.from.x + dx * k - (dy / n) * side), 0.12, wz(B.from.y + dy * k + (dx / n) * side));
+        d.userData.k = k;
+        this.all.add(d);
+        drops.push(d);
+      }
+      this.trail = { drops, t0: B.t0 };
+    }
+    // Laid down as it passes over, then fading through its time away.
+    const flew = (f.tick - B.t0 + Math.max(0, Math.min(1, t))) / B.ticks, after = Math.max(0, f.tick - B.t0 - B.ticks + t) / B.away;
+    for (const d of this.trail.drops) d.material.opacity = flew >= (d.userData.k as number) ? T.glow * Math.max(0, 1 - after) : 0;
   }
 
   /** The dark: a light and a disc for each pool, Rook's own shuddering on each knock, harder the nearer it is. */

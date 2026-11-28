@@ -39,6 +39,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   afterEach(() => {
     OFFSPRING.dark.on = 1;
     OFFSPRING.hunt.on = 1;
+    OFFSPRING.hunt.block = 0;
     OFFSPRING.it.daze1 = 0;
     OFFSPRING.her.regen4 = 0.2;
     OFFSPRING.it.eatBanked4 = 4;
@@ -222,8 +223,13 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     p.send({ t: "fight", hit: true });
     expect(p.room.state.wound).toBe(true);
     p.me.pos = p.me.prev = pt(p.c.x - 2, p.c.y);
+    const last = [...p.x.inside][0]!;
     p.send({ t: "fight", hit: true });
-    for (let i = 0; i < 20 && p.room.state.phase === "playing"; i++) p.tick();
+    p.tick(OFFSPRING.wound.pull + 1);
+    // Torn out, it lies loose (hunt.home 0): he pulls it to the fire like any light.
+    expect(p.x.inside.has(last)).toBe(false);
+    p.send({ t: "act", action: { kind: "staff", wisp: last } });
+    for (let i = 0; i < 40 && p.room.state.phase === "playing"; i++) p.tick();
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.won);
   });
 
@@ -523,7 +529,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       return p;
     };
 
-    it("strikes from behind whenever it isn't looking, held or not, and each pull flings a light that lies lit until a tap sends it home", () => {
+    it("strikes from behind whenever it isn't looking, held or not, and each pull flings a light that lies loose and lit, to be pulled to the fire", () => {
       const p = loose();
       expect(p.x.it.held).toBe(false);
       expect(p.room.storyView().fight!.it.strike).toBe(2);
@@ -538,17 +544,18 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       expect(flung).toBeDefined();
       const w = p.g.wisps[flung!.id]!;
       expect(w.pos).toMatchObject(flung!.to);
-      // Not on its way home by itself, and not banked where it lies.
+      // Not on its way home by itself: ordinary loose light (hunt.home 0), lit, to be pulled and banked.
       expect(p.x.torn.has(flung!.id)).toBe(false);
-      expect(p.g.noBank.has(flung!.id)).toBe(true);
-      // A tap from near it sends it home.
+      expect(p.g.noBank.has(flung!.id)).toBe(false);
+      expect(p.x.lit.has(flung!.id)).toBe(true);
+      // His first pull on it is the "home" step done.
+      p.x.teach.homed = false;
       p.me.pos = p.me.prev = pt(w.pos.x, w.pos.y);
       p.send({ t: "act", action: { kind: "staff", wisp: flung!.id } });
-      expect(p.x.torn.has(flung!.id)).toBe(true);
       expect(p.x.teach.homed).toBe(true);
     });
 
-    it("the wound shuts after a few tears; her blast stuns it for a few ticks, not a long hold", () => {
+    it("the wound shuts after a few tears and it jumps to safety, far from him, for a while; her blast stuns it for a few ticks, not a long hold", () => {
       const p = loose();
       p.send({ t: "fight", hit: true });
       for (let k = 0; k < OFFSPRING.hunt.tears && p.x.wound.open; k++) {
@@ -559,6 +566,20 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
         p.tick(OFFSPRING.wound.pull + 1);
       }
       expect(p.x.wound.open).toBe(false);
+      // Its jump: away from him, seen all the way, a trail left until it is back.
+      const H = OFFSPRING.hunt, f = p.room.storyView().fight!;
+      expect(p.room.stats.bolts).toBe(1);
+      expect(f.bolt).toBeDefined();
+      const me = p.me.pos, to = f.bolt!.to;
+      expect(Math.hypot(to.x - me.x, to.y - me.y)).toBeGreaterThanOrEqual(H.boltMin - 2);
+      p.tick(H.boltTicks + 1);
+      expect(Math.hypot(p.x.it.x - to.x, p.x.it.y - to.y)).toBeLessThan(0.01);
+      const at = { x: p.x.it.x, y: p.x.it.y };
+      p.tick(H.away - 4);
+      expect(Math.hypot(p.x.it.x - at.x, p.x.it.y - at.y)).toBeLessThan(0.01);
+      expect(p.room.storyView().fight!.bolt).toBeDefined();
+      p.tick(8);
+      expect(p.room.storyView().fight!.bolt).toBeUndefined();
       const q = play(4);
       expect(q.x.her.doing).toBe("hold");
       expect(q.x.her.left).toBeLessThanOrEqual(OFFSPRING.hunt.stun);
@@ -652,7 +673,8 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       expect(p.room.storyView().fight!.dark!.flood).toBe(true);
     });
 
-    it("the fire is shut while it stands at the brazier", () => {
+    it("with hunt.block on, the fire is shut while it stands at the brazier", () => {
+      OFFSPRING.hunt.block = 1;
       const p = loose();
       const c = p.c;
       p.x.it.x = c.x + 1;
