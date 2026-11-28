@@ -7,6 +7,7 @@
 import * as THREE from "three";
 import type { StoryView } from "../engine/protocol.js";
 import { OFFSPRING } from "../engine/offspring.js";
+import { knockClock, nearness } from "./fight-music.js";
 
 type Fight = NonNullable<StoryView["fight"]>;
 
@@ -36,7 +37,34 @@ export const FIGHT_LOOK = {
   /** The hunt: its eye turning reflective (the colour it goes, and its glint), and light flung out of the wound (how high it arcs, seconds in the air). */
   mirror: "#e8f6ff",
   fling: { up: 2.2, sec: 0.55, color: "#ffd58a" },
+  /**
+   * The dark (run 4, OFFSPRING.dark): each pool's light (colour, strength, how high it hangs), the
+   * disc on the ground at the pool's edge, and the shudder of Rook's own light on each knock: how
+   * hard (its share of the light and of the disc's size) and for how long (s), scaled by how near it
+   * is (`nearness`, fight-music.ts: the knock's own curve).
+   */
+  pools: {
+    light: { rook: ["#ffe2b0", 14, 1.6], shard: ["#cff4ff", 26, 1.9], fire: ["#ff9a4a", 30, 1.4], wisp: ["#ffd58a", 5, 0.9], her: ["#cfe6ff", 14, 2.1], fen: ["#ffd9a0", 9, 1.5] } as Record<string, [string, number, number]>,
+    disc: 0.3,
+    max: 12,
+  },
+  shudder: { light: 0.55, size: 0.1, sec: 0.35 },
 };
+
+/** A soft round pool of light on the ground (the dark's lit pools). */
+let poolTex: THREE.Texture | null = null;
+function poolTexture() {
+  if (poolTex) return poolTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const x = c.getContext("2d")!, g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.75, "rgba(255,255,255,0.55)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  x.fillStyle = g;
+  x.fillRect(0, 0, 128, 128);
+  return (poolTex = new THREE.CanvasTexture(c));
+}
 
 type Glow = (color: string, size: number, opacity?: number) => THREE.Sprite;
 
@@ -74,6 +102,8 @@ export class OffspringFx {
   private walk = 0;
   private wound = 0;
   private last = 0;
+  /** The dark's pools: a light and a ground disc each (made once, unused ones dark). */
+  private pools: { light: THREE.PointLight; disc: THREE.Mesh }[] = [];
 
   constructor(glow: Glow) {
     this.glow = glow;
@@ -203,6 +233,11 @@ export class OffspringFx {
     this.strikeGlow.scale.setScalar(S * (st === 2 ? 0.8 + 0.15 * Math.sin(o.time * 8) : 0.7));
     (this.strikeRing.material as THREE.MeshBasicMaterial).opacity = st === 2 ? 0.75 + 0.25 * Math.sin(o.time * 8) : st === 1 ? 0.35 : 0;
     this.strikeRing.scale.setScalar(st === 2 ? 1 + 0.18 * Math.sin(o.time * 8) : 1);
+    // The dark: no light has it, so nothing of it shows; while its eye turns or its gaze holds, only the eye.
+    const hidden = !!f.it.hidden;
+    for (const ch of this.it.children) if (ch !== this.eye) ch.visible = ch === this.slit ? this.slit.visible && !hidden : !hidden;
+    this.eye.visible = !hidden || !!f.eye;
+    this.stepPools(f, o, wx, wz);
     // Her light over her: its size is her glow, and it pulses while she winds up.
     const her = f.her, wind = her.doing === "windup" ? 1 + 0.25 * Math.sin(o.time * 18) : 1;
     this.herGlow.position.set(wx(her.x), 2.1, wz(her.y));
@@ -260,7 +295,7 @@ export class OffspringFx {
     const ex = wx(x) + Math.cos(face) * S * 0.38, ez = wz(y) + Math.sin(face) * S * 0.38;
     this.motes.forEach((m, i) => {
       const k = (o.time * P.speed + i / this.motes.length) % 1;
-      m.visible = this.sapLevel > 0.02;
+      m.visible = this.sapLevel > 0.02 && !f.it.hidden;
       if (!m.visible) return;
       m.position.set(ex * k, 1.2 + (L.eyeAt - 1.2) * k + Math.sin(Math.PI * k) * 0.8, ez * k);
       m.scale.setScalar(0.25 + 0.3 * (1 - k));
@@ -281,6 +316,39 @@ export class OffspringFx {
       this.beam.scale.set(1, len, 1);
       this.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.sub(a).normalize());
     }
+  }
+
+  /** The dark: a light and a disc for each pool, Rook's own shuddering on each knock, harder the nearer it is. */
+  private stepPools(f: Fight, o: { t: number; time: number; rook: THREE.Object3D | null }, wx: (x: number) => number, wz: (y: number) => number) {
+    const P = FIGHT_LOOK.pools, D = f.dark;
+    while (D && this.pools.length < Math.min(P.max, D.pools.length)) {
+      const light = new THREE.PointLight("#ffffff", 0, 4, 1.5);
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshBasicMaterial({ map: poolTexture(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+      disc.rotation.x = -Math.PI / 2;
+      disc.position.y = 0.03;
+      this.all.add(light, disc);
+      this.pools.push({ light, disc });
+    }
+    // The knock: Rook's light gives a little on each one (every 2 ticks from bar 1, as the knock stem plays).
+    const kc = knockClock(), t0 = kc ?? 0, age = ((((f.tick - t0) % 2) + 2) % 2 + Math.max(0, Math.min(1, o.t))) * 0.6;
+    const S = FIGHT_LOOK.shudder, near = D ? nearness(D.hear.d) : 0, kick = age < S.sec ? near * Math.exp(-age / (S.sec / 3)) : 0;
+    this.pools.forEach((q, i) => {
+      const p = D && !D.flood ? D.pools[i] : undefined;
+      q.light.visible = q.disc.visible = !!p;
+      if (!p) return;
+      const [color, power, high] = P.light[p.k]!, mine = i === 0 && o.rook;
+      const x = mine ? o.rook!.position.x : wx(p.x), z = mine ? o.rook!.position.z : wz(p.y);
+      const shake = mine ? kick : 0;
+      q.light.color.set(color);
+      q.light.intensity = power * (1 - S.light * shake);
+      q.light.distance = p.r * 1.7;
+      q.light.position.set(x, high, z);
+      q.disc.position.set(x, 0.03, z);
+      q.disc.scale.setScalar(p.r * (1 + S.size * shake * Math.sin(age * 60)));
+      const m = q.disc.material as THREE.MeshBasicMaterial;
+      m.color.set(color);
+      m.opacity = P.disc * (1 - S.light * shake);
+    });
   }
 
   dispose() {

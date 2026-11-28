@@ -183,6 +183,12 @@ body.touch .bark.chip { top: 58px; left: 12px; right: auto; }
 #shard small.key { display: block; font-size: 11px; font-weight: 600; opacity: 0.7; letter-spacing: 0.04em; margin-top: 3px; }
 body:not(.touch) #shard { width: 128px; }
 #shard.on { background: #bfefff; color: #0d2230; box-shadow: 0 0 14px #bfefffaa; }
+/* Run 4: the run button as plain as the shard's (the gameplay thread: he has to run from its gaze). */
+body:not(.touch) #run.fight { width: 128px; font-size: 15px; font-weight: 700; line-height: 1.15; border: 2px solid #ffd36a; color: #fff3cf; box-shadow: 0 0 12px #ffd36a66; }
+body:not(.touch) #run.fight.walking { border-style: dashed; color: #ffe9b0; box-shadow: 0 0 8px #ffd36a44; }
+#run.fight small.key { display: block; font-size: 11px; font-weight: 600; opacity: 0.7; letter-spacing: 0.04em; margin-top: 3px; }
+.touch #run2.fight { box-shadow: 0 0 0 3px #ffd36acc, 0 4px 14px #0008; }
+.touch #run2.fight.walking { filter: none; box-shadow: 0 0 0 3px #ffd36a88, 0 4px 14px #0008; }
 body.calling #board { cursor: crosshair; }
 
 /* ---------------------------------------------------------------- run 1's ending, run 2's opening */

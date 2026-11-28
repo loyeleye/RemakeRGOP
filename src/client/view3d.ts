@@ -538,6 +538,9 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
+/** Run 4, the dark: the yard's sky and moon light as shares of the day's (enough to make out walls and carts), how far her flood brings it back, and how fast it changes (per second). */
+const FIGHT_DARK = { hemi: 0.12, sun: 0.05, flood: 0.45, ease: 4 };
+
 /** The Sieve's light: the sun's and the sky's colour at the start, and each one's strength at the start and at the end; and the cold colours they drain to. */
 const SIEVE_LIGHT = { sun: ["#ffd9a0", 2.6, 1.5] as const, sky: ["#fff3e0", 0.95, 1.3] as const };
 /** Run 8's pull, second take: the cold colour of its rings and threads. */
@@ -3156,12 +3159,21 @@ export class World {
     this.rescueFx.step({ r, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, wisps: this.wisps, players: this.players });
   }
 
+  private fightLast = 0;
   /** Part 2, runs 3 and 4: the offspring, her light, the boy's, the shard (offspring-dress.ts, placeholder shapes). */
   private fightFx: OffspringFx | null = null;
   /** The fire the fight put out, so leaving the fight lights that one again and no other. */
   private fightFire: FireParts = null;
+  /** Run 4, the dark: how far toward the day's light the yard is (1 day, 0 the dark), eased frame to frame. */
+  private fightDay = 1;
   private stepFight(st: DrawState, time: number) {
     const f = st.fight;
+    if (!f && this.fightDay < 1) {
+      this.fightDay = 1;
+      this.hemi.intensity = this.dayLight.hemi;
+      this.sun.intensity = this.dayLight.sun;
+      this.brazierLight.distance = 30;
+    }
     if (!f) {
       if (this.fightFx) {
         this.fightFx.dispose();
@@ -3188,6 +3200,17 @@ export class World {
       p.embers.visible = on;
       p.pillar.visible = false;
       if (on) p.fire.scale.set(0.4 + 0.6 * k, 0.2 + 0.8 * k, 0.4 + 0.6 * k);
+    }
+    // The dark (OFFSPRING.dark): the yard's own light down to a faint moon, so the walls and carts still
+    // read; her wind-up, her hold and the kill fill it again. The fire lights only its own pool.
+    const D = FIGHT_DARK, want = f.dark ? (f.dark.flood ? D.flood : 0) : 1, dk = Math.min(1, D.ease * Math.max(0, time - this.fightLast));
+    this.fightLast = time;
+    if (f.dark || this.fightDay < 1) {
+      this.fightDay += (want - this.fightDay) * dk;
+      this.hemi.intensity = this.dayLight.hemi * (D.hemi + (1 - D.hemi) * this.fightDay);
+      this.sun.intensity = this.dayLight.sun * (D.sun + (1 - D.sun) * this.fightDay);
+      const fire = f.dark?.pools.find((p) => p.k === "fire");
+      this.brazierLight.distance = f.dark && !f.dark.flood ? (fire ? fire.r * 1.7 : 0.01) : 30;
     }
     const b = st.shrine.board;
     this.fightFx.step({ f, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, rook: this.players.get(st.me)?.root ?? null });

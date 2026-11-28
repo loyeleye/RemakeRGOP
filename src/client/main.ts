@@ -1603,7 +1603,11 @@ function renderPad(s: GameSnapshot | null) {
   $("mode").classList.toggle("push", p?.mode === "push");
   // The button always says which he is doing; a press changes it.
   const walking = p?.run === false;
-  $("run").textContent = walking ? "🚶 Walking" : "🏃 Running";
+  // Run 4 (the hunt): the run button is as big and as plain as the shard's, with its key.
+  const fight = !!room?.story?.fight?.shard;
+  if (fight && !document.body.classList.contains("touch")) $("run").innerHTML = `${walking ? "🚶 Walking" : "🏃 Running"}<small class="key">R</small>`;
+  else $("run").textContent = walking ? "🚶 Walking" : "🏃 Running";
+  for (const id of ["run", "run2"]) $(id).classList.toggle("fight", fight);
   $("run2").textContent = walking ? "Walking" : "Running";
   for (const id of ["run", "run2"]) {
     $(id).classList.toggle("walking", walking);
@@ -3224,7 +3228,7 @@ function hintsFrame(now: number) {
     shownFight = fightHint;
     if (teach?.hint) {
       const H = (teach.retry ? OFFSPRING.teach.short : OFFSPRING.teach.hint)[teach.hint];
-      showHint("fight", touch ? H.tap : H.key, teach.hint === "show" || teach.hint === "cover" || teach.hint === "lure" || teach.hint === "loose" || teach.hint === "eye" ? $("shard") : null, true);
+      showHint("fight", touch ? H.tap : H.key, teach.hint === "show" || teach.hint === "cover" || teach.hint === "lure" || teach.hint === "loose" ? $("shard") : teach.hint === "eye" ? (touch ? $("run2") : $("run")) : null, true);
       if (hintUp) hintUp.until = Infinity;
     }
   }

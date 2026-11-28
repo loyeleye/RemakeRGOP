@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Tile, pt } from "../src/engine/board.js";
 import { shrineById } from "../src/engine/maps.js";
 import { OFFSPRING } from "../src/engine/offspring.js";
@@ -32,7 +32,12 @@ function opened(start: 3 | 4 = 3) {
 
 describe("Part 2, runs 3 and 4: the offspring fight", () => {
   // Tests of run 4's rounds of holds (OFFSPRING.hunt off, v291) switch the hunt off; every test ends with the defaults back.
+  // The dark (OFFSPRING.dark) hides its body from the view: tests of the rest switch it off.
+  beforeEach(() => {
+    OFFSPRING.dark.on = 0;
+  });
   afterEach(() => {
+    OFFSPRING.dark.on = 1;
     OFFSPRING.hunt.on = 1;
     OFFSPRING.it.daze1 = 0;
     OFFSPRING.her.regen4 = 0.2;
@@ -587,6 +592,64 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
         for (let i = 0; i < E.ticks + 1; i++) p.tick();
         expect(p.room.state.catches > before).toBe(!dodge);
       }
+    });
+
+    it("its gaze holds after the eye turns, sweeping after him: stepping back into it is a catch", () => {
+      const E = OFFSPRING.eye;
+      const p = loose(2);
+      p.send({ t: "fight", hit: true });
+      p.x.wound.open = false;
+      for (let i = 0; i < 30 && !p.room.storyView().fight!.eye; i++) {
+        const it = p.x.it;
+        p.me.pos = p.me.prev = pt(Math.round(it.x + Math.cos(it.face) * 2.5), Math.round(it.y + Math.sin(it.face) * 2.5));
+        p.tick();
+      }
+      // Round its back while the eye turns: no catch when it has turned.
+      const it = p.x.it, back = () => (p.me.pos = p.me.prev = pt(Math.round(it.x - Math.cos(it.face) * 3), Math.round(it.y - Math.sin(it.face) * 3)));
+      back();
+      const before = p.room.state.catches;
+      for (let i = 0; i < E.ticks; i++) p.tick();
+      expect(p.room.state.catches).toBe(before);
+      expect(p.room.storyView().fight!.eye).toMatchObject({ left: 0, hold: E.hold });
+      expect(p.room.storyView().opt!.cone!.k).toBe(1);
+      // Into its front with the gaze still on: caught.
+      p.me.pos = p.me.prev = pt(Math.round(it.x + Math.cos(it.face) * 3), Math.round(it.y + Math.sin(it.face) * 3));
+      p.tick();
+      expect(p.room.state.catches).toBe(before + 1);
+    });
+
+    it("in the dark nothing of it shows unless a light has it; its eye shows at any distance", () => {
+      OFFSPRING.dark.on = 1;
+      const D = OFFSPRING.dark, half = OFFSPRING.it.size / 2;
+      const p = loose(2);
+      // Right behind it: Rook's own ring has it.
+      expect(p.room.storyView().fight!.it.hidden).toBeUndefined();
+      expect(p.room.storyView().fight!.it.strike).toBe(2);
+      // Far off in the dark, shard covered: nothing of it, no line to what it is after, no place to tap.
+      const it = p.x.it, c = p.c;
+      it.x = c.x - 9;
+      it.y = c.y + 6;
+      p.me.pos = p.me.prev = pt(c.x + 8, c.y - 6);
+      const f = p.room.storyView().fight!;
+      expect(f.it.hidden).toBe(true);
+      expect(f.it.to).toBeUndefined();
+      expect(f.it.strike).toBeUndefined();
+      expect(p.room.storyView().opt!.hit).toBeUndefined();
+      // Rook's pool first, at his light's reach from its body edge; and where it is to be heard from.
+      expect(f.dark!.pools[0]).toMatchObject({ k: "rook", r: D.rook + half });
+      expect(f.dark!.hear.d).toBeCloseTo(Math.hypot(17, 12) - half, 5);
+      expect(f.dark!.flood).toBeUndefined();
+      // Its eye turning: the eye and cone show, its body still doesn't.
+      (p.room as unknown as { eye: number }).eye = 2;
+      expect(p.room.seen()).toBe(true);
+      expect(p.room.seen(false)).toBe(false);
+      expect(p.room.storyView().fight!.eye).toBeDefined();
+      expect(p.room.storyView().fight!.it.hidden).toBe(true);
+      // Her hold fills the yard.
+      (p.room as unknown as { eye: number }).eye = 0;
+      p.x.it.held = true;
+      expect(p.room.storyView().fight!.it.hidden).toBeUndefined();
+      expect(p.room.storyView().fight!.dark!.flood).toBe(true);
     });
 
     it("the fire is shut while it stands at the brazier", () => {

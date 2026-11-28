@@ -195,7 +195,7 @@ export const OFFSPRING = {
       loose: { key: "Keep pulling. Press Space to cover the shard before it reaches you.", tap: "Keep pulling. Hide the shard before it reaches you." },
       far: { key: "Too far to pull. Get closer to its back.", tap: "Too far to pull. Get closer to its back." },
       home: { key: "Click the fallen light to send it home to the fire.", tap: "Tap the fallen light to send it home to the fire." },
-      eye: { key: "Its eye is turning. Get out of its sight, or press Space to cover the shard.", tap: "Its eye is turning. Get out of its sight, or hide the shard." },
+      eye: { key: "Its eye is turning. Get out of its sight: press R to run.", tap: "Its eye is turning. Get out of its sight: tap Running." },
     },
     /** The same on a retry, shortened. */
     short: {
@@ -207,7 +207,7 @@ export const OFFSPRING = {
       loose: { key: "Pull, then Space to cover.", tap: "Pull, then hide." },
       far: { key: "Too far. Get closer.", tap: "Too far. Get closer." },
       home: { key: "Click the light: home.", tap: "Tap the light: home." },
-      eye: { key: "Its eye: out of sight, or Space.", tap: "Its eye: out of sight, or hide." },
+      eye: { key: "Its eye: run (R).", tap: "Its eye: run." },
     },
     /** Ticks he waits at a step before she says the strike or pull order. */
     wait: 3,
@@ -253,11 +253,23 @@ export const OFFSPRING = {
    * eye takes 3 or 4 ticks to turn reflective then you are dead if you are in it's cone of vision").
    * After the shard it walks to within `range` tiles of him (from its front edge) and turns to face
    * him (within `aim` degrees). Then the eye turns over `ticks`, while it stands and follows him only
-   * `track` degrees a tick (`lock`). At the end he is caught (the save, then the loss) if the shard
-   * still glows and he is within `cone` degrees either side of its facing and `range` + `slack` tiles
-   * of its front. If the shard goes dark first the eye lets go.
+   * `track` degrees a tick (`lock`). Once turned, its gaze holds `hold` more ticks, sweeping after him
+   * `sweep` degrees a tick (Ladi, 27 Nov 4:22 PM: "The gaze definitely would need to last longer").
+   * On any of those ticks he is caught (the save, then the loss) if the shard still glows and he is
+   * within `cone` degrees either side of its facing and `range` + `slack` tiles of its front. If the
+   * shard goes dark first the eye lets go.
    */
-  eye: { on: 1, ticks: 3, cone: 35, aim: 15, range: 1.5, lock: 1, slack: 2, track: 8 },
+  eye: { on: 1, ticks: 3, cone: 35, aim: 15, range: 1.5, lock: 1, slack: 4.5, track: 8, hold: 5, sweep: 15 },
+  /**
+   * TRIAL, the dark (Ladi, 27 Nov 4:24 PM, decision card "Fight it in the dark"; the gameplay thread's
+   * trial-dark.patch). How far each light shows its body, in tiles from its body's edge: Rook's own
+   * ring, the uncovered shard, the brazier (and more for each banked light), a loose lit wisp,
+   * Solenne (and more for her light), Fen. It also shows while she winds up or holds it, for
+   * `ateTicks` after each mouthful, and in the kill; its turning eye and its gaze show at any distance.
+   * `glow`: ticks it can still follow a covered shard, which lights nothing for him (Ladi, 27 Nov
+   * 4:32 PM: "Let's set it to 3 seconds"). `hurt`: ticks of the crawl after the wound shuts.
+   */
+  dark: { on: 1, rook: 1, shard: 4, brazier: 0.5, perBanked: 0.3, wisp: 0.8, her: 1, perHer: 0.25, fen: 1.5, ateTicks: 2, glow: 5, hurt: 3 },
   /** Her three lines after a save (approved wording, Ladi 27 Nov 12:48 PM; no voice take yet). One at random. */
   saved: ["I can't do that twice, Salvage.", "Next time it has you, I keep what's left for the boy.", "That cost more than you're worth. Stay behind it."],
   /** Text on the short card. Placeholder wording, not story lines. */

@@ -57,6 +57,10 @@ export class FightRoom {
   private pulling = 0;
   private hurtUntil = -1;
   private eye = 0;
+  /** The gaze: ticks it still holds after the eye has turned (eye.hold). */
+  private gaze = 0;
+  /** The dark: the tick it last ate or drank (it shows for a moment). */
+  private ateAt = -99;
   /** The hunt: light flung out of the wound this tick or lately: from its back to where it fell. */
   private flung: { id: number; from: { x: number; y: number }; to: { x: number; y: number }; tick: number }[] = [];
   stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0 };
@@ -173,6 +177,7 @@ export class FightRoom {
     this.pulling = 0;
     this.wound = { open: false, timer: 0 };
     this.eye = 0;
+    this.gaze = 0;
     this.flung = [];
     this.stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0 };
     this.shard = { shown: false, glow: 0 };
@@ -316,6 +321,24 @@ export class FightRoom {
     for (const id of [...g.noBank]) if (!this.torn.has(id) && (g.away.has(id) || this.throughFire(g.wisps[id]!.pos))) g.noBank.delete(id);
   }
 
+  /**
+   * The dark: whether any light shows it now. Each light shows it within its own reach of its body; her blast, its open eye and a mouthful of light show it anywhere.
+   * With `eyeToo` false, whether its body shows: its turning eye and gaze show only the eye and the cone (the view).
+   */
+  seen(eyeToo = true) {
+    const D = OFFSPRING.dark, g = this.game, it = this.it, c = g.board.center, half = OFFSPRING.it.size / 2;
+    if (!D.on || this.run !== 4) return true;
+    if (eyeToo && (this.eye > 0 || this.gaze > 0)) return true;
+    if (it.held || this.her.doing === "windup" || g.tick - this.ateAt < D.ateTicks || this.part === "kill") return true;
+    const near = (p: { x: number; y: number }, r: number) => Math.hypot(p.x - it.x, p.y - it.y) <= r + half;
+    const me = this.spot(YOU);
+    if (near(me, this.shard.shown ? D.shard : D.rook)) return true;
+    if (this.banked.size && near(c, D.brazier + D.perBanked * this.banked.size)) return true;
+    if (near(this.spot(SOL_ID), D.her + D.perHer * this.her.light) || near(this.spot(FEN_ID), D.fen)) return true;
+    for (const w of g.wisps) if (!g.away.has(w.id) && !this.banked.has(w.id) && this.lit.has(w.id) && near(w.pos, D.wisp)) return true;
+    return false;
+  }
+
   /** The hunt: its body is at the fire (within its drinking distance), and not held. */
   private onFire() {
     const I = OFFSPRING.it, c = this.game.board.center, it = this.it;
@@ -377,7 +400,7 @@ export class FightRoom {
       // Held by her blast: facing her, still.
       const sol = this.spot(SOL_ID);
       if (!OFFSPRING.hunt.on || this.cycle <= 1) it.face = Math.atan2(sol.y - it.y, sol.x - it.x);
-      this.eye = 0;
+      this.eye = this.gaze = 0;
       return;
     }
     if (this.hop()) return;
@@ -393,8 +416,8 @@ export class FightRoom {
     const l = this.choose();
     if (!l) return;
     const E = O.eye, HU = O.hunt;
-    if (HU.on && E.on && l.after !== "shard") this.eye = 0;
-    if (HU.on && E.on && this.eye > 0) {
+    if (HU.on && E.on && l.after !== "shard") this.eye = this.gaze = 0;
+    if (HU.on && E.on && (this.eye > 0 || this.gaze > 0)) {
       // Its eye is turning: it stands and stares (locked, or tracking him), and at the end he is caught if he is in its cone with the shard still lit.
       const me = this.spot(YOU);
       if (!E.lock || E.track) {
@@ -402,11 +425,14 @@ export class FightRoom {
         let d = w - it.face;
         while (d > Math.PI) d -= 2 * Math.PI;
         while (d < -Math.PI) d += 2 * Math.PI;
-        const tn = ((E.lock ? E.track : I.turn) * Math.PI) / 180;
+        const tn = ((this.eye > 0 ? (E.lock ? E.track : I.turn) : E.sweep) * Math.PI) / 180;
         it.face += Math.abs(d) <= tn ? d : Math.sign(d) * tn;
       }
-      if (--this.eye === 0) {
-        this.stats.flashes++;
+      // The eye turned: one look, and then the gaze holds for eye.hold more ticks, sweeping after him; he is caught on any tick he is in it.
+      const turned = this.eye > 0 ? --this.eye === 0 : true;
+      if (this.eye === 0 && turned) {
+        if (this.gaze === 0) (this.stats.flashes++, (this.gaze = E.hold + 1));
+        this.gaze--;
         let off = Math.atan2(me.y - it.y, me.x - it.x) - it.face;
         while (off > Math.PI) off -= 2 * Math.PI;
         while (off < -Math.PI) off += 2 * Math.PI;
@@ -456,6 +482,7 @@ export class FightRoom {
         if (++it.eat < (this.run === 4 ? I.eatBanked4 : I.eatBanked)) return;
         const id = [...this.banked].pop()!;
         this.stats.drunk++;
+        this.ateAt = g.tick;
         this.banked.delete(id);
         this.inside.add(id);
         g.scores[0] = this.banked.size;
@@ -496,6 +523,7 @@ export class FightRoom {
     this.torn.delete(w.id);
     this.lit.delete(w.id);
     this.stats.eaten++;
+    this.ateAt = g.tick;
     this.inside.add(w.id);
     if (this.run === 3) this.ate();
   }
@@ -726,8 +754,10 @@ export class FightRoom {
   }
 
   private stepShard() {
-    const S = OFFSPRING.shard, full = OFFSPRING.light.shard;
-    this.shard.glow = this.shard.shown ? full : Math.max(0, this.shard.glow - full / S.dim);
+    const S = OFFSPRING.shard, full = OFFSPRING.light.shard, D = OFFSPRING.dark;
+    // The dark: a covered shard keeps a glow it can follow for dark.glow ticks, though it lights nothing for him.
+    const dim = D.on && OFFSPRING.hunt.on && D.glow ? D.glow : S.dim;
+    this.shard.glow = this.shard.shown ? full : Math.max(0, this.shard.glow - full / dim);
   }
 
   /** Near enough its back to pull from the wound (wound.reach; 0 for anywhere). */
@@ -740,7 +770,7 @@ export class FightRoom {
   private stepWound() {
     const keep = (OFFSPRING.hunt.on || (OFFSPRING.wound.loose && this.cycle >= OFFSPRING.wound.looseFrom)) && this.wound.open;
     if (!this.shard.shown || (!this.it.held && !keep)) {
-      if (this.wound.open && !this.it.held) this.hurtUntil = this.game.tick + OFFSPRING.shard.dim;
+      if (this.wound.open && !this.it.held) this.hurtUntil = this.game.tick + (OFFSPRING.dark.on && OFFSPRING.hunt.on ? OFFSPRING.dark.hurt : OFFSPRING.shard.dim);
       this.wound = { open: false, timer: 0 };
       this.pulling = 0;
       return;
@@ -916,12 +946,14 @@ export class FightRoom {
 
   fightView(): Fight {
     const O = OFFSPRING, g = this.game, it = this.it, sol = this.spot(SOL_ID), fen = this.spot(FEN_ID);
-    const l = it.held ? null : this.lights().find((x) => x.key === it.key);
+    // The dark: unseen, nothing of it is drawn (no body, no back, no line to what it is after, no landing mark).
+    const dark = this.run === 4 && O.dark.on && O.hunt.on, body = !dark || this.seen(false);
+    const l = it.held || !body ? null : this.lights().find((x) => x.key === it.key);
     return {
       run: this.run,
       part: this.part,
       tick: g.tick,
-      it: { x: it.x, y: it.y, face: it.face, after: it.held ? "her" : it.after, ...(l ? { to: { x: l.at.x, y: l.at.y } } : {}), inside: this.inside.size, held: it.held, wound: this.wound.open ? 1 : 0, knocked: it.knocked, ...(it.eat > 0 ? { eating: true } : {}), ...(this.run === 4 && !this.wound.open && this.part !== "flare" ? (O.hunt.on ? (this.behind() && !(it.leap && g.tick <= it.leap.t0 + it.leap.ticks) ? { strike: 2 as const } : {}) : it.held && this.shard.shown ? { strike: this.behind() ? (2 as const) : (1 as const) } : {}) : {}), ...(it.leap && g.tick <= it.leap.t0 + it.leap.ticks + 1 ? { leap: it.leap } : {}) },
+      it: { x: it.x, y: it.y, face: it.face, after: it.held ? "her" : it.after, ...(l ? { to: { x: l.at.x, y: l.at.y } } : {}), inside: this.inside.size, held: it.held, wound: this.wound.open ? 1 : 0, knocked: it.knocked, ...(it.eat > 0 ? { eating: true } : {}), ...(!body ? { hidden: true } : {}), ...(this.run === 4 && body && !this.wound.open && this.part !== "flare" ? (O.hunt.on ? (this.behind() && !(it.leap && g.tick <= it.leap.t0 + it.leap.ticks) ? { strike: 2 as const } : {}) : it.held && this.shard.shown ? { strike: this.behind() ? (2 as const) : (1 as const) } : {}) : {}), ...(body && it.leap && g.tick <= it.leap.t0 + it.leap.ticks + 1 ? { leap: it.leap } : {}) },
       her: { x: sol.x, y: sol.y, light: this.her.light, full: O.her.full, glow: this.herGlow(), doing: this.part === "flare" ? "hold" : this.her.doing, left: this.her.left, of: this.her.of, ...(this.her.flash ? { flash: this.her.flash } : {}) },
       fen: { x: fen.x, y: fen.y, light: this.fenLight },
       ...(this.run === 4 ? { shard: { shown: this.shard.shown, glow: this.shard.glow, of: O.light.shard } } : {}),
@@ -932,11 +964,31 @@ export class FightRoom {
       catches: this.catches,
       down: this.down,
       pulling: this.pulling,
-      ...(this.run === 4 && O.hunt.on && O.eye.on && this.eye > 0 ? { eye: { left: this.eye, of: O.eye.ticks, cone: O.eye.cone, r: O.eye.range + O.eye.slack } } : {}),
+      // Its eye turning (left of of), then its gaze holding (gaze of hold, the eye fully turned), seen at any distance.
+      ...(this.run === 4 && O.hunt.on && O.eye.on && (this.eye > 0 || this.gaze > 0) ? { eye: { left: this.eye, of: O.eye.ticks, cone: O.eye.cone, r: O.eye.range + O.eye.slack, ...(this.eye === 0 ? { gaze: this.gaze, hold: O.eye.hold } : {}) } } : {}),
+      ...(dark ? { dark: this.pools() } : {}),
       ...(this.run === 4 && O.hunt.on && O.hunt.block && this.onFire() ? { shut: true } : {}),
       ...(this.flung.length ? { flung: this.flung.filter((q) => g.tick - q.tick <= 2) } : {}),
       ...(this.run === 4 ? { teach: { ...(this.teach.hint ? { hint: this.teach.hint } : {}), ...(this.teach.retry ? { retry: true } : {}), ...(this.standAt() ? { stand: this.standAt()! } : {}) } } : {}),
     };
+  }
+
+  /**
+   * The dark: the pools of light on the ground (each light's reach of its body, so the edge is where it
+   * starts to show), and where it is to be heard from: its distance from Rook to its body edge, and its
+   * offset from him (for the knock's gain and pan). Also, whether her light fills the yard.
+   */
+  private pools() {
+    const D = OFFSPRING.dark, g = this.game, c = g.board.center, half = OFFSPRING.it.size / 2, me = this.spot(YOU), it = this.it, sol = this.spot(SOL_ID), fen = this.spot(FEN_ID);
+    const pools: { k: "rook" | "shard" | "fire" | "wisp" | "her" | "fen"; x: number; y: number; r: number }[] = [
+      { k: this.shard.shown ? "shard" : "rook", x: me.x, y: me.y, r: (this.shard.shown ? D.shard : D.rook) + half },
+      { k: "her", x: sol.x, y: sol.y, r: D.her + D.perHer * this.her.light + half },
+      { k: "fen", x: fen.x, y: fen.y, r: D.fen + half },
+    ];
+    if (this.banked.size) pools.push({ k: "fire", x: c.x, y: c.y, r: D.brazier + D.perBanked * this.banked.size + half });
+    for (const w of g.wisps) if (!g.away.has(w.id) && !this.banked.has(w.id) && this.lit.has(w.id)) pools.push({ k: "wisp", x: w.pos.x, y: w.pos.y, r: D.wisp + half });
+    const flood = it.held || this.her.doing === "windup" || this.part === "kill";
+    return { pools, hear: { d: Math.max(0, Math.hypot(it.x - me.x, it.y - me.y) - half), dx: it.x - me.x, dy: it.y - me.y }, ...(flood ? { flood: true as const } : {}) };
   }
 
   /** The hunt: light torn out that lies where it fell, lit, waiting for his tap to send it home. */
@@ -982,7 +1034,7 @@ export class FightRoom {
     if (this.run === 4) feet.push({ x: f.fen.x, y: f.fen.y, f: f.fen.light / O.light.fenMax, tone: "fen" });
     // Where to tap: its back, held with the shard out (live from behind it), or the open wound.
     const lp = f.it.leap, land = lp && f.tick < lp.t0 + lp.ticks ? { x: lp.to.x, y: lp.to.y, r: O.it.size / 2 } : null;
-    const back = O.it.size * 0.25, hit = f.it.strike || f.it.wound ? { x: f.it.x - Math.cos(f.it.face) * back, y: f.it.y - Math.sin(f.it.face) * back, live: f.it.strike === 2 || (f.it.wound > 0 && this.inReach()) } : null;
+    const back = O.it.size * 0.25, hit = !f.it.hidden && (f.it.strike || f.it.wound) ? { x: f.it.x - Math.cos(f.it.face) * back, y: f.it.y - Math.sin(f.it.face) * back, live: f.it.strike === 2 || (f.it.wound > 0 && this.inReach()) } : null;
     return {
       run: this.run === 3 ? O.run3 : O.run4,
       movement: 0,

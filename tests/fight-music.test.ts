@@ -12,6 +12,7 @@ class FakeParam {
   setValueAtTime(v: number, t: number) {
     log.push(`${this.name()} set ${v} @${t.toFixed(2)}`);
   }
+  setTargetAtTime() {}
   linearRampToValueAtTime(v: number, t: number) {
     log.push(`${this.name()} ramp ${v} @${t.toFixed(2)}`);
   }

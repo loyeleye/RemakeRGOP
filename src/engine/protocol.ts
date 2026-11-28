@@ -180,7 +180,7 @@ export interface StoryView {
     run: 3 | 4;
     part: "open" | "play" | "flare" | "kill";
     tick: number;
-    it: { x: number; y: number; face: number; after: "her" | "fen" | "wisp" | "brazier" | "shard" | null; to?: { x: number; y: number }; inside: number; held: boolean; wound: number; knocked?: number; eating?: boolean; /** Its back glows where to strike: 1 held with the shard out, 2 and he is behind it (a tap strikes). */ strike?: 1 | 2; /** A leap to her, drawn by her flare: from, to, the tick it left and how many ticks it takes. */ leap?: { from: { x: number; y: number }; to: { x: number; y: number }; t0: number; ticks: number } };
+    it: { x: number; y: number; face: number; after: "her" | "fen" | "wisp" | "brazier" | "shard" | null; to?: { x: number; y: number }; inside: number; held: boolean; wound: number; knocked?: number; eating?: boolean; /** Run 4, the dark: no light shows its body (draw nothing of it but its eye and cone). */ hidden?: true; /** Its back glows where to strike: 1 held with the shard out, 2 and he is behind it (a tap strikes). */ strike?: 1 | 2; /** A leap to her, drawn by her flare: from, to, the tick it left and how many ticks it takes. */ leap?: { from: { x: number; y: number }; to: { x: number; y: number }; t0: number; ticks: number } };
     her: { x: number; y: number; light: number; full: number; glow: number; doing: "rest" | "windup" | "hold"; left: number; of: number; flash?: { kind: "shove" | "blast" | "save" | "flare"; tick: number } };
     fen: { x: number; y: number; light: number };
     shard?: { shown: boolean; glow: number; of: number };
@@ -194,7 +194,10 @@ export interface StoryView {
     pulling: number;
     /** Run 4's teaching (OFFSPRING.teach): the hint bubble to show now, and round 1's mark where to stand. */
     /** The hunt (OFFSPRING.hunt, .eye): its eye turning, ticks left of `of`, its cone either side of its facing (degrees) and how far it reaches (tiles from its front edge); the fire shut while it sits on it; light flung out of the wound lately, from its back to where it fell. */
-    eye?: { left: number; of: number; cone: number; r: number };
+    /** Run 4, the hunt: its eye turning (`left` of `of` ticks), then (left 0) its gaze holding, `gaze` of `hold` ticks left. */
+    eye?: { left: number; of: number; cone: number; r: number; gaze?: number; hold?: number };
+    /** Run 4, the dark: the pools of light (their edge is where it starts to show), where it is to be heard from, and whether her light fills the yard. */
+    dark?: { pools: { k: "rook" | "shard" | "fire" | "wisp" | "her" | "fen"; x: number; y: number; r: number }[]; hear: { d: number; dx: number; dy: number }; flood?: true };
     shut?: boolean;
     flung?: { id: number; from: { x: number; y: number }; to: { x: number; y: number }; tick: number }[];
     teach?: { hint?: "show" | "strike" | "pull" | "cover" | "lure" | "loose" | "far" | "home" | "eye"; /** Run 4 again after a loss: the short hints. */ retry?: boolean; stand?: { x: number; y: number } };

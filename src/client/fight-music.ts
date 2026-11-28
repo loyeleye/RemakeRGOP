@@ -30,7 +30,15 @@ export const FIGHT_MUSIC = {
   locks: [1, 2, 4],
   /** Keeping in step with the ticks: how many ticks a reading looks back over, the error (s) that starts a nudge and the one that ends it, the largest change of speed, and how many seconds a nudge aims to take back the error in. */
   drift: { window: 10, start: 0.04, stop: 0.01, most: 0.01, over: 4 },
+  /** The dark: the knock panned by how far east or west of him it is (full `pan` at `panAt` tiles), eased in over `ease` s. Its gain is `nearness`. */
+  hearing: { pan: 0.8, panAt: 8, ease: 0.15, near: 3, farAt: 15, far: 0.2 },
 };
+
+/** The gameplay thread's distance curve for hearing it (and for Rook's light shuddering, with the sound off too): 1 within `near` tiles, falling to `far` at `farAt` or more. */
+export function nearness(d: number) {
+  const H = FIGHT_MUSIC.hearing;
+  return d <= H.near ? 1 : d >= H.farAt ? H.far : 1 - ((1 - H.far) * (d - H.near)) / (H.farAt - H.near);
+}
 
 const STEMS = ["p2-run3-knock", "p2-run3-heart", "p2-run3-breath", "p2-run3-tone", "p2-flare-chord", "p2-flare-note", "p2-flare-far-knocks", "p2-run4-her", "p2-run4-him", "p2-run4-locked"] as const;
 type Stem = (typeof STEMS)[number];
@@ -76,6 +84,8 @@ class Score {
   base: number | null = null;
   err = 0;
   bed = false;
+  /** The dark: the knock is its sound, louder the nearer it is and panned to where it is. */
+  near: { g: GainNode; pan: StereoPannerNode | null } | null = null;
   flared = false;
   run4 = false;
   shown = false;
@@ -128,7 +138,16 @@ class Score {
     src.loop = loop;
     src.playbackRate.value = this.seg.r;
     g.gain.value = on ? 1 : 0;
-    src.connect(g).connect(this.bus);
+    if (n === "p2-run3-knock") {
+      // The knock goes through its own gain and pan (the dark: where it is).
+      if (!this.near) {
+        const ng = this.c.createGain(), pan = typeof this.c.createStereoPanner === "function" ? this.c.createStereoPanner() : null;
+        if (pan) ng.connect(pan).connect(this.bus);
+        else ng.connect(this.bus);
+        this.near = { g: ng, pan };
+      }
+      src.connect(g).connect(this.near.g);
+    } else src.connect(g).connect(this.bus);
     const a = Math.max(this.c.currentTime, this.at(m));
     if (len !== undefined) src.start(a, 0, len);
     else src.start(a);
@@ -200,9 +219,19 @@ class Score {
     else if (nudging) this.rate(1);
   }
 
+  /** The dark: the knock's gain by its distance, and its pan by where it is beside him (the screen is north up), eased over a tick. */
+  hear(f: Fight) {
+    if (!this.near) return;
+    const h = f.dark?.hear, a = this.c.currentTime, M = FIGHT_MUSIC.hearing;
+    const g = h ? nearness(h.d) : 1, p = h ? Math.max(-1, Math.min(1, h.dx / M.panAt)) * M.pan : 0;
+    this.near.g.gain.setTargetAtTime(g, a, M.ease);
+    this.near.pan?.pan.setTargetAtTime(p, a, M.ease);
+  }
+
   step(f: Fight) {
     const M = FIGHT_MUSIC;
     this.keepStep(f.tick);
+    this.hear(f);
     if (f.run === 3) {
       if (!this.layers.has("p2-run3-knock")) this.play("p2-run3-knock", 0, true);
       // From the first bank (the fight past its opening pull): the rest of the bed, at the next bar line.
@@ -285,6 +314,11 @@ class Score {
 }
 
 let score: Score | null = null;
+
+/** The fight tick the knock's bar 1 fell on (it knocks every 2 ticks from there), while the music plays; null without it. */
+export function knockClock() {
+  return score ? score.tick0 : null;
+}
 
 /**
  * Each tick of a story room: the fight's music, while a fight is being played. Anything else (the
