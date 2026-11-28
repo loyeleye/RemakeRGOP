@@ -3,10 +3,23 @@
 // with Dawn and Dusk swapped, so neither guild ever gets the better side.
 //
 //   .  floor        #  shrine wall     o  boulder       ~  pool     (space) open sky
+//   ≈  deep pool (a plain pull slips over it; only a water light holds)
 //   *  ice (slides you the way you face)
 //   B  brazier      a  Dawn wisp spawn b  Dusk wisp spawn
 //   1  Dawn start   2  Dusk start
 
+import { DYING, craterBoard, craterTiles } from "./dying.js";
+import { SV_WELLS, sieveRows, svCoast, svOutline } from "./sieve.js";
+import { OFFSPRING, oyCoast, oyOutline, yardRows } from "./offspring.js";
+import { CAMP, CAMP_ROWS, campCoast, campOutline } from "./camp.js";
+import { RUN2, RUN2_ROWS } from "./run2.js";
+import { RUN1, RUN1_ROWS } from "./run1.js";
+import { LO_FRAME, LO_OVAL, RESCUE, loCoast, loFromSlip, loOutline, lowOneRows } from "./rescue.js";
+import { SHIP, SHIP_DECK, SHIP_FRAME, shipRows } from "./shiphome.js";
+import { KF_FAR, KF_OVAL, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
+import { TIDEPOOL, TP_FRAME, tidepoolRows, tpCoast, tpOutline, tpTiles } from "./tidepool.js";
+import { COVE, CV_FRAME, CV_ISLE, coveFlats, coveRows, cvCoast, cvFromBrazier, cvOutline } from "./cove.js";
+import { HS_CENTRE, HS_FAR, HS_LOBES, horseshoeRows, hsCoast, hsOval } from "./horseshoe.js";
 import { Board, DIRS, Mover, Tile, pt, type Pt } from "./board.js";
 
 export interface ShrineDef {
@@ -34,6 +47,8 @@ export interface ShrineDef {
   farSpawns?: { band: [number, number]; share: number };
   /** A share of wisps appear on pools in this band instead (of those not sent far out). */
   poolSpawns?: { band: [number, number]; share: number };
+  /** The rows are the whole island, not half of a point-symmetric one (story islands). */
+  full?: boolean;
 }
 
 export interface Gimmicks {
@@ -99,6 +114,8 @@ export interface Arm {
   wiggle?: number;
   /** Side routes that leave this arm and rejoin it further out. */
   forks?: Fork[];
+  /** Clutter scale on this arm (default 1; 0 keeps it clear, for a place to walk). */
+  clutter?: number;
 }
 
 /**
@@ -162,7 +179,7 @@ export function armSamples(s: IsleShape): ArmSample[] {
   const out: ArmSample[] = [];
   for (const arm of s.arms ?? []) {
     const n = Math.ceil(arm.length * 2);
-    for (let i = 0; i <= n; i++) out.push({ ...armPoint(s, arm, i / n), c: 1 });
+    for (let i = 0; i <= n; i++) out.push({ ...armPoint(s, arm, i / n), c: arm.clutter ?? 1 });
     for (const f of arm.forks ?? []) out.push(...bowed(armPoint(s, arm, f.from), armPoint(s, arm, f.to), f.bend, f.width, f.clutter));
   }
   for (const l of s.links ?? []) {
@@ -331,11 +348,45 @@ export function ringWalls(ring: Ring): Pt[] {
   return out;
 }
 
+/** Story places: solid things drawn as themselves. Multi-tile ones are one block of their letter. */
+export type PropKind = "fence" | "post" | "bench" | "barrel" | "woodpile" | "flowerbed" | "shrine-wall" | "tree" | "lamp" | "basin" | "statue" | "lookout" | "rail" | "falls" | "skiff" | "shrine" | "stall" | "hesta-house" | "chair" | "kindling"
+  | "maudie-house" | "moth-house" | "mabry-house" | "orrin-house" | "nell-house" | "sefa-house" | "wick-house" | "offering" | "mooring" | "boat" | "path-lamp" | "ladder"
+  | "beehive" | "garden-plot" | "mat-rack" | "baskets" | "wheelbarrow" | "pane-crate" | "cargo-crates" | "streamer" | "streamer-blue" | "kes-house" | "wind-vane" | "bent-tree" | "referee-stand"
+  | "cold-brazier" | "low-lamp" | "low-house" | "ship-figure" | "yard-solid";
+export const PROP_CHARS: Record<string, PropKind> = {
+  F: "fence", Y: "post", N: "bench", U: "barrel", P: "woodpile", L: "flowerbed", W: "shrine-wall", T: "tree", A: "lamp", Q: "basin", Z: "statue", J: "lookout", E: "rail", V: "falls", K: "skiff", S: "shrine", O: "stall", R: "hesta-house", C: "chair", G: "kindling",
+  // The horseshoe island's houses, the Offering stone, and the one boat at its mooring.
+  M: "maudie-house", D: "moth-house", g: "mabry-house", I: "orrin-house", e: "nell-house", f: "sefa-house", X: "wick-house", h: "offering", i: "mooring", j: "boat", v: "falls",
+  // The lake path's lamp posts, and the lamp trimmer's ladder against one.
+  l: "path-lamp", k: "ladder",
+  // The yards: hives, garden plots (3x2, walkable), a mat rack (2x1), baskets, a barrow, crates.
+  // Kite Fell's streamers: storm violet, and one in Rosalind's blue.
+  u: "streamer", y: "streamer-blue",
+  // And its own models: Kes's house, the wind vanes, the bent trees, and Lumi's referee stand (open ground: she stands on it).
+  "5": "kes-house", "6": "wind-vane", "7": "bent-tree", "8": "referee-stand",
+  // The low one (run 9): its own brazier, cold, its path lamps and its houses. All are drawn by the run (rescue-dress.ts).
+  "9": "cold-brazier", "0": "low-lamp", "?": "low-house",
+  // The ship home (run 10) once had its figure on the deck here; he now stands in the prow, off the map (shiphome.ts SHIP.figure).
+  "$": "ship-figure",
+  // The crew's yard (the offspring fight): solid ground the yard's own dress draws (walls, carts, the cage).
+  "!": "yard-solid",
+  q: "beehive", p: "garden-plot", m: "mat-rack", s: "baskets", w: "wheelbarrow", n: "pane-crate", r: "cargo-crates",
+};
+/** Story places: open ground drawn differently (a worn path, a landing's planks, a terrace's flags). */
+export const GROUND_CHARS: Record<string, "path" | "planks" | "terrace"> = { ",": "path", ";": "planks", ":": "terrace" };
+
 export interface Shrine {
   id: string;
   name: string;
   blurb: string;
   board: Board;
+  /** Story: a house on the island (Rook's), drawn as a building over its tiles, which nobody walks through. Door on the east side. */
+  house?: { x: number; y: number; w: number; h: number };
+  /** Story places: things to walk round (solid tiles, drawn as themselves), and worn-path tiles to draw on the grass. */
+  props?: { kind: PropKind; x: number; y: number }[];
+  paths?: Pt[];
+  /** Story places: planks (the landing) and terrace flags, drawn over the grass. */
+  ground?: { kind: "planks" | "terrace"; x: number; y: number }[];
   /** Teams this layout seats: 2, or up to 4 on a four-way island. */
   teams: number;
   /** Per team: the drawn spawn marks (kept for the map's look and as a fallback). */
@@ -360,6 +411,30 @@ export interface Shrine {
   gimmicks: Gimmicks;
   /** The island's shape in played tiles (scaled), or null. */
   isle: IsleShape | null;
+  /** Story places drawn from their own shape (the horseshoe): extra plateaus under the parts that stick out, in tiles from the centre. */
+  lobes?: { x: number; y: number; r: number }[];
+  /** Where the main plateau is hung from when that isn't the board's centre (the horseshoe's brazier is by its west rim): the middle of the land, in tiles from the centre, and the edge's distance from there at each angle. */
+  core?: { x: number; y: number; outline: (a: number) => number };
+  /** Story: rime here is the comet's glass (dark, an ember glow under it), not frost. */
+  glass?: boolean;
+  /** Story places: an oval of other ground round the brazier (Kite Fell's race ground), half-sizes in tiles; drawn from textures/floor-<id>-race.webp. */
+  raceOval?: { rx: number; ry: number };
+  /** Story places: wells, shafts open to the sky below (the Sieve), as offsets from the brazier and radii in tiles. */
+  wells?: { x: number; y: number; r: number }[];
+  /** Story places: where the lower terraces hang (radians, east is 0, south a quarter turn), to keep them clear of a landing or falls. */
+  tierAngles?: number[];
+  /** Story places: model turns (radians) by prop kind, or by tile as "x,y", over the usual. */
+  turns?: Record<string, number>;
+  /** Story places: wash lines (by their west post, "x,y") hung with small pale cloths (a baby's things). */
+  smallWash?: string[];
+  /** Story: the bank is a landing's slip, where a boat's lamp is filled (run 9). No brazier, dais or fire is drawn at the centre. */
+  landing?: boolean;
+  /** Story: the board is a ship's deck in the sky (run 10). No island is drawn under it; the run draws the hull. */
+  deck?: boolean;
+  /** Story places: named islands of the sky that must be in view from here, in tiles from the centre; `drop` is how far below this one they hang. */
+  far?: { x: number; y: number; r: number; drop: number }[];
+  /** Story (the Cove): the tiles (by index) that the tide covers and uncovers. Open ground on this board; a round floods them (Game.setTide). */
+  tidal?: number[];
 }
 
 /**
@@ -431,13 +506,13 @@ export const SHRINE_DEFS: ShrineDef[] = [
       "                                     ",
       "          .........  .....           ",
       "         ..................          ",
-      "        ..........~.....b.....       ",
-      "       ..o...a...~~~...........      ",
-      "    .........~~..~o~..~~........     ",
-      "  ....a.....~~~~..~..~~~~.....b..    ",
+      "        ..........≈.....b.....       ",
+      "       ..o...a...≈≈≈...........      ",
+      "    .........~~..≈o≈..~~........     ",
+      "  ....a.....~~~~..≈..~~~~.....b..    ",
       "  ...........~~.......~~o........    ",
-      " ......~~~.................~~~....   ",
-      "  ..1..~~~.................~~~..2..  ",
+      " ......≈≈≈.................≈≈≈....   ",
+      "  ..1..≈≈≈.................≈≈≈..2..  ",
       "  .................",
     ],
   },
@@ -797,10 +872,70 @@ const TILE_OF: Record<string, Tile> = {
   " ": Tile.Edge,
   "*": Tile.Ice,
   "#": Tile.Wall,
+  // A house (story islands): solid like a wall, drawn as a building.
+  H: Tile.Wall,
+  l: Tile.Wall,
+  k: Tile.Wall,
+  // Yard things are solid; a garden plot ("p") stays open ground.
+  q: Tile.Wall,
+  u: Tile.Wall,
+  y: Tile.Wall,
+  "5": Tile.Wall,
+  "6": Tile.Wall,
+  "7": Tile.Wall,
+  m: Tile.Wall,
+  s: Tile.Wall,
+  w: Tile.Wall,
+  n: Tile.Wall,
+  r: Tile.Wall,
+  "!": Tile.Wall,
+  // Story places: a fence, a wash-line post, a bench (solid), and a worn path (open ground).
+  F: Tile.Wall,
+  Y: Tile.Wall,
+  N: Tile.Wall,
+  U: Tile.Wall,
+  P: Tile.Wall,
+  L: Tile.Wall,
+  W: Tile.Wall,
+  T: Tile.Wall,
+  A: Tile.Wall,
+  Q: Tile.Wall,
+  Z: Tile.Wall,
+  J: Tile.Wall,
+  E: Tile.Wall,
+  V: Tile.Wall,
+  K: Tile.Wall,
+  S: Tile.Wall,
+  O: Tile.Wall,
+  R: Tile.Wall,
+  C: Tile.Wall,
+  G: Tile.Wall,
+  M: Tile.Wall,
+  D: Tile.Wall,
+  g: Tile.Wall,
+  I: Tile.Wall,
+  e: Tile.Wall,
+  f: Tile.Wall,
+  X: Tile.Wall,
+  h: Tile.Wall,
+  i: Tile.Wall,
+  /** The boat rides on the water: drawn, but the tile stays water. */
+  j: Tile.Water,
+  /** The horseshoe's falls: the lake's last row at the lip, still water. */
+  v: Tile.Water,
   o: Tile.Rock,
+  // The low one's cold brazier and lamps: nobody walks through them, but sight and reach carry past.
+  "9": Tile.Rock,
+  "0": Tile.Rock,
+  "?": Tile.Rock,
+  "$": Tile.Rock,
   "~": Tile.Water,
+  /** Deep water (the law of the water): a pool tile where a plain pull slips. */
+  "≈": Tile.Water,
   B: Tile.Brazier,
   "%": Tile.Rime,
+  /** A well (the Sieve, run 8): open to the sky below. */
+  "@": Tile.Well,
   "+": Tile.Bloom,
   "^": Tile.Vent,
   "=": Tile.Gate,
@@ -830,7 +965,7 @@ export function mirrorRows(half: string[]): string[] {
 }
 
 export function buildShrine(def: ShrineDef): Shrine {
-  let rows = scaleRows(mirrorRows(def.rows), def.scale ?? MAP_SCALE);
+  let rows = scaleRows(def.full ? def.rows : mirrorRows(def.rows), def.scale ?? MAP_SCALE);
   const isle = scaledIsle(def);
   if (isle) rows = carveIsle(rows, isle);
   rows = addRings(rows, ringsOf(def));
@@ -846,6 +981,10 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
   const tiles: Tile[] = [];
   const wispSpawns: Pt[][] = Array.from({ length: teams }, () => []);
   const starts: Pt[][] = Array.from({ length: teams }, () => []);
+  const house: Pt[] = [];
+  const props: NonNullable<Shrine["props"]> = [];
+  const paths: Pt[] = [];
+  const ground: NonNullable<Shrine["ground"]> = [];
   rows.forEach((row, y) => {
     if (row.length !== width) throw new Error(`${def.id}: row ${y} is ${row.length} wide, expected ${width}`);
     [...row].forEach((ch, x) => {
@@ -853,10 +992,17 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
       const sp = SPAWN_TEAM[ch], st = START_TEAM[ch];
       if (sp !== undefined && sp < teams) wispSpawns[sp]!.push(pt(x, y));
       if (st !== undefined && st < teams) starts[st]!.push(pt(x, y));
+      if (ch === "H") house.push(pt(x, y));
+      if (PROP_CHARS[ch]) props.push({ kind: PROP_CHARS[ch]!, x, y });
+      const gk = GROUND_CHARS[ch];
+      if (gk === "path") paths.push(pt(x, y));
+      else if (gk) ground.push({ kind: gk, x, y });
     });
   });
   // The brazier is always a 3x3 block at the centre, whatever the ASCII shows.
   const board = new Board(width, height, tiles);
+  const deep = rows.flatMap((row, y) => [...row].flatMap((ch, x) => (ch === "≈" ? [y * width + x] : [])));
+  if (deep.length) board.deep = new Set(deep);
   for (let dy = -1; dy <= 1; dy++)
     for (let dx = -1; dx <= 1; dx++) tiles[(board.center.y + dy) * width + board.center.x + dx] = Tile.Brazier;
   const every = def.gimmicks?.glyphs;
@@ -865,7 +1011,9 @@ function finish(def: ShrineDef, rows: string[], teams: number, outline: ((a: num
     const d = board.bankFlow();
     for (let i = 0; i < tiles.length; i++) if (tiles[i] === Tile.Floor && d[i]! >= 2 * every && d[i]! % every === 0) tiles[i] = Tile.Glyph;
   }
-  return { id: def.id, name: def.name, blurb: def.blurb, board, teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0, poolField: def.poolSpawns ? spawnField(board, def.poolSpawns.band, Tile.Water) : [], poolShare: def.poolSpawns?.share ?? 0 };
+  const hx = house.map((p) => p.x), hy = house.map((p) => p.y);
+  const houseBox = house.length ? { x: Math.min(...hx), y: Math.min(...hy), w: Math.max(...hx) - Math.min(...hx) + 1, h: Math.max(...hy) - Math.min(...hy) + 1 } : undefined;
+  return { id: def.id, name: def.name, blurb: def.blurb, board, ...(houseBox ? { house: houseBox } : {}), ...(props.length ? { props } : {}), ...(paths.length ? { paths } : {}), ...(ground.length ? { ground } : {}), teams, wispSpawns, spawnField: spawnField(board, def.spawnBand ?? SPAWN_BAND), starts, rings: ringsOf(def), outline, coast: isle && outline ? (dx, dy) => coastDepth(isle, dx, dy, outline) : null, arms: !!isle?.arms?.length, isle: isle ?? null, gimmicks: def.gimmicks ?? {}, farField: def.farSpawns ? spawnField(board, def.farSpawns.band) : [], farShare: def.farSpawns?.share ?? 0, poolField: def.poolSpawns ? spawnField(board, def.poolSpawns.band, Tile.Water) : [], poolShare: def.poolSpawns?.share ?? 0 };
 }
 
 /**
@@ -1123,7 +1271,9 @@ function scatterArms(g: string[][], cx: number, cy: number, isle: IsleShape) {
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       if (!land(x, y)) continue;
-      const r = hash(x, y, 1) / clutter(x - cx, y - cy);
+      const cl = clutter(x - cx, y - cy);
+      if (cl <= 0) continue;
+      const r = hash(x, y, 1) / cl;
       if (r < 0.028) g[y]![x] = "o";
       else if (r < 0.036) {
         // A short wall, two or three tiles, along x or y.
@@ -1190,8 +1340,219 @@ export const SHRINES: Shrine[] = SHRINE_DEFS.map((d) => {
 });
 const FOUR_WAY = new Map<string, Shrine>();
 
+/**
+ * Lumi's home pond, for story run 2: a small island, the brazier in the middle, one pool on the
+ * east side (far enough out that nobody can pull a wisp on it straight into the brazier from
+ * across the fire), and a few boulders round the jams. Not symmetric, and not in the lobby.
+ */
+/** Lumi's home pond, at `k` times the size across (1 for runs 1 and 2; Granny's game plays it bigger). */
+function homePondRows(k = 1): string[] {
+  const N = Math.round(31 * k) | 1, c = (N - 1) / 2;
+  const g = Array.from({ length: N }, () => Array<string>(N).fill("."));
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      // The pool: an oval east of the brazier, 8 to 12 tiles out (times k).
+      const px = (x - (c + 10 * k)) / (2.6 * k), py = (y - c) / (5.2 * k);
+      if (px * px + py * py <= 1) g[y]![x] = "~";
+    }
+  // Boulders by the jams (north and west), and a couple out in the open.
+  for (const [x, y] of [[13, 6], [17, 6], [6, 12], [6, 18], [9, 24], [21, 24], [10, 9]] as const) g[Math.round(c + (y - 15) * k)]![Math.round(c + (x - 15) * k)] = "o";
+  // Rook's house, on the big pond only (4x4): a block-out by the west shore, door facing the brazier.
+  if (k > 1) for (let y = c - 1; y <= c + 2; y++) for (let x = c - 16; x <= c - 13; x++) g[y]![x] = "H";
+  const sy = Math.round(c + 7 * k);
+  g[sy]![c] = "1";
+  g[sy]![c + 1] = "2";
+  return g.map((r) => r.join(""));
+}
+
+/** Run 5's race ground: open dry ground, Rook starting south-west of the fire and Kes south-east. */
+export const STORY_SHRINES: Shrine[] = [
+  buildShrine({
+    id: "home-pond",
+    name: "Home pond",
+    blurb: "Lumi's island: a small pond island, the brazier in the middle and a pool to the east.",
+    full: true,
+    scale: 1,
+    isle: { radius: 14.5, squareness: 2.1, coves: 0.06, heads: 0.05, seed: 5, stretch: [1.08, 0.95] },
+    rings: [],
+    spawnBand: [6, 9],
+    rows: homePondRows(),
+  }),
+  // Granny's game: the same pond half as big again across, so every point is longer walks and longer pulls.
+  buildShrine({
+    id: "home-pond-big",
+    name: "Home pond",
+    blurb: "Lumi's island, played big: the brazier in the middle and a pool to the east.",
+    full: true,
+    scale: 1,
+    isle: { radius: 14.5 * 1.5, squareness: 2.1, coves: 0.06, heads: 0.05, seed: 5, stretch: [1.08, 0.95] },
+    rings: [],
+    spawnBand: [15, 21],
+    rows: homePondRows(1.5),
+  }),
+  // Granny's rematch (optional run 1): the same big pond, in the afternoon (its look is the theme's).
+  buildShrine({
+    id: "home-pond-afternoon",
+    name: "Home pond",
+    blurb: "Lumi's island in the afternoon: the brazier in the middle and a pool to the east.",
+    full: true,
+    scale: 1,
+    isle: { radius: 14.5 * 1.5, squareness: 2.1, coves: 0.06, heads: 0.05, seed: 5, stretch: [1.08, 0.95] },
+    rings: [],
+    spawnBand: [15, 21],
+    rows: homePondRows(1.5),
+  }),
+  // Run 5, the race with Kes, on her island (see kitefell.ts).
+  kiteFell(),
+  // The free walk between runs: the home island as a horseshoe round its lake (see horseshoe.ts).
+  homeIsland(),
+  // Runs 6 and 7: the Kindling ground after Hesta's landing, with the glass crater by the brazier (see dying.ts).
+  kindlingCrater(),
+  // Run 8, a harder job: the Sieve, pale chalk pierced by wells (see sieve.ts).
+  sieve(),
+  lowOne(),
+  shipDeck(),
+  // Optional run 2, Lumi's lesson with Kes: the Cove of the home pond (see cove.ts).
+  cove(),
+  // Optional run 3b, the tide job: Tidepool Steps, terraced (see tidepool.ts).
+  tidepoolTerraces(),
+  // Part 2, runs 3 and 4: the offspring fight in Solenne's yard (see offspring.ts).
+  solenneYard(),
+  // Part 2, the camp walk: the same yard before the fight, warm (see camp.ts).
+  warmCamp(),
+  crewRun2(),
+  wreck(),
+];
+
+/** The crew's camp, warm (Part 2, the camp walk): the same yard, whole, its gate open; drawn by camp-dress.ts. */
+function warmCamp(): Shrine {
+  const def: ShrineDef = { id: CAMP.shrine, name: CAMP.title, blurb: "A walled yard in a pool of lamplight round a cold brazier, its gate standing open.", full: true, scale: 1, rings: [], spawnBand: [3, 12], rows: CAMP_ROWS };
+  const sh = finish(def, CAMP_ROWS, 2, null);
+  return { ...sh, coast: campCoast, outline: campOutline, arms: true, lobes: [], core: { x: 0, y: 0, outline: campOutline } };
+}
+
+/** The wreck (Part 2, the wake and run 1): the broken brazier ground, drawn by wreck-dress.ts. */
+function wreck(): Shrine {
+  const def: ShrineDef = { id: RUN1.shrine, name: RUN1.title, blurb: "A broken brazier ground on a rotten wreck, its brazier dead, the dark all round.", full: true, scale: 1, rings: [], spawnBand: [4, 9], rows: RUN1_ROWS };
+  return finish(def, RUN1_ROWS, 2, null);
+}
+
+/** The same camp for run 2: its gate shut and barred, the brazier lit by the run (camp-dress.ts). */
+function crewRun2(): Shrine {
+  const def: ShrineDef = { id: RUN2.shrine, name: RUN2.title, blurb: "The crew's camp round its cold brazier, the gate barred for the night.", full: true, scale: 1, rings: [], spawnBand: RUN2.band, rows: RUN2_ROWS };
+  const sh = finish(def, RUN2_ROWS, 2, null);
+  return { ...sh, coast: campCoast, outline: campOutline, arms: true, lobes: [], core: { x: 0, y: 0, outline: campOutline } };
+}
+
+/** The crew's yard, breached (Part 2, runs 3 and 4): its walls, carts and cage drawn by yard-dress.ts. */
+function solenneYard(): Shrine {
+  const rows = yardRows();
+  const def: ShrineDef = { id: OFFSPRING.shrine, name: "The crew's yard", blurb: "A ruin round a cold brazier, its west wall broken in, and something in it that eats light.", full: true, scale: 1, rings: [], spawnBand: [3, 12], rows };
+  const sh = finish(def, rows, 2, null);
+  return { ...sh, coast: oyCoast, outline: oyOutline, arms: true, lobes: [], core: { x: 0, y: 0, outline: oyOutline } };
+}
+
+/** The Kindling ground with the crater in it: everything else as run 1's island. */
+function kindlingCrater(): Shrine {
+  const base = SHRINES.find((sh) => sh.id === DYING.shrine)!;
+  const board = craterBoard(base.board);
+  // The stones the comet struck are gone from the drawing too.
+  const gone = new Set(craterTiles(base.board).map((p) => `${p.x},${p.y}`));
+  return { ...base, id: DYING.craterShrine, name: "The Kindling ground", board, props: base.props?.filter((p) => !gone.has(`${p.x},${p.y}`)), glass: true };
+}
+
+/** The Sieve: a plain chalk oval with its wells, and nothing else on it. */
+function sieve(): Shrine {
+  const rows = sieveRows();
+  const def: ShrineDef = { id: "sieve", name: "The Sieve", blurb: "Pale chalk pierced by wells open to the cloud below.", full: true, scale: 1, rings: [], spawnBand: [10, 14], rows };
+  const sh = finish(def, rows, 2, null);
+  return { ...sh, coast: svCoast, outline: svOutline, arms: true, lobes: [], wells: SV_WELLS.map((w) => ({ ...w })) };
+}
+
+/** The low one (run 9): a plain oval cut by two long pools, with the landing at its south end. The board's centre is the landing's slip. */
+/** The stranger's ship (run 10): a deck 11 by 25, the lamp amidships, open sky all round. */
+function shipDeck(): Shrine {
+  const rows = shipRows();
+  const def: ShrineDef = { id: SHIP.shrine, name: "The ship home", blurb: "The deck of a small ship in the sky, at night.", full: true, scale: 1, rings: [], spawnBand: [3, 12], rows };
+  const sh = finish(def, rows, 2, null);
+  const c = sh.board.center;
+  sh.board.frame = { x: c.x + SHIP_FRAME.x0, y: c.y + SHIP_FRAME.y0, w: SHIP_FRAME.x1 - SHIP_FRAME.x0 + 1, h: SHIP_FRAME.y1 - SHIP_FRAME.y0 + 1 };
+  sh.board.phoneSpan = SHIP.phoneSpan;
+  // The rules' coast is the deck's edge (the rails).
+  const coast = (x: number, y: number) => Math.max(Math.abs(x) - SHIP_DECK.hw, Math.abs(y) - SHIP_DECK.hl) - 0.5;
+  const outline = (a: number) => Math.min((SHIP_DECK.hw + 0.5) / Math.abs(Math.cos(a) || 1e-6), (SHIP_DECK.hl + 0.5) / Math.abs(Math.sin(a) || 1e-6));
+  return { ...sh, coast, outline, arms: true, lobes: [], landing: true, deck: true };
+}
+
+function lowOne(): Shrine {
+  const rows = lowOneRows();
+  const def: ShrineDef = { id: RESCUE.shrine, name: "The low one", blurb: "A neighbouring island, ankle-deep in cloud. Everyone is leaving.", full: true, scale: 1, rings: [], spawnBand: [14, 34], rows };
+  const sh = finish(def, rows, 2, null);
+  const c = sh.board.center;
+  sh.board.frame = { x: c.x + LO_FRAME.x0, y: c.y + LO_FRAME.y0, w: LO_FRAME.x1 - LO_FRAME.x0 + 1, h: LO_FRAME.y1 - LO_FRAME.y0 + 1 };
+  // On a phone the view takes in half the island's depth, so the line of lamps going cold is seen.
+  sh.board.phoneSpan = RESCUE.phoneSpan;
+  return { ...sh, coast: loCoast, outline: loFromSlip, arms: true, lobes: [], core: { x: LO_OVAL.x, y: LO_OVAL.y, outline: loOutline }, landing: true };
+}
+
+/** The Cove (optional run 2): mostly water, its flats under the tide or out of it. The board's centre is the pond brazier, by its west end. */
+function cove(): Shrine {
+  const rows = coveRows();
+  const def: ShrineDef = { id: COVE.shrine, name: "The Cove", blurb: "The cove of the home pond: mostly water, and the tide comes and goes.", full: true, scale: 1, rings: [], spawnBand: [3, 30], rows };
+  const sh = finish(def, rows, 2, null);
+  const b = sh.board, c = b.center;
+  b.frame = { x: c.x + CV_FRAME.x0, y: c.y + CV_FRAME.y0, w: CV_FRAME.x1 - CV_FRAME.x0 + 1, h: CV_FRAME.y1 - CV_FRAME.y0 + 1 };
+  b.phoneSpan = COVE.phoneSpan;
+  const tidal = coveFlats().map(([x, y]) => (c.y + y) * b.width + c.x + x);
+  return { ...sh, coast: cvCoast, outline: cvFromBrazier, arms: true, lobes: [], core: { x: CV_ISLE.x, y: CV_ISLE.y, outline: cvOutline }, tidal };
+}
+
+/** Tidepool Steps, terraced (optional run 3b): five steps up from the court, a cascade of pools on each side. The strips are open ground on the board; the tide floods them. */
+function tidepoolTerraces(): Shrine {
+  const rows = tidepoolRows();
+  const def: ShrineDef = { id: TIDEPOOL.shrine, name: "Tidepool Steps", blurb: "Marit's island: terraces of tide pools, stepping down to the brazier.", full: true, scale: 1, rings: [], spawnBand: [6, 18], rows };
+  const sh = finish(def, rows, 2, null);
+  const b = sh.board, c = b.center;
+  b.frame = { x: c.x + TP_FRAME.x0, y: c.y + TP_FRAME.y0, w: TP_FRAME.x1 - TP_FRAME.x0 + 1, h: TP_FRAME.y1 - TP_FRAME.y0 + 1 };
+  b.phoneSpan = TIDEPOOL.phoneSpan;
+  const tidal = tpTiles("strip").map(({ x, y }) => (c.y + y) * b.width + c.x + x);
+  return { ...sh, coast: tpCoast, outline: tpOutline, arms: true, lobes: [], tidal };
+}
+
+/** Kite Fell: drawn from the maps thread's shapes, like the home island. */
+function kiteFell(): Shrine {
+  const { rows, turns, flags } = kiteFellRows();
+  const def: ShrineDef = { id: "kite-fell", name: "Kite Fell", blurb: "Kes's island: a plain dry oval with the brazier in the middle, and the wind always up.", full: true, scale: 1, rings: [], spawnBand: [10, 15], rows };
+  const sh = finish(def, rows, 2, null);
+  // The start marks are whole stones, under the starts too.
+  const ground = [...(sh.ground ?? []), ...flags.map((f) => ({ kind: "terrace" as const, ...f }))];
+  return { ...sh, ground, coast: kfCoast, outline: kfOutline, arms: true, lobes: KF_LOBES, far: KF_FAR, turns, tierAngles: [3.3, 4.4, 1.9], raceOval: KF_OVAL };
+}
+
+/** The home island to walk on: drawn from the maps thread's shapes, not an IsleShape. */
+function homeIsland(): Shrine {
+  const { rows, turns, smallWash } = horseshoeRows();
+  const def: ShrineDef = { id: "home-island", name: "Home island", blurb: "Lumi's island, to walk about on: the houses round the lake, the falls, the Kindling ground.", full: true, scale: 1, rings: [], spawnBand: [15, 21], rows };
+  const sh = finish(def, rows, 2, null);
+  const at = (dx: number, dy: number) => hsCoast(dx + HS_CENTRE.x, dy + HS_CENTRE.y);
+  // The cliff's outline: how far out the oval's edge is (the bulge and spur have their own plateaus) at each angle from the pond brazier.
+  const outline = (a: number) => {
+    let r = 1;
+    while (r < 200 && hsOval(Math.cos(a) * r + HS_CENTRE.x, Math.sin(a) * r + HS_CENTRE.y) < 0) r += 0.5;
+    return r;
+  };
+  // The plateau hangs from the middle of the land, so its underside tapers under the lake, not out past the west rim.
+  const mid = { x: 0, y: 2 };
+  const fromMid = (a: number) => {
+    let r = 1;
+    while (r < 200 && hsOval(Math.cos(a) * r + mid.x, Math.sin(a) * r + mid.y) < 0) r += 0.25;
+    return r;
+  };
+  return { ...sh, coast: at, outline, arms: true, far: HS_FAR.map((f) => ({ ...f, x: f.x - HS_CENTRE.x, y: f.y - HS_CENTRE.y })), core: { x: mid.x - HS_CENTRE.x, y: mid.y - HS_CENTRE.y, outline: fromMid }, lobes: HS_LOBES.map((l) => ({ x: l.x - HS_CENTRE.x, y: l.y - HS_CENTRE.y, r: l.r })), turns, smallWash };
+}
+
 export function shrineById(id: string): Shrine {
-  return SHRINES.find((s) => s.id === id) ?? SHRINES[0]!;
+  return SHRINES.find((s) => s.id === id) ?? STORY_SHRINES.find((s) => s.id === id) ?? SHRINES[0]!;
 }
 
 /**

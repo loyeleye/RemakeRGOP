@@ -1,0 +1,538 @@
+import { describe, expect, it } from "vitest";
+import { Mover, Tile, pt } from "../src/engine/board.js";
+import { Game } from "../src/engine/game.js";
+import { shrineById } from "../src/engine/maps.js";
+import type { ServerMsg } from "../src/engine/protocol.js";
+import { SIEVE, SV_WELLS } from "../src/engine/sieve.js";
+import { SieveRoom, type Stand } from "../src/server/sieve.js";
+import { lineTicks } from "../src/server/granny.js";
+import { STILL, STILLS, stillMs } from "../src/engine/stills.js";
+
+/** Rook alone on the Sieve with one wisp, under the falling law. */
+function sieve() {
+  const g = new Game(shrineById(SIEVE.shrine), [{ id: 1, guild: 0, name: "Rook" }], 7, [1, 0], 400);
+  g.waterLawHere = true;
+  g.fallRate = SIEVE.fall;
+  g.liftTap = SIEVE.liftTap;
+  g.liftHold = SIEVE.liftHold;
+  g.outPause = 50;
+  const c = g.board.center, rook = g.players[0]!, w = g.wisps[0]!;
+  rook.pos = rook.prev = pt(c.x, c.y + 4);
+  w.pos = w.prev = pt(c.x, c.y + 10);
+  return { g, c, rook, w };
+}
+
+describe("the wells", () => {
+  it("are open air: nobody walks on one, wisps float over, and sight and reach carry across", () => {
+    const { g, c } = sieve();
+    const well = SV_WELLS[0], p = pt(c.x + well.x, c.y + well.y);
+    expect(g.board.tile(p)).toBe(Tile.Well);
+    expect(g.board.passable(p, Mover.Walker)).toBe(false);
+    expect(g.board.passable(p, Mover.Wisp)).toBe(true);
+    expect(g.board.passable(p, Mover.Sight)).toBe(true);
+    // Five of them, none within 3 tiles of the brazier, 3 to 6 tiles across.
+    expect(SV_WELLS.length).toBe(5);
+    for (const w of SV_WELLS) {
+      expect(Math.hypot(w.x, w.y) - w.r).toBeGreaterThanOrEqual(3);
+      expect(w.r * 2).toBeGreaterThanOrEqual(3);
+      expect(w.r * 2).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it("a pull works on a wisp over a well as on the ground (it is not water)", () => {
+    const { g, c, rook, w } = sieve();
+    const well = SV_WELLS[3];
+    w.pos = w.prev = pt(c.x + well.x, c.y + well.y);
+    rook.pos = rook.prev = pt(c.x + well.x + 5, c.y + well.y - 3);
+    g.command(1, { action: { kind: "staff", wisp: w.id } });
+    for (let t = 0; t < 3; t++) g.step();
+    expect(rook.slipped).toBeFalsy();
+    expect(w.pos).not.toEqual(pt(c.x + well.x, c.y + well.y));
+  });
+});
+
+describe("the falling law", () => {
+  it("an untouched wisp loses height every tick and at the ground is gone, without scoring", () => {
+    const { g, w } = sieve();
+    g.height.set(w.id, 10);
+    g.step();
+    expect(g.height.get(w.id)).toBeCloseTo(10 - SIEVE.fall);
+    expect(g.snapshot().wisps[0]!.h).toBeCloseTo((10 - SIEVE.fall) / 100);
+    let fell = null as null | { well: boolean };
+    for (let t = 0; t < 10 && !fell; t++) (g.step(), (fell = g.falls[0] ?? null));
+    expect(fell).toEqual(expect.objectContaining({ wisp: w.id, well: false }));
+    expect(g.away.has(w.id)).toBe(true);
+    expect(g.scores[0]).toBe(0);
+  });
+
+  it("says when it fell over a well", () => {
+    const { g, c, w } = sieve();
+    w.pos = w.prev = pt(c.x + SV_WELLS[0].x, c.y + SV_WELLS[0].y);
+    g.height.set(w.id, 1);
+    g.step();
+    expect(g.falls[0]!.well).toBe(true);
+    expect(g.snapshot().falls![0]!.well).toBe(true);
+  });
+
+  it("a staff lifts it: a jump when it arrives, then steadily while it stays, to full height at most", () => {
+    const { g, w } = sieve();
+    g.height.set(w.id, 20);
+    g.command(1, { action: { kind: "staff", wisp: w.id } });
+    g.step();
+    expect(g.height.get(w.id)).toBeCloseTo(20 + SIEVE.liftTap);
+    g.step();
+    expect(g.height.get(w.id)).toBeCloseTo(20 + SIEVE.liftTap + SIEVE.liftHold);
+    for (let t = 0; t < 3; t++) g.step();
+    expect(g.height.get(w.id)).toBeLessThanOrEqual(100);
+  });
+
+  it("height changes nothing else: a low wisp is pulled as far as a high one", () => {
+    const go = (h: number) => {
+      const { g, w } = sieve();
+      g.height.set(w.id, h);
+      g.command(1, { action: { kind: "staff", wisp: w.id } });
+      for (let t = 0; t < 4; t++) g.step();
+      return { ...w.pos };
+    };
+    expect(go(5)).toEqual(go(100));
+  });
+
+  it("applies nowhere else", () => {
+    const g = new Game(shrineById(SIEVE.shrine), [{ id: 1, guild: 0, name: "Rook" }], 7, [1, 0], 400);
+    for (let t = 0; t < 80; t++) g.step();
+    expect(g.falls).toEqual([]);
+    expect(g.snapshot().wisps[0]!.h).toBeUndefined();
+  });
+});
+
+function play(stand: Stand, seed: number, max = 1500, pull: boolean | SieveRoom["pullMode"] = true) {
+  let s = seed;
+  const msgs: ServerMsg[] = [];
+  const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), stand);
+  if (typeof pull === "string") room.pullMode = pull;
+  else room.pullOn = pull;
+  room.connect((m) => msgs.push(m)).message(JSON.stringify({ t: "hello", name: "Rook" }));
+  let n = 0;
+  while (room.state.phase !== "results" && n < max) room.onTick(), n++;
+  return { room, said: msgs.flatMap((m) => (m.t === "say" ? m.lines.map((l) => l.text) : [])) };
+}
+
+describe("Run 8: a harder job, on the Sieve", () => {
+  it("opens with a wisp nearly down over the far well that nothing can save, and it is not counted", () => {
+    let s = 5;
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647));
+    const conn = room.connect(() => {});
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    while (room.state.phase !== "playing") room.onTick();
+    const g = room.state.game, id = room.state.doomed!;
+    expect(g.board.tile(g.wisps[id]!.pos)).toBe(Tile.Well);
+    // He puts his staff on it from beside the well, and it goes all the same.
+    const rook = g.players[0]!;
+    rook.pos = rook.prev = g.nearestFree(pt(g.wisps[id]!.pos.x - 5, g.wisps[id]!.pos.y + 2), 0);
+    for (let t = 0; t < 12 && room.state.doomed !== null; t++) {
+      conn.message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: id } }));
+      room.onTick();
+    }
+    expect(room.state.doomed).toBeNull();
+    expect(room.lost).toBe(0);
+    // A moment of looking down the well after it: nothing moves, and then she speaks.
+    expect(room.storyView().sieve!.look).toEqual({ x: g.wisps[id]!.pos.x, y: g.wisps[id]!.pos.y });
+    expect(room.state.said.has("there")).toBe(false);
+    const tick = g.tick;
+    for (let t = 0; t < SIEVE.lookTicks; t++) room.onTick();
+    expect(g.tick).toBe(tick);
+    expect(room.storyView().sieve!.look).toBeUndefined();
+    expect(room.state.said.has("there")).toBe(true);
+  });
+
+  it("all sixteen play out: a juggler loses none or one, and she counts what he banked against sixteen", () => {
+    for (const seed of [3, 44, 501]) {
+      const { room, said } = play("juggle", seed);
+      expect(room.state.phase).toBe("results");
+      expect(room.lost).toBeLessThanOrEqual(1);
+      expect(room.restarts).toBe(0);
+      // The first can't be saved, so fifteen at most.
+      expect(room.state.game.scores[0]).toBe(SIEVE.supply - 1 - room.lost);
+      expect(room.state.arrived).toBe(SIEVE.supply);
+      expect(said).toContain("There. That's what I sent for you about.");
+      expect(said).toContain("I can't do that. I can only hold one.");
+      const end = room.state.end!.lines.map((l) => l.text);
+      expect(end.slice(0, 2)).toEqual([room.lost ? "Fourteen." : "Fifteen.", "The book says sixteen. Every year, back to the first page."]);
+      expect(end.at(-1)).toBe("Come home, Rook.");
+      expect([...said, ...end].join(" ").toLowerCase()).not.toContain("sink");
+    }
+  });
+
+  it("six of the sixteen arrive hanging over a well, never two running and never the first", () => {
+    expect(SIEVE.overWell.length).toBe(6);
+    expect(SIEVE.overWell[0]).toBeGreaterThan(0);
+    SIEVE.overWell.forEach((n, i) => i && expect(n - SIEVE.overWell[i - 1]!).toBeGreaterThan(1));
+    let s = 77, seen = 0, warnedFor = 0;
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "juggle");
+    room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const was = new Map<number, boolean>();
+    for (let n = 0; n < 1500 && room.state.phase !== "results"; n++) {
+      // The air over a well shimmers for some ticks before a wisp appears there, and it comes with time to reach it.
+      const waiting = [...room.state.warned.keys()];
+      if (waiting.length) (warnedFor++, expect(room.storyView().sieve!.warn!.length).toBeGreaterThan(0));
+      room.onTick();
+      const g = room.state.game;
+      for (const id of waiting) if (!room.state.warned.has(id) && !g.away.has(id)) expect(g.height.get(id)! / SIEVE.fall).toBeGreaterThanOrEqual(15);
+      // A wisp newly on the board over a well (the scripted first one aside).
+      for (const w of g.wisps) {
+        const on = !g.away.has(w.id) && g.board.tile(w.pos) === Tile.Well && w.id !== room.state.doomed;
+        if (on && !was.get(w.id)) seen++;
+        was.set(w.id, !g.away.has(w.id));
+      }
+    }
+    expect(seen).toBeGreaterThanOrEqual(4);
+    expect(warnedFor).toBeGreaterThanOrEqual(seen * (SIEVE.warnTicks - 1));
+    expect(room.lost).toBeLessThanOrEqual(1);
+  });
+
+  it("holding one at a time loses several", () => {
+    let lost = 0, restarts = 0;
+    for (const seed of [3, 44, 501, 77]) {
+      const { room } = play("hold", seed);
+      lost += room.lost;
+      restarts += room.restarts;
+    }
+    expect(lost + restarts * 7).toBeGreaterThanOrEqual(12);
+  });
+
+  it("standing still loses everything, and the stop starts again with no blame", () => {
+    const { room, said } = play("idle", 9, 400);
+    expect(room.state.phase).toBe("playing");
+    expect(room.restarts).toBeGreaterThanOrEqual(2);
+    // Tilda says it on the restart: Hesta is not on the Sieve.
+    expect(said).not.toContain("Again, Rook.");
+    expect(said).toContain(SIEVE.again);
+    expect(room.state.game.scores[0]).toBe(0);
+  });
+
+  it("the first pull, first take: after she says they don't wander, the rings close in, loose wisps jump a tile toward their nearest well, and everything holds while she says they never did", () => {
+    let s = 21;
+    const msgs: ServerMsg[] = [];
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "hold");
+    room.pullMode = "quiet";
+    room.connect((m) => msgs.push(m)).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const said = () => msgs.flatMap((m) => (m.t === "say" ? m.lines.map((l) => l.text) : []));
+    while (room.state.pull.phase !== "wind" && room.state.phase === "playing" || room.state.phase === "countdown") room.onTick();
+    expect(room.state.pull.phase).toBe("wind");
+    expect(said()).toContain("They don't wander. Mind the wells and you'll be fine.");
+    expect(said()).toContain("A tired one drops. Straight down, right where it hangs. Knock it and it's right again.");
+    expect(said()).not.toContain("If I leave one, it goes down. If I knock it, it comes up. For a while.");
+    const g = room.state.game, c = g.board.center;
+    let winds = 0;
+    const view = () => (msgs.filter((m) => m.t === "room").pop() as Extract<ServerMsg, { t: "room" }>).room.story!.sieve!;
+    while (room.state.pull.phase === "wind") (winds++, expect(view().pull?.phase).toBe("wind"), room.onTick());
+    expect(winds).toBe(SIEVE.pull.windTicks);
+    expect(room.state.pull.phase).toBe("hold");
+    // Each one that moved went one tile, toward its nearest well.
+    const moved = view().pull!.moved;
+    expect(moved.length).toBeGreaterThan(0);
+    for (const { id } of moved) {
+      const w = g.wisps[id]!;
+      expect(Math.max(Math.abs(w.pos.x - w.prev.x), Math.abs(w.pos.y - w.prev.y))).toBe(1);
+      const near = [...SV_WELLS].sort((a, b) => Math.hypot(c.x + a.x - w.prev.x, c.y + a.y - w.prev.y) - Math.hypot(c.x + b.x - w.prev.x, c.y + b.y - w.prev.y))[0]!;
+      expect(Math.hypot(c.x + near.x - w.pos.x, c.y + near.y - w.pos.y)).toBeLessThan(Math.hypot(c.x + near.x - w.prev.x, c.y + near.y - w.prev.y));
+    }
+    // Everything holds: nothing moves, nothing falls, the clock stands.
+    const at = g.wisps.map((w) => ({ ...w.pos, h: g.height.get(w.id) })), tick = g.tick;
+    for (let i = 0; i < SIEVE.pull.holdTicks - 1; i++) room.onTick();
+    expect(g.tick).toBe(tick);
+    expect(g.wisps.map((w) => ({ ...w.pos, h: g.height.get(w.id) }))).toEqual(at);
+    expect(said()).toContain("They don't do that. They've never done that.");
+    // Then play goes on, and there is no second pull.
+    room.onTick();
+    expect(room.state.pull.phase).toBe("done");
+    while (room.state.phase === "playing" && g.tick < tick + 200) {
+      room.onTick();
+      expect(room.state.pull.phase).toBe("done");
+    }
+  });
+
+  it("the first take spares a wisp under his staff in the wind-up", () => {
+    let s = 21;
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "hold");
+    room.pullMode = "quiet";
+    const conn = room.connect(() => {});
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    while (room.state.pull.phase !== "wind" && room.state.phase === "playing" || room.state.phase === "countdown") room.onTick();
+    const g = room.state.game;
+    const loose = g.wisps.filter((w) => !g.away.has(w.id) && !g.board.inBankZone(w.pos) && w.holder === null);
+    const pos = new Map(loose.map((w) => [w.id, { ...w.pos }]));
+    // Every loose one touched: none should move.
+    for (const w of loose) room.state.pull.spared.add(w.id);
+    while (room.state.pull.phase === "wind") room.onTick();
+    for (const w of loose) if (room.state.pull.spared.has(w.id)) expect(room.state.pull.moved.map((m) => m.id)).not.toContain(w.id);
+    expect(pos.size).toBeGreaterThan(0);
+  });
+
+  it("with the pull switched off it plays as before: her old line, no pull", () => {
+    const { room, said } = play("hold", 21, 1500, false);
+    expect(room.pulledAt).toBe(-1);
+    expect(said).not.toContain("They don't do that. They've never done that.");
+    expect(said).toContain("If I leave one, it goes down. If I knock it, it comes up. For a while.");
+  });
+
+  it("the pull leaves ten within reach: a juggler and most holders still pass", () => {
+    let pass = 0;
+    for (const seed of [3, 44, 501, 77, 12]) {
+      const { room } = play("hold", seed, 1500, "quiet");
+      expect(room.pulledAt).toBeGreaterThanOrEqual(0);
+      if (room.state.phase === "results") pass++;
+    }
+    expect(pass).toBeGreaterThanOrEqual(4);
+    const j = play("juggle", 8, 1500, "quiet");
+    expect(j.room.state.phase).toBe("results");
+    expect(j.room.restarts).toBe(0);
+  });
+
+  it("the first wisp goes down where it hangs, whatever staff is on it", () => {
+    let s = 21;
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647));
+    room.connect(() => {}).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    while (room.state.phase === "countdown") room.onTick();
+    const g = room.state.game, first = g.wisps[room.state.doomed!]!, at = { ...first.pos };
+    g.players[0]!.action = { kind: "staff", wisp: first.id };
+    let fell: { x: number; y: number; well: boolean } | null = null;
+    for (let n = 0; n < 40 && !fell; n++) {
+      room.onTick();
+      fell = g.falls.find((f) => f.wisp === first.id) ?? null;
+    }
+    expect(fell).toMatchObject({ x: at.x, y: at.y, well: true });
+  });
+
+  it("the second take spares nothing: every wisp goes up to three tiles toward its nearest well and stops at the lip, and the one on his staff is torn off it", () => {
+    let s = 21;
+    const msgs: ServerMsg[] = [];
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "juggle");
+    room.pullMode = "loud";
+    room.connect((m) => msgs.push(m)).message(JSON.stringify({ t: "hello", name: "Rook" }));
+    while ((room.state.pull.phase !== "wind" && room.state.phase === "playing") || room.state.phase === "countdown") room.onTick();
+    const g = room.state.game, c = g.board.center, rook = g.players[0]!;
+    // He has his staff on one as the wind-up ends.
+    while (room.state.pull.left > 1) room.onTick();
+    // One on the chalk, not one hanging over a well (that one has nowhere to go).
+    const mine = g.wisps.find((w) => !g.away.has(w.id) && w.id !== room.state.doomed && g.board.tile(w.pos) === Tile.Floor)!;
+    rook.pos = rook.prev = g.nearestFree(pt(mine.pos.x + 2, mine.pos.y), 0);
+    rook.action = { kind: "staff", wisp: mine.id };
+    const live = g.wisps.filter((w) => !g.away.has(w.id) && g.board.tile(w.pos) === Tile.Floor).length;
+    room.onTick();
+    expect(room.state.pull.phase).toBe("hold");
+    const moved = room.state.pull.moved;
+    const ids = new Set(moved.map((m) => m.id));
+    // Nearly all of them moved (one boxed in by another may not), none onto a well, none further than three.
+    expect(moved.length).toBeGreaterThanOrEqual(live - 1);
+    for (const m of moved) {
+      const w = g.wisps[m.id]!;
+      expect(g.board.tile(w.pos)).toBe(Tile.Floor);
+      expect(Math.max(Math.abs(w.pos.x - m.x), Math.abs(w.pos.y - m.y))).toBeLessThanOrEqual(SIEVE.pull.reach);
+      const k = SV_WELLS[m.well]!;
+      if (w.pos.x !== m.x || w.pos.y !== m.y) expect(Math.hypot(c.x + k.x - w.pos.x, c.y + k.y - w.pos.y)).toBeLessThan(Math.hypot(c.x + k.x - m.x, c.y + k.y - m.y));
+    }
+    // The juggler had its staff on one (whichever it chose): torn off, and his staff is empty.
+    const torn = room.state.pull.torn!;
+    expect(torn).not.toBe(null);
+    expect(ids.has(torn)).toBe(true);
+    expect(rook.action.kind).toBe("idle");
+    expect(g.wisps[torn]!.holder).toBe(null);
+    // None it moved falls in, while it holds or in the tick after: none was left over a well.
+    for (let i = 0; i < SIEVE.pull.holdTicks + 1; i++) {
+      room.onTick();
+      for (const f of g.falls) if (ids.has(f.wisp)) expect(f.well).toBe(false);
+    }
+  });
+
+  it("the second take leaves ten within reach", () => {
+    let pass = 0;
+    for (const seed of [3, 44, 501, 77, 12]) if (play("hold", seed, 1500, "loud").room.state.phase === "results") pass++;
+    expect(pass).toBeGreaterThanOrEqual(3);
+    expect(play("juggle", 8, 1500, "loud").room.state.phase).toBe("results");
+  });
+
+  /** The tug, set up by hand: once she has said they don't wander, his staff goes on a wisp three tiles from a well's lip. */
+  function tugRoom(holdOn = true) {
+    let s = 21;
+    const msgs: ServerMsg[] = [];
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "hold");
+    expect(room.pullMode).toBe("tug");
+    const conn = room.connect((m) => msgs.push(m));
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const said = () => msgs.flatMap((m) => (m.t === "say" ? m.lines.map((l) => l.text) : []));
+    const talking = () => (room as unknown as { talking(): boolean }).talking();
+    // Once she has started talking, his staff comes away and the stand-in stops, so nothing is on it when the tug can come.
+    while (!room.state.said.has("calm") || room.state.phase !== "playing" || talking()) {
+      if (room.state.said.has("there")) {
+        (room as unknown as { stand: Stand }).stand = "idle";
+        room.state.game.players[0]!.action = { kind: "idle" };
+        room.state.game.players[0]!.beam = null;
+      }
+      room.onTick();
+    }
+    (room as unknown as { stand: Stand }).stand = "idle";
+    const g = room.state.game, c = g.board.center, rook = g.players[0]!, well = SV_WELLS[0]!;
+    const wc = pt(c.x + well.x, c.y + well.y);
+    // A spot three tiles out from the lip, on the side toward the brazier, and Rook six beyond it.
+    const dx = c.x - wc.x, dy = c.y - wc.y, dl = Math.hypot(dx, dy);
+    const spot = g.nearestFree(pt(Math.round(wc.x + (dx / dl) * (well.r + 3)), Math.round(wc.y + (dy / dl) * (well.r + 3))), 0);
+    const w = g.wisps.find((q) => !g.away.has(q.id) && q.id !== room.state.doomed)!;
+    w.pos = w.prev = spot;
+    w.target = null;
+    g.height.set(w.id, 100);
+    rook.pos = rook.prev = g.nearestFree(pt(Math.round(spot.x + (dx / dl) * 6), Math.round(spot.y + (dy / dl) * 6)), 0);
+    // Whatever the stand-in had on his staff, he lets go of it.
+    rook.action = { kind: "idle" };
+    rook.beam = null;
+    const lip = (at: { x: number; y: number }) => Math.min(...SV_WELLS.map((k) => Math.hypot(c.x + k.x - at.x, c.y + k.y - at.y) - k.r));
+    const staff = () => conn.message(JSON.stringify({ t: "act", action: { kind: "staff", wisp: w.id } }));
+    for (let t = 0; t < 30 && room.state.pull.phase === "wait"; t++) {
+      if (holdOn || t < 3) staff();
+      room.onTick();
+    }
+    return { room, g, w, rook, said, lip, staff, conn };
+  }
+
+  it("the tug: with his staff on one near a well, the well drags it back a tile every other tick while he holds, and at the end it springs back toward him; nothing falls in", () => {
+    const { room, g, w, rook, said, lip, staff } = tugRoom(true);
+    expect(room.state.pull.phase).toBe("tug");
+    expect(room.state.pull.tugged).toBe(w.id);
+    expect(lip(w.pos)).toBeLessThanOrEqual(SIEVE.tug.nearWell);
+    expect(room.storyView().sieve!.pull!.phase).toBe("tug");
+    const ids = new Set(g.wisps.map((q) => q.id));
+    const lips: number[] = [lip(w.pos)];
+    let before = { ...w.pos };
+    // No freeze: the clock runs.
+    const tick = g.tick;
+    while (room.state.pull.phase === "tug") {
+      before = { ...w.pos };
+      staff();
+      room.onTick();
+      for (const f of g.falls) expect(ids.has(f.wisp) && f.well).toBe(false);
+      if (room.state.pull.phase === "tug") lips.push(lip(w.pos)), expect(room.state.pull.held).toBe(true);
+    }
+    expect(g.tick).toBe(tick + SIEVE.tug.ticks);
+    // Dragged back, never toward him, and it never reached the well.
+    for (let i = 1; i < lips.length; i++) expect(lips[i]!).toBeLessThanOrEqual(lips[i - 1]! + 1e-9);
+    expect(lips[lips.length - 1]!).toBeLessThan(lips[0]!);
+    expect(g.board.tile(w.pos)).toBe(Tile.Floor);
+    // The wells let go: it springs toward him.
+    const d = (a: { x: number; y: number }) => Math.hypot(a.x - rook.pos.x, a.y - rook.pos.y);
+    expect(d(w.pos)).toBeLessThan(d(before));
+    expect(room.state.pull.phase).toBe("after");
+    // Then play goes on and there is no second pull.
+    for (let t = 0; t < 200 && room.state.phase === "playing"; t++) (room.onTick(), t > 4 && expect(room.state.pull.phase).toBe("done"));
+    expect(said()).toContain("They don't do that.");
+    expect(said()).toContain("They've never done that.");
+    expect(said().indexOf("They don't do that.")).toBeLessThan(said().indexOf("They've never done that."));
+  });
+
+  it("the tug: let go and it slides to the lip; every other loose wisp creeps to its lip; none goes in", () => {
+    const { room, g, w, lip, conn } = tugRoom(true);
+    expect(room.state.pull.phase).toBe("tug");
+    // He lets go.
+    conn.message(JSON.stringify({ t: "act", action: { kind: "idle" } }));
+    const others = g.wisps.filter((q) => !g.away.has(q.id) && q.id !== w.id && q.id !== room.state.doomed && !g.board.inBankZone(q.pos));
+    const start = new Map(others.map((q) => [q.id, lip(q.pos)]));
+    while (room.state.pull.phase === "tug") {
+      room.onTick();
+      for (const f of g.falls) expect(f.wisp === w.id || start.has(f.wisp) ? f.well : false).toBe(false);
+    }
+    expect(g.board.tile(w.pos)).toBe(Tile.Floor);
+    expect(lip(w.pos)).toBeLessThan(1.6);
+    expect(room.state.pull.held).toBe(false);
+    let crept = 0;
+    for (const q of others) if (!g.away.has(q.id) && lip(q.pos) < start.get(q.id)! - 0.3) crept++;
+    expect(crept).toBeGreaterThan(0);
+    for (const q of others) if (!g.away.has(q.id)) expect(g.board.tile(q.pos) === Tile.Floor || start.get(q.id)! < 0).toBe(true);
+  });
+
+  it("the tug leaves ten within reach", () => {
+    let pass = 0;
+    for (const seed of [3, 44, 501, 77, 12]) {
+      const { room } = play("hold", seed, 1500, "tug");
+      expect(room.pulledAt).toBeGreaterThanOrEqual(0);
+      if (room.state.phase === "results") pass++;
+    }
+    expect(pass).toBeGreaterThanOrEqual(3);
+    expect(play("juggle", 8, 1500, "tug").room.state.phase).toBe("results");
+  });
+});
+
+describe("Run 8: the reaction stills", () => {
+  /** A whole game played by the juggler, with every line it says and when the room's clock said it, and every wisp's arrivals. */
+  function playThrough() {
+    let s = 7;
+    const msgs: { at: number; m: ServerMsg }[] = [];
+    const room = new SieveRoom({ every: () => () => {} }, () => (s = (s * 48271) % 2147483647), "juggle");
+    let clock = 0;
+    const conn = room.connect((m) => msgs.push({ at: clock, m }));
+    conn.message(JSON.stringify({ t: "hello", name: "Rook" }));
+    const arrivals: number[] = [];
+    let onBoard = new Set<number>();
+    for (let t = 0; t < 3000 && room.state.phase !== "results"; t++) {
+      clock = t + 1;
+      room.onTick();
+      const g = room.state.game;
+      const now = new Set(g.wisps.filter((w) => !g.away.has(w.id)).map((w) => w.id));
+      for (const id of now) if (!onBoard.has(id)) arrivals.push(clock);
+      onBoard = now;
+    }
+    const lines = msgs.flatMap(({ at, m }) => (m.t === "say" ? m.lines.map((l) => ({ at, l })) : []));
+    return { room, lines, arrivals };
+  }
+
+  it("the core stills come in order with their lines, picture 4 is gone, and the end brings 10 and 11", () => {
+    const { room, lines } = playThrough();
+    expect(room.state.phase).toBe("results");
+    const shown = lines.filter((x) => x.l.still).map((x) => x.l.still!.id);
+    expect(shown.slice(0, 2)).toEqual(["r8-1", "r8-2"]);
+    expect(shown).toContain("r8-5");
+    expect(shown).toContain("r8-6");
+    expect(shown).toContain("r8-7");
+    expect(shown).not.toContain("r8-4");
+    expect(shown.indexOf("r8-5")).toBeLessThan(shown.indexOf("r8-6"));
+    // Six comes while five is still up, so they cross-fade in place.
+    const at = (id: string) => lines.find((x) => x.l.still?.id === id)!.at;
+    expect(at("r8-6") - at("r8-5")).toBeLessThan(Math.ceil(6000 / 600));
+    expect(shown.indexOf("r8-6")).toBeLessThan(shown.indexOf("r8-7"));
+    // The line is the caption: each still's line is the one the story gives it.
+    const text = (id: string) => lines.find((x) => x.l.still?.id === id)!.l;
+    expect(text("r8-1").text).toBe("You're Rook. I'm Tilda. I keep this now.");
+    expect(text("r8-2").text).toBe("There. That's what I sent for you about.");
+    expect(text("r8-5").text).toBe("They don't do that.");
+    expect(text("r8-6").text).toBe("They've never done that.");
+    expect(text("r8-7")).toMatchObject({ who: "Rook", text: "Granny?" });
+    // Every line is its picture's caption; none is a bubble beside it.
+    expect(lines.filter((x) => x.l.still?.bubble)).toEqual([]);
+    expect(text("r8-5").still!.seq && text("r8-6").still!.seq).toBe(true);
+    const end = room.state.end!.lines.filter((l) => l.still).map((l) => l.still!.id);
+    expect(end).toEqual(["r8-10", "r8-11a", "r8-11b"]);
+    expect(room.stillsShown.slice(0, 2)).toEqual(["r8-1", "r8-2"]);
+  });
+
+  it("no new wisp arrives while a still is up, and stills outside a sequence are at least the gap apart", () => {
+    const { room, lines, arrivals } = playThrough();
+    const ticks = (ms: number) => Math.ceil(ms / 600);
+    const up: { id: string; from: number; to: number; seq: boolean }[] = [];
+    for (const { at, l } of lines) {
+      if (!l.still || room.state.phase !== "results" || !l.text) continue;
+      const len = Math.ceil(stillMs(l.still.id, lineTicks(l) * 600) / 600);
+      up.push({ id: l.still.id, from: at, to: at + len, seq: !!l.still.seq });
+    }
+    // In play (still 1 is in the bells, where nothing arrives anyway).
+    for (const u of up.slice(1)) for (const a of arrivals) expect(a > u.from && a < u.to - 1).toBe(false);
+    for (let i = 1; i < up.length; i++) if (!up[i]!.seq) expect(up[i]!.from - up[i - 1]!.to).toBeGreaterThanOrEqual(ticks(STILL.gapMs) - 1);
+  });
+
+  it("every still the run calls has a placeholder card", () => {
+    for (const id of ["r8-1", "r8-2", "r8-5", "r8-6", "r8-7", "r8-10", "r8-11a", "r8-11b"]) expect(STILLS[id]?.who).toBeTruthy();
+    // Held for its line plus a second, never shorter than the floor; seven holds longer.
+    expect(stillMs("r8-1", 0)).toBe(STILL.inMs + STILL.holdMs + STILL.outMs);
+    expect(stillMs("r8-1", 4000)).toBe(STILL.inMs + 5000 + STILL.outMs);
+    expect(stillMs("r8-7", 0)).toBe(STILL.inMs + STILL.holdMs + 1000 + STILL.outMs);
+    // Five stays up until six replaces it, at most six seconds.
+    expect(stillMs("r8-5", 1500)).toBe(6000);
+  });
+});

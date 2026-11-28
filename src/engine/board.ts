@@ -45,6 +45,8 @@ export enum Tile {
   Plate = 14,
   /** Sun glyph: a wisp left resting on one is relayed along the way toward the brazier. */
   Glyph = 15,
+  /** A well: a shaft open to the sky below. Nobody walks on it; wisps float over it, and sight and reach carry across. It is not water. */
+  Well = 16,
 }
 
 /** In mist you can still make out anything this close (Chebyshev tiles). */
@@ -79,6 +81,17 @@ export class Board {
   ) {
     this.center = pt(Math.floor(width / 2), Math.floor(height / 2));
   }
+
+  /** Deep water: pool tiles (by index) where a plain pull slips. The rest of the water is shallow. */
+  deep: Set<number> | null = null;
+  isDeep(p: Pt) {
+    return !!this.deep && this.tile(p) === Tile.Water && this.deep.has(p.y * this.width + p.x);
+  }
+
+  /** Story boards whose centre is not their middle (the low one): the part worth looking at, in tiles. The camera fits and centres on it. */
+  frame: { x: number; y: number; w: number; h: number } | null = null;
+  /** On a phone, how many tiles the short side of the screen shows when the camera follows the player (12 when not set). */
+  phoneSpan: number | null = null;
 
   /** Bumped whenever the tiles change during a round (portcullises), so caches know. */
   version = 0;
@@ -135,6 +148,7 @@ export class Board {
       case Tile.CrystalB:
         return who === Mover.Sight;
       case Tile.Water:
+      case Tile.Well:
       case Tile.Brazier:
         return who !== Mover.Walker;
       case Tile.Moss:

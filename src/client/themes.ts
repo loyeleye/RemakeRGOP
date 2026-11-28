@@ -25,6 +25,14 @@ export interface Theme {
   wall: PropKind;
   boulder: PropKind;
   particles: Particles;
+  /** Where the sun stands, if not high in the north-west (world units from the brazier: east, up, south). */
+  sunAt?: [number, number, number];
+  /** A place to walk, not an arena: grass, no parapet round the edge, no monoliths. */
+  place?: boolean;
+  /** A shrine that is played on but dressed with a place's props (Kite Fell). */
+  dressed?: boolean;
+  /** Tiles to one repeat of the floor texture (6 if not given). */
+  floorTiles?: number;
   /** Tint for the plain wall/boulder models, if the island wants them darker or paler. */
   tint?: string;
   /** What deflector stones inside the archways look like, if not the island's boulders. */
@@ -112,6 +120,114 @@ export const THEMES: Record<string, Theme> = {
         bushes(t.group, t.r, "#4fa83a", i);
       });
     },
+  },
+  // Lumi's home pond (story run 2): the lagoon look for now, as placeholder art.
+  get "home-pond"() {
+    return THEMES["tidepool-steps"]!;
+  },
+  get "home-pond-big"() {
+    return THEMES["tidepool-steps"]!;
+  },
+  // The same pond in the afternoon (optional run 1, Granny's rematch): a low warm sun from the west, long shadows
+  // running east, the sky paler and the haze warm (the maps thread's numbers). Wisps and guild colours are untouched.
+  get "home-pond-afternoon"() {
+    const base = THEMES["tidepool-steps"]!;
+    return {
+      ...base, name: "Home pond, afternoon",
+      sky: { ...base.sky, zenith: "#3f78c8", sky: "#8fb0d8", haze: "#f2d6b0" },
+      fog: "#e6cfb0", hemi: ["#ffe8cc", "#7a6a48", 1.05] as [string, string, number], sun: ["#ffd9a0", 2.5] as [string, number], exposure: 0.97,
+      sunAt: [-30, 14, -6] as [number, number, number],
+    };
+  },
+  // The Cove of the home pond (optional run 2, Lumi's lesson with Kes): the afternoon pond's light, plain grass, its fence. The run takes the light down as it goes.
+  get cove() {
+    const base = THEMES["home-pond-afternoon"]!;
+    return { ...base, name: "The Cove", floor: "kite-fell", grass: "#7a9c58", particles: null, dressed: true, decorate() {} };
+  },
+  // Kite Fell, Kes's island (run 5, the race): short wind-flattened grass, bare of palms, and dressed
+  // with its props like a place, but played on like a shrine.
+  get "kite-fell"() {
+    const base = THEMES["tidepool-steps"]!;
+    return { ...base, name: "Kite Fell", floor: "kite-fell", grass: "#7fa850", dressed: true, decorate() {} };
+  },
+  // The crew's yard (Part 2, runs 3 and 4, the offspring fight): the low one's dusk, on the maps thread's packed earth (4 tiles to a repeat).
+  get "solenne-yard"() {
+    const base = THEMES["low-one"]!;
+    return { ...base, name: "The crew's yard", floor: "crew-yard", floorTiles: 4, grass: "#5f6b4c", exposure: 0.9, hemi: ["#c4c0cc", "#6e5a44", 0.95] as [string, string, number], particles: null, dressed: true, decorate() {} };
+  },
+  // The crew's camp, warm (Part 2, the camp walk): the same yard after dark, lit by its own lamps and the cooking fire
+  // (camp-dress.ts lights them); the sky and the ground's own light low, so the lamps make the pool of light.
+  get "warm-camp"() {
+    const base = THEMES["solenne-yard"]!;
+    return {
+      ...base, name: "The crew's camp",
+      sky: { ...base.sky, zenith: "#0d1222", sky: "#1b2236", haze: "#3a3440", below: "#141a28", stars: 0.6 },
+      fog: "#1c2030", clouds: "#3a4256", hemi: ["#6a6c88", "#3a2a1c", 0.5] as [string, string, number], sun: ["#9aa8d8", 0.35] as [string, number], exposure: 1.05,
+    };
+  },
+  // The wreck (Part 2, run 1): old ship planks under a cold blue-grey cloud; run 1 takes the light down to the dark (wreck-dress.ts).
+  get wreck() {
+    const base = THEMES["low-one"]!;
+    return {
+      ...base, name: "The wreck", floor: "wreck", floorTiles: 4, grass: "#3a3e48",
+      sky: { zenith: "#0a0f1c", sky: "#1a2234", haze: "#3a4252", below: "#101624", stars: 0.2 },
+      fog: "#1a2030", clouds: "#3c4658", hemi: ["#8a9ab8", "#2a2a30", 0.7] as [string, string, number], sun: ["#a8b8d8", 0.6] as [string, number], exposure: 1,
+      particles: null, dressed: true, decorate() {},
+    };
+  },
+  // Run 2 on the same camp, gate barred: the same night.
+  get "crew-run2"() {
+    return { ...THEMES["warm-camp"]!, name: "The crew's brazier" };
+  },
+  // The Sieve (run 8): the palest, quietest place. Bleached chalk under a low, washed-out morning; nothing growing, no colour.
+  get sieve() {
+    const base = THEMES["tidepool-steps"]!;
+    return {
+      ...base, name: "The Sieve", floor: "sieve", grass: "#9c9b6c", soil: "#e4dfd0", rock: "#cfc9b8",
+      sky: { ...base.sky, zenith: "#9fb4c4", sky: "#c9d6dc", haze: "#e6e8e2", below: "#dfe4e4" },
+      fog: "#d8dedc", clouds: "#f4f4ee", hemi: ["#eef2f4", "#b8b4a4", 1.0] as [string, string, number], sun: ["#fff2dc", 2.2] as [string, number], exposure: 0.95,
+      particles: null, dressed: true, decorate() {},
+    };
+  },
+  // The low one (run 9): a plain green island at the end of the day, pale cloud already over its ground. Not dressed yet.
+  get "low-one"() {
+    const base = THEMES["tidepool-steps"]!;
+    return {
+      ...base, name: "The low one", floor: "kite-fell", grass: "#6f8f5a",
+      sky: { ...base.sky, zenith: "#3a4a6e", sky: "#7f8fb0", haze: "#c9c4c8", below: "#b9c0d0" },
+      fog: "#aab4c8", clouds: "#dfe4ee", hemi: ["#b8c4e0", "#6a6a70", 0.95] as [string, string, number], sun: ["#ffd9b0", 1.5] as [string, number], exposure: 0.92,
+      particles: null, dressed: true, decorate() {},
+    };
+  },
+  // The ship home (run 10): a deck at night over the cloud sea. The light is run by the board (ship-dress.ts); this is where it starts.
+  get "ship-deck"() {
+    const base = THEMES["low-one"]!;
+    return {
+      ...base, name: "The ship home",
+      sky: { zenith: "#02030a", sky: "#03040a", haze: "#0a0e1c", below: "#03040a", stars: 1 },
+      fog: "#03040a", clouds: "#1a2238", hemi: ["#4a62a8", "#141824", 0.42] as [string, string, number], sun: ["#8ea6e8", 0.5] as [string, number], exposure: 1.25,
+      particles: null, dressed: true, decorate() {},
+    };
+  },
+  // The fairy ring after Hesta's landing (run 7): the same look, with the crater's glass drawn by the board.
+  get "kindling-crater"() {
+    return THEMES["fairy-ring"]!;
+  },
+  // The home island as a place to walk: the lagoon's sky and falls, on grass.
+  get "home-island"() {
+    const base = THEMES["tidepool-steps"]!;
+    return {
+      ...base, name: "Home island", floor: "home-island", grass: "#7fb352", place: true,
+      // Palms stand just inside the rim (the cliff is tight to the edge here), and none in the falls' mouth.
+      decorate(d: DecorContext) {
+        for (let i = 0; i < 9; i++) {
+          if (i === 5) continue;
+          const a = Math.PI * (1.05 + (i / 8) * 0.9);
+          const p = d.ring(a, -1.2 - (i % 2) * 0.5);
+          add(d.group, makePalm(2.4 + (i % 3) * 0.6, i), p.x, 0, p.z);
+        }
+      },
+    };
   },
   "ember-quarry": {
     name: "Volcano",
@@ -1245,3 +1361,42 @@ export function ambientParticles(kind: Particles, radius: number, low: boolean, 
   pts.frustumCulled = false;
   return pts;
 }
+
+/** The walks' times of day: what each changes on the island's own look (afternoon is the island as it is). */
+export const LIGHTS: Record<string, Partial<Theme>> = {
+  afternoon: {},
+  morning: {
+    sky: { zenith: "#3a6ec8", sky: "#9cc4ee", haze: "#fbe2c0", below: "#7a9ee0", stars: 0 },
+    fog: "#d8e4f0",
+    hemi: ["#fff0dc", "#8a7a60", 1.1],
+    sun: ["#ffe2b8", 2.6],
+    exposure: 1,
+  },
+  // The end of the day after run 4 (walk 7, Ladi: a sunset tint): warm orange and rose, brighter than
+  // dusk and with no stars, so it is not mistaken for walk 5's cold dusk.
+  sunset: {
+    sky: { zenith: "#5a5aa0", sky: "#f08a6a", haze: "#ffb070", below: "#b87a8a", stars: 0 },
+    fog: "#e89a80",
+    clouds: "#ffae88",
+    hemi: ["#ffb48a", "#5a3a44", 0.9],
+    sun: ["#ff9450", 2.5],
+    exposure: 0.98,
+    sunAt: [-60, 16, 12],
+  },
+  dusk: {
+    sky: { zenith: "#2a2f6a", sky: "#c8785a", haze: "#f0a070", below: "#5a4a7a", stars: 0.3 },
+    fog: "#a07a7a",
+    clouds: "#f0b090",
+    hemi: ["#f0b48a", "#3a2a3a", 0.8],
+    sun: ["#ff9a5a", 1.8],
+    exposure: 1.05,
+  },
+  night: {
+    sky: { zenith: "#050a24", sky: "#142a5c", haze: "#2a3e78", below: "#0c1840", stars: 1 },
+    fog: "#1a2a52",
+    clouds: "#3a4a7a",
+    hemi: ["#5a78c8", "#1a2030", 0.5],
+    sun: ["#a8c0ff", 0.9],
+    exposure: 1.3,
+  },
+};

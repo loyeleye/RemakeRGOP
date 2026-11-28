@@ -19,7 +19,57 @@
       <input id="code" maxlength="4" placeholder="CODE" autocapitalize="characters" aria-label="Room code" />
       <button type="submit">Join</button>
     </form>
+    <div class="chain-row"><button id="part1" class="big">Play Part 1</button><button id="part1-again" class="ghost" hidden>Start again</button></div>
+    <div class="chain-row"><button id="part2" class="big">Play Part 2</button><button id="part2-again" class="ghost" hidden>Start again</button></div>
     <button id="practice" class="ghost">Practice alone</button>
+    <button id="story" class="ghost">Story: the Grand Kindling <span class="soon">prototype</span></button>
+    <button id="story2" class="ghost">Story: Lumi's lesson <span class="soon">prototype</span></button>
+    <button id="story3" class="ghost">Story: Granny's game <span class="soon">prototype</span></button>
+    <button id="story4" class="ghost">Story: A job <span class="soon">prototype</span></button>
+    <button id="story5" class="ghost">Story: The race <span class="soon">prototype</span></button>
+    <button id="story6" class="ghost">Story: The dying brazier <span class="soon">prototype</span></button>
+    <button id="story8" class="ghost">Story: A harder job <span class="soon">prototype</span></button>
+    <button id="story9" class="ghost">Story: The rescue <span class="soon">prototype</span></button>
+    <button id="story10" class="ghost">Story: The ship home <span class="soon">prototype</span></button>
+    <button id="story-o1" class="ghost">Optional: Granny's rematch <span class="soon">prototype</span></button>
+    <button id="story-o2" class="ghost">Optional: Lumi's lesson with Kes <span class="soon">prototype</span></button>
+    <button id="story-o3a" class="ghost">Optional: Moss Hollow <span class="soon">prototype</span></button>
+    <button id="story-o3b" class="ghost">Optional: Tidepool Steps <span class="soon">prototype</span></button>
+    <button id="story-o3c" class="ghost">Optional: Kes's rematch on the Fell <span class="soon">prototype</span></button>
+    <button id="story-p2fight" class="ghost">Part 2: the offspring fight, runs 3 and 4 <span class="soon">prototype</span></button>
+    <button id="story-continue" class="ghost">Story: start</button>
+    <button id="story-pond" class="ghost">Story: the pond, between runs <span class="soon">test</span></button>
+    <!-- Testing: built from OPTIONS in src/client/testing.ts, which adds the run sections into #t-runs. -->
+    <details class="how testing" id="progress">
+      <summary>Testing <span class="soon">for testers</span></summary>
+      <div class="t-body">
+        <p class="t-intro">Every option the page can be opened with. Set them here, then press Apply to reload with them, or copy the link.</p>
+        <section class="t-sec t-fixed" id="t-jump" aria-labelledby="t-jump-h">
+          <h3 id="t-jump-h">Jump to</h3>
+          <div class="t-row">
+            <label class="t-text" for="walk-pick">A walk on its own, outside Part 1</label>
+            <div class="t-pair"><select id="walk-pick"></select><button id="walk-go" type="button" class="small">Go</button></div>
+          </div>
+        </section>
+        <section class="t-sec t-fixed" aria-labelledby="t-progress-h">
+          <h3 id="t-progress-h">Story progress</h3>
+          <p id="progress-note" class="t-note"></p>
+          <div class="t-row t-flag"><input type="checkbox" id="show-runs" /><label class="t-text" for="show-runs">Show every run on the menu, even ones Part 1 has not reached</label></div>
+          <div><button id="progress-reset" type="button" class="ghost small">Reset progress</button></div>
+        </section>
+        <div id="t-runs"></div>
+        <div class="t-link">
+          <label class="t-text" for="t-url">Link with these options</label>
+          <textarea id="t-url" rows="2" readonly spellcheck="false"></textarea>
+          <div class="t-actions">
+            <button id="t-apply" type="button" class="small">Apply</button>
+            <button id="t-copy" type="button" class="ghost small">Copy link</button>
+            <button id="t-clear" type="button" class="ghost small">Clear</button>
+          </div>
+          <p id="t-status" class="t-status" aria-live="polite"></p>
+        </div>
+      </div>
+    </details>
     <details class="how">
       <summary>How to play</summary>
       <ul>
@@ -85,14 +135,25 @@
       <span id="ticks" class="ticks"></span>
       <span class="score grove" id="score-3" hidden>0</span>
       <span class="score dusk" id="score-1">0</span>
+      <button id="call" class="ghost small" aria-label="Call Rook to a spot" hidden>📣 Call</button>
+      <button id="mute" class="ghost small" aria-label="Sound off" hidden>🔊</button>
       <button id="recenter" class="ghost small" aria-label="Centre on me">◎</button>
     </header>
+    <!-- A walk: who to talk to or what to do next, and the question before a tap starts a run. -->
+    <div id="walk-goal" hidden></div>
+    <div id="walk-ask" hidden><p></p><div class="btns"><button class="big yes"></button><button class="ghost no"></button></div></div>
+    <div id="dialog" hidden><img id="dialog-face" alt="" /><div class="say"><b id="dialog-name"></b><p id="dialog-text"></p></div></div>
+    <div id="hint" hidden></div>
+    <div id="tip" hidden></div>
+    <div id="bark" class="bark" hidden><img alt="" /><span></span></div>
+    <div id="chip" class="bark chip" hidden><img alt="" /><span></span></div>
     <div class="thumbs">
       <div id="stick" class="stick touch-only" aria-label="Walk"><div class="knob"></div></div>
-      <button id="run" class="thumb desk-only">Run</button>
+      <button id="run" class="thumb desk-only">🏃 Running</button>
       <div class="pad">
-        <button id="run2" class="thumb touch-only">Run</button>
+        <button id="run2" class="thumb touch-only">Running</button>
         <button id="mode" class="thumb">Pull</button>
+        <button id="shard" class="thumb shard" hidden>Show shard</button>
         <button id="next" class="thumb touch-only" aria-label="Next wisp">Next</button>
         <button id="staff" class="thumb staff touch-only">Staff</button>
       </div>
@@ -100,12 +161,20 @@
     <div id="results" class="panel overlay" hidden>
       <h2 id="result-title"></h2>
       <p id="result-score" class="final"></p>
+      <div id="story-end" hidden>
+        <div class="sky"><div id="sky-fill"></div></div>
+        <ol id="end-lines"></ol>
+      </div>
       <button id="again" class="big">Back to the lobby</button>
       <button id="leave3" class="ghost">Leave room</button>
     </div>
   </div>
+  <div id="chain-card" hidden></div>
   <div id="toast" hidden></div>
+  <div id="reward" hidden><b>Unlocked for multiplayer</b><span>coming later</span></div>
   <div id="debug" hidden><div class="debug-head">Debug <span>(press ` to close)</span></div><pre id="debug-state"></pre><pre id="debug-log"></pre></div>
   <script type="module" src="app.js"></script>
+  <div id="flash"></div>
+  <div id="still" hidden></div>
 </body>
 </html>
