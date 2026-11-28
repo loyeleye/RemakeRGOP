@@ -973,8 +973,8 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       OFFSPRING.hunt.stuck3 = 4;
     }
   });
-  it("the run 3 trial hunt.see3 (off by default): it sees loose light only within that many tiles of it", () => {
-    expect(OFFSPRING.hunt.see3).toBe(0);
+  it("run 3's short sight, hunt.see3 (8 by default, Ladi's pick): it sees loose light only within that many tiles of it; 0 is the old way", () => {
+    expect(OFFSPRING.hunt.see3).toBe(8);
     const far = (see3: number) => {
       OFFSPRING.hunt.see3 = see3;
       const p = opened();
@@ -994,7 +994,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       expect(off.pick).toBe(off.w);
       expect(on.pick).not.toBe(on.w);
     } finally {
-      OFFSPRING.hunt.see3 = 0;
+      OFFSPRING.hunt.see3 = 8;
     }
   });
 });
