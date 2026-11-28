@@ -29,7 +29,7 @@ export const PART2: Piece[] = [
   { id: "2", name: "Run 2, the crew's brazier", kind: "run", run2: true },
   // Pictures D7 and D8, locked; D6 is not drawn yet.
   { id: "2e", name: "The cage lights", kind: "card", scene: "held", card: { heading: "The cage lights", summary: "Lines of light run from the brazier over his boots to the cart. He doesn't slow. The cart's bars light: a cage, and he has just powered it.", ruled: "Part ruled: that he doesn't slow is Ladi's. Pictures D7 and D8 are locked." } },
-  { id: "2-3", name: "The den", kind: "card", card: { heading: "The den", summary: "Eleven pictures, about five minutes, ending on Solenne lifting the boy and the eye turning to follow. Straight into run 3.", ruled: "Part ruled: the staging is Ladi's (22 Nov), and the two Solenne and Rook exchanges are final. Outrider's lines are draft. Five pictures are locked and the rest are still being drawn, so it stays words for now." } },
+  { id: "2-3", name: "The den", kind: "card", card: { heading: "The den", summary: "Eleven pictures, about five minutes, ending on Solenne lifting the boy and the eye turning to follow. Straight into run 3.", ruled: "Part ruled: the staging is Ladi's (22 Nov), and the two Solenne and Rook exchanges are final. Outrider's lines are draft. Ten of its pictures are locked (A2, A4, B2, B5, C2, D4, D6, E2, F4, F7) and the rest are still being drawn, so it stays words for now." } },
   { id: "3", name: "Run 3, keep it off them", kind: "run", fight: 3 },
   { id: "4", name: "Run 4, the first kill", kind: "run", fight: 4 },
   { id: "end", name: "Part 2 continues", kind: "card", card: { heading: "Part 2 continues", summary: "The yard afterwards is the start of the next stretch.", ruled: DRAFT, end: true } },
@@ -59,7 +59,7 @@ export const HELD2: Record<string, Held> = {
     gap: 0.4,
     pictures: [
       { slot: "part2-b1-v2", hold: 3.5 },
-      // B2 v2 (locked 28 Nov, "not their net"); Ladi's note says he should look more down and to the right, so a v3 may follow.
+      // B2 v2 (locked 28 Nov, "not their net"). Ladi asked for a redraw, saw it, and kept this one (the cutscene thread, 28 Nov).
       { slot: "part2-b2-v2", hold: 3 },
       { slot: "part2-b3-v1", hold: 3 },
     ],
