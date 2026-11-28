@@ -51,6 +51,9 @@ export class FightRoom {
   private hopAt = -1;
   /** The lunge at her or the boy: the tick it goes, while it gathers itself (-1: not gathering). */
   private lungeAt = -1;
+  /** Run 3's stall (hunt.stuck3): the loose light it is walking to, its nearest gap so far, the ticks with no gain; and the lights it no longer sees, until a tick. */
+  private stall3 = { key: "", best: Infinity, n: 0 };
+  private blind = new Map<string, number>();
   private herDown = false;
   private lastAct = 0;
   private her = { light: 0, dipUntil: -1, doing: "rest" as "rest" | "windup" | "hold", left: 0, of: 0, flash: undefined as Fight["her"]["flash"] };
@@ -243,6 +246,8 @@ export class FightRoom {
     this.flareUntil = -1;
     this.hopAt = -1;
     this.lungeAt = -1;
+    this.stall3 = { key: "", best: Infinity, n: 0 };
+    this.blind = new Map();
     this.herDown = false;
     this.lastAct = this.game ? this.game.tick : 0;
     this.catches = 0;
@@ -490,10 +495,15 @@ export class FightRoom {
     const shard = L.find((l) => l.after === "shard");
     if (shard) return shard;
     const c = this.game.board.center, atMeal = it.key === "brazier" && Math.hypot(c.x - it.x, c.y - it.y) <= I.reachBrazier + I.size / 2 + 0.1;
-    const food = L.filter((l) => (l.after === "wisp" && this.lit.has(Number(l.key.slice(1)))) || (l.after === "brazier" && (this.game.tick < this.flareUntil || atMeal)));
+    let food = L.filter((l) => (l.after === "wisp" && this.lit.has(Number(l.key.slice(1)))) || (l.after === "brazier" && (this.game.tick < this.flareUntil || atMeal)));
+    // TRIAL: in run 3 it only sees loose light within hunt.see3 tiles of it (0: any distance). She and the boy it always sees.
+    if (this.run === 3 && OFFSPRING.hunt.see3) food = food.filter((l) => gap(l) <= OFFSPRING.hunt.see3);
+    // Run 3's stall (hunt.stuck3): a loose light it has stopped getting nearer to, it doesn't see for a while.
+    if (this.run === 3 && OFFSPRING.hunt.stuck3) food = food.filter((l) => !(this.game.tick < (this.blind.get(l.key) ?? -1)));
     // TRIAL (gameplay thread, 28 Nov; Ladi asked for ways to make run 3 bite): in run 3 it goes for the nearest light, and she and the boy are lights.
     if (this.run === 3 && OFFSPRING.hunt.nearest3) {
-      const cand = [...food, ...L.filter((l) => l.key === "her" || l.key === "fen")];
+      // She and the boy stay its marks even with her light spent (they are people, not only lights).
+      const cand = [...food, ...this.lights().filter((l) => l.key === "her" || l.key === "fen")];
       return cand.sort((x, y) => gap(x) / (x.key === it.key ? I.stick : 1) - gap(y) / (y.key === it.key ? I.stick : 1))[0] ?? null;
     }
     // The hunt: loose light before the fire. Only with no stray left does it go back to drink.
@@ -530,6 +540,20 @@ export class FightRoom {
       if (s > top) (top = s), (best = l);
     }
     return best;
+  }
+
+  /**
+   * Run 3's stall (gameplay thread, 28 Nov): a woken light it can't get its body to held it for ever. On each tick it walks
+   * after a loose light: if it has got no nearer for hunt.stuck3 ticks, it stops seeing that light for hunt.blind3 ticks.
+   */
+  private stall(l: { key: string; after: After; at: { x: number; y: number }; edge: number }) {
+    const HU = OFFSPRING.hunt, I = OFFSPRING.it, it = this.it, s = this.stall3;
+    const d = Math.max(0, Math.hypot(l.at.x - it.x, l.at.y - it.y) - l.edge - I.size / 2);
+    if (l.after !== "wisp" || d <= I.reach + 0.05) return void (this.stall3 = { key: "", best: Infinity, n: 0 });
+    if (l.key !== s.key || d < s.best - 0.05) return void (this.stall3 = { key: l.key, best: d, n: 0 });
+    if (++s.n < HU.stuck3) return;
+    this.blind.set(l.key, this.game.tick + HU.blind3);
+    this.stall3 = { key: "", best: Infinity, n: 0 };
   }
 
   /** The offspring's tick: pick, turn, go, eat. */
@@ -616,6 +640,7 @@ export class FightRoom {
       }
       return;
     }
+    if (this.run === 3 && HU.stuck3) this.stall(l);
     if (l.key !== it.key) it.eat = 0;
     it.key = l.key;
     it.after = l.after;

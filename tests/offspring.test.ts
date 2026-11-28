@@ -944,4 +944,57 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       OFFSPRING.hunt.nearest3 = 0;
     }
   });
+  it("run 3's stall (hunt.stuck3): a woken light its body can't reach holds it only a few ticks, then it stops seeing it for a while", () => {
+    const parked = (stuck3: number) => {
+      OFFSPRING.hunt.stuck3 = stuck3;
+      const p = opened();
+      const keep = p.g.wisps.find((w) => !p.g.away.has(w.id) && !p.x.banked.has(w.id))!;
+      for (const w of p.g.wisps) if (w !== keep && !p.g.away.has(w.id)) p.g.away.set(w.id, 1e9);
+      // The gameplay thread's case (its sim's "bringer", 28 Nov): a woken light at (-3, 6) past the cart, it at (1.2, 6), Rook at (3, 10).
+      p.me.pos = p.me.prev = p.at(3, 10);
+      moveWisp(keep, p.at(-3, 6));
+      p.x.lit.add(keep.id);
+      p.x.banked.clear();
+      p.x.it.x = p.c.x + 1.2;
+      p.x.it.y = p.c.y + 6;
+      p.x.it.dazed = -1;
+      const keys: string[] = [];
+      for (let i = 0; i < 40; i++) (p.tick(), keys.push(p.x.it.key));
+      return { keys, w: `w${keep.id}` };
+    };
+    try {
+      const off = parked(0);
+      expect(off.keys.slice(5).every((k) => k === off.w)).toBe(true);
+      const on = parked(4);
+      const first = on.keys.findIndex((k) => k !== on.w);
+      expect(first).toBeGreaterThan(-1);
+      expect(first).toBeLessThanOrEqual(8);
+    } finally {
+      OFFSPRING.hunt.stuck3 = 4;
+    }
+  });
+  it("the run 3 trial hunt.see3 (off by default): it sees loose light only within that many tiles of it", () => {
+    expect(OFFSPRING.hunt.see3).toBe(0);
+    const far = (see3: number) => {
+      OFFSPRING.hunt.see3 = see3;
+      const p = opened();
+      const keep = p.g.wisps.find((w) => !p.g.away.has(w.id) && !p.x.banked.has(w.id))!;
+      for (const w of p.g.wisps) if (w !== keep && !p.g.away.has(w.id)) p.g.away.set(w.id, 1e9);
+      p.x.banked.clear();
+      moveWisp(keep, p.at(-11, 1));
+      p.x.lit.add(keep.id);
+      p.x.it.x = p.c.x + 2.5;
+      p.x.it.y = p.c.y + 1;
+      p.x.it.dazed = -1;
+      p.tick();
+      return { pick: p.x.it.key, w: `w${keep.id}` };
+    };
+    try {
+      const off = far(0), on = far(8);
+      expect(off.pick).toBe(off.w);
+      expect(on.pick).not.toBe(on.w);
+    } finally {
+      OFFSPRING.hunt.see3 = 0;
+    }
+  });
 });
