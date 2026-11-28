@@ -69,11 +69,12 @@ export const FIGHT_LOOK = {
   trail: { drops: 16, color: "#ffc070", size: 0.55, glow: 0.85 },
   /**
    * The model: how wide (tiles) it is drawn; the back's stages (how many lights show, and the back's
-   * glow, at full, more than half, some, and empty: Ladi's four); how far the wound opens (its y
+   * glow, at full, more than half, some, and empty: Ladi's four); a faint warm rim on its body and
+   * arms (the cast thread's ask, for the camera above); how far the wound opens (its y
    * scale, shut and open); how fast the ink turns in each light (rad/s, plus a little more for each);
    * and how long a change of clip blends (s).
    */
-  model: { wide: 3, stages: [[6, 1], [4, 0.6], [2, 0.3], [0, 0]] as const, wound: [0.3, 2.2] as const, ink: [0.6, 0.15] as const, blend: 0.2 },
+  model: { rim: { color: "#b8a89a", strength: 0.35, power: 2.5 }, wide: 3, stages: [[6, 1], [4, 0.6], [2, 0.3], [0, 0]] as const, wound: [0.3, 2.2] as const, ink: [0.6, 0.15] as const, blend: 0.2 },
   /** Untouchable after its jump: a pale shell round it (its strength, and how slowly it breathes), and a tap turned aside: a ring off the shell (how far it spreads, seconds). */
   safe: { color: "#dfe8ff", shell: 0.22, breathe: 2.2, ward: { spread: 0.8, sec: 0.5 } },
 };
@@ -463,6 +464,16 @@ export class OffspringFx {
         if (mat.map) (mat.emissiveMap = mat.map), mat.emissive.set("#ffffff");
         else mat.emissive.copy(mat.color);
         mat.emissiveIntensity = 0.4;
+        // A faint warm rim (fresnel) on the body and arms, so its shape reads from the camera above in the dark.
+        const R = FIGHT_LOOK.model.rim;
+        mat.onBeforeCompile = (sh) => {
+          sh.uniforms.uRim = { value: new THREE.Color(R.color) };
+          sh.uniforms.uRimK = { value: R.strength };
+          sh.fragmentShader = sh.fragmentShader
+            .replace("#include <common>", "#include <common>\nuniform vec3 uRim;\nuniform float uRimK;")
+            .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>\ntotalEmissiveRadiance += uRim * uRimK * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), ${R.power.toFixed(1)});`);
+        };
+        mat.customProgramCacheKey = () => "offspring-rim";
       }
       if (m.name === "eye") eye = m;
       else if (m.name === "back") back = m;
