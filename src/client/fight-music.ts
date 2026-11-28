@@ -32,6 +32,8 @@ export const FIGHT_MUSIC = {
   drift: { window: 10, start: 0.04, stop: 0.01, most: 0.01, over: 4 },
   /** The dark: the knock panned by how far east or west of him it is (full `pan` at `panAt` tiles), eased in over `ease` s. Its gain is `nearness`. */
   hearing: { pan: 0.8, panAt: 8, ease: 0.15, near: 3, farAt: 15, far: 0.2 },
+  /** The music's level under its eye and gaze (0.63 is about 4 dB down). */
+  duck: 0.63,
 };
 
 /** The gameplay thread's distance curve for hearing it (and for Rook's light shuddering, with the sound off too): 1 within `near` tiles, falling to `far` at `farAt` or more. */
@@ -315,6 +317,14 @@ class Score {
 
 let score: Score | null = null;
 
+/** Its eye turning and its gaze: the music ducks (`duck` of its level) so they cut through (the gameplay thread's guess, about 4 dB). */
+let ducked = false;
+export function duckFightMusic(on: boolean) {
+  if (!score || on === ducked) return;
+  ducked = on;
+  score.bus.gain.setTargetAtTime(SOUND.musicGain * (on ? FIGHT_MUSIC.duck : 1), score.bus.context.currentTime, 0.08);
+}
+
 /** The fight tick the knock's bar 1 fell on (it knocks every 2 ticks from there), while the music plays; null without it. */
 export function knockClock() {
   return score ? score.tick0 : null;
@@ -328,7 +338,7 @@ export function fightMusic(f: Fight | undefined, playing: boolean) {
   const o = audioOut();
   if (o && f) load(o.c);
   if (!f || !playing || !o) {
-    if (score) (score.silence(), (score = null));
+    if (score) (score.silence(), (score = null), (ducked = false));
     return;
   }
   if (!buffers) return;

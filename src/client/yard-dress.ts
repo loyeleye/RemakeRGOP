@@ -36,21 +36,22 @@ const plain = new GLTFLoader().register((parser) => {
   return { name: "plain_textures" };
 });
 
+let raw: Promise<Record<string, string>> | null = null;
+/** The pack file itself (base64 glbs by name), fetched once: the yard's pieces, and the offspring's model (offspring-dress.ts). */
+export function yardPackFile() {
+  raw ??= fetch("models/crew-yard.pack.json").then((r) => (r.ok ? (r.json() as Promise<Record<string, string>>) : Promise.reject(new Error(String(r.status)))));
+  return raw;
+}
+/** One glb from the pack, parsed whole (its scene and its clips). */
+export function parsePacked(b64: string) {
+  return new Promise<GLTF>((ok, no) => plain.parse(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer, "", ok, no));
+}
+
 let pack: Promise<Record<string, THREE.Object3D>> | null = null;
-/** The yard's models, asked for once (when the yard is first built). */
+/** The yard's models, asked for once (when the yard is first built). Not the offspring: it is dressed by the fight. */
 function loadPack() {
-  pack ??= fetch("models/crew-yard.pack.json")
-    .then((r) => (r.ok ? (r.json() as Promise<Record<string, string>>) : Promise.reject(new Error(String(r.status)))))
-    .then((b64s) =>
-      Promise.all(
-        Object.entries(b64s).map(
-          ([n, b64]) =>
-            new Promise<[string, THREE.Object3D]>((ok, no) =>
-              plain.parse(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer, "", (g: GLTF) => ok([n, dressed(g.scene)]), no),
-            ),
-        ),
-      ),
-    )
+  pack ??= yardPackFile()
+    .then((b64s) => Promise.all(Object.entries(b64s).filter(([n]) => n !== "offspring").map(([n, b64]) => parsePacked(b64).then((g) => [n, dressed(g.scene)] as const))))
     .then((es) => Object.fromEntries(es));
   return pack;
 }

@@ -44,6 +44,7 @@ import { card as storyCard, ENDING, KindlingEnding, lanternCard } from "./ending
 import { buildTesting } from "./testing.js";
 import * as sound from "./sound.js";
 import { fightMusic } from "./fight-music.js";
+import { offspringSfx } from "./offspring-sfx.js";
 import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -1091,7 +1092,12 @@ let pullFrom = 0;
 function storyPhaseSound(was: string | undefined) {
   const phase = room!.phase;
   // The fight's music stops dead the moment play stops (the kill's last press, a loss, the results).
-  if (phase !== "playing") fightMusic(undefined, false);
+  if (phase !== "playing") {
+    fightMusic(undefined, false);
+    // Its last sound: the kill, or the loss when it caught him twice.
+    const f = room!.story?.fight, won = room!.story?.end?.summary === OFFSPRING.card.won;
+    offspringSfx(undefined, false, phase === "results" && f ? { won, caught: !won && f.catches >= 2 } : undefined);
+  }
   // The dying brazier has no bell and no music: only the fire. The Sieve has only the wind.
   if (room!.story?.dying) return;
   if (room!.story?.sieve || room!.story?.rescue || room!.story?.ship) {
@@ -1123,7 +1129,7 @@ function storyTickSound(s: GameSnapshot) {
   else if (st.sieve) void 0;
   else if (st.rescue) rescueSound(st.rescue);
   else if (st.ship) shipSound(st.ship);
-  else if (st.fight) fightMusic(st.fight, room!.phase === "playing");
+  else if (st.fight) (fightMusic(st.fight, room!.phase === "playing"), offspringSfx(st.fight, room!.phase === "playing"));
   else if (room!.phase === "playing" && musicFor !== st.movement) {
     musicFor = st.movement;
     sound.playMusic(st.movement); // starts on a tick, so the beat lines up with the 600 ms steps
@@ -1516,6 +1522,7 @@ function stopStorySound() {
   dyingCard(undefined);
   sound.stopMusic(0.3);
   fightMusic(undefined, false);
+  offspringSfx(undefined, false);
   musicFor = -1;
 }
 

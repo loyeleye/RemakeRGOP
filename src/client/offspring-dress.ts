@@ -8,6 +8,22 @@ import * as THREE from "three";
 import type { StoryView } from "../engine/protocol.js";
 import { OFFSPRING } from "../engine/offspring.js";
 import { knockClock, nearness } from "./fight-music.js";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { parsePacked, yardPackFile } from "./yard-dress.js";
+
+/**
+ * The offspring's model (the cast thread, 28 Nov: sogni/lanternfall/production/offspring/, its
+ * README the contract), from the yard's pack: hands at y 0, facing +Z, 3.38 wide unscaled; one skin;
+ * meshes eye, back, wound and light_1..6 driven from here; clips idle, walk, crawl, feed, stagger,
+ * stunned, leap, die. Parsed once; each fight gets its own copy. Until it is in, the placeholder shapes.
+ */
+let modelP: Promise<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] } | null> | null = null;
+function offspringModel() {
+  modelP ??= yardPackFile()
+    .then((b) => (b.offspring ? parsePacked(b.offspring).then((g) => ({ scene: g.scene, clips: g.animations })) : null))
+    .catch(() => null);
+  return modelP;
+}
 
 type Fight = NonNullable<StoryView["fight"]>;
 
@@ -51,6 +67,13 @@ export const FIGHT_LOOK = {
   shudder: { light: 0.55, size: 0.1, sec: 0.35 },
   /** The jump: it flees hurt, dripping light along its arc; the drops (how many, colour, size) lie on the ground and fade out over the ticks it stays away. */
   trail: { drops: 16, color: "#ffc070", size: 0.55, glow: 0.85 },
+  /**
+   * The model: how wide (tiles) it is drawn; the back's stages (how many lights show, and the back's
+   * glow, at full, more than half, some, and empty: Ladi's four); how far the wound opens (its y
+   * scale, shut and open); how fast the ink turns in each light (rad/s, plus a little more for each);
+   * and how long a change of clip blends (s).
+   */
+  model: { wide: 3, stages: [[6, 1], [4, 0.6], [2, 0.3], [0, 0]] as const, wound: [0.3, 2.2] as const, ink: [0.6, 0.15] as const, blend: 0.2 },
   /** Untouchable after its jump: a pale shell round it (its strength, and how slowly it breathes), and a tap turned aside: a ring off the shell (how far it spreads, seconds). */
   safe: { color: "#dfe8ff", shell: 0.22, breathe: 2.2, ward: { spread: 0.8, sec: 0.5 } },
 };
@@ -71,6 +94,7 @@ function poolTexture() {
 }
 
 type Glow = (color: string, size: number, opacity?: number) => THREE.Sprite;
+const TMP_Q = new THREE.Quaternion(), Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 export class OffspringFx {
   readonly all = new THREE.Group();
@@ -114,6 +138,13 @@ export class OffspringFx {
   private wardRing: THREE.Mesh;
   private wardAt = -99;
   private wardTick = -99;
+  /** The model, once in: its root (under `it`), its mixer and clips, and the meshes driven from here. */
+  private model: {
+    root: THREE.Object3D; mixer: THREE.AnimationMixer; acts: Map<string, THREE.AnimationAction>; now: string; once: { name: string; until: number } | null;
+    eye: THREE.Mesh | null; back: THREE.Mesh | null; wound: THREE.Mesh | null; lights: { m: THREE.Mesh; rest: THREE.Quaternion }[]; parts: THREE.Mesh[];
+  } | null = null;
+  private struck = 0;
+  private leapT0 = -1;
 
   constructor(glow: Glow) {
     this.glow = glow;
@@ -185,6 +216,7 @@ export class OffspringFx {
     this.wardRing.position.y = L.ride + 0.9;
     this.it.add(this.wardRing);
     this.all.add(this.it);
+    void offspringModel().then((m) => m && !this.disposed && this.takeModel(m.scene, m.clips));
     // Her light, the boy's, the shard, her flash, and the beam of her hold.
     this.herGlow = glow(L.her, 1.5, 0.9);
     this.fenGlow = glow(L.fen, 0.8, 0.8);
@@ -239,8 +271,9 @@ export class OffspringFx {
     // The back: brighter for every wisp inside it.
     const full = f.it.inside / Math.max(1, f.wisps);
     (this.backSkin.material as THREE.MeshStandardMaterial).emissiveIntensity = full * 2.2;
-    this.backGlow.material.opacity = full * 0.85;
-    this.backGlow.scale.setScalar(S * (0.5 + full * 0.9));
+    // With the model its own lights glow; the sprite is only a little halo over them.
+    this.backGlow.material.opacity = full * (this.model ? 0.3 : 0.85);
+    this.backGlow.scale.setScalar(S * (this.model ? 0.35 + full * 0.35 : 0.5 + full * 0.9));
     // The wound opens and shuts over a few frames.
     this.wound += (f.it.wound - this.wound) * Math.min(1, dt * 10);
     this.slit.visible = this.wound > 0.02;
@@ -298,6 +331,7 @@ export class OffspringFx {
     em.metalness = ey ? 0.6 * turned : 0;
     this.glint.material.opacity = ey ? 0.25 + 0.7 * turned * (0.75 + 0.25 * Math.sin(o.time * 20)) : 0;
     this.glint.scale.setScalar(S * (0.5 + 0.9 * turned));
+    if (this.model) this.stepModel(f, o, dt, moving, up, turned);
     // Light flung out of the wound: a mote arcing from its back to where the light fell.
     for (const q of f.flung ?? []) {
       if (this.flungMotes.has(q.id) && this.flungMotes.get(q.id)!.to.x === q.to.x && this.flungMotes.get(q.id)!.to.y === q.to.y) continue;
@@ -406,7 +440,110 @@ export class OffspringFx {
     });
   }
 
+  private disposed = false;
+  /** The model is in: a copy of it under `it`, turned to face +x (the eye's way here), the placeholder shapes put away. */
+  private takeModel(src: THREE.Object3D, clips: THREE.AnimationClip[]) {
+    const L = FIGHT_LOOK, S = OFFSPRING.it.size, root = cloneSkinned(src), k = (L.model.wide / 3.38) * (S / 3);
+    root.scale.setScalar(k);
+    root.rotation.y = Math.PI / 2;
+    const parts: THREE.Mesh[] = [];
+    let eye: THREE.Mesh | null = null, back: THREE.Mesh | null = null, wound: THREE.Mesh | null = null;
+    const lights: { m: THREE.Mesh; rest: THREE.Quaternion }[] = [];
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.frustumCulled = false;
+      // Its own materials, so this fight's changes stay its own; the game's look on the plain ones.
+      m.material = (m.material as THREE.Material).clone();
+      const mat = m.material as THREE.MeshStandardMaterial, own = m.name === "back" || m.name === "wound" || m.name.startsWith("light_");
+      if (!own && m.name !== "eye") {
+        mat.metalness = 0;
+        mat.roughness = 1;
+        if (mat.map) (mat.emissiveMap = mat.map), mat.emissive.set("#ffffff");
+        else mat.emissive.copy(mat.color);
+        mat.emissiveIntensity = 0.4;
+      }
+      if (m.name === "eye") eye = m;
+      else if (m.name === "back") back = m;
+      else if (m.name === "wound") wound = m;
+      else if (m.name.startsWith("light_")) lights.push({ m, rest: m.quaternion.clone() });
+      parts.push(m);
+    });
+    lights.sort((a, b) => a.m.name.localeCompare(b.m.name));
+    const mixer = new THREE.AnimationMixer(root), acts = new Map<string, THREE.AnimationAction>();
+    for (const c of clips) acts.set(c.name, mixer.clipAction(c));
+    for (const n of ["stagger", "leap", "die"]) {
+      const a = acts.get(n);
+      if (a) (a.setLoop(THREE.LoopOnce, 1), (a.clampWhenFinished = true));
+    }
+    acts.get("idle")?.play();
+    // The placeholder body, legs, back and eye go; its glows and rings stay as the tells they are.
+    for (const ph of [this.body, ...this.legs, this.backSkin, this.slit]) ph.visible = false;
+    this.body.removeFromParent();
+    this.legs.forEach((l) => l.removeFromParent());
+    this.backSkin.removeFromParent();
+    this.slit.removeFromParent();
+    this.ball.visible = false;
+    for (const ch of this.eye.children) if (ch !== this.glint) ch.visible = false;
+    // The glint sits on the model's eye (its middle about 1.48 up and 0.47 forward, unscaled).
+    this.eye.position.set(0.47 * k, 1.48 * k, 0);
+    this.glint.position.x = 0.25 * k;
+    this.it.add(root);
+    this.model = { root, mixer, acts, now: "idle", once: null, eye, back, wound, lights, parts };
+  }
+
+  /** The model's tick: which clip, the back's stage, the wound, the eye going to a mirror, the ink turning, and what shows in the dark. */
+  private stepModel(f: Fight, o: { time: number }, dt: number, moving: boolean, up: number, turned: number) {
+    const M = this.model!, L = FIGHT_LOOK.model, it = f.it;
+    // The clip: a one-shot (struck, a leap) plays out; else held, feeding, crawling, walking, or still.
+    if (it.wound > 0 && this.struck === 0) M.once = { name: "stagger", until: o.time + 0.8 };
+    this.struck = it.wound;
+    const lp = it.leap;
+    if (lp && lp.t0 !== this.leapT0) {
+      this.leapT0 = lp.t0;
+      M.once = { name: "leap", until: o.time + lp.ticks * 0.6 };
+      const a = M.acts.get("leap");
+      if (a) a.timeScale = 1.8 / Math.max(0.6, lp.ticks * 0.6);
+    }
+    if (M.once && o.time >= M.once.until) M.once = null;
+    const want = M.once?.name ?? (it.held ? "stunned" : it.eating ? "feed" : moving && it.crawl ? "crawl" : moving || up > 0.05 ? "walk" : "idle");
+    if (want !== M.now && M.acts.has(want)) {
+      const from = M.acts.get(M.now), to = M.acts.get(want)!;
+      to.reset().play();
+      if (from) to.crossFadeFrom(from, L.blend, false);
+      M.now = want;
+    }
+    M.mixer.update(dt);
+    // The back: Ladi's four stages, by how full it is.
+    const full = it.inside / Math.max(1, f.wisps), st = full >= 1 ? L.stages[0] : full > 0.5 ? L.stages[1] : full > 0 ? L.stages[2] : L.stages[3];
+    M.lights.forEach((q, i) => {
+      q.m.visible = i < st[0];
+      // The ink turning in each light.
+      const spin = o.time * (L.ink[0] + L.ink[1] * (i + 1));
+      q.m.quaternion.copy(q.rest).multiply(TMP_Q.setFromAxisAngle(Y_AXIS, spin));
+    });
+    if (M.back) (M.back.material as THREE.MeshStandardMaterial).emissiveIntensity = st[1];
+    if (M.wound) M.wound.scale.y = L.wound[0] + (L.wound[1] - L.wound[0]) * this.wound;
+    // Its eye: toward a mirror as it turns on him (and a little while it feeds).
+    if (M.eye) {
+      const em = M.eye.material as THREE.MeshStandardMaterial, k = Math.max(turned, it.eating ? 0.35 : 0);
+      // Plain, its own brown eye lit a little by its paint; turning, the paint gives way to a white mirror.
+      em.emissiveMap = k > 0.01 ? null : em.map;
+      if ((em.userData.mapped as boolean | undefined) !== k <= 0.01) (em.userData.mapped = k <= 0.01), (em.needsUpdate = true);
+      em.emissive.set(k > 0.01 ? FIGHT_LOOK.mirror : "#ffffff");
+      em.emissiveIntensity = k > 0.01 ? 0.4 + 2.2 * k : 0.45;
+      em.metalness = 0.6 * k;
+      em.roughness = 1 - 0.7 * k;
+    }
+    // The dark: unseen, only its eye shows (while it turns on him).
+    const hidden = !!it.hidden;
+    M.root.visible = !hidden || !!f.eye;
+    for (const m of M.parts) m.visible = !hidden || m === M.eye ? m.name.startsWith("light_") ? m.visible : true : false;
+  }
+
   dispose() {
+    this.disposed = true;
     this.all.traverse((o) => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose();
