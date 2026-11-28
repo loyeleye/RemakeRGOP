@@ -202,7 +202,7 @@ export function initFightDebug(fight: () => FightRoom | null) {
     b.onclick = f;
     return b;
   };
-  const run = (cmd: "restart3" | "restart4" | "win" | "lose", done: string) => () => {
+  const run = (cmd: "restart3" | "restart4" | "win" | "lose" | "catch", done: string) => () => {
     const r = room();
     if (!r) return say("No fight is on.");
     // The menu closes, so the fight runs on (it stands still while the menu is open).
@@ -217,6 +217,7 @@ export function initFightDebug(fight: () => FightRoom | null) {
     act("Restart run 4", run("restart4", "Run 4 again, with these numbers.")),
     act("Win now", run("win", "Its death plays, then the card.")),
     act("Lose now", run("lose", "The card for another try.")),
+    act("Get caught (run 4)", run("catch", "Caught: her save the first time, the loss the second.")),
     act("Reload with these", () => location.assign(linkNow(start()))),
   );
 

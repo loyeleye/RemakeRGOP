@@ -91,6 +91,15 @@ export const FIGHT_LOOK = {
    * 1.6 s at their own speed, against 1.8 s down).
    */
   death: { flash: "#fff4d6", hot: "#ffe2a0", heat: 1.6, shake: 0.07, motes: 56, rise: 4.2, spread: 3.2, size: 0.5, fade: [1.5, 3.1] as const, ring: [2.4, 7] as const, ringColor: "#ffd890" },
+  /**
+   * Solenne's save (Ladi, 27 Nov 10:57 PM: "an animation of her saving you and stunning the offspring
+   * that's visible and easy to tell what happened"; the beats are the gameplay thread's draft, the
+   * numbers here are the build's): a thick pale-gold beam from her to its eye, crossing in `cross`
+   * seconds and gone by `beam[1]`; a burst at its eye; its eye whited out, then shut while it is
+   * dazed; a streak on the ground where she knocked it; sparks crawling over it while it is dazed;
+   * and her dropped to a knee for `kneel` seconds (the cost). Rook goes down on his own clips (thrown).
+   */
+  save: { color: "#ffe9a8", core: 0.22, outer: 0.7, cross: 0.3, beam: [0.9, 1.4] as const, burst: [0.25, 0.85] as const, burstSize: 4.5, white: 0.5, shut: 0.12, streak: [0.3, 1.4] as const, sparks: 7, sparkSize: 0.5, sparkColor: "#cfe3ff", kneel: [0.5, 2.6] as const, kneelDrop: 0.45, kneelLean: 14 },
   thrown: { knockedSpeed: 1.5, getupSpeed: 1.7, flight: 0.6, high: 0.9, tilt: 78, rise: 0.9, stars: 3, starSize: 0.42, starSpin: 5, starColor: "#ffe38a", dust: "#b9a58a", dustSize: 2.2 },
   /**
    * The model: how wide (tiles) it is drawn; the back's stages (how many lights show, and the back's
@@ -246,6 +255,9 @@ export class OffspringFx {
   private tilted: THREE.Object3D | null = null;
   /** His own clips under way for one throw (its tick), and whether getup has started. */
   private clip: { tick: number; anim: HoldAnim; up: boolean } | null = null;
+  /** Solenne's save, while it plays (FIGHT_LOOK.save). */
+  private saveFx: { tick: number; core: THREE.Mesh; outer: THREE.Mesh; burst: THREE.Sprite; streak: THREE.Mesh; sparks: THREE.Sprite[]; eyeRest: number | null } | null = null;
+  private knelt: THREE.Object3D | null = null;
 
   constructor(glow: Glow) {
     this.glow = glow;
@@ -393,6 +405,7 @@ export class OffspringFx {
     this.stepPools(f, o, wx, wz);
     this.stepWarp(f, o.t, o.time, wx(x), wz(y), face);
     this.stepDeath(f, o.time, wx(x), wz(y));
+    this.stepSave(f, t, wx, wz, wx(x), wz(y), up);
     // Untouchable: the shell breathes while it is away, and a tap on it throws a ring off the shell.
     const SF = L.safe, sm = this.shell.material as THREE.MeshBasicMaterial, rm = this.wardRing.material as THREE.MeshBasicMaterial;
     sm.opacity = f.safe ? SF.shell * (0.7 + 0.3 * Math.sin((o.time * 2 * Math.PI) / SF.breathe)) * Math.min(1, f.safe.left / 2) : 0;
@@ -709,6 +722,98 @@ export class OffspringFx {
     for (const m of M.parts) m.visible = !hidden || m === M.eye ? m.name.startsWith("light_") ? m.visible : true : false;
   }
 
+  /** Her save, shown (FIGHT_LOOK.save): the beam, the burst at its eye, its eye shut, the streak and its daze. */
+  private stepSave(f: Fight, t: number, wx: (px: number) => number, wz: (py: number) => number, x: number, z: number, up: number) {
+    const V = FIGHT_LOOK.save, s = f.save, S = OFFSPRING.it.size;
+    const sec = s ? (f.tick - s.tick + t) * 0.6 : 99, end = s ? (s.until - s.tick + 1) * 0.6 : 0;
+    const eye = this.model?.eye ?? null;
+    if (!s || sec < 0 || sec > Math.max(end, V.beam[1], V.streak[1])) {
+      if (this.saveFx) {
+        for (const m of [this.saveFx.core, this.saveFx.outer, this.saveFx.burst, this.saveFx.streak, ...this.saveFx.sparks]) m.visible = false;
+        if (eye && this.saveFx.eyeRest !== null) eye.scale.y = this.saveFx.eyeRest;
+        this.saveFx.eyeRest = null;
+      }
+      return;
+    }
+    if (!this.saveFx) {
+      const mat = (o: number) => new THREE.MeshBasicMaterial({ color: V.color, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending });
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(V.core, V.core, 1, 12, 1, true), mat(0));
+      const outer = new THREE.Mesh(new THREE.CylinderGeometry(V.outer, V.outer, 1, 16, 1, true), mat(0));
+      const burst = this.glow(V.color, V.burstSize, 0);
+      const streak = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat(0));
+      streak.rotation.x = -Math.PI / 2;
+      const tex = starTexture(), sparks: THREE.Sprite[] = [];
+      for (let i = 0; i < V.sparks; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: V.sparkColor, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+        sp.scale.setScalar(V.sparkSize);
+        sp.renderOrder = 5;
+        sparks.push(sp);
+      }
+      for (const m of [core, outer, burst, streak, ...sparks]) (m.renderOrder = 6), this.all.add(m);
+      this.saveFx = { tick: -1, core, outer, burst, streak, sparks, eyeRest: null };
+    }
+    const X = this.saveFx;
+    X.tick = s.tick;
+    // The beam: from her to its eye, reaching it over `cross`, held, then fading.
+    const eyeAt = new THREE.Vector3();
+    if (eye) eye.getWorldPosition(eyeAt), this.all.worldToLocal(eyeAt);
+    else eyeAt.set(x, FIGHT_LOOK.eyeAt + up, z);
+    const a = new THREE.Vector3(wx(s.sol.x), 1.6, wz(s.sol.y));
+    const reach = Math.min(1, sec / V.cross), fade = sec < V.beam[0] ? 1 : Math.max(0, 1 - (sec - V.beam[0]) / (V.beam[1] - V.beam[0]));
+    const b = a.clone().lerp(eyeAt, reach), len = Math.max(0.01, a.distanceTo(b)), mid = a.clone().add(b).multiplyScalar(0.5);
+    const dir = b.clone().sub(a).normalize();
+    for (const [m, o] of [[X.core, 0.95], [X.outer, 0.35]] as const) {
+      m.visible = fade > 0;
+      m.position.copy(mid);
+      m.scale.set(1, len, 1);
+      if (len > 0.02) m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      (m.material as THREE.MeshBasicMaterial).opacity = o * fade * (0.85 + 0.15 * Math.sin(sec * 40));
+    }
+    // The burst at its eye as the beam lands.
+    const bk = (sec - V.burst[0]) / (V.burst[1] - V.burst[0]);
+    X.burst.visible = bk >= 0 && bk < 1;
+    if (X.burst.visible) X.burst.position.copy(eyeAt), X.burst.scale.setScalar(V.burstSize * (0.4 + bk)), (X.burst.material.opacity = 1 - bk);
+    // Its eye: white as the beam lands, then shut while it is dazed.
+    if (eye) {
+      if (X.eyeRest === null) X.eyeRest = eye.scale.y;
+      const em = eye.material as THREE.MeshStandardMaterial;
+      if (sec >= V.cross && sec < V.cross + V.white) (em.emissiveMap = null), em.emissive.set("#ffffff"), (em.emissiveIntensity = 4), (em.needsUpdate = true);
+      eye.scale.y = sec >= V.cross + V.white * 0.6 && sec < end ? X.eyeRest * V.shut : X.eyeRest;
+    }
+    // The streak on the ground, from where it stood to where she knocked it.
+    const sk = (sec - V.streak[0]) / (V.streak[1] - V.streak[0]);
+    const p0 = { x: wx(s.from.x), z: wz(s.from.y) }, p1 = { x: wx(s.to.x), z: wz(s.to.y) }, sl = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+    X.streak.visible = sk >= -1 && sk < 1 && sl > 0.1;
+    if (X.streak.visible) {
+      X.streak.position.set((p0.x + p1.x) / 2, 0.06, (p0.z + p1.z) / 2);
+      X.streak.rotation.set(-Math.PI / 2, 0, -Math.atan2(p1.z - p0.z, p1.x - p0.x));
+      X.streak.scale.set(sl + S * 0.6, S * 0.7, 1);
+      (X.streak.material as THREE.MeshBasicMaterial).opacity = 0.45 * (sk < 0 ? 1 : 1 - sk);
+    }
+    // Sparks crawling over it while it is dazed.
+    const dazed = sec >= V.cross && sec < end;
+    X.sparks.forEach((sp, i) => {
+      sp.visible = dazed;
+      if (!dazed) return;
+      const ang = sec * (2.2 + (i % 3) * 0.7) + (i / X.sparks.length) * Math.PI * 2, r = S * (0.3 + 0.12 * Math.sin(sec * 5 + i));
+      sp.position.set(x + Math.cos(ang) * r, up + S * 0.35 + 0.5 * Math.sin(sec * 7 + i * 1.7) + 0.6, z + Math.sin(ang) * r);
+      sp.material.opacity = 0.5 + 0.5 * Math.abs(Math.sin(sec * 11 + i));
+    });
+  }
+
+  /** Solenne pays for the save: down on a knee for a moment (FIGHT_LOOK.save.kneel). Call after the players are placed. */
+  kneelHer(f: Fight, t: number, her: THREE.Object3D | null) {
+    const V = FIGHT_LOOK.save, s = f.save, sec = s ? (f.tick - s.tick + Math.max(0, Math.min(1, t))) * 0.6 : 99;
+    const k = sec < V.kneel[0] || sec > V.kneel[1] ? 0 : Math.min(1, (sec - V.kneel[0]) / 0.2, (V.kneel[1] - sec) / 0.4);
+    if (!her || k <= 0) {
+      if (this.knelt) (this.knelt.rotation.x = 0), (this.knelt = null);
+      return;
+    }
+    this.knelt = her;
+    her.position.y -= V.kneelDrop * k;
+    her.rotation.x = ((V.kneelLean * Math.PI) / 180) * k;
+  }
+
   /** Its death: the light tears out of it and it comes apart (FIGHT_LOOK.death). */
   private stepDeath(f: Fight, time: number, x: number, z: number) {
     const D = FIGHT_LOOK.death, S = OFFSPRING.it.size;
@@ -804,11 +909,11 @@ export class OffspringFx {
     const a = { x: wx(th.from.x), z: wz(th.from.y) }, b = { x: wx(th.to.x), z: wz(th.to.y) };
     const k = Math.min(1, e / T.flight), ease = 1 - (1 - k) * (1 - k);
     let dx = b.x - a.x, dz = b.z - a.z;
-    const len = Math.hypot(dx, dz) || 1;
+    const len = Math.hypot(dx, dz) || 1, high = T.high * Math.min(1, len / 1.5);
     (dx /= len), (dz /= len);
     // In the air along the arc, then where he fell (a small bounce as he hits).
     const bounce = k >= 1 ? Math.max(0, Math.sin(Math.min(1, (e - T.flight) / 0.25) * Math.PI)) * 0.08 : 0;
-    R.position.set(a.x + (b.x - a.x) * ease, Math.sin(Math.PI * k) * T.high + bounce, a.z + (b.z - a.z) * ease);
+    R.position.set(a.x + (b.x - a.x) * ease, Math.sin(Math.PI * k) * high + bounce, a.z + (b.z - a.z) * ease);
     let up: number, head: THREE.Vector3;
     if (A && o.rig) {
       // His own clips: knocked as he is thrown, held flat, then getup timed to end as his ticks down do. He faces

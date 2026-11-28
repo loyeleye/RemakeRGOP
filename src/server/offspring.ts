@@ -56,6 +56,8 @@ export class FightRoom {
   private down = 0;
   /** His last throw (a knockdown), for the view's flight. */
   private thrown: { from: { x: number; y: number }; to: { x: number; y: number }; tick: number; ticks: number } | null = null;
+  /** Her save, for the view (Fight.save). */
+  private saved: NonNullable<Fight["save"]> | null = null;
   private pulling = 0;
   private hurtUntil = -1;
   private eye = 0;
@@ -154,13 +156,15 @@ export class FightRoom {
    * its catches do nothing.
    */
   dbg = { paused: false, see: false, safe: false };
-  debug(cmd: "restart3" | "restart4" | "win" | "lose") {
+  debug(cmd: "restart3" | "restart4" | "win" | "lose" | "catch") {
     if (cmd === "restart3" || cmd === "restart4") {
       this.at4 = null;
       return this.begin(cmd === "restart4" ? 4 : 3);
     }
     if (this.phase !== "playing" || this.dying) return;
     if (cmd === "win") return this.win();
+    // A catch on the spot, to see her save (the first) or the loss (the second).
+    if (cmd === "catch") return void (this.run === 4 && this.caught(), this.broadcastTick());
     this.lose();
   }
 
@@ -199,6 +203,7 @@ export class FightRoom {
     this.catches = 0;
     this.down = 0;
     this.thrown = null;
+    this.saved = null;
     this.dying = null;
     this.pulling = 0;
     this.wound = { open: false, timer: 0 };
@@ -371,7 +376,7 @@ export class FightRoom {
     const D = OFFSPRING.dark, g = this.game, it = this.it, c = g.board.center, half = OFFSPRING.it.size / 2;
     if (!D.on || this.run !== 4) return true;
     if (eyeToo && (this.eye > 0 || this.gaze > 0)) return true;
-    if (it.held || this.her.doing === "windup" || g.tick - this.ateAt < D.ateTicks || this.part === "kill") return true;
+    if (it.held || this.her.doing === "windup" || g.tick - this.ateAt < D.ateTicks || this.part === "kill" || this.saveFlood()) return true;
     const near = (p: { x: number; y: number }, r: number) => Math.hypot(p.x - it.x, p.y - it.y) <= r + half;
     const me = this.spot(YOU);
     if (near(me, this.shard.shown ? D.shard : D.rook)) return true;
@@ -379,6 +384,11 @@ export class FightRoom {
     if (near(this.spot(SOL_ID), D.her + D.perHer * this.her.light) || near(this.spot(FEN_ID), D.fen)) return true;
     for (const w of g.wisps) if (!g.away.has(w.id) && !this.banked.has(w.id) && this.lit.has(w.id) && near(w.pos, D.wisp)) return true;
     return false;
+  }
+
+  /** Her save lifts the dark for a few ticks (OFFSPRING.her.save.flood). */
+  private saveFlood() {
+    return !!this.saved && this.game.tick - this.saved.tick < OFFSPRING.her.save.flood;
   }
 
   /** The hunt: its body is at the fire (within its drinking distance), and not held. */
@@ -1047,8 +1057,14 @@ export class FightRoom {
     this.her.doing = "rest";
     this.her.left = 0;
     this.her.flash = { kind: "save", tick: g.tick };
+    const from = { x: this.it.x, y: this.it.y }, sol = this.spot(SOL_ID);
     this.knockBack(me, H.saveKnock);
     this.it.dazed = g.tick + H.saveDaze;
+    this.saved = { tick: g.tick, from, to: { x: this.it.x, y: this.it.y }, sol: { x: sol.x, y: sol.y }, until: this.it.dazed };
+    // He goes down where he stands, falling back away from it.
+    const a = Math.atan2(from.y - me.y, from.x - me.x);
+    this.down = H.save.down;
+    this.thrown = { from: { x: me.x + Math.cos(a) * 0.4, y: me.y + Math.sin(a) * 0.4 }, to: { x: me.x, y: me.y }, tick: g.tick, ticks: H.save.down };
     const text = O.saved[Math.floor(this.rng.next() * O.saved.length)]!;
     this.lines.push({ who: SOLENNE, text, player: SOL_ID });
     this.captions.push({ who: SOLENNE, text, until: g.tick + O.captionTicks });
@@ -1130,6 +1146,7 @@ export class FightRoom {
       catches: this.catches,
       down: this.down,
       ...(this.thrown && g.tick <= this.thrown.tick + this.thrown.ticks + 1 ? { thrown: this.thrown } : {}),
+      ...(this.saved && g.tick <= this.saved.until + 1 ? { save: this.saved } : {}),
       pulling: this.pulling,
       // Its eye turning (left of of), then its gaze holding (gaze of hold, the eye fully turned), seen at any distance.
       ...(this.run === 4 && O.hunt.on && O.eye.on && (this.eye > 0 || this.gaze > 0) ? { eye: { left: this.eye, of: O.eye.ticks, cone: O.eye.cone, r: O.eye.range + O.eye.slack, ...(this.eye === 0 ? { gaze: this.gaze, hold: O.eye.hold } : {}) } } : {}),
@@ -1158,7 +1175,7 @@ export class FightRoom {
     ];
     if (this.banked.size) pools.push({ k: "fire", x: c.x, y: c.y, r: D.brazier + D.perBanked * this.banked.size + half });
     for (const w of g.wisps) if (!g.away.has(w.id) && !this.banked.has(w.id) && this.lit.has(w.id)) pools.push({ k: "wisp", x: w.pos.x, y: w.pos.y, r: D.wisp + half });
-    const flood = it.held || this.her.doing === "windup" || this.part === "kill";
+    const flood = it.held || this.her.doing === "windup" || this.part === "kill" || this.saveFlood();
     return { pools, hear: { d: Math.max(0, Math.hypot(it.x - me.x, it.y - me.y) - half), dx: it.x - me.x, dy: it.y - me.y }, ...(flood ? { flood: true as const } : {}) };
   }
 
@@ -1201,6 +1218,8 @@ export class FightRoom {
       { label: this.run === 3 ? "Its light" : "Its light / the brazier", n: f.it.inside, of: f.wisps, tone: "us", tug: this.run === 3 ? { mine: f.it.inside, loose: 0, bank: 0 } : { mine: f.it.inside, loose, bank: f.banked, fen: f.fen.light } },
     ];
     if (f.her.doing !== "rest") strip.push({ label: f.her.doing === "hold" ? "Her hold" : f.safe ? "Solenne: waiting" : "Solenne: winding up", n: 0, of: 0, tone: "her", bar: f.her.of ? Math.max(0, f.her.left / f.her.of) : 0, steady: true });
+    // Her one save: lit until it is spent (the gameplay thread's draft of the save, 27 Nov).
+    if (this.run === 4) strip.push({ label: f.catches ? "Her save: spent" : "Her save", n: f.catches ? 0 : 1, of: 1, tone: "her" });
     if (f.shard) strip.push({ label: f.shard.shown ? "Shard: uncovered" : f.shard.glow > 0 ? "Shard: dimming" : "Shard: hidden", n: 0, of: 0, tone: "chalk", bar: f.shard.glow / f.shard.of, steady: true });
     // In run 4 the boy's light matters too: a marker on the bar from the brazier's end, and a ring at his feet.
     const feet: NonNullable<NonNullable<StoryView["opt"]>["feet"]> = [{ x: f.her.x, y: f.her.y, f: f.her.light / f.her.full, mark: (this.run === 3 ? O.her.shove : f.her.full) / f.her.full, tone: "her", ...(f.teach?.hint === "cover" ? { flash: true } : {}), ...(f.safe && f.her.doing !== "hold" ? { paused: f.safe.left / f.safe.of } : {}) }];

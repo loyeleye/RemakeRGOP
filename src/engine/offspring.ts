@@ -36,8 +36,10 @@ export const OFFSPRING = {
      * How big it is, in tiles across (Ladi, 27 Nov 1:22 PM: "at least 3x3 tiles wide. Maybe even
      * 4x4"). It is square, the eye on its front edge. Every distance below is from its front edge
      * (or its back edge, for behind it), so changing this one number is enough to try 4.
+     * 5 is Ladi's (27 Nov, 10:57 PM, played at ?fight=it.size:5: "5 feels good. It makes it
+     * memorable enough that it isn't something you want to go against often"); it was 3.
      */
-    size: 3,
+    size: 5,
     /** Speed in tiles a tick: `slow` with nothing inside it, rising to `speed` with all ten (faster the more it has eaten). */
     slow: 0.6,
     speed: 1.5,
@@ -114,8 +116,18 @@ export const OFFSPRING = {
     /** The save: what she has left after knocking it off him (a quarter of full), and how far it goes. */
     afterSave: 2,
     saveKnock: 3,
-    /** After the save it stands dazed this many ticks before it looks for a light again. */
-    saveDaze: 3,
+    /**
+     * After the save it stands dazed this many ticks before it looks for a light again: 5 (was 3), so
+     * he has about 2 ticks to move once the save has played (the gameplay thread's number, 27 Nov).
+     */
+    saveDaze: 5,
+    /**
+     * The save, shown (Ladi, 27 Nov 10:57 PM: "an animation of her saving you and stunning the
+     * offspring that's visible and easy to tell what happened"; the beats are the gameplay thread's
+     * draft): he goes down `down` ticks (his knocked and getup clips), and for `flood` ticks the dark
+     * lifts so she, her beam and it can be seen wherever they are. The look is FIGHT_LOOK.save.
+     */
+    save: { down: 2, flood: 3 },
   },
   /**
    * Random jumps (Ladi, 27 Nov 2:52 PM: "random jumps where he jumps to a random spot on the map if he

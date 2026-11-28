@@ -166,6 +166,8 @@ class Sfx {
     // Her blast or flare hits it; held, its trembling for as long as she holds it.
     const fl = f.her.flash;
     if (fl && (fl.kind === "blast" || fl.kind === "flare") && fl.tick !== p.her.flash?.tick) this.play("stun", at);
+    // Her save: the stun as her beam lands on its eye, and its cry as it is thrown back.
+    if (fl && fl.kind === "save" && fl.tick !== p.her.flash?.tick) (this.play("stun", at, 0.25), this.play("hurt", at, 0.35));
     if (it.held && !this.held) this.held = this.play("held", at, 0, true);
     if (!it.held && this.held) this.held = this.stop(this.held, 0.15);
     // A hop or leap (not the jump to safety): take-off, and the thud as it lands.

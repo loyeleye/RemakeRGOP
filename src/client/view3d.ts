@@ -4490,6 +4490,8 @@ export class World {
       const b2 = st.shrine.board;
       const rig = this.players.get(st.me);
       this.fightFx.throwRook({ f: st.fight, t: st.t, time, half: { w: b2.width / 2, h: b2.height / 2 }, rook: rig?.root ?? null, rig: rig ? { body: rig.body ?? null, anim: (rig.body?.userData.anim as CastAnim | undefined) ?? null, face: (a) => (rig.facing = a) } : null });
+      // Her save costs her: down on a knee for a moment (Solenne is player 2 in the fight).
+      this.fightFx.kneelHer(st.fight, st.t, this.players.get(2)?.root ?? null);
     }
 
     // My reach square and walk marker.

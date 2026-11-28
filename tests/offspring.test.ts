@@ -43,6 +43,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     OFFSPRING.it.daze1 = 0;
     OFFSPRING.her.regen4 = 0.2;
     OFFSPRING.it.eatBanked4 = 4;
+    OFFSPRING.it.size = 5;
   });
   it("the yard: open ground round a dead brazier, everyone and the same ten wisps on open ground", () => {
     const b = shrineById(OFFSPRING.shrine).board, c = b.center;
@@ -186,6 +187,13 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
     expect(p.x.her.light).toBe(OFFSPRING.her.afterSave);
     expect(OFFSPRING.saved).toContain(p.lines.at(-1)?.text);
     expect(p.lines.at(-1)?.who).toBe("Solenne");
+    // The save, shown (Ladi, 27 Nov 10:57 PM): he goes down, it is knocked back and dazed, the dark lifts, her save is spent.
+    const v = p.room.storyView(), f = v.fight!, H = OFFSPRING.her;
+    expect(f.save).toMatchObject({ tick: f.tick, until: f.tick + H.saveDaze });
+    expect(Math.hypot(f.save!.to.x - f.save!.from.x, f.save!.to.y - f.save!.from.y)).toBeGreaterThan(1);
+    expect(p.room.state.down).toBe(H.save.down);
+    expect(f.thrown).toMatchObject({ tick: f.tick, ticks: H.save.down });
+    expect(v.opt?.strip.some((c) => c.label === "Her save: spent" && c.n === 0)).toBe(true);
     for (let i = 0; i < 30 && p.room.state.phase === "playing"; i++) p.tick();
     expect(p.room.state.end?.summary).toBe(OFFSPRING.card.again4);
     p.send({ t: "lobby" });
@@ -424,6 +432,8 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   });
 
   it("waiting just behind where it lands is safe: the landing knocks down only under its body", () => {
+    // The landing's geometry as it was set up, at its old size.
+    OFFSPRING.it.size = 3;
     OFFSPRING.hunt.on = 0;
     // The landing, not the gap after round 1: keep it standing through the gap, as the old daze did.
     OFFSPRING.it.daze1 = 15;
@@ -444,6 +454,8 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
   });
 
   it("out of her hold it jumps now and then to a random spot or onto a lit wisp, never near Rook, and not while it eats at the brazier", () => {
+    // At its old size: at 5 the yard has few spots clear of him to land on in 120 ticks.
+    OFFSPRING.it.size = 3;
     const p = play(4);
     p.x.teach.pulled = true;
     p.x.her.left = 0;
