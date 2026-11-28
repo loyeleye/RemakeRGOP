@@ -193,9 +193,9 @@ export class Camera {
 
 type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
-const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell", "sefa", "kes", "maudie", "mabry", "orrin"] as const;
+const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell", "sefa", "kes", "maudie", "mabry", "orrin", "solenne"] as const;
 /** Each character's height against Rook's (models come in at one height). Lumi is nine. */
-export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95, ferryman: 1.05, tilda: 0.88 };
+export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95, ferryman: 1.05, tilda: 0.88, solenne: 1.04 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};
@@ -4490,8 +4490,9 @@ export class World {
       const b2 = st.shrine.board;
       const rig = this.players.get(st.me);
       this.fightFx.throwRook({ f: st.fight, t: st.t, time, half: { w: b2.width / 2, h: b2.height / 2 }, rook: rig?.root ?? null, rig: rig ? { body: rig.body ?? null, anim: (rig.body?.userData.anim as CastAnim | undefined) ?? null, face: (a) => (rig.facing = a) } : null });
-      // Her save costs her: down on a knee for a moment (Solenne is player 2 in the fight).
-      this.fightFx.kneelHer(st.fight, st.t, this.players.get(2)?.root ?? null);
+      // Her save: her own clip, facing it (Solenne is player 2 in the fight).
+      const her = this.players.get(2);
+      this.fightFx.herSave({ f: st.fight, t: st.t, half: { w: b2.width / 2, h: b2.height / 2 }, her: her?.root ?? null, rig: her ? { body: her.body ?? null, anim: (her.body?.userData.anim as CastAnim | undefined) ?? null, face: (a) => (her.facing = a) } : null });
     }
 
     // My reach square and walk marker.

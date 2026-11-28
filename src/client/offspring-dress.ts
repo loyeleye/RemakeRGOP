@@ -94,12 +94,16 @@ export const FIGHT_LOOK = {
   /**
    * Solenne's save (Ladi, 27 Nov 10:57 PM: "an animation of her saving you and stunning the offspring
    * that's visible and easy to tell what happened"; the beats are the gameplay thread's draft, the
-   * numbers here are the build's): a thick pale-gold beam from her to its eye, crossing in `cross`
-   * seconds and gone by `beam[1]`; a burst at its eye; its eye whited out, then shut while it is
-   * dazed; a streak on the ground where she knocked it; sparks crawling over it while it is dazed;
-   * and her dropped to a knee for `kneel` seconds (the cost). Rook goes down on his own clips (thrown).
+   * numbers here are the build's, timed to the cast thread's clips, 28 Nov): a thick pale-gold beam
+   * from her right hand to its eye, leaving at `start` and crossing in `cross` seconds, gone by
+   * `beam[1]`; a burst at its eye as it lands (`hit`); its eye whited out for `white`, then shut
+   * (its own lid, in its recoil and stunshut clips; scaled flat without them); it held where it
+   * stood until the beam lands, then thrown back over `slide`; a streak on the ground; sparks
+   * crawling over it while it is dazed. Solenne plays her save clip (arm up, the jolt, down on a
+   * knee), holds the knee, and rises at `riseAt`; without the clips she leans down a little for
+   * `kneel`. Rook goes down on his own clips (thrown).
    */
-  save: { color: "#ffe9a8", core: 0.22, outer: 0.7, cross: 0.3, beam: [0.9, 1.4] as const, burst: [0.25, 0.85] as const, burstSize: 4.5, white: 0.5, shut: 0.12, streak: [0.3, 1.4] as const, sparks: 7, sparkSize: 0.5, sparkColor: "#cfe3ff", kneel: [0.5, 2.6] as const, kneelDrop: 0.45, kneelLean: 14 },
+  save: { color: "#ffe9a8", core: 0.22, outer: 0.7, start: 0.2, cross: 0.15, hit: 0.35, beam: [1.1, 1.4] as const, burst: [0.35, 0.95] as const, burstSize: 4.5, white: 0.2, shut: 0.12, slide: [0.35, 0.7] as const, recoil: 1, streak: [0.35, 1.5] as const, sparks: 7, sparkSize: 0.5, sparkColor: "#cfe3ff", riseAt: 3, rise: 1, kneel: [0.5, 2.6] as const, kneelDrop: 0.45, kneelLean: 14 },
   thrown: { knockedSpeed: 1.5, getupSpeed: 1.7, flight: 0.6, high: 0.9, tilt: 78, rise: 0.9, stars: 3, starSize: 0.42, starSpin: 5, starColor: "#ffe38a", dust: "#b9a58a", dustSize: 2.2 },
   /**
    * The model: how wide (tiles) it is drawn; the back's stages (how many lights show, and the back's
@@ -258,6 +262,11 @@ export class OffspringFx {
   /** Solenne's save, while it plays (FIGHT_LOOK.save). */
   private saveFx: { tick: number; core: THREE.Mesh; outer: THREE.Mesh; burst: THREE.Sprite; streak: THREE.Mesh; sparks: THREE.Sprite[]; eyeRest: number | null } | null = null;
   private knelt: THREE.Object3D | null = null;
+  /** Her right hand, where the save's beam leaves from (her model's hand_R), and her clip under way. */
+  private herHand: THREE.Object3D | null = null;
+  private herClip: { tick: number; anim: HoldAnim; rose: boolean; done: boolean } | null = null;
+  /** Seconds into her save (99 when none), worked out each frame for stepModel. */
+  private saveSec = 99;
 
   constructor(glow: Glow) {
     this.glow = glow;
@@ -370,6 +379,14 @@ export class OffspringFx {
       x = lp.from.x + (lp.to.x - lp.from.x) * k;
       y = lp.from.y + (lp.to.y - lp.from.y) * k;
       up = Math.sin(Math.PI * k) * OFFSPRING.cycles.jump;
+    }
+    // Her save: it stands where it was caught until her beam lands, then is thrown back (FIGHT_LOOK.save.slide).
+    const sv = f.save, SV = L.save;
+    this.saveSec = sv ? (f.tick - sv.tick + t) * 0.6 : 99;
+    if (sv && this.saveSec >= 0 && this.saveSec < SV.slide[1]) {
+      const k = Math.max(0, Math.min(1, (this.saveSec - SV.slide[0]) / (SV.slide[1] - SV.slide[0]))), e = 1 - (1 - k) * (1 - k);
+      x = sv.from.x + (sv.to.x - sv.from.x) * e;
+      y = sv.from.y + (sv.to.y - sv.from.y) * e;
     }
     const wx = (px: number) => px + 0.5 - o.half.w, wz = (py: number) => py + 0.5 - o.half.h;
     this.it.position.set(wx(x), up, wz(y));
@@ -653,7 +670,7 @@ export class OffspringFx {
     lights.sort((a, b) => a.m.name.localeCompare(b.m.name));
     const mixer = new THREE.AnimationMixer(root), acts = new Map<string, THREE.AnimationAction>();
     for (const c of clips) acts.set(c.name, mixer.clipAction(c));
-    for (const n of ["stagger", "leap", "die"]) {
+    for (const n of ["stagger", "leap", "die", "recoil"]) {
       const a = acts.get(n);
       if (a) (a.setLoop(THREE.LoopOnce, 1), (a.clampWhenFinished = true));
     }
@@ -687,7 +704,10 @@ export class OffspringFx {
       if (a) a.timeScale = 1.8 / Math.max(0.6, lp.ticks * 0.6);
     }
     if (M.once && o.time >= M.once.until) M.once = null;
-    const want = f.dying && M.acts.has("die") ? "die" : M.once?.name ?? (it.held ? "stunned" : it.eating ? "feed" : moving && it.crawl ? "crawl" : moving || up > 0.05 ? "walk" : "idle");
+    // Her save: its recoil as her beam lands, then stunshut for as long as it is dazed.
+    const SV = FIGHT_LOOK.save, ss = this.saveSec - SV.hit, dazed = !!f.save && ss >= 0 && this.saveSec < (f.save.until - f.save.tick + 1) * 0.6;
+    const saved = dazed && M.acts.has("recoil") ? (ss < SV.recoil ? "recoil" : M.acts.has("stunshut") ? "stunshut" : "stunned") : null;
+    const want = f.dying && M.acts.has("die") ? "die" : saved ?? M.once?.name ?? (it.held ? "stunned" : it.eating ? "feed" : moving && it.crawl ? "crawl" : moving || up > 0.05 ? "walk" : "idle");
     if (want !== M.now && M.acts.has(want)) {
       const from = M.acts.get(M.now), to = M.acts.get(want)!;
       to.reset().play();
@@ -731,6 +751,8 @@ export class OffspringFx {
       if (this.saveFx) {
         for (const m of [this.saveFx.core, this.saveFx.outer, this.saveFx.burst, this.saveFx.streak, ...this.saveFx.sparks]) m.visible = false;
         if (eye && this.saveFx.eyeRest !== null) eye.scale.y = this.saveFx.eyeRest;
+        const em = eye?.material as THREE.MeshStandardMaterial | undefined;
+        if (em?.userData.color !== undefined) em.color.setHex(em.userData.color as number);
         this.saveFx.eyeRest = null;
       }
       return;
@@ -759,7 +781,8 @@ export class OffspringFx {
     if (eye) eye.getWorldPosition(eyeAt), this.all.worldToLocal(eyeAt);
     else eyeAt.set(x, FIGHT_LOOK.eyeAt + up, z);
     const a = new THREE.Vector3(wx(s.sol.x), 1.6, wz(s.sol.y));
-    const reach = Math.min(1, sec / V.cross), fade = sec < V.beam[0] ? 1 : Math.max(0, 1 - (sec - V.beam[0]) / (V.beam[1] - V.beam[0]));
+    if (this.herHand) this.herHand.getWorldPosition(a), this.all.worldToLocal(a);
+    const reach = Math.max(0, Math.min(1, (sec - V.start) / V.cross)), fade = sec < V.start ? 0 : sec < V.beam[0] ? 1 : Math.max(0, 1 - (sec - V.beam[0]) / (V.beam[1] - V.beam[0]));
     const b = a.clone().lerp(eyeAt, reach), len = Math.max(0.01, a.distanceTo(b)), mid = a.clone().add(b).multiplyScalar(0.5);
     const dir = b.clone().sub(a).normalize();
     for (const [m, o] of [[X.core, 0.95], [X.outer, 0.35]] as const) {
@@ -777,8 +800,12 @@ export class OffspringFx {
     if (eye) {
       if (X.eyeRest === null) X.eyeRest = eye.scale.y;
       const em = eye.material as THREE.MeshStandardMaterial;
-      if (sec >= V.cross && sec < V.cross + V.white) (em.emissiveMap = null), em.emissive.set("#ffffff"), (em.emissiveIntensity = 4), (em.needsUpdate = true);
-      eye.scale.y = sec >= V.cross + V.white * 0.6 && sec < end ? X.eyeRest * V.shut : X.eyeRest;
+      em.userData.color ??= em.color.getHex();
+      if (sec >= V.hit && sec < V.hit + V.white) (em.emissiveMap = null), em.color.set("#ffffff"), em.emissive.set("#ffffff"), (em.emissiveIntensity = 4), (em.needsUpdate = true);
+      else em.color.setHex(em.userData.color as number);
+      // Its own lid shuts it in the recoil clip; without it, the eye is flattened shut.
+      const lid = !!this.model?.acts.has("recoil");
+      eye.scale.y = !lid && sec >= V.hit + V.white && sec < end ? X.eyeRest * V.shut : X.eyeRest;
     }
     // The streak on the ground, from where it stood to where she knocked it.
     const sk = (sec - V.streak[0]) / (V.streak[1] - V.streak[0]);
@@ -791,7 +818,7 @@ export class OffspringFx {
       (X.streak.material as THREE.MeshBasicMaterial).opacity = 0.45 * (sk < 0 ? 1 : 1 - sk);
     }
     // Sparks crawling over it while it is dazed.
-    const dazed = sec >= V.cross && sec < end;
+    const dazed = sec >= V.hit && sec < end;
     X.sparks.forEach((sp, i) => {
       sp.visible = dazed;
       if (!dazed) return;
@@ -801,8 +828,33 @@ export class OffspringFx {
     });
   }
 
-  /** Solenne pays for the save: down on a knee for a moment (FIGHT_LOOK.save.kneel). Call after the players are placed. */
-  kneelHer(f: Fight, t: number, her: THREE.Object3D | null) {
+  /**
+   * Solenne's part in the save: her save clip, turned to face it (then the knee held, then rise), or,
+   * without the clips, a lean down for a moment. Call after the players are placed.
+   */
+  herSave(o: { f: Fight; t: number; half: { w: number; h: number }; her: THREE.Object3D | null; rig: { body: THREE.Object3D | null; anim: HoldAnim | null; face: (a: number) => void } | null }) {
+    const V = FIGHT_LOOK.save, s = o.f.save, sec = s ? (o.f.tick - s.tick + Math.max(0, Math.min(1, o.t))) * 0.6 : 99;
+    this.herHand = o.rig?.body?.getObjectByName("hand_R") ?? null;
+    const A = o.rig?.anim && o.rig.anim.has("save") ? o.rig.anim : null;
+    if (A && o.rig && s && sec >= 0 && sec < V.riseAt + V.rise) {
+      if (this.herClip?.tick !== s.tick) {
+        this.herClip = { tick: s.tick, anim: A, rose: false, done: false };
+        A.hold("save", 1, 0.1);
+      }
+      // Facing it where it was caught (the clip points straight ahead).
+      const face = Math.atan2(s.from.x - s.sol.x, s.from.y - s.sol.y);
+      o.rig.face(face);
+      if (o.rig.body) o.rig.body.rotation.y = face;
+      if (!this.herClip.rose && sec >= V.riseAt) (this.herClip.rose = true), A.hold(A.has("rise") ? "rise" : "idle", 1, 0);
+      return;
+    }
+    if (this.herClip && !this.herClip.done) (this.herClip.done = true), this.herClip.anim.release();
+    if (A) return;
+    this.kneelHer(o.f, o.t, o.her);
+  }
+
+  /** Without her clips: down a little for a moment (FIGHT_LOOK.save.kneel). */
+  private kneelHer(f: Fight, t: number, her: THREE.Object3D | null) {
     const V = FIGHT_LOOK.save, s = f.save, sec = s ? (f.tick - s.tick + Math.max(0, Math.min(1, t))) * 0.6 : 99;
     const k = sec < V.kneel[0] || sec > V.kneel[1] ? 0 : Math.min(1, (sec - V.kneel[0]) / 0.2, (V.kneel[1] - sec) / 0.4);
     if (!her || k <= 0) {

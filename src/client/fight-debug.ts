@@ -284,5 +284,7 @@ export function initFightDebug(fight: () => FightRoom | null) {
       else if (!box.hidden) r.dbg.paused = pauseOnOpen;
     }
     btn.hidden = !r || !box.hidden;
+    // For test scripts (prototype only): the fight room on the page.
+    (window as { lfFightRoom?: FightRoom | null }).lfFightRoom = r;
   }, 400);
 }
