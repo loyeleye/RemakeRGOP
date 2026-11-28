@@ -1348,13 +1348,33 @@ class CastAnim {
   has(move: string) {
     return this.actions.has(move);
   }
+  /** A one-shot held on its last frame (Rook's knocked, getup), over whatever is playing, until release(); `fade` 0 cuts straight to it. */
+  hold(move: string, timeScale = 1, fade = 0.1) {
+    const next = this.actions.get(move);
+    if (!next) return false;
+    const prev = this.held ? this.actions.get(this.held) : this.cur ? this.actions.get(this.cur) : undefined;
+    next.setLoop(THREE.LoopOnce, 1);
+    next.clampWhenFinished = true;
+    next.timeScale = timeScale;
+    next.reset().play();
+    if (prev && prev !== next) fade > 0 ? next.crossFadeFrom(prev, fade, false) : prev.stop();
+    this.held = move;
+    return true;
+  }
+  /** Back from a held one-shot: the next set() crossfades out of it. */
+  release() {
+    if (!this.held) return;
+    this.cur = this.held as CastMove;
+    this.held = null;
+  }
+  private held: string | null = null;
   /** How far into this clip she is, in seconds; null when it isn't the one playing. */
   at(move: string) {
     return this.cur === move && !this.casting ? (this.actions.get(move)?.time ?? null) : null;
   }
   /** Ask for a move; a push already playing finishes first. */
   set(move: CastMove) {
-    if (this.casting) return;
+    if (this.casting || this.held) return;
     if (move === this.cur || (this.cur === "push" && move === "idle")) return;
     const next = this.actions.get(move) ?? this.actions.get("idle");
     if (!next) return;
@@ -4468,7 +4488,8 @@ export class World {
     // The offspring fight: Rook thrown by it (offspring-dress.ts), over where his figure was just put.
     if (st.fight && this.fightFx) {
       const b2 = st.shrine.board;
-      this.fightFx.throwRook({ f: st.fight, t: st.t, time, half: { w: b2.width / 2, h: b2.height / 2 }, rook: this.players.get(st.me)?.root ?? null });
+      const rig = this.players.get(st.me);
+      this.fightFx.throwRook({ f: st.fight, t: st.t, time, half: { w: b2.width / 2, h: b2.height / 2 }, rook: rig?.root ?? null, rig: rig ? { body: rig.body ?? null, anim: (rig.body?.userData.anim as CastAnim | undefined) ?? null, face: (a) => (rig.facing = a) } : null });
     }
 
     // My reach square and walk marker.

@@ -86,9 +86,12 @@ export const FIGHT_LOOK = {
    * seconds from the last press: a flash, then it shakes and burns white from inside (`hot`), its light tears out
    * of it and spirals up (`motes`, `rise`, `spread`), it comes apart and fades (`fade`: from, to), and a ring of
    * light runs out over the ground (`ring`: at, speed). The gameplay thread's starting picks.
+   * With his own clips (the cast thread's knocked and getup, 28 Nov, Ladi: "Let's add knocked and get up"), they
+   * play instead of the tip-over, sped up by `knockedSpeed` and `getupSpeed` to fit his ticks down (1.1 s and
+   * 1.6 s at their own speed, against 1.8 s down).
    */
   death: { flash: "#fff4d6", hot: "#ffe2a0", heat: 1.6, shake: 0.07, motes: 56, rise: 4.2, spread: 3.2, size: 0.5, fade: [1.5, 3.1] as const, ring: [2.4, 7] as const, ringColor: "#ffd890" },
-  thrown: { flight: 0.6, high: 0.9, tilt: 78, rise: 0.9, stars: 3, starSize: 0.42, starSpin: 5, starColor: "#ffe38a", dust: "#b9a58a", dustSize: 2.2 },
+  thrown: { knockedSpeed: 1.5, getupSpeed: 1.7, flight: 0.6, high: 0.9, tilt: 78, rise: 0.9, stars: 3, starSize: 0.42, starSpin: 5, starColor: "#ffe38a", dust: "#b9a58a", dustSize: 2.2 },
   /**
    * The model: how wide (tiles) it is drawn; the back's stages (how many lights show, and the back's
    * glow, at full, more than half, some, and empty: Ladi's four); a faint warm rim on its body and
@@ -158,6 +161,8 @@ function poolTexture() {
 }
 
 type Glow = (color: string, size: number, opacity?: number) => THREE.Sprite;
+/** What throwRook needs of a cast member's animation (view3d's CastAnim). */
+type HoldAnim = { has(move: string): boolean; hold(move: string, timeScale?: number, fade?: number): boolean; release(): void };
 const TMP_Q = new THREE.Quaternion(), Y_AXIS = new THREE.Vector3(0, 1, 0);
 /** A small four-pointed star, for his daze. */
 function starTexture() {
@@ -239,6 +244,8 @@ export class OffspringFx {
   /** Its death under way: when it began (s), the light leaving it, the flash, the ring, and its own materials (cloned, so fading them fades only this one). */
   private death: { at: number; motes: { s: THREE.Sprite; a: number; up: number; out: number; t0: number }[]; flash: THREE.Sprite; ring: THREE.Mesh; mats: THREE.MeshStandardMaterial[] } | null = null;
   private tilted: THREE.Object3D | null = null;
+  /** His own clips under way for one throw (its tick), and whether getup has started. */
+  private clip: { tick: number; anim: HoldAnim; up: boolean } | null = null;
 
   constructor(glow: Glow) {
     this.glow = glow;
@@ -770,11 +777,12 @@ export class OffspringFx {
    * After the figures are placed: Rook thrown, flown along an arc from his old spot to his new one and tipped
    * over backwards, lying there dazed (stars round his head) while he is down, then back up.
    */
-  throwRook(o: { f: Fight; t: number; time: number; half: { w: number; h: number }; rook: THREE.Object3D | null }) {
-    const T = FIGHT_LOOK.thrown, th = o.f.thrown, R = o.rook;
+  throwRook(o: { f: Fight; t: number; time: number; half: { w: number; h: number }; rook: THREE.Object3D | null; rig?: { body: THREE.Object3D | null; anim: HoldAnim | null; face: (a: number) => void } | null }) {
+    const T = FIGHT_LOOK.thrown, th = o.f.thrown, R = o.rook, A = o.rig?.anim && o.rig.anim.has("knocked") && o.rig.anim.has("getup") ? o.rig.anim : null;
     const e = th ? o.f.tick - th.tick + Math.max(0, Math.min(1, o.t)) : 99;
     const on = !!th && !!R && e >= 0 && e < th.ticks + 0.05;
     if (!on) {
+      if (this.clip) (this.clip.anim.release(), (this.clip = null));
       if (this.tilted) (this.tilted.quaternion.identity(), (this.tilted = null));
       if (this.daze) (this.daze.stars.forEach((s) => (s.visible = false)), (this.daze.dust.visible = false));
       return;
@@ -801,13 +809,27 @@ export class OffspringFx {
     // In the air along the arc, then where he fell (a small bounce as he hits).
     const bounce = k >= 1 ? Math.max(0, Math.sin(Math.min(1, (e - T.flight) / 0.25) * Math.PI)) * 0.08 : 0;
     R.position.set(a.x + (b.x - a.x) * ease, Math.sin(Math.PI * k) * T.high + bounce, a.z + (b.z - a.z) * ease);
-    // Tipped over backwards, head along the throw; up again over the last `rise` ticks.
-    const up = Math.max(0, Math.min(1, (e - (th.ticks - T.rise)) / T.rise));
-    const tilt = ((T.tilt * Math.PI) / 180) * ease * (1 - up * up * (3 - 2 * up));
-    R.quaternion.setFromAxisAngle(TMP_V.set(dz, 0, -dx), tilt);
-    this.tilted = R;
+    let up: number, head: THREE.Vector3;
+    if (A && o.rig) {
+      // His own clips: knocked as he is thrown, held flat, then getup timed to end as his ticks down do. He faces
+      // back the way he came, so falling back lays him along the throw.
+      const face = Math.atan2(-dx, -dz), getup = 1.6 / T.getupSpeed / 0.6, from = th.ticks - getup;
+      o.rig.face(face);
+      if (o.rig.body) o.rig.body.rotation.y = face;
+      if (this.clip?.tick !== th.tick) (this.clip = { tick: th.tick, anim: A, up: false }), A.hold("knocked", T.knockedSpeed, 0.08);
+      if (!this.clip.up && e >= from) (this.clip.up = true), A.hold("getup", T.getupSpeed, 0);
+      up = Math.max(0, Math.min(1, (e - from) / getup));
+      const lie = Math.min(1, e / (1.1 / T.knockedSpeed / 0.6)) * (1 - up);
+      head = TMP_V.set(R.position.x + dx * 1.45 * lie, 1.55 - 1.3 * lie, R.position.z + dz * 1.45 * lie);
+    } else {
+      // Tipped over backwards, head along the throw; up again over the last `rise` ticks.
+      up = Math.max(0, Math.min(1, (e - (th.ticks - T.rise)) / T.rise));
+      const tilt = ((T.tilt * Math.PI) / 180) * ease * (1 - up * up * (3 - 2 * up));
+      R.quaternion.setFromAxisAngle(TMP_V.set(dz, 0, -dx), tilt);
+      this.tilted = R;
+      head = TMP_V.set(0, 1.55, 0).applyQuaternion(R.quaternion).add(R.position);
+    }
     // His daze: stars circling where his head is, from the moment he lands until he is up.
-    const head = TMP_V.set(0, 1.55, 0).applyQuaternion(R.quaternion).add(R.position);
     const fade = Math.min(1, Math.max(0, (e - T.flight * 0.6) / 0.2)) * (1 - Math.max(0, up - 0.6) / 0.4);
     this.daze.stars.forEach((s, i) => {
       const ang = o.time * T.starSpin + (i * 2 * Math.PI) / T.stars;
