@@ -106,8 +106,11 @@ class Score {
     this.tick0 = tick;
     this.bus = c.createGain();
     this.bus.gain.value = SOUND.musicGain;
-    this.bus.connect(out);
+    this.mute = c.createGain();
+    this.bus.connect(this.mute).connect(out);
   }
+  /** The debug menu's switch (FIGHT_MUTE.music). */
+  mute: GainNode;
   now() {
     return this.pos(this.c.currentTime);
   }
@@ -334,6 +337,9 @@ export function knockClock() {
  * Each tick of a story room: the fight's music, while a fight is being played. Anything else (the
  * countdown, the results, another board) is silence, so the kill's last press stops it dead.
  */
+/** The fight's debug menu: its music, or its sounds (offspring-sfx), silenced while testing. */
+export const FIGHT_MUTE = { music: false, sounds: false };
+
 export function fightMusic(f: Fight | undefined, playing: boolean) {
   const o = audioOut();
   if (o && f) load(o.c);
@@ -343,5 +349,6 @@ export function fightMusic(f: Fight | undefined, playing: boolean) {
   }
   if (!buffers) return;
   score ??= new Score(o.c, o.o, buffers, f.tick);
+  score.mute.gain.value = FIGHT_MUTE.music ? 0 : 1;
   score.step(f);
 }

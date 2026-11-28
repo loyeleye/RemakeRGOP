@@ -45,6 +45,7 @@ import { buildTesting } from "./testing.js";
 import * as sound from "./sound.js";
 import { fightMusic } from "./fight-music.js";
 import { offspringSfx } from "./offspring-sfx.js";
+import { initFightDebug } from "./fight-debug.js";
 import { CAST_SCALE, Camera, GUILD_COLORS, GUILD_NAMES, World, drawMinimap, drawOverlay, loadModels, type DrawState } from "./view3d.js";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -2616,6 +2617,8 @@ $("part1-again").onclick = () => playPiece(0);
 renderPart1();
 // The testing panel: every option the address can carry, as controls (client/testing.ts).
 buildTesting((key, v) => (key === "part2" ? playFight(v === "4" ? 4 : 3) : playPiece(pieceIndex(v))));
+// The fight's debug menu (prototype only): its button shows while the Part 2 fight is on.
+initFightDebug(() => (storyRoom instanceof FightRoom && room?.story?.fight ? storyRoom : null));
 /** The Part 2 fight from the testing panel or ?part2=: a test jump, so saved progress doesn't move on. */
 function playFight(start: 3 | 4) {
   if (link) leave(true);

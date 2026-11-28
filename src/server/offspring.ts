@@ -146,6 +146,24 @@ export class FightRoom {
     }
   }
 
+  // ---------------------------------------------------------------- the debug menu
+
+  /**
+   * The fight's debug menu (Ladi, 27 Nov 10:36 PM: "Can you add a debug menu?"; prototype only, never
+   * for players). `paused`: the clock stands still. `see`: its body shows through the dark. `safe`:
+   * its catches do nothing.
+   */
+  dbg = { paused: false, see: false, safe: false };
+  debug(cmd: "restart3" | "restart4" | "win" | "lose") {
+    if (cmd === "restart3" || cmd === "restart4") {
+      this.at4 = null;
+      return this.begin(cmd === "restart4" ? 4 : 3);
+    }
+    if (this.phase !== "playing" || this.dying) return;
+    if (cmd === "win") return this.win();
+    this.lose();
+  }
+
   // ---------------------------------------------------------------- set-up
 
   begin(run: 3 | 4 = 3) {
@@ -247,6 +265,7 @@ export class FightRoom {
   // ---------------------------------------------------------------- the clock
 
   onTick() {
+    if (this.dbg.paused) return;
     if (this.phase === "countdown") {
       this.countdown--;
       if (this.countdown <= 0) this.phase = "playing";
@@ -1012,6 +1031,8 @@ export class FightRoom {
   /** It reached him while it was after the shard. The first time she saves him. */
   private caught() {
     const O = OFFSPRING, H = O.her, g = this.game, me = this.spot(YOU);
+    // The debug menu's "can't be caught": the look ends, nothing else happens.
+    if (this.dbg.safe) return void (this.eye = this.gaze = 0);
     this.catches++;
     // A catch ends its look: one gaze catches once.
     this.eye = this.gaze = 0;
@@ -1091,7 +1112,7 @@ export class FightRoom {
     // The dark: unseen, nothing of it is drawn (no body, no back, no line to what it is after, no landing mark).
     // Its jump to safety is seen all the way (it flees hurt into the dark), and leaves a trail until it is back.
     const B = this.bolted && g.tick <= this.bolted.t0 + this.bolted.ticks + this.bolted.away ? this.bolted : null, fleeing = !!B && g.tick <= B.t0 + B.ticks;
-    const dark = this.run === 4 && O.dark.on && O.hunt.on, body = !dark || fleeing || this.seen(false);
+    const dark = this.run === 4 && O.dark.on && O.hunt.on, body = !dark || fleeing || this.dbg.see || this.seen(false);
     const safe = this.run === 4 && O.hunt.on && O.hunt.safe && g.tick < this.awayUntil;
     const l = it.held || !body ? null : this.lights().find((x) => x.key === it.key);
     return {

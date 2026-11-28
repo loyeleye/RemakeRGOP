@@ -9,7 +9,7 @@
 // Ladi's ear.
 
 import type { StoryView } from "../engine/protocol.js";
-import { FIGHT_MUSIC, duckFightMusic, nearness } from "./fight-music.js";
+import { FIGHT_MUSIC, FIGHT_MUTE, duckFightMusic, nearness } from "./fight-music.js";
 import { audioOut } from "./sound.js";
 
 type Fight = NonNullable<StoryView["fight"]>;
@@ -209,5 +209,19 @@ export function offspringSfx(f: Fight | undefined, playing: boolean, ended?: { w
   }
   if (!buffers) return;
   sfx ??= new Sfx(o.c, o.o, buffers);
+  sfx.bus.gain.value = FIGHT_MUTE.sounds ? 0 : OFFSPRING_SFX.gain;
   sfx.step(f);
+}
+
+/** The debug menu's sound board: every one of the fight's sounds by name. */
+export const FIGHT_SOUNDS: readonly string[] = NAMES;
+let board: Sfx | null = null;
+/** Plays one of them now, at its own gain, whether or not a fight is on (false while the pack is still loading). */
+export function playFightSound(n: string) {
+  const o = audioOut();
+  if (!o) return false;
+  load(o.c);
+  if (!buffers || !(NAMES as readonly string[]).includes(n)) return false;
+  board ??= new Sfx(o.c, o.o, buffers);
+  return !!board.play(n as Name);
 }
