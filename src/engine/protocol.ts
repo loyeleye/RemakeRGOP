@@ -163,7 +163,7 @@ export interface StoryView {
     land?: { x: number; y: number; r: number };
     /** A mark on the ground where to stand (the offspring fight, round 1 of run 4). */
     stand?: { x: number; y: number };
-    feet?: { x: number; y: number; f: number; mark?: number; tone: "her" | "fen"; /** It flashes (her hold nearly spent, while he is taught to cover the shard). */ flash?: boolean }[];
+    feet?: { x: number; y: number; f: number; mark?: number; tone: "her" | "fen"; /** It flashes (her hold nearly spent, while he is taught to cover the shard). */ flash?: boolean; /** Her charge waits (run 4, while it is away after its jump): the share of the wait still to go. */ paused?: number }[];
   };
   /**
    * Part 2, runs 3 and 4, the offspring fight (gameplay/part2/runs3-4-fight-brief.md). `run`: 3 or
@@ -199,6 +199,8 @@ export interface StoryView {
     /** Run 4, the dark: the pools of light (their edge is where it starts to show), where it is to be heard from, and whether her light fills the yard. */
     dark?: { pools: { k: "rook" | "shard" | "fire" | "wisp" | "her" | "fen"; x: number; y: number; r: number }[]; hear: { d: number; dx: number; dy: number }; flood?: true };
     shut?: boolean;
+    /** Run 4, after its jump: untouchable for `left` of `of` ticks (her charge waits as long); `ward` the tick a tap on it was turned aside. */
+    safe?: { left: number; of: number; ward?: number };
     /** Run 4, the jump: it fled hurt from `from` to `to`, leaving tick `t0` for `ticks`, and stays away `away` ticks after. */
     bolt?: { from: { x: number; y: number }; to: { x: number; y: number }; t0: number; ticks: number; away: number };
     flung?: { id: number; from: { x: number; y: number }; to: { x: number; y: number }; tick: number }[];

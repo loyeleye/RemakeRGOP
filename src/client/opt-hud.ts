@@ -296,8 +296,22 @@ export function drawOptHud(g: CanvasRenderingContext2D, cam: Cam, o: Opt, snap: 
     g.strokeStyle = "rgba(10,8,20,0.55)";
     ground(g, cam, F.x + 0.5, F.y + 0.5, rad);
     g.lineWidth = 4;
-    g.strokeStyle = `rgba(${rgb},${short ? 0.55 : 0.98})`;
+    g.strokeStyle = `rgba(${rgb},${F.paused !== undefined ? 0.4 : short ? 0.55 : 0.98})`;
     if (f > 0.01) ground(g, cam, F.x + 0.5, F.y + 0.5, rad, f);
+    if (F.paused !== undefined) {
+      // Her charge waits: a pause sign over the ring, and the wait running out round it.
+      g.lineWidth = 2;
+      g.strokeStyle = "rgba(255,255,255,0.85)";
+      if (F.paused > 0.01) ground(g, cam, F.x + 0.5, F.y + 0.5, rad + 0.32, F.paused);
+      const c = cam.toScreen(F.x + 0.5, F.y + 0.5, 2.9), u = Math.max(5, Math.hypot(cam.toScreen(F.x + 1.5, F.y + 0.5, 2.9).x - c.x, cam.toScreen(F.x + 1.5, F.y + 0.5, 2.9).y - c.y) * 0.24);
+      g.fillStyle = "rgba(10,8,20,0.6)";
+      g.beginPath();
+      g.arc(c.x, c.y, u * 1.9, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = "rgba(207,230,255,0.95)";
+      g.fillRect(c.x - u * 0.85, c.y - u, u * 0.6, u * 2);
+      g.fillRect(c.x + u * 0.25, c.y - u, u * 0.6, u * 2);
+    }
     if (F.mark === undefined) continue;
     // The notch where the next shove or blast is.
     const a = -Math.PI / 2 + F.mark * Math.PI * 2, i0 = cam.toScreen(F.x + 0.5 + Math.cos(a) * (rad - 0.35), F.y + 0.5 + Math.sin(a) * (rad - 0.35), 0.15), o0 = cam.toScreen(F.x + 0.5 + Math.cos(a) * (rad + 0.35), F.y + 0.5 + Math.sin(a) * (rad + 0.35), 0.15);

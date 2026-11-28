@@ -51,6 +51,8 @@ export const FIGHT_LOOK = {
   shudder: { light: 0.55, size: 0.1, sec: 0.35 },
   /** The jump: it flees hurt, dripping light along its arc; the drops (how many, colour, size) lie on the ground and fade out over the ticks it stays away. */
   trail: { drops: 16, color: "#ffc070", size: 0.55, glow: 0.85 },
+  /** Untouchable after its jump: a pale shell round it (its strength, and how slowly it breathes), and a tap turned aside: a ring off the shell (how far it spreads, seconds). */
+  safe: { color: "#dfe8ff", shell: 0.22, breathe: 2.2, ward: { spread: 0.8, sec: 0.5 } },
 };
 
 /** A soft round pool of light on the ground (the dark's lit pools). */
@@ -108,6 +110,10 @@ export class OffspringFx {
   private pools: { light: THREE.PointLight; disc: THREE.Mesh }[] = [];
   /** The jump's trail of dropped light, laid down for one jump (its t0). */
   private trail: { drops: THREE.Sprite[]; t0: number } | null = null;
+  private shell: THREE.Mesh;
+  private wardRing: THREE.Mesh;
+  private wardAt = -99;
+  private wardTick = -99;
 
   constructor(glow: Glow) {
     this.glow = glow;
@@ -169,6 +175,15 @@ export class OffspringFx {
     this.strikeRing.position.set(-S * 0.2, L.ride + 0.3 + S * 0.26, 0);
     this.strikeRing.renderOrder = 10;
     this.it.add(this.strikeRing);
+    // Untouchable after its jump: a pale shell, and the ring a turned-aside tap throws off it.
+    this.shell = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 16), new THREE.MeshBasicMaterial({ color: L.safe.color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.shell.scale.set(S * 1.05, S * 0.62, S * 0.95);
+    this.shell.position.y = L.ride + 0.3;
+    this.it.add(this.shell);
+    this.wardRing = new THREE.Mesh(new THREE.RingGeometry(S * 0.5, S * 0.56, 48), new THREE.MeshBasicMaterial({ color: L.safe.color, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+    this.wardRing.rotation.x = -Math.PI / 2;
+    this.wardRing.position.y = L.ride + 0.9;
+    this.it.add(this.wardRing);
     this.all.add(this.it);
     // Her light, the boy's, the shard, her flash, and the beam of her hold.
     this.herGlow = glow(L.her, 1.5, 0.9);
@@ -242,6 +257,14 @@ export class OffspringFx {
     for (const ch of this.it.children) if (ch !== this.eye) ch.visible = ch === this.slit ? this.slit.visible && !hidden : !hidden;
     this.eye.visible = !hidden || !!f.eye;
     this.stepPools(f, o, wx, wz);
+    // Untouchable: the shell breathes while it is away, and a tap on it throws a ring off the shell.
+    const SF = L.safe, sm = this.shell.material as THREE.MeshBasicMaterial, rm = this.wardRing.material as THREE.MeshBasicMaterial;
+    sm.opacity = f.safe ? SF.shell * (0.7 + 0.3 * Math.sin((o.time * 2 * Math.PI) / SF.breathe)) * Math.min(1, f.safe.left / 2) : 0;
+    if (f.safe?.ward !== undefined && f.safe.ward !== this.wardTick) (this.wardTick = f.safe.ward), (this.wardAt = o.time);
+    const wa = (o.time - this.wardAt) / SF.ward.sec;
+    rm.opacity = wa < 1 ? 0.9 * (1 - wa) : 0;
+    this.wardRing.scale.setScalar(1 + SF.ward.spread * Math.min(1, wa));
+    if (wa < 1) sm.opacity = Math.max(sm.opacity, 0.5 * (1 - wa));
     this.stepTrail(f, o.t, wx, wz);
     // Her light over her: its size is her glow, and it pulses while she winds up.
     const her = f.her, wind = her.doing === "windup" ? 1 + 0.25 * Math.sin(o.time * 18) : 1;

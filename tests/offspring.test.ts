@@ -673,6 +673,39 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       expect(p.room.storyView().fight!.dark!.flood).toBe(true);
     });
 
+    it("away after its jump it is untouchable, and her charge waits until it is back", () => {
+      const H = OFFSPRING.hunt;
+      const p = loose();
+      p.send({ t: "fight", hit: true });
+      for (let k = 0; k < H.tears && p.x.wound.open; k++) {
+        const it = p.x.it;
+        p.me.pos = p.me.prev = pt(Math.round(it.x - Math.cos(it.face) * 2.5), Math.round(it.y - Math.sin(it.face) * 2.5));
+        p.send({ t: "fight", hit: true });
+        p.tick(OFFSPRING.wound.pull + 1);
+      }
+      expect(p.room.stats.bolts).toBe(1);
+      p.tick(H.boltTicks + 1);
+      const f = p.room.storyView().fight!;
+      expect(f.safe).toBeDefined();
+      // Right behind it, a tap does nothing but show it turned aside.
+      const it = p.x.it;
+      p.me.pos = p.me.prev = pt(Math.round(it.x - Math.cos(it.face) * 2.5), Math.round(it.y - Math.sin(it.face) * 2.5));
+      expect(p.room.storyView().fight!.it.strike).toBeUndefined();
+      p.send({ t: "fight", hit: true });
+      expect(p.x.wound.open).toBe(false);
+      expect(p.room.storyView().fight!.safe!.ward).toBeDefined();
+      // Her light stands still, and her ring says she waits.
+      const light = p.x.her.light;
+      p.tick(3);
+      expect(p.x.her.light).toBe(light);
+      expect(p.room.storyView().opt!.feet![0]!.paused).toBeGreaterThan(0);
+      // Back: her light moves again (it rises, or drains while it is after her).
+      p.tick(H.away);
+      expect(p.room.storyView().fight!.safe).toBeUndefined();
+      p.tick(2);
+      expect(p.x.her.light).not.toBe(light);
+    });
+
     it("with hunt.block on, the fire is shut while it stands at the brazier", () => {
       OFFSPRING.hunt.block = 1;
       const p = loose();

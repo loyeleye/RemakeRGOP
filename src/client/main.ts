@@ -1741,7 +1741,8 @@ function targetAt(sx: number, sy: number, tap = false): { action: Action; wisp: 
   // Part 2, run 4: a tap on its back. From behind it with the shard out, a strike (the wound opens);
   // on the open wound, a pull (he stays where he is). Not behind it, the tap walks him as usual.
   const fit = room.story?.fight?.it;
-  if (fit && (fit.wound > 0 || fit.strike === 2)) {
+  // Untouchable after its jump: a tap on it is sent anyway, so the view can show it turned aside (he doesn't walk into it).
+  if (fit && (fit.wound > 0 || fit.strike === 2 || (room.story?.fight?.safe && !fit.hidden))) {
     const c = cam.toScreen(fit.x + 0.5, fit.y + 0.5, 1.2);
     if (Math.hypot(c.x - sx, c.y - sy) <= Math.max(bigTapRadius(), cam.scale * OFFSPRING.it.size * 0.7)) return tap && link?.send({ t: "fight", hit: true }), null;
   }

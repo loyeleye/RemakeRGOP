@@ -184,6 +184,7 @@ export class FightRoom {
     this.gaze = 0;
     this.boltDue = false;
     this.bolted = null;
+    this.awayUntil = -1;
     this.flung = [];
     this.stats = { flashes: 0, hits: 0, strikes: 0, stuns: 0, drunk: 0, eaten: 0, bolts: 0 };
     this.shard = { shown: false, glow: 0 };
@@ -631,6 +632,8 @@ export class FightRoom {
   private stepHer4() {
     const O = OFFSPRING, H = O.her, L = O.light, g = this.game, it = this.it, her = this.her;
     if (this.cycle >= L.fenFrom) this.fenLight = Math.min(L.fenMax, this.fenLight + L.fenRise);
+    // While it is away after its jump her charge waits: no charging, no wind-up, no blast.
+    if (O.hunt.on && O.hunt.safe && g.tick < this.awayUntil && her.doing !== "hold") return;
     if (her.doing === "hold") {
       // Round 1's hold waits until he has shown the shard, struck and pulled once.
       if (this.cycle === 1 && !this.teach.pulled) return;
@@ -769,6 +772,7 @@ export class FightRoom {
     this.hurtUntil = g.tick + H.boltTicks + H.away + OFFSPRING.dark.hurt;
     // It stays where it lands for hunt.away ticks before it comes back for the light.
     this.it.dazed = g.tick + H.boltTicks + H.away;
+    this.awayUntil = g.tick + H.boltTicks + H.away;
     this.leapTo(best, H.boltTicks);
     this.bolted = { from: { x: this.it.x, y: this.it.y }, to: best, t0: g.tick, ticks: H.boltTicks, away: H.away };
   }
@@ -843,6 +847,8 @@ export class FightRoom {
       // The hunt: a strike from behind whenever it isn't looking, held or not. He strikes with the shard, so it is out from here.
       const L = this.it.leap;
       if ((L && this.game.tick - L.t0 <= L.ticks) || !this.behind()) return;
+      // Away after its jump it can't be struck (the view shows the tap turned aside).
+      if (OFFSPRING.hunt.safe && this.game.tick < this.awayUntil) return void (this.wardAt = this.game.tick);
       if (this.part === "kill") return this.win();
       this.shard.shown = true;
       this.wound = { open: true, timer: 0 };
@@ -962,6 +968,10 @@ export class FightRoom {
 
   lostTo = "";
   private boltDue = false;
+  /** Until this tick it is away after a jump to safety, and nothing can touch it (Ladi, 27 Nov 5:17 PM). */
+  private awayUntil = -1;
+  /** The tick his last tap on it was turned aside while it was untouchable (the view). */
+  private wardAt = -99;
   /** The jump: where it fled from and to, and when (for the view's trail of light it leaves). */
   private bolted: { from: { x: number; y: number }; to: { x: number; y: number }; t0: number; ticks: number; away: number } | null = null;
   private lose() {
@@ -1001,12 +1011,13 @@ export class FightRoom {
     // Its jump to safety is seen all the way (it flees hurt into the dark), and leaves a trail until it is back.
     const B = this.bolted && g.tick <= this.bolted.t0 + this.bolted.ticks + this.bolted.away ? this.bolted : null, fleeing = !!B && g.tick <= B.t0 + B.ticks;
     const dark = this.run === 4 && O.dark.on && O.hunt.on, body = !dark || fleeing || this.seen(false);
+    const safe = this.run === 4 && O.hunt.on && O.hunt.safe && g.tick < this.awayUntil;
     const l = it.held || !body ? null : this.lights().find((x) => x.key === it.key);
     return {
       run: this.run,
       part: this.part,
       tick: g.tick,
-      it: { x: it.x, y: it.y, face: it.face, after: it.held ? "her" : it.after, ...(l ? { to: { x: l.at.x, y: l.at.y } } : {}), inside: this.inside.size, held: it.held, wound: this.wound.open ? 1 : 0, knocked: it.knocked, ...(it.eat > 0 ? { eating: true } : {}), ...(!body ? { hidden: true } : {}), ...(this.run === 4 && body && !this.wound.open && this.part !== "flare" ? (O.hunt.on ? (this.behind() && !(it.leap && g.tick <= it.leap.t0 + it.leap.ticks) ? { strike: 2 as const } : {}) : it.held && this.shard.shown ? { strike: this.behind() ? (2 as const) : (1 as const) } : {}) : {}), ...(body && it.leap && g.tick <= it.leap.t0 + it.leap.ticks + 1 ? { leap: it.leap } : {}) },
+      it: { x: it.x, y: it.y, face: it.face, after: it.held ? "her" : it.after, ...(l ? { to: { x: l.at.x, y: l.at.y } } : {}), inside: this.inside.size, held: it.held, wound: this.wound.open ? 1 : 0, knocked: it.knocked, ...(it.eat > 0 ? { eating: true } : {}), ...(!body ? { hidden: true } : {}), ...(this.run === 4 && body && !safe && !this.wound.open && this.part !== "flare" ? (O.hunt.on ? (this.behind() && !(it.leap && g.tick <= it.leap.t0 + it.leap.ticks) ? { strike: 2 as const } : {}) : it.held && this.shard.shown ? { strike: this.behind() ? (2 as const) : (1 as const) } : {}) : {}), ...(body && it.leap && g.tick <= it.leap.t0 + it.leap.ticks + 1 ? { leap: it.leap } : {}) },
       her: { x: sol.x, y: sol.y, light: this.her.light, full: O.her.full, glow: this.herGlow(), doing: this.part === "flare" ? "hold" : this.her.doing, left: this.her.left, of: this.her.of, ...(this.her.flash ? { flash: this.her.flash } : {}) },
       fen: { x: fen.x, y: fen.y, light: this.fenLight },
       ...(this.run === 4 ? { shard: { shown: this.shard.shown, glow: this.shard.glow, of: O.light.shard } } : {}),
@@ -1021,6 +1032,8 @@ export class FightRoom {
       ...(this.run === 4 && O.hunt.on && O.eye.on && (this.eye > 0 || this.gaze > 0) ? { eye: { left: this.eye, of: O.eye.ticks, cone: O.eye.cone, r: O.eye.range + O.eye.slack, ...(this.eye === 0 ? { gaze: this.gaze, hold: O.eye.hold } : {}) } } : {}),
       ...(dark ? { dark: this.pools() } : {}),
       ...(B ? { bolt: B } : {}),
+      // Away after its jump: untouchable for `left` of `of` ticks, and her charge waits as long.
+      ...(safe ? { safe: { left: this.awayUntil - g.tick, of: O.hunt.boltTicks + O.hunt.away, ...(g.tick - this.wardAt <= 1 ? { ward: this.wardAt } : {}) } } : {}),
       ...(this.run === 4 && O.hunt.on && O.hunt.block && this.onFire() ? { shut: true } : {}),
       ...(this.flung.length ? { flung: this.flung.filter((q) => g.tick - q.tick <= 2) } : {}),
       ...(this.run === 4 ? { teach: { ...(this.teach.hint ? { hint: this.teach.hint } : {}), ...(this.teach.retry ? { retry: true } : {}), ...(this.standAt() ? { stand: this.standAt()! } : {}) } } : {}),
@@ -1083,10 +1096,10 @@ export class FightRoom {
     const strip: NonNullable<StoryView["opt"]>["strip"] = [
       { label: this.run === 3 ? "Its light" : "Its light / the brazier", n: f.it.inside, of: f.wisps, tone: "us", tug: this.run === 3 ? { mine: f.it.inside, loose: 0, bank: 0 } : { mine: f.it.inside, loose, bank: f.banked, fen: f.fen.light } },
     ];
-    if (f.her.doing !== "rest") strip.push({ label: f.her.doing === "hold" ? "Her hold" : "Solenne: winding up", n: 0, of: 0, tone: "her", bar: f.her.of ? Math.max(0, f.her.left / f.her.of) : 0, steady: true });
+    if (f.her.doing !== "rest") strip.push({ label: f.her.doing === "hold" ? "Her hold" : f.safe ? "Solenne: waiting" : "Solenne: winding up", n: 0, of: 0, tone: "her", bar: f.her.of ? Math.max(0, f.her.left / f.her.of) : 0, steady: true });
     if (f.shard) strip.push({ label: f.shard.shown ? "Shard: uncovered" : f.shard.glow > 0 ? "Shard: dimming" : "Shard: hidden", n: 0, of: 0, tone: "chalk", bar: f.shard.glow / f.shard.of, steady: true });
     // In run 4 the boy's light matters too: a marker on the bar from the brazier's end, and a ring at his feet.
-    const feet: NonNullable<NonNullable<StoryView["opt"]>["feet"]> = [{ x: f.her.x, y: f.her.y, f: f.her.light / f.her.full, mark: (this.run === 3 ? O.her.shove : f.her.full) / f.her.full, tone: "her", ...(f.teach?.hint === "cover" ? { flash: true } : {}) }];
+    const feet: NonNullable<NonNullable<StoryView["opt"]>["feet"]> = [{ x: f.her.x, y: f.her.y, f: f.her.light / f.her.full, mark: (this.run === 3 ? O.her.shove : f.her.full) / f.her.full, tone: "her", ...(f.teach?.hint === "cover" ? { flash: true } : {}), ...(f.safe && f.her.doing !== "hold" ? { paused: f.safe.left / f.safe.of } : {}) }];
     if (this.run === 4) feet.push({ x: f.fen.x, y: f.fen.y, f: f.fen.light / O.light.fenMax, tone: "fen" });
     // Where to tap: its back, held with the shard out (live from behind it), or the open wound.
     const lp = f.it.leap, land = lp && !f.bolt && f.tick < lp.t0 + lp.ticks ? { x: lp.to.x, y: lp.to.y, r: O.it.size / 2 } : null;
