@@ -997,9 +997,10 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       OFFSPRING.hunt.see3 = 8;
     }
   });
-  it("the fight's reach on loose light (OFFSPRING.reach, 10 by default): the same in runs 3 and 4; the scripted first pull keeps 10", () => {
-    expect(OFFSPRING.reach).toBe(10);
-    expect(play(3).room.storyView().fight!.reach).toBeUndefined();
+  it("the fight's reach on loose light (OFFSPRING.reach, 8 by default, Ladi's pick): the same in runs 3 and 4; the scripted first pull keeps 10", () => {
+    expect(OFFSPRING.reach).toBe(8);
+    expect(play(3).room.storyView().fight!.reach).toBe(10);
+    expect(play(4).room.storyView().fight!.reach).toBe(8);
     OFFSPRING.reach = 6;
     try {
       const p = play(3);
@@ -1020,7 +1021,7 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       expect(q.g.pullReach).toBe(6);
       expect(q.room.storyView().fight!.reach).toBe(6);
     } finally {
-      OFFSPRING.reach = 10;
+      OFFSPRING.reach = 8;
     }
   });
 });

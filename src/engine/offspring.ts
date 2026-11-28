@@ -345,10 +345,10 @@ export const OFFSPRING = {
   retryFrom: 3 as 3 | 4,
   /**
    * His pull's reach on loose light, in tiles, the same in runs 3 and 4 (Ladi, 28 Nov 6:04 AM PT: "I'd rather keep runs 3
-   * and 4 reach consistent"). 10 is the usual; the gameplay thread's dial for Ladi to try 8 and 6 (?fight=reach:6), Ladi's
-   * card to pick the default. The scripted first pull keeps 10, so the opening is unchanged.
+   * and 4 reach consistent"). 8: Ladi's pick on the gameplay thread's card, "8 tiles in both runs" (28 Nov, 6:25 AM PT);
+   * 10 is the engine's usual (?fight=reach:10). The scripted first pull keeps 10, so the opening is unchanged.
    */
-  reach: 10,
+  reach: 8,
   /** Seconds a caption stays up (in ticks). */
   captionTicks: 6,
 };
