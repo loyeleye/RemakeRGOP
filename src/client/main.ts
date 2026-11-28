@@ -39,7 +39,8 @@ import { VOICE_SECONDS } from "../engine/voice-durations.js";
 import { CONTROLS, hintSeen, markHint, resetHints } from "./controls.js";
 import { StoryRoom } from "../server/story.js";
 import { Kitchen } from "./kitchen.js";
-import { DREAM, EVENING, GLOW, HELD, MENU_RUNS, MORNING, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Piece } from "./part1.js";
+import { DREAM, EVENING, GLOW, HELD, MENU_RUNS, MORNING, OPTIONAL_RUNS, PART1, SUPPER, loadFar, loadPlace, pieceIndex, pieceOfRun, pieceOfWalk, savePlace, type Held, type Piece } from "./part1.js";
+import { HELD2, PART2, loadPlace2, piece2Index, piece2OfRun, savePlace2 } from "./part2.js";
 import { card as storyCard, ENDING, KindlingEnding, lanternCard } from "./ending.js";
 import { buildTesting } from "./testing.js";
 import * as sound from "./sound.js";
@@ -322,7 +323,7 @@ function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "p
   // ?nostills: every run's reaction stills off (runs 8 to 10 also read it where they are built).
   if ("stillsOn" in r && new URLSearchParams(location.search).has("nostills")) r.stillsOn = false;
   // Run 5 after walk 7, where Kes's challenge was said: its opening leaves those lines out.
-  if (run === 5 && chainAt > 0 && PART1[chainAt - 1]?.id.startsWith("4-5")) (r as RaceRoom).openSaid = true;
+  if (run === 5 && chainPart === 1 && chainAt > 0 && PART1[chainAt - 1]?.id.startsWith("4-5")) (r as RaceRoom).openSaid = true;
   storyRoom = r;
   runHints = { walkSince: 0, reminded: false, misses: 0, rescued: false };
   const conn = r.connect((m) => queueMicrotask(() => onServer(m)));
@@ -2102,8 +2103,21 @@ $("story-continue").onclick = () => {
 };
 // ------------------------------------------------------------------ Part 1, played through
 
-/** The piece of Part 1 on screen (its index in PART1), or -1 outside the chain. */
+/** The piece on screen (its index in `chain`, Part 1's or Part 2's), or -1 outside a chain. */
 let chainAt = -1;
+/** Which part is being played through: its pieces, and its number. */
+let chain: Piece[] = PART1;
+let chainPart: 1 | 2 = 1;
+const chainIdx = (id: string) => chain.findIndex((p) => p.id === id);
+const chainSave = (i: number) => (chainPart === 2 ? savePlace2(i) : savePlace(i));
+/** A piece's held pictures, in its own part. */
+const heldFor = (p: Piece): Held | undefined => (chainPart === 2 ? HELD2[p.id] : HELD[p.id]);
+/** Start playing a part through, at piece `i`. */
+function startChain(part: 1 | 2, i: number) {
+  chain = part === 2 ? PART2 : PART1;
+  chainPart = part;
+  playPiece(i);
+}
 /** An optional run opened from a walk or a walk's card: the piece to come back to. */
 let chainBack: number | null = null;
 /** The walk's hand-on and optional asks already acted on. */
@@ -2112,7 +2126,7 @@ let chainOptN = 0;
 
 /** Open a piece of Part 1: a run, a walk, or a card for what is not built yet. */
 function playPiece(i: number) {
-  const p = PART1[i];
+  const p = chain[i];
   // A new piece: nothing from the last one is still talking.
   sound.dropVoices();
   if (!p) return leave();
@@ -2121,11 +2135,13 @@ function playPiece(i: number) {
   chainBack = null;
   chainDone = false;
   chainOptN = 0;
-  savePlace(i);
+  chainSave(i);
   renderPart1();
   $("chain-card").hidden = true;
-  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : p.scene === "supper" ? supperScene(p) : p.scene === "evening" ? eveningScene(p) : p.scene === "glow" ? glowScene(p) : p.scene === "dream" ? dreamScene(p) : p.scene === "held" && HELD[p.id] ? heldScene(p) : chainCard(p);
+  if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : p.scene === "supper" ? supperScene(p) : p.scene === "evening" ? eveningScene(p) : p.scene === "glow" ? glowScene(p) : p.scene === "dream" ? dreamScene(p) : p.scene === "held" && heldFor(p) ? heldScene(p) : chainCard(p);
   if (p.kind === "walk") return connectStory(playerName(), "pond", p.walk);
+  // Part 2's runs 3 and 4: the fight, from that run.
+  if (p.fight) return (fightStart = p.fight), connectStory(playerName(), "p2fight");
   connectStory(playerName(), p.run!);
 }
 
@@ -2149,6 +2165,8 @@ function chainAgainLabel(): string | null {
   if (chainBack !== null) return "Back to the walk";
   // Run 2 not won: it is played again (won, it goes on into the walk by itself).
   if (room?.story?.run === "Lumi's lesson") return "Try again";
+  // Part 2's fight, lost: run 4 again from her flare (the kill goes on).
+  if (room?.story?.fight && room.story.end?.summary !== OFFSPRING.card.won) return "Try again";
   return "Continue";
 }
 
@@ -2160,7 +2178,7 @@ function chainWatch() {
   const pond = st.pond;
   if (pond?.walk) {
     const i = pieceOfWalk(pond.walk);
-    if (i >= 0 && i !== chainAt) (chainAt = i), (chainDone = false), (chainOptN = 0), savePlace(i), renderPart1();
+    if (i >= 0 && i !== chainAt) (chainAt = i), (chainDone = false), (chainOptN = 0), chainSave(i), renderPart1();
     if (pond.done && !chainDone) {
       chainDone = true;
       // After walk 7 a night passes, shown, before the next morning's walk opens under it.
@@ -2174,8 +2192,8 @@ function chainWatch() {
     }
     return;
   }
-  const i = st.run ? pieceOfRun(st.run) : -1;
-  if (i >= 0 && i !== chainAt) (chainAt = i), savePlace(i), renderPart1();
+  const i = st.run ? (chainPart === 2 ? piece2OfRun(st.run, OFFSPRING.run3, OFFSPRING.run4) : pieceOfRun(st.run)) : -1;
+  if (i >= 0 && i !== chainAt) (chainAt = i), chainSave(i), renderPart1();
 }
 
 /**
@@ -2212,7 +2230,7 @@ function chainCard(p: Piece) {
   const opts = c.optional
     ? `<div class="opts"><b>Offered here (until Maudie's tap):</b>${OPTIONAL_RUNS.map((o) => `<button class="ghost opt" data-id="${o.id}">${esc(o.label)} <span class="soon">${esc(o.who)}</span></button>`).join("")}</div>`
     : "";
-  el.innerHTML = `<div class="card"><div class="tags"><span class="nb">Not built yet</span><span>Draft</span><span>Part 1, ${esc(p.id)}</span></div><h2>${esc(c.heading)}</h2><p>${esc(c.summary)}</p><p class="ruled">${esc(c.ruled)}</p>${opts}<div class="btns"><button class="big go">${c.end ? "End of Part 1" : "Continue"}</button><button class="ghost out">Leave</button></div></div>`;
+  el.innerHTML = `<div class="card"><div class="tags"><span class="nb">Not built yet</span><span>Draft</span><span>Part ${chainPart}, ${esc(p.id)}</span></div><h2>${esc(c.heading)}</h2><p>${esc(c.summary)}</p><p class="ruled">${esc(c.ruled)}</p>${opts}<div class="btns"><button class="big go">${c.end ? (chainPart === 2 ? "Back to the menu" : "End of Part 1") : "Continue"}</button><button class="ghost out">Leave</button></div></div>`;
   el.hidden = false;
   el.querySelector<HTMLButtonElement>(".go")!.onclick = () => {
     if (!c.end) return chainOn();
@@ -2252,7 +2270,7 @@ function kitchenScene(p: Piece) {
   const timers: number[] = [];
   const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
   let left = false;
-  const here = () => !left && chainAt === pieceIndex(p.id);
+  const here = () => !left && chainAt === chainIdx(p.id);
   const caption = el.querySelector<HTMLElement>(".creed")!;
   lanternCard(() => {
     if (!here()) return;
@@ -2308,7 +2326,7 @@ function eveningScene(p: Piece) {
   document.body.appendChild(el);
   const timers: number[] = [];
   const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
-  const here = () => chainAt === pieceIndex(p.id);
+  const here = () => chainAt === chainIdx(p.id);
   const caption = el.querySelector<HTMLElement>(".creed")!;
   requestAnimationFrame(() => requestAnimationFrame(() => (el.classList.add("on"), pics[0]!.classList.add("on"))));
   let t = M.fade + M.lead;
@@ -2340,16 +2358,17 @@ function eveningScene(p: Piece) {
  * lines as captions with faces and voices, no taps, then on. Tagged with what Ladi has not seen.
  */
 function heldScene(p: Piece) {
-  const H = HELD[p.id]!, el = document.createElement("div");
+  const H = heldFor(p)!, el = document.createElement("div");
   el.id = "gap-scene";
   el.className = H.shape ? `morning ${H.shape}` : "morning";
   el.innerHTML = `<div class="tags"><span class="nb">Draft</span><span>${esc(H.tag)}</span></div><p class="creed" aria-live="polite"></p><button class="ghost small out" aria-label="Leave">✕</button>`;
-  const pics = H.pictures.map((m) => storyCard(m.slot, "pic"));
+  // An empty slot is a black frame (Part 2's wake, until its first pictures are locked).
+  const pics = H.pictures.map((m) => (m.slot ? storyCard(m.slot, "pic") : Object.assign(document.createElement("div"), { className: "card pic black" })));
   el.prepend(...pics);
   document.body.appendChild(el);
   const timers: number[] = [];
   const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
-  const here = () => chainAt === pieceIndex(p.id);
+  const here = () => chainAt === chainIdx(p.id);
   const caption = el.querySelector<HTMLElement>(".creed")!;
   // A shaking picture: its layer flicked between nothing and about 60 percent, a few pixels off, every
   // 90 to 120 ms, while it is up (none with reduced motion).
@@ -2440,7 +2459,7 @@ function dreamScene(p: Piece) {
   white.style.transitionDuration = `${D.white}s`;
   const timers: number[] = [];
   const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
-  const here = () => chainAt === pieceIndex(p.id);
+  const here = () => chainAt === chainIdx(p.id);
   const caption = el.querySelector<HTMLElement>(".creed")!;
   requestAnimationFrame(() => requestAnimationFrame(() => (el.classList.add("on"), pics[0]!.classList.add("on"), sound.playBed(D.bed))));
   let t = D.fade;
@@ -2494,7 +2513,7 @@ function glowScene(p: Piece) {
   document.body.appendChild(el);
   const timers: number[] = [];
   const at = (sec: number, f: () => void) => timers.push(window.setTimeout(f, sec * 1000));
-  const here = () => chainAt === pieceIndex(p.id);
+  const here = () => chainAt === chainIdx(p.id);
   const caption = el.querySelector<HTMLElement>(".creed")!;
   let shown: HTMLElement[] = [];
   const show = (i: number) => {
@@ -2572,7 +2591,7 @@ function supperScene(p: Piece) {
   // The picture goes to black (the scene stays up, so the menu never shows), then the walk comes up under it.
   at(t + S.tail, () => el.classList.add("out"));
   at(t + S.tail + S.fade, () => {
-    if (chainAt !== pieceIndex(p.id)) return el.remove();
+    if (chainAt !== chainIdx(p.id)) return el.remove();
     chainOn();
     let n = 0;
     const out = () => {
@@ -2594,6 +2613,9 @@ function renderPart1() {
   const at = loadPlace();
   $("part1").textContent = at < 0 ? "Play Part 1" : `Continue Part 1: ${PART1[at]!.name}`;
   $("part1-again").hidden = at < 0;
+  const at2 = loadPlace2();
+  $("part2").textContent = at2 < 0 ? "Play Part 2" : `Continue Part 2: ${PART2[at2]!.name}`;
+  $("part2-again").hidden = at2 < 0;
   // Once Part 1 is under way, a run's own button waits until the story has reached it (the testing
   // panel's box shows them all).
   const far = loadFar(), all = $<HTMLInputElement>("show-runs").checked;
@@ -2612,11 +2634,13 @@ function renderPart1() {
     renderPart1();
   };
 }
-$("part1").onclick = () => playPiece(Math.max(0, loadPlace()));
-$("part1-again").onclick = () => playPiece(0);
+$("part1").onclick = () => startChain(1, Math.max(0, loadPlace()));
+$("part1-again").onclick = () => startChain(1, 0);
+$("part2").onclick = () => startChain(2, Math.max(0, loadPlace2()));
+$("part2-again").onclick = () => startChain(2, 0);
 renderPart1();
 // The testing panel: every option the address can carry, as controls (client/testing.ts).
-buildTesting((key, v) => (key === "part2" ? playFight(v === "4" ? 4 : 3) : playPiece(pieceIndex(v))));
+buildTesting((key, v) => (key === "part2" ? startChain(2, piece2Index(v)) : startChain(1, pieceIndex(v))));
 // The fight's debug menu (prototype only): its button shows while the Part 2 fight is on.
 initFightDebug(() => (storyRoom instanceof FightRoom && room?.story?.fight ? storyRoom : null));
 /** ?fight=start:4 in the link: run 4. */
@@ -2632,14 +2656,15 @@ function playFight(start: 3 | 4) {
 }
 {
   // ?part1=<piece>: straight into Part 1 at that piece (its id in client/part1.ts, such as 5-6 or 9-10).
-  // ?part2=3 or 4: straight into the Part 2 fight, from that run.
+  // ?part2=<piece>: Part 2 played through from that piece (3 and 4 are the fight's runs).
   // The Part 2 preview (index-p2.html sets lfPart2) holds only Part 2's files: with nothing in the link
   // it opens straight into the fight, from the page itself, since a sandboxed preview may not let a
   // script rewrite its address.
   const q = new URLSearchParams(location.search), at = q.get("part1"), p2 = q.get("part2");
   const p2only = (window as { lfPart2?: boolean }).lfPart2 === true;
-  if (at !== null && pieceIndex(at) >= 0) window.setTimeout(() => playPiece(pieceIndex(at)), 0);
-  else if (p2 === "3" || p2 === "4") window.setTimeout(() => playFight(p2 === "4" ? 4 : 3), 0);
+  if (at !== null && pieceIndex(at) >= 0) window.setTimeout(() => startChain(1, pieceIndex(at)), 0);
+  // ?part2=<piece>: Part 2 played through from that piece (3 and 4 are the fight's runs).
+  else if (p2 !== null && piece2Index(p2) >= 0) window.setTimeout(() => startChain(2, piece2Index(p2)), 0);
   else if (p2only && !q.has("fight") && !q.has("room")) window.setTimeout(() => playFight(3), 0);
   else if (p2only && q.has("fight")) window.setTimeout(() => playFight(fightStartFromLink()), 0);
 }
@@ -2663,6 +2688,7 @@ $("progress-reset").onclick = () => {
   resetOpts();
   resetHints();
   savePlace(-1);
+  savePlace2(-1);
   renderPart1();
   renderProgress();
 };

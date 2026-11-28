@@ -16,6 +16,7 @@ import { RESCUE } from "../engine/rescue.js";
 import { SHIP } from "../engine/shiphome.js";
 import { ENDING_CUTS, endingCut, setEndingCut } from "./ending.js";
 import { PART1 } from "./part1.js";
+import { PART2 } from "./part2.js";
 
 export type Section = "jump" | "run1" | "run6" | "run8" | "run9" | "run10" | "rematch" | "cove" | "moss" | "tidepool" | "kite" | "p2fight" | "other";
 
@@ -82,7 +83,7 @@ const ending: Saved = { def: "test", get: () => endingCut(), set: (v) => setEndi
 
 export const OPTIONS: Opt[] = [
   { section: "jump", key: "part1", kind: "choice", go: true, id: "part1-pick", label: "Part 1 piece", hint: "Go plays it now. In the link, the page opens straight into it.", values: [["", "None, open the menu"], ...PART1.map((p) => [p.id, `${p.name} (${p.id})`] as const)] },
-  { section: "jump", key: "part2", kind: "choice", go: true, id: "part2-pick", label: "Part 2: the offspring fight", hint: "A prototype on placeholder shapes. Go plays it now, with the numbers set below.", values: [["", "None, open the menu"], ["3", "Run 3, from the first pull"], ["4", "Run 4, from her flare"]] },
+  { section: "jump", key: "part2", kind: "choice", go: true, id: "part2-pick", label: "Part 2 piece", hint: "Part 2 played through from that piece, as Play Part 2 does. Runs 3 and 4 are the fight, with the numbers set below.", values: [["", "None, open the menu"], ...PART2.map((p) => [p.id, `${p.name} (${p.id})`] as const)] },
 
   { section: "run1", key: "ending", kind: "choice", id: "ending-pick", saved: ending, label: "Which cut of the ending plays", hint: "Remembered in this browser too.", values: ENDING_CUTS.map((c) => [c.id, c.name] as const) },
 

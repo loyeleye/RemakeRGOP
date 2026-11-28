@@ -379,6 +379,7 @@ body.in-ending #play .hud, body.in-ending #play .thumbs, body.in-ending #bark, b
 #gap-scene { position: fixed; inset: 0; z-index: 49; background: #000; opacity: 0; transition: opacity 0.6s; }
 #gap-scene.on { opacity: 1; }
 #gap-scene .pic { position: absolute; left: 50%; top: 50%; width: min(100vw, 100vh); aspect-ratio: 1; transform: translate(-50%, -50%); background-size: cover; background-position: center; background-color: #2a2018; }
+#gap-scene .pic.black { background-color: #000; }
 #gap-scene .pic .ph { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: #ffffff80; font-style: normal; }
 #gap-scene .pic.real .ph { display: none; }
 #gap-scene .tags { position: absolute; left: 12px; top: 12px; display: flex; gap: 8px; flex-wrap: wrap; max-width: calc(100% - 70px); }

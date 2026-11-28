@@ -205,6 +205,8 @@ export function initFightDebug(fight: () => FightRoom | null) {
   const run = (cmd: "restart3" | "restart4" | "win" | "lose", done: string) => () => {
     const r = room();
     if (!r) return say("No fight is on.");
+    // The menu closes, so the fight runs on (it stands still while the menu is open).
+    show(false);
     r.debug(cmd);
     say(done);
   };

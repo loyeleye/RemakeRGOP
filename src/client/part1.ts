@@ -14,6 +14,8 @@ export interface Piece {
   name: string;
   kind: "run" | "walk" | "card";
   run?: Run;
+  /** Part 2: the offspring fight, from run 3 or run 4 (client/part2.ts). */
+  fight?: 3 | 4;
   walk?: number;
   /** A card: its heading and one line on what it will be, and how much of it is ruled. */
   card?: { heading: string; summary: string; ruled: string; optional?: true; end?: true };
