@@ -40,7 +40,7 @@ function loadPieces() {
 }
 
 /** The game contract's look: no metal, rough, lit a little by its own paint. */
-function dressed(root: THREE.Object3D) {
+export function dressed(root: THREE.Object3D) {
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
@@ -79,7 +79,7 @@ export function dressCamp(group: THREE.Group, which: readonly { m: string; at: [
 }
 
 let shadeModel: Promise<GLTF | null> | null = null;
-function loadShade() {
+export function loadShade() {
   const plain = new GLTFLoader().register((parser) => {
     (parser as unknown as { textureLoader: THREE.Loader }).textureLoader = new THREE.TextureLoader(parser.options.manager);
     return { name: "plain_textures" };

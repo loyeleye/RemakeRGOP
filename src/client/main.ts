@@ -22,8 +22,10 @@ import { DYING } from "../engine/dying.js";
 import { PondRoom, answersTap } from "../server/pond.js";
 import { CampRoom } from "../server/camp.js";
 import { Run2Room } from "../server/run2.js";
+import { Run1Room } from "../server/run1.js";
+import { RUN1 } from "../engine/run1.js";
 import { RUN2 } from "../engine/run2.js";
-import { campSfx, run2Sfx } from "./part2-sfx.js";
+import { campSfx, run1Sfx, run2Sfx } from "./part2-sfx.js";
 import { campMusic, run2Music } from "./part2-music.js";
 import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
@@ -164,7 +166,7 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | CampRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | TidepoolRoom | MossRoom | FightRoom | Run2Room | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | CampRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | TidepoolRoom | MossRoom | FightRoom | Run2Room | Run1Room | null = null;
 
 /** Part 2's camp walk: in the chain, its last tap goes on to the ask. */
 function campRoom() {
@@ -172,6 +174,14 @@ function campRoom() {
   r.chain = chainAt >= 0 && chainBack === null;
   // For the screenshot scripts, as the fight's room is (window.lfFightRoom).
   (window as unknown as { lfCampRoom: CampRoom }).lfCampRoom = r;
+  return r;
+}
+
+/** Part 2's run 1: in the chain, the lamps coming in go on to the scene where they find him. */
+function run1Room() {
+  const r = new Run1Room();
+  r.chain = chainAt >= 0 && chainBack === null;
+  (window as unknown as { lfRun1Room: Run1Room }).lfRun1Room = r;
   return r;
 }
 
@@ -336,12 +346,12 @@ function noteOpt() {
 }
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" | "o3a" | "o3b" | "o3c" | "p2fight" | "camp" | "run2c" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" | "o3a" | "o3b" | "o3c" | "p2fight" | "camp" | "run2c" | "run1c" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
   sound.preloadVoices();
-  const r = run === "run2c" ? run2Room() : run === "camp" ? campRoom() : run === "p2fight" ? fightRoom() : run === "o3a" ? mossRoom() : run === "o3b" ? tidepoolRoom() : run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "run1c" ? run1Room() : run === "run2c" ? run2Room() : run === "camp" ? campRoom() : run === "p2fight" ? fightRoom() : run === "o3a" ? mossRoom() : run === "o3b" ? tidepoolRoom() : run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   // ?nostills: every run's reaction stills off (runs 8 to 10 also read it where they are built).
   if ("stillsOn" in r && new URLSearchParams(location.search).has("nostills")) r.stillsOn = false;
   // Run 5 after walk 7, where Kes's challenge was said: its opening leaves those lines out.
@@ -1158,6 +1168,8 @@ function storyTickSound(s: GameSnapshot) {
   else if (st.camp) campSfx(st.camp), campMusic(st.camp);
   // Run 2: the crew's work song, and its last phrase with the cheer.
   else if (st.run2) run2Sfx(st.run2), run2Music(st.run2);
+  // Run 1: no music, no bell; only the wreck and what moves on it.
+  else if (st.run1) run1Sfx(st.run1);
   else if (room!.phase === "playing" && musicFor !== st.movement) {
     musicFor = st.movement;
     sound.playMusic(st.movement); // starts on a tick, so the beat lines up with the 600 ms steps
@@ -1553,6 +1565,7 @@ function stopStorySound() {
   offspringSfx(undefined, false);
   campSfx(undefined);
   run2Sfx(undefined);
+  run1Sfx(undefined);
   campMusic(undefined);
   run2Music(undefined);
   musicFor = -1;
@@ -1608,10 +1621,10 @@ function renderHud() {
   if (story) {
     const rv = story.rival;
     $("score-1").hidden = !rv;
-    renderRun2Pips(story.run2);
+    renderRun2Pips(story.run2 ?? (story.run1 && { filled: story.run1.banks, of: story.run1.of, warm: -1 }), story.run1);
     // The free walk on the pond (and Part 2's camp): no score and no clock, just the place's name.
     // Part 2's run 2 has no clock either: its row of pips counts.
-    if (story.pond || story.camp || story.run2) {
+    if (story.pond || story.camp || story.run2 || story.run1) {
       $("score-0").hidden = true;
       $("ticks").textContent = story.title;
       return renderPad(s);
@@ -1639,8 +1652,9 @@ function renderHud() {
 }
 
 /** Part 2's run 2: a row of sixteen pips under the top bar, lit as the brazier fills, with a gap at warm. */
-function renderRun2Pips(r: NonNullable<RoomView["story"]>["run2"] | undefined) {
+function renderRun2Pips(r: { filled: number; of: number; warm: number } | undefined, run1?: NonNullable<RoomView["story"]>["run1"]) {
   let el = document.getElementById("run2-pips");
+  if (!run1) frost(-1, 3, false);
   if (!r) {
     if (el) el.hidden = true;
     return;
@@ -1652,11 +1666,30 @@ function renderRun2Pips(r: NonNullable<RoomView["story"]>["run2"] | undefined) {
     $("walk-goal").before(el);
   }
   el.hidden = false;
-  const key = `${r.filled}/${r.of}`;
+  // Run 1 also shows his warmth: three marks, and frost creeping in from the screen's edge as they go.
+  const key = `${r.filled}/${r.of}/${run1?.warmth ?? ""}`;
+  if (run1) frost(run1.warmth, run1.of3, run1.closing !== undefined);
   if (el.dataset.key === key) return;
   el.dataset.key = key;
-  el.setAttribute("aria-label", `The brazier: ${r.filled} of ${r.of}`);
-  el.innerHTML = Array.from({ length: r.of }, (_, i) => `<i class="${i < r.filled ? "lit" : ""}${i === r.warm ? " warm" : ""}"></i>`).join("");
+  el.setAttribute("aria-label", `The brazier: ${r.filled} of ${r.of}` + (run1 ? `. Warmth: ${run1.warmth} of ${run1.of3}` : ""));
+  el.innerHTML = Array.from({ length: r.of }, (_, i) => `<i class="${i < r.filled ? "lit" : ""}${i === r.warm ? " warm" : ""}"></i>`).join("") + (run1 ? `<b class="warmth">${Array.from({ length: run1.of3 }, (_, i) => `<i class="${i < run1.warmth ? "on" : ""}"></i>`).join("")}</b>` : "");
+}
+
+/** Run 1: frost from the screen's edge as his warmth goes, and the dark closing over him at none. */
+function frost(warmth: number, of: number, closing: boolean) {
+  let el = document.getElementById("run1-frost");
+  if (warmth < 0) {
+    if (el) el.hidden = true;
+    return;
+  }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "run1-frost";
+    $("walk-goal").before(el);
+  }
+  el.hidden = false;
+  el.style.setProperty("--frost", String(Math.max(0, of - warmth) / of));
+  el.classList.toggle("closing", closing);
 }
 
 function renderPad(s: GameSnapshot | null) {
@@ -2210,6 +2243,7 @@ function playPiece(i: number) {
   // Part 2's runs 3 and 4: the fight, from that run.
   if (p.fight) return (fightStart = p.fight), connectStory(playerName(), "p2fight");
   if (p.run2) return connectStory(playerName(), "run2c");
+  if (p.run1) return connectStory(playerName(), "run1c");
   connectStory(playerName(), p.run!);
 }
 
@@ -2265,12 +2299,17 @@ function chainWatch() {
     if (st.camp.done && !chainDone) (chainDone = true), window.setTimeout(() => chainAt >= 0 && chainOn(), 1200);
     return;
   }
+  // Part 2's run 1: no results screen; once the lamps have come in, on to the scene where they find him.
+  if (st.run1?.end?.done) {
+    if (!chainDone) (chainDone = true), window.setTimeout(() => chainAt >= 0 && chainOn(), 300);
+    return;
+  }
   // Part 2's run 2: no results screen; once two of the crew have him and the picture has held, on to the cage lights.
   if (st.run2?.end?.done) {
     if (!chainDone) (chainDone = true), window.setTimeout(() => chainAt >= 0 && chainOn(), 300);
     return;
   }
-  const i = st.run ? (chainPart === 2 ? piece2OfRun(st.run, OFFSPRING.run3, OFFSPRING.run4, RUN2.title) : pieceOfRun(st.run)) : -1;
+  const i = st.run ? (chainPart === 2 ? piece2OfRun(st.run, OFFSPRING.run3, OFFSPRING.run4, RUN2.title, RUN1.title) : pieceOfRun(st.run)) : -1;
   if (i >= 0 && i !== chainAt) (chainAt = i), chainSave(i), renderPart1();
 }
 
@@ -2961,7 +3000,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), staticOn: staticCut && now < staticCut.until ? staticCut.player : undefined, steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, opt: room?.story?.opt, ship: room?.story?.ship, fight: room?.story?.fight, walk: room?.story?.pond?.walk, looks: room?.story?.pond?.looks ?? room?.story?.camp?.looks ?? room?.story?.run2?.looks, camp: room?.story?.camp, run2: room?.story?.run2, camAt: { x: cam.cx, y: cam.cy } };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), staticOn: staticCut && now < staticCut.until ? staticCut.player : undefined, steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, opt: room?.story?.opt, ship: room?.story?.ship, fight: room?.story?.fight, walk: room?.story?.pond?.walk, looks: room?.story?.pond?.looks ?? room?.story?.camp?.looks ?? room?.story?.run2?.looks, camp: room?.story?.camp, run2: room?.story?.run2, run1: room?.story?.run1, camAt: { x: cam.cx, y: cam.cy } };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.

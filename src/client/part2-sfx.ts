@@ -11,12 +11,15 @@ import { audioOut } from "./sound.js";
 
 type Camp = NonNullable<StoryView["camp"]>;
 type Run2 = NonNullable<StoryView["run2"]>;
+type Run1 = NonNullable<StoryView["run1"]>;
 
 export const PART2_SFX = {
   /** The whole pack's level. */
   gain: 0.8,
   /** Each loop at full (build's guesses, for Ladi's ear). */
-  gains: { "camp-fire": 0.55, "shade-hush": 0.5, fizz: 0.7, cheer: 0.8, "light-lines": 0.9, "cage-light": 0.9, hands: 0.8 } as Record<string, number>,
+  /** Run 1: the wreck's air (the quietest thing in the game), fading as the flame tone comes up; the hush full within `near` tiles of a nightshade and gone past 3 (the README). */
+  run1: { air: 0.22, airUnderFlame: 0.4, tone: 0.5, hush: { full: 1, gone: 3 } },
+  gains: { "wreck-air": 1, "flame-tone": 1, snuff: 0.7, "ember-catch": 0.8, "lamps-come": 0.8, "camp-fire": 0.55, "shade-hush": 0.5, fizz: 0.7, cheer: 0.8, "light-lines": 0.9, "cage-light": 0.9, hands: 0.8 } as Record<string, number>,
   /** Run 2's cheer has voices in it (a small crowd, no words found): Ladi's to allow or drop. Off, the music's last phrase carries the end. */
   cheer: true,
   /** The fire is full within `full` tiles and gone past `gone` (build). */
@@ -158,4 +161,29 @@ export function run2Sfx(r: Run2 | undefined) {
   if (e?.lines !== undefined && pe?.lines === undefined) s.once("light-lines");
   if (e?.lit !== undefined && pe?.lit === undefined) s.once("cage-light");
   if (e?.held !== undefined && pe?.held === undefined) s.once("hands");
+}
+
+let run1: { sfx: CampSfx; last: Run1 | null } | null = null;
+
+/** Each tick of run 1: the wreck's air; the hush as one comes near; the snuff as one goes out; the ember as the brazier first catches, then the flame tone rising a step a bank; the lamps at the end. */
+export function run1Sfx(r: Run1 | undefined) {
+  const o = audioOut();
+  if (o && r) load(o.c);
+  if (!r || !o) {
+    run1?.sfx.silence();
+    run1 = null;
+    return;
+  }
+  if (!buffers) return;
+  run1 ??= { sfx: new CampSfx(o.c, o.o, buffers), last: null };
+  const S = PART2_SFX.run1, p = run1.last, s = run1.sfx, closing = r.closing !== undefined;
+  run1.last = r;
+  const k = r.banks / r.of;
+  s.hold("wreck-air", closing ? 0 : S.air * (1 - (1 - S.airUnderFlame) * k));
+  s.hold("flame-tone", closing || r.banks === 0 ? 0 : S.tone * Math.max(1 / 7, k));
+  s.hold("shade-hush", closing || r.end ? 0 : closeness(r.near, S.hush));
+  if (!p) return;
+  if (r.snuffed && r.snuffed.tick !== p.snuffed?.tick) s.once("snuff");
+  if (r.banks === 1 && p.banks === 0) s.once("ember-catch");
+  if (r.end?.lamps && !p.end?.lamps) s.once("lamps-come");
 }

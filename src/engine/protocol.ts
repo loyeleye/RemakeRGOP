@@ -299,6 +299,8 @@ export interface StoryView {
    * aim on them), the nightshades at the light's edge, who faces where while they stand, and done once the
    * last tap is made (the page goes on).
    */
+  /** Part 2's run 1, the dark run: banks of how many, the lit circle (tiles), his warmth of three, whether he stands in the dark, the nightshades (board tiles, and whether each has hold of him), the nearest one (tiles), the last snuff and mark lost (ticks), the dark closing over him (tick), how many rounds lost, where the lantern lies, and the end (the lamps' places as they come; done hands on). */
+  run1?: { banks: number; of: number; lit: number; warmth: number; of3: number; dark: boolean; shades: { id: number; x: number; y: number; on: boolean }[]; near: number; snuffed?: { tick: number; x: number; y: number }; marked?: number; closing?: number; tries: number; lantern: { x: number; y: number }; end?: { at: number; lamps?: { x: number; y: number }[]; done?: true } };
   /** Part 2's run 2: banks that counted of how many, where warm is, the last crew light to fizz past warm (tick and board tile), who faces where, and how it ends (ticks: when it filled, the lines ran, the bars lit, both had him; done hands on). */
   run2?: { filled: number; of: number; warm: number; fizz?: { tick: number; x: number; y: number }; looks?: { id: number; x: number; y: number }[]; end?: { at: number; lines?: number; lit?: number; held?: number; done?: true } };
   camp?: { goal?: string; done?: true; taps: { x: number; y: number; h: number }[]; shades: { x: number; y: number; near: boolean }[]; looks?: { id: number; x: number; y: number }[];

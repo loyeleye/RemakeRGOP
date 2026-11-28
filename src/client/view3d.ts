@@ -24,6 +24,8 @@ import { OffspringFx } from "./offspring-dress.js";
 import { dressYard } from "./yard-dress.js";
 import { CampFx, Run2Fx, dressCamp } from "./camp-dress.js";
 import { RUN2, RUN2_PIECES } from "../engine/run2.js";
+import { RUN1 } from "../engine/run1.js";
+import { Run1Fx, WRECK_LOOK, dressWreck } from "./wreck-dress.js";
 import { CAMP } from "../engine/camp.js";
 import { OFFSPRING } from "../engine/offspring.js";
 import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villagers.js";
@@ -84,6 +86,8 @@ export interface DrawState {
   looks?: { id: number; x: number; y: number }[];
   /** Part 2, the camp walk (see StoryView.camp), and where the camera looks (board tiles), so the nightshades move only off camera. */
   camp?: NonNullable<import("../engine/protocol.js").StoryView["camp"]>;
+  /** Part 2's run 1: the dark run (the lit circle, his warmth, the nightshades, the end). */
+  run1?: NonNullable<import("../engine/protocol.js").StoryView["run1"]>;
   /** Part 2's run 2: the brazier filling, the fizz, and how it ends. */
   run2?: NonNullable<import("../engine/protocol.js").StoryView["run2"]>;
   camAt?: { x: number; y: number };
@@ -2119,6 +2123,12 @@ export class World {
       g.add(yard);
       dressCamp(yard);
     }
+    // The wreck (Part 2, run 1): the maps thread's broken brazier ground (wreck-dress.ts).
+    if (shrine.id === RUN1.shrine) {
+      const wreck = new THREE.Group();
+      g.add(wreck);
+      dressWreck(wreck);
+    }
     // And for run 2, its gate barred.
     if (shrine.id === RUN2.shrine) {
       const yard = new THREE.Group();
@@ -3260,6 +3270,46 @@ export class World {
     this.fightFx.step({ f, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, rook: this.players.get(st.me)?.root ?? null });
   }
 
+  /** Part 2, run 1: the dark; the brazier's pool a bank at a time; his glow; the nightshades; the lamps at the end. */
+  private run1Fx: Run1Fx | null = null;
+  private stepRun1(st: DrawState, time: number) {
+    const r = st.run1;
+    if (!r) {
+      if (this.run1Fx) {
+        this.run1Fx.dispose();
+        this.run1Fx = null;
+        this.hemi.intensity = this.dayLight.hemi;
+        this.sun.intensity = this.dayLight.sun;
+        this.brazierLight.distance = 30;
+        if (this.fireParts) {
+          const p = this.fireParts;
+          p.fire.visible = p.embers.visible = p.glow.visible = p.pillar.visible = true;
+          p.fire.scale.setScalar(1);
+        }
+      }
+      return;
+    }
+    if (!this.run1Fx) {
+      this.run1Fx = new Run1Fx(glowSprite);
+      this.scene.add(this.run1Fx.all);
+    }
+    const D = WRECK_LOOK.dark, full = !!r.end;
+    // The dark: the sky's light down to almost nothing; at the end the ground is lit.
+    this.hemi.intensity = this.dayLight.hemi * (full ? 0.6 : D.hemi);
+    this.sun.intensity = this.dayLight.sun * (full ? 0.5 : D.sun);
+    const k = r.lit / RUN1.lit.full, on = r.banks > 0 && r.closing === undefined;
+    this.brazierLight.intensity = on ? WRECK_LOOK.fire.power * (0.35 + 0.65 * k) : 0;
+    this.brazierLight.distance = on ? r.lit + WRECK_LOOK.fire.beyond : 0.01;
+    if (this.fireParts) {
+      const p = this.fireParts;
+      p.fire.visible = p.glow.visible = p.embers.visible = on;
+      p.pillar.visible = full;
+      if (on) p.fire.scale.set(0.35 + 0.65 * k, 0.2 + 0.8 * k, 0.35 + 0.65 * k);
+    }
+    const b = st.shrine.board;
+    this.run1Fx.step({ r, time, half: { w: b.width / 2, h: b.height / 2 }, rook: this.players.get(st.me)?.root ?? null });
+  }
+
   /** Part 2, the camp walk: its lamps, the cooking fire, the nightshades; the brazier is cold. Run 2: the same lamps, the brazier lit bank by bank, and its ending. */
   private campFx: CampFx | null = null;
   private run2Fx: Run2Fx | null = null;
@@ -4397,6 +4447,7 @@ export class World {
     this.stepShip(st, time);
     this.stepFight(st, time);
     this.stepCamp(st, time);
+    this.stepRun1(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
     // Watchers: story figures standing off the plaza, turning slowly to keep you in view.

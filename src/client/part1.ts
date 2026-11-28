@@ -21,6 +21,8 @@ export interface Piece {
   camp?: true;
   /** Part 2's run 2, the crew's brazier (server/run2.ts). */
   run2?: true;
+  /** Part 2's run 1, the dark run (server/run1.ts). */
+  run1?: true;
   /** A card: its heading and one line on what it will be, and how much of it is ruled. */
   card?: { heading: string; summary: string; ruled: string; optional?: true; end?: true };
   /**

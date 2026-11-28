@@ -165,6 +165,16 @@ export const THEMES: Record<string, Theme> = {
       fog: "#1c2030", clouds: "#3a4256", hemi: ["#6a6c88", "#3a2a1c", 0.5] as [string, string, number], sun: ["#9aa8d8", 0.35] as [string, number], exposure: 1.05,
     };
   },
+  // The wreck (Part 2, run 1): old ship planks under a cold blue-grey cloud; run 1 takes the light down to the dark (wreck-dress.ts).
+  get wreck() {
+    const base = THEMES["low-one"]!;
+    return {
+      ...base, name: "The wreck", floor: "wreck", floorTiles: 4, grass: "#3a3e48",
+      sky: { zenith: "#0a0f1c", sky: "#1a2234", haze: "#3a4252", below: "#101624", stars: 0.2 },
+      fog: "#1a2030", clouds: "#3c4658", hemi: ["#8a9ab8", "#2a2a30", 0.7] as [string, string, number], sun: ["#a8b8d8", 0.6] as [string, number], exposure: 1,
+      particles: null, dressed: true, decorate() {},
+    };
+  },
   // Run 2 on the same camp, gate barred: the same night.
   get "crew-run2"() {
     return { ...THEMES["warm-camp"]!, name: "The crew's brazier" };

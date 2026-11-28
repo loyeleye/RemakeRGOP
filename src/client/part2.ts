@@ -15,7 +15,8 @@ const DRAFT = "Draft: not ruled by Ladi yet.";
 export const PART2: Piece[] = [
   // Pictures A2 to A5 (locked by Ladi); A1 is the black.
   { id: "0", name: "The wake", kind: "card", scene: "held", card: { heading: "The wake", summary: "Black, the last light of Part 1 going out. Rook on his back in a new net in a rotten wreck, Lumi's dark lantern beside him. \"She sent me the long way.\" He sits up: \"Ground doesn't just go. Not like that.\"", ruled: "Part ruled: the net, the lantern beside him and both thoughts are Ladi's. Pictures A2 to A5 are locked." } },
-  { id: "1", name: "Run 1, the dark run", kind: "card", card: { heading: "Run 1, the dark run", summary: "Alone in the wreck with short sight and no voice, he relights the dead brazier. Nightshades snuff the lights at the edge. The brazier catches and the dark draws back.", ruled: "Part ruled: the two thoughts are Ladi's. That it can't be lost is the gameplay thread's recommendation, not ruled. The map is designed, not in the game yet." } },
+  // Run 1 (server/run1.ts): the gameplay thread's second design, after Ladi's ruling that light snuffs nightshades; the maps thread's wreck.
+  { id: "1", name: "Run 1, the dark run", kind: "run", run1: true },
   // Pictures B1 (v2), B2, B3, locked by Ladi. Outrider's two lines are draft, so none is shown.
   { id: "1e", name: "The lamps find him", kind: "card", scene: "held", card: { heading: "The lamps find him", summary: "Lamps come through the gap toward his light. Outrider looks up at the net, not at him, then comes down with the grin.", ruled: "Part ruled: that somebody says the rope is new is Ladi's. Outrider's lines are draft and not in yet. The three pictures are locked." } },
   // Pictures C1 and C3 locked; C2 is not drawn yet.
@@ -100,8 +101,8 @@ export const HELD2: Record<string, Held> = {
 export const piece2Index = (id: string) => PART2.findIndex((p) => p.id === id);
 
 /** The fight's piece by its run's title (OFFSPRING.run3 and run4), or -1. */
-export function piece2OfRun(title: string, run3: string, run4: string, run2?: string): number {
-  return title === run3 ? piece2Index("3") : title === run4 ? piece2Index("4") : title === run2 ? piece2Index("2") : -1;
+export function piece2OfRun(title: string, run3: string, run4: string, run2?: string, run1?: string): number {
+  return title === run3 ? piece2Index("3") : title === run4 ? piece2Index("4") : title === run2 ? piece2Index("2") : title === run1 ? piece2Index("1") : -1;
 }
 
 const KEY = "lanternfall.part2";
