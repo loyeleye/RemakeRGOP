@@ -997,4 +997,30 @@ describe("Part 2, runs 3 and 4: the offspring fight", () => {
       OFFSPRING.hunt.see3 = 8;
     }
   });
+  it("the fight's reach on loose light (OFFSPRING.reach, 10 by default): the same in runs 3 and 4; the scripted first pull keeps 10", () => {
+    expect(OFFSPRING.reach).toBe(10);
+    expect(play(3).room.storyView().fight!.reach).toBeUndefined();
+    OFFSPRING.reach = 6;
+    try {
+      const p = play(3);
+      // The opening: his first pull is the usual 10, and the view says so.
+      expect(p.g.pullReach).toBe(6);
+      expect(p.room.storyView().fight!.reach).toBe(10);
+      p.send({ t: "act", action: { kind: "staff", wisp: 0 } });
+      for (let i = 0; i < 30 && p.room.state.part === "open"; i++) p.tick();
+      expect(p.room.state.part).toBe("play");
+      expect(p.room.storyView().fight!.reach).toBe(6);
+      const w = p.g.wisps.find((q) => !p.g.away.has(q.id) && !p.x.banked.has(q.id))!;
+      for (const [d, ok] of [[5, true], [8, false]] as const) {
+        p.me.pos = p.me.prev = pt(w.pos.x - d, w.pos.y);
+        expect(p.g.inReach(p.me, w)).toBe(ok);
+      }
+      // Run 4: the same.
+      const q = play(4);
+      expect(q.g.pullReach).toBe(6);
+      expect(q.room.storyView().fight!.reach).toBe(6);
+    } finally {
+      OFFSPRING.reach = 10;
+    }
+  });
 });

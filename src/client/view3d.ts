@@ -4625,7 +4625,7 @@ export class World {
     // My reach square and walk marker.
     const me = st.snap.players.find((p) => p.id === st.me);
     if (me) {
-      const r = me.mode === "pull" ? (st.ship?.reach ?? st.opt?.reach ?? PULL_REACH) : PUSH_REACH;
+      const r = me.mode === "pull" ? (st.ship?.reach ?? st.fight?.reach ?? st.opt?.reach ?? PULL_REACH) : PUSH_REACH;
       const mx = lerp(me.px, me.x);
       const my = lerp(me.py, me.y);
       let x0 = Math.max(1, mx - r);

@@ -182,6 +182,8 @@ export interface StoryView {
     run: 3 | 4;
     part: "open" | "play" | "flare" | "kill";
     tick: number;
+    /** His pull's reach now, when it isn't the usual (OFFSPRING.reach set); the client's reach square and tap check follow it. */
+    reach?: number;
     it: { x: number; y: number; face: number; after: "her" | "fen" | "wisp" | "brazier" | "shard" | null; to?: { x: number; y: number }; inside: number; held: boolean; wound: number; knocked?: number; eating?: boolean; /** Run 4, the dark: no light shows its body (draw nothing of it but its eye and cone). */ hidden?: true; /** It crawls (the wound open) or limps (hurt, after its jump). */ crawl?: true; /** Its back glows where to strike: 1 held with the shard out, 2 and he is behind it (a tap strikes). */ strike?: 1 | 2; /** A leap to her, drawn by her flare: from, to, the tick it left and how many ticks it takes. */ leap?: { from: { x: number; y: number }; to: { x: number; y: number }; t0: number; ticks: number } };
     her: { x: number; y: number; light: number; full: number; glow: number; doing: "rest" | "windup" | "hold"; left: number; of: number; flash?: { kind: "shove" | "blast" | "save" | "flare"; tick: number }; /** Run 4 (the lunge trial): it is on her, feeding on her light; or her light is out and she is down. */ fed?: true; down?: true };
     /** Run 4 (the lunge trial): it gathers itself to leap at her; it goes on tick `go`, after `of` ticks of tell. */

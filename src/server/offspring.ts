@@ -6,7 +6,7 @@
 // of it and bank it, until the brazier holds its eye for the kill. Numbers in OFFSPRING.
 
 import { Tile, pt, samePt, type Pt } from "../engine/board.js";
-import { Game, Rng, TICK_MS, type Guild, type Wisp } from "../engine/game.js";
+import { Game, PULL_REACH, Rng, TICK_MS, type Guild, type Wisp } from "../engine/game.js";
 import { shrineById } from "../engine/maps.js";
 import { OFFSPRING, oyRoom } from "../engine/offspring.js";
 import type { ClientMsg, Phase, RoomView, ServerMsg, StoryLine, StoryView } from "../engine/protocol.js";
@@ -229,7 +229,9 @@ export class FightRoom {
     // A banked wisp stays in the brazier until the offspring takes it back out.
     g.respawnPause = GONE;
     // A wisp torn from the wound comes to him wherever he stands; the rest as usual.
-    g.reachRule = (p, w) => this.torn.has(w.id) || Math.max(Math.abs(p.pos.x - w.pos.x), Math.abs(p.pos.y - w.pos.y)) <= g.pullReach;
+    // The fight's reach on loose light (OFFSPRING.reach): all but the scripted first pull, which keeps the usual reach.
+    g.reachRule = (p, w) => this.torn.has(w.id) || Math.max(Math.abs(p.pos.x - w.pos.x), Math.abs(p.pos.y - w.pos.y)) <= (this.part === "open" && w.id === 0 ? PULL_REACH : g.pullReach);
+    if (O.reach > 0) g.pullReach = O.reach;
     const place = (id: number, [x, y]: readonly [number, number]) => {
       const p = this.player(id);
       p.pos = p.prev = pt(c.x + x, c.y + y);
@@ -1347,6 +1349,7 @@ export class FightRoom {
       run: this.run,
       part: this.part,
       tick: g.tick,
+      ...(g.pullReach !== PULL_REACH ? { reach: this.part === "open" ? PULL_REACH : g.pullReach } : {}),
       it: { x: it.x, y: it.y, face: it.face, after: it.held ? "her" : it.after, ...(l ? { to: { x: l.at.x, y: l.at.y } } : {}), inside: this.inside.size, held: it.held, wound: this.wound.open ? 1 : 0, knocked: it.knocked, ...(it.eat > 0 ? { eating: true } : {}), ...(!body ? { hidden: true } : {}), ...((this.wound.open || g.tick < this.hurtUntil) && O.wound.crawl ? { crawl: true as const } : {}), ...(this.run === 4 && body && !safe && !this.wound.open && this.part !== "flare" ? (O.hunt.on ? (this.behind() && (this.part !== "kill" || this.atFire()) && !(it.leap && g.tick <= it.leap.t0 + it.leap.ticks) ? { strike: 2 as const } : {}) : it.held && this.shard.shown ? { strike: this.behind() ? (2 as const) : (1 as const) } : {}) : {}), ...(body && it.leap && g.tick <= it.leap.t0 + it.leap.ticks + 1 ? { leap: it.leap } : {}) },
       her: { x: sol.x, y: sol.y, light: this.her.light, full: O.her.full, glow: this.herGlow(), doing: this.part === "flare" ? "hold" : this.her.doing, left: this.her.left, of: this.her.of, ...(this.her.flash ? { flash: this.her.flash } : {}), ...(this.herDown ? { down: true as const } : this.onHer() ? { fed: true as const } : {}) },
       ...(this.lungeAt >= 0 ? { lunge: { go: this.lungeAt, of: O.lunge.tell, to: { x: sol.x, y: sol.y } } } : {}),

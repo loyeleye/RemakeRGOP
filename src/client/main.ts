@@ -2988,7 +2988,7 @@ function frame(now: number) {
     const p = snap.players.find((q) => q.id === me);
     const w = snap.wisps.find((q) => q.id === lit);
     const ship = room?.story?.ship, c = shrine.board.center;
-    const reach = p?.mode === "push" || !ship ? (p?.mode === "push" ? PUSH_REACH : room?.story?.opt?.reach ?? PULL_REACH) : ship.reach;
+    const reach = p?.mode === "push" || !ship ? (p?.mode === "push" ? PUSH_REACH : room?.story?.fight?.reach ?? room?.story?.opt?.reach ?? PULL_REACH) : ship.reach;
     const near = !!p && !!w && (ship && p.mode !== "push" ? shipReach(p.x - c.x, p.y - c.y, w.x - c.x, w.y - c.y, reach) : Math.max(Math.abs(w.x - p.x), Math.abs(w.y - p.y)) <= reach);
     $("staff").classList.toggle("far", !near);
   }

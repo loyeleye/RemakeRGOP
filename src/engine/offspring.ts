@@ -343,6 +343,12 @@ export const OFFSPRING = {
   card: { won: "It's down.", again3: "Again, from the first pull.", again4: "Again, from her flare." },
   /** Where a loss in run 4 starts again: run 3's first pull (Ladi, 28 Nov 1:29 PM: "Cut #3", the gameplay thread's list item "Losing run 4 restarts run 4 only"), or 4 for her flare as before. A dial for comparing. */
   retryFrom: 3 as 3 | 4,
+  /**
+   * His pull's reach on loose light, in tiles, the same in runs 3 and 4 (Ladi, 28 Nov 6:04 AM PT: "I'd rather keep runs 3
+   * and 4 reach consistent"). 10 is the usual; the gameplay thread's dial for Ladi to try 8 and 6 (?fight=reach:6), Ladi's
+   * card to pick the default. The scripted first pull keeps 10, so the opening is unchanged.
+   */
+  reach: 10,
   /** Seconds a caption stays up (in ticks). */
   captionTicks: 6,
 };
