@@ -14,7 +14,8 @@ import { cleanAction, moveWisp } from "./granny.js";
 import { realClock, type Clock } from "./room.js";
 
 const YOU = 1, SOL_ID = 2, FEN_ID = 3;
-const ROOK = "Rook", SOLENNE = "Solenne", FEN = "Fen";
+// The boy's tag is "The boy" until he gives his name himself at camp 2 (the story thread, 28 Nov): nobody has named him to Rook.
+const ROOK = "Rook", SOLENNE = "Solenne", FEN = "The boy";
 const GONE = 1e9;
 
 type After = NonNullable<StoryView["fight"]>["it"]["after"];

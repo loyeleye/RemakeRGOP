@@ -17,6 +17,8 @@ export interface Piece {
   /** Part 2: the offspring fight, from run 3 or run 4 (client/part2.ts). */
   fight?: 3 | 4;
   walk?: number;
+  /** Part 2's camp walk (server/camp.ts), in place of a home-island walk. */
+  camp?: true;
   /** A card: its heading and one line on what it will be, and how much of it is ruled. */
   card?: { heading: string; summary: string; ruled: string; optional?: true; end?: true };
   /**

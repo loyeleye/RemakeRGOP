@@ -22,6 +22,8 @@ import { SIEVE } from "../engine/sieve.js";
 import { RESCUE_LOOK, RescueFx, type VillagerRig } from "./rescue-dress.js";
 import { OffspringFx } from "./offspring-dress.js";
 import { dressYard } from "./yard-dress.js";
+import { CampFx, dressCamp } from "./camp-dress.js";
+import { CAMP } from "../engine/camp.js";
 import { OFFSPRING } from "../engine/offspring.js";
 import { VILLAGERS, VILLAGER_BASES, tintVillager, type Villager } from "./villagers.js";
 import { RematchFx } from "./rematch-dress.js";
@@ -79,6 +81,9 @@ export interface DrawState {
   walk?: number;
   /** A walk's people who face somewhere while they stand (Maudie toward the dock in walk 7). */
   looks?: { id: number; x: number; y: number }[];
+  /** Part 2, the camp walk (see StoryView.camp), and where the camera looks (board tiles), so the nightshades move only off camera. */
+  camp?: NonNullable<import("../engine/protocol.js").StoryView["camp"]>;
+  camAt?: { x: number; y: number };
 }
 
 // ------------------------------------------------------------------ camera
@@ -193,9 +198,9 @@ export class Camera {
 
 type ModelName = "dawn" | "dusk" | "brazier" | "monolith" | "boulder";
 /** Story characters with a model of their own so far. Others wear their guild's robe. */
-const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell", "sefa", "kes", "maudie", "mabry", "orrin", "solenne", "fen"] as const;
+const CAST_MODELS = ["rook", "lumi", "hesta", "wick", "moth", "nell", "sefa", "kes", "maudie", "mabry", "orrin", "solenne", "fen", "outrider", "crew-cook", "crew-lantern", "crew-gate", "crew-lamp"] as const;
 /** Each character's height against Rook's (models come in at one height). Lumi is nine. */
-export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95, ferryman: 1.05, tilda: 0.88, solenne: 1.04, fen: 0.8 };
+export const CAST_SCALE: Record<string, number> = { lumi: 0.7, nell: 0.76, sefa: 0.6, hesta: 0.95, wick: 1.05, moth: 0.95, kes: 0.95, orrin: 1.05, maudie: 0.92, mabry: 0.78, jarek: 1.05, manu: 1.08, garrick: 1.0, hania: 0.92, marit: 0.92, sina: 0.95, ferryman: 1.05, tilda: 0.88, solenne: 1.04, fen: 0.8, outrider: 1.04, "crew-cook": 0.95, "crew-lantern": 1.0, "crew-gate": 1.06, "crew-lamp": 0.97 };
 /** How much a character's own colours light it, so dark skin and cloth read under any island's light. */
 const CAST_FLAT = 0.25;
 const models: Partial<Record<string, THREE.Object3D>> = {};
@@ -2105,6 +2110,12 @@ export class World {
       g.add(yard);
       dressYard(yard);
     }
+    // The same yard before the fight, warm (Part 2, the camp walk: camp-dress.ts).
+    if (shrine.id === CAMP.shrine) {
+      const yard = new THREE.Group();
+      g.add(yard);
+      dressCamp(yard);
+    }
     // Each arm is a chain of overlapping plateaus that shrink toward the tip.
     if (shrine.isle?.arms?.length) {
       const pts = armSamples(shrine.isle);
@@ -3239,6 +3250,37 @@ export class World {
     this.fightFx.step({ f, t: st.t, time, half: { w: b.width / 2, h: b.height / 2 }, rook: this.players.get(st.me)?.root ?? null });
   }
 
+  /** Part 2, the camp walk: its lamps, the cooking fire, the nightshades; the brazier is cold. */
+  private campFx: CampFx | null = null;
+  private stepCamp(st: DrawState, time: number) {
+    const c = st.camp;
+    if (!c) {
+      if (this.campFx) {
+        this.campFx.dispose();
+        this.campFx = null;
+        if (this.fireParts) {
+          const p = this.fireParts;
+          p.fire.visible = p.embers.visible = p.glow.visible = p.pillar.visible = true;
+        }
+      }
+      return;
+    }
+    if (!this.campFx) {
+      this.campFx = new CampFx(glowSprite);
+      this.scene.add(this.campFx.all);
+    }
+    // The cold brazier: no fire, no light of its own.
+    this.brazierLight.intensity = 0;
+    if (this.fireParts) {
+      const p = this.fireParts;
+      p.fire.visible = p.embers.visible = p.glow.visible = p.pillar.visible = false;
+    }
+    // The boy carries no lamp in the camp either.
+    for (const rig of this.players.values()) if (rig.cast === "fen") rig.lantern.visible = false;
+    const b = st.shrine.board, half = { w: b.width / 2, h: b.height / 2 };
+    this.campFx.step({ c, time, half, camAt: { x: (st.camAt?.x ?? half.w) - half.w, z: (st.camAt?.y ?? half.h) - half.h } });
+  }
+
   /** Run 10, the ship home: the cloud sea, the patch ahead, the hull and its lamp, the hooded figure, home at the end (ship-dress.ts), and the light going from night to grey. */
   private shipFx: ShipFx | null = null;
   private stepShip(st: DrawState, time: number) {
@@ -3936,8 +3978,8 @@ export class World {
     this.scene.add(beam);
     this.scene.add(root);
     const rig: PlayerRig = { root, body: null, bodyKind: null, ring, lantern, beam, facing: 0, guild, cast };
-    // Rook carries no lantern glow: it hides his face.
-    lantern.visible = cast !== "rook";
+    // Rook carries no lantern glow: it hides his face. Nor do the crew of Part 2, who are no lamplighters.
+    lantern.visible = cast !== "rook" && cast !== "outrider" && !cast?.startsWith("crew-");
     this.dressPlayer(rig);
     return rig;
   }
@@ -4328,6 +4370,7 @@ export class World {
     this.stepTidepool(st, time);
     this.stepShip(st, time);
     this.stepFight(st, time);
+    this.stepCamp(st, time);
     if (this.rim) (this.rim.material as THREE.LineBasicMaterial).opacity = 0.55 + rimPulse * 0.45 * (0.5 + 0.5 * Math.sin(time * 10));
 
     // Watchers: story figures standing off the plaza, turning slowly to keep you in view.

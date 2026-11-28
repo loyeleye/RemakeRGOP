@@ -155,6 +155,7 @@ b.kes, .bark.kes span b { color: #c9a2ff; }
 .bark.thought { border-radius: 20px; border: 1px dashed #ffffff66; background: #1c1830d8; font-style: italic; color: #e8e4f4; padding-right: 14px; }
 .bark.thought::before, .bark.thought::after { content: ""; position: absolute; border-radius: 50%; background: #1c1830d8; border: 1px dashed #ffffff66; }
 .bark.thought::before { width: 12px; height: 12px; left: calc(50% - 6px); bottom: -16px; }
+.bark .draft-mark { font-style: normal; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: #ffd98a; border: 1px solid #ffd98a88; border-radius: 6px; padding: 0 4px; margin-left: 4px; vertical-align: 1px; white-space: nowrap; }
 .bark.thought::after { width: 7px; height: 7px; left: calc(50% + 3px); bottom: -27px; }
 /* Run 9: the shadow cuts Kes off. Her bubble breaks up in static for the burst, and is then gone. */
 .bark.static { background-color: #8a8a94; background-image: url(stills/r9-static-tile.png), var(--static); background-size: 128px 128px, 64px 64px; border-color: #ffffff77; animation: static-jump 0.09s steps(1) infinite; }
@@ -491,3 +492,4 @@ label.t-text { cursor: pointer; }
 @keyframes np-moon { 0%, 16% { left: 14%; top: 72%; opacity: 0; } 30% { opacity: 1; } 50% { left: 50%; top: 22%; } 70% { opacity: 1; } 84%, 100% { left: 86%; top: 72%; opacity: 0; } }
 @keyframes np-dawn { 0%, 66% { opacity: 0; } 100% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #night-pass .moon { display: none; } }
+body.camp-walk #run, body.camp-walk #run2, body.camp-walk #mode, body.camp-walk #staff, body.camp-walk #next, body.camp-walk #shard { display: none !important; }

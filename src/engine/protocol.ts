@@ -66,6 +66,8 @@ export interface StoryLine {
   still?: StillCue;
   /** Shown but not voiced (Nell and Sefa in Granny's game, Ladi 25 Nov). */
   quiet?: boolean;
+  /** Its words are the story thread's draft, not yet approved by Ladi: shown with a small "draft" mark (Part 2's camp walk). */
+  draft?: boolean;
   /** A thought, not said aloud: a thought bubble over its player, never voiced (Rook in run 7, Ladi 25 Nov). */
   thought?: boolean;
   /** Its voice may start while another is still speaking (Nell and Sefa's "Granny!" as Hesta lands). */
@@ -292,6 +294,14 @@ export interface StoryView {
   };
   /** The free walk on the pond: no score, people can be tapped, and Lumi's lantern lies by the water. */
   /** kitchen: how many times Rook has gone in his door this walk (from walk 2); a rise opens the kitchen still. */
+  /**
+   * Part 2's camp walk (server/camp.ts): the goal once it shows, the things to tap (tiles, and how high to
+   * aim on them), the nightshades at the light's edge, who faces where while they stand, and done once the
+   * last tap is made (the page goes on).
+   */
+  camp?: { goal?: string; done?: true; taps: { x: number; y: number; h: number }[]; shades: { x: number; y: number; near: boolean }[]; looks?: { id: number; x: number; y: number }[];
+    /** How far Rook stands from the cook's fire and the nearest nightshade (tiles), for the loops. */
+    hear?: { fire: number; shade: number } };
   pond?: { lantern: { x: number; y: number }; leaving?: boolean; walk?: number; light?: "afternoon" | "morning" | "sunset" | "night" | "dusk"; looks?: { id: number; x: number; y: number }[]; kitchen?: number;
     /** Part 1's chain: the walk's last tap was made, and the page goes on. */
     done?: boolean;

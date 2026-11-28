@@ -20,6 +20,8 @@ import { ShipRoom } from "../server/shiphome.js";
 import { SHIP, SHIP_DECK, shipReach } from "../engine/shiphome.js";
 import { DYING } from "../engine/dying.js";
 import { PondRoom, answersTap } from "../server/pond.js";
+import { CampRoom } from "../server/camp.js";
+import { campSfx } from "./part2-sfx.js";
 import { JobRoom } from "../server/job.js";
 import { WALKS } from "../engine/walks.js";
 import { loadOpt, loadProgress, reach, resetOpts, resetProgress, saveOpt } from "./progress.js";
@@ -91,7 +93,7 @@ function onServer(m: ServerMsg) {
       // end the voice still talking stops too, so the end's own lines are heard at once.
       if (was === "playing" && room.phase !== "playing") dropBarks(room.phase === "results");
       if (room.story) storyPhaseSound(was);
-      placeView(!!room.story?.pond, !!room.story?.pond?.leaving);
+      placeView(!!room.story?.pond || !!room.story?.camp, !!room.story?.pond?.leaving);
       openKitchen();
       noteProgress();
       noteOpt();
@@ -159,7 +161,16 @@ function connectPractice(name: string) {
   link.send({ t: "bot", guild: 1, level: botLevel() });
 }
 
-let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | TidepoolRoom | MossRoom | FightRoom | null = null;
+let storyRoom: LessonRoom | StoryRoom | GrannyRoom | PondRoom | CampRoom | JobRoom | RaceRoom | DyingRoom | SieveRoom | RescueRoom | ShipRoom | RematchRoom | CoveRoom | KiteRoom | TidepoolRoom | MossRoom | FightRoom | null = null;
+
+/** Part 2's camp walk: in the chain, its last tap goes on to the ask. */
+function campRoom() {
+  const r = new CampRoom();
+  r.chain = chainAt >= 0 && chainBack === null;
+  // For the screenshot scripts, as the fight's room is (window.lfFightRoom).
+  (window as unknown as { lfCampRoom: CampRoom }).lfCampRoom = r;
+  return r;
+}
 
 /** Back from a job (an optional job run), the walk starts by the sky skiff (Ladi, 26 Nov). */
 let walkFromJob = false;
@@ -314,12 +325,12 @@ function noteOpt() {
 }
 
 /** A story run runs in the page too, like Practice: run 1 (the Grand Kindling), run 2 (Lumi's lesson) or run 3 (Granny's game). */
-function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" | "o3a" | "o3b" | "o3c" | "p2fight" = 1, walk = 1) {
+function connectStory(name: string, run: 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9 | 10 | "pond" | "o1" | "o2" | "o3a" | "o3b" | "o3c" | "p2fight" | "camp" = 1, walk = 1) {
   practice = true;
   jumped = false;
   callMode = false;
   sound.preloadVoices();
-  const r = run === "p2fight" ? fightRoom() : run === "o3a" ? mossRoom() : run === "o3b" ? tidepoolRoom() : run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
+  const r = run === "camp" ? campRoom() : run === "p2fight" ? fightRoom() : run === "o3a" ? mossRoom() : run === "o3b" ? tidepoolRoom() : run === "o3c" ? kiteRoom() : run === "o2" ? coveRoom() : run === "o1" ? rematchRoom() : run === "pond" ? pondRoom(walk) : run === 10 ? shipRoom() : run === 9 ? rescueRoom() : run === 8 ? sieveRoom() : run === 6 ? dyingRoom() : run === 5 ? new RaceRoom() : run === 4 ? new JobRoom() : run === 3 ? new GrannyRoom() : run === 2 ? new LessonRoom() : new StoryRoom();
   // ?nostills: every run's reaction stills off (runs 8 to 10 also read it where they are built).
   if ("stillsOn" in r && new URLSearchParams(location.search).has("nostills")) r.stillsOn = false;
   // Run 5 after walk 7, where Kes's challenge was said: its opening leaves those lines out.
@@ -473,7 +484,7 @@ function sayLine(l: StoryLine, released = false) {
   const face = faceOf(l);
   if (face) img.src = face;
   img.hidden = !face;
-  el.querySelector("span")!.innerHTML = (face ? "" : `<b>${esc(l.who)}</b> `) + lineHtml(l.text);
+  el.querySelector("span")!.innerHTML = (face ? "" : `<b>${esc(l.who)}</b> `) + lineHtml(l.text) + (l.draft ? ` <i class="draft-mark">draft</i>` : "");
   el.hidden = false;
   // Restart the fade-in.
   el.style.animation = "none";
@@ -1132,6 +1143,8 @@ function storyTickSound(s: GameSnapshot) {
   else if (st.rescue) rescueSound(st.rescue);
   else if (st.ship) shipSound(st.ship);
   else if (st.fight) (fightMusic(st.fight, room!.phase === "playing" && !st.fight.dying), offspringSfx(st.fight, room!.phase === "playing"));
+  // The camp walk has no music: the cook's fire and, at the light's edge, the nightshades' hush.
+  else if (st.camp) campSfx(st.camp);
   else if (room!.phase === "playing" && musicFor !== st.movement) {
     musicFor = st.movement;
     sound.playMusic(st.movement); // starts on a tick, so the beat lines up with the 600 ms steps
@@ -1525,6 +1538,7 @@ function stopStorySound() {
   sound.stopMusic(0.3);
   fightMusic(undefined, false);
   offspringSfx(undefined, false);
+  campSfx(undefined);
   musicFor = -1;
 }
 
@@ -1568,7 +1582,7 @@ function renderHud() {
     el.textContent = String(s?.scores[g] ?? 0);
   }
   const story = room.story;
-  renderWalkGoal(story?.pond);
+  renderWalkGoal(story?.pond ?? (story?.camp && { lantern: { x: 0, y: 0 }, ...(story.camp.goal ? { goal: story.camp.goal } : {}), ...(story.camp.done ? { done: true } : {}) }));
   $("score-1").classList.toggle("kes", !!story);
   $("mute").hidden = !story;
   $("call").hidden = !story?.canCall;
@@ -1578,8 +1592,8 @@ function renderHud() {
   if (story) {
     const rv = story.rival;
     $("score-1").hidden = !rv;
-    // The free walk on the pond: no score and no clock, just the place's name.
-    if (story.pond) {
+    // The free walk on the pond (and Part 2's camp): no score and no clock, just the place's name.
+    if (story.pond || story.camp) {
       $("score-0").hidden = true;
       $("ticks").textContent = story.title;
       return renderPad(s);
@@ -1628,6 +1642,8 @@ function renderPad(s: GameSnapshot | null) {
   $("mode").textContent = p?.mode === "push" ? "→ Pull" : "→ Push";
   if (!document.body.classList.contains("touch")) $("mode").textContent = p?.mode === "push" ? "Push" : "Pull";
   $("mode").style.display = room?.story?.opt?.noPush ? "none" : "";
+  // Part 2's camp walk: nothing to pull, and he does not run (his slower, watchful walk): only the stick.
+  document.body.classList.toggle("camp-walk", !!room?.story?.camp);
   // Part 2, run 4: the one show/hide button for the shard.
   const sh = room?.story?.fight?.shard;
   $("shard").hidden = !sh;
@@ -1746,6 +1762,18 @@ function targetAt(sx: number, sy: number, tap = false): { action: Action; wisp: 
     const place = world?.placeAt(sx, sy);
     const on = place === "house" ? home.house && { x: home.house.x + Math.floor(home.house.w / 2), y: home.house.y + Math.floor(home.house.h / 2) } : place ? props.find((q) => q.kind === place) : null;
     if (on) return { action: { kind: "walk", to: { x: on.x, y: on.y } }, wisp: null };
+  }
+  // Part 2's camp walk: the people and the things to tap. A tap on one sends its tile.
+  const camp = room.story?.camp;
+  if (camp) {
+    let hit: { at: Pt; d: number } | null = null;
+    const things = [...snap.players.filter((q) => q.id !== me).map((q) => ({ at: { x: q.x, y: q.y }, h: 0.9 })), ...camp.taps.map((q) => ({ at: { x: q.x, y: q.y }, h: q.h }))];
+    for (const th of things) {
+      const c = cam.toScreen(th.at.x + 0.5, th.at.y + 0.5, th.h);
+      const d = Math.hypot(c.x - sx, c.y - sy);
+      if (d <= Math.max(bigTapRadius(), cam.scale * 0.9) && (!hit || d < hit.d)) hit = { at: th.at, d };
+    }
+    if (hit) return { action: { kind: "walk", to: hit.at }, wisp: null };
   }
   // Part 2, run 4: a tap on its back. From behind it with the shard out, a strike (the wound opens);
   // on the open wound, a pull (he stays where he is). Not behind it, the tap walks him as usual.
@@ -2139,7 +2167,7 @@ function playPiece(i: number) {
   renderPart1();
   $("chain-card").hidden = true;
   if (p.kind === "card") return p.scene === "kitchen" ? kitchenScene(p) : p.scene === "supper" ? supperScene(p) : p.scene === "evening" ? eveningScene(p) : p.scene === "glow" ? glowScene(p) : p.scene === "dream" ? dreamScene(p) : p.scene === "held" && heldFor(p) ? heldScene(p) : chainCard(p);
-  if (p.kind === "walk") return connectStory(playerName(), "pond", p.walk);
+  if (p.kind === "walk") return p.camp ? connectStory(playerName(), "camp") : connectStory(playerName(), "pond", p.walk);
   // Part 2's runs 3 and 4: the fight, from that run.
   if (p.fight) return (fightStart = p.fight), connectStory(playerName(), "p2fight");
   connectStory(playerName(), p.run!);
@@ -2190,6 +2218,11 @@ function chainWatch() {
       const id = pond.optional.id as "o1";
       window.setTimeout(() => chainOptional(id), 1200);
     }
+    return;
+  }
+  // Part 2's camp walk: its last tap (Outrider at the cold brazier) goes on to the ask.
+  if (st.camp) {
+    if (st.camp.done && !chainDone) (chainDone = true), window.setTimeout(() => chainAt >= 0 && chainOn(), 1200);
     return;
   }
   const i = st.run ? (chainPart === 2 ? piece2OfRun(st.run, OFFSPRING.run3, OFFSPRING.run4) : pieceOfRun(st.run)) : -1;
@@ -2883,7 +2916,7 @@ function frame(now: number) {
     });
     drawSnap = drawPrev = { ...snap, wisps };
   }
-  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), staticOn: staticCut && now < staticCut.until ? staticCut.player : undefined, steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, opt: room?.story?.opt, ship: room?.story?.ship, fight: room?.story?.fight, walk: room?.story?.pond?.walk, looks: room?.story?.pond?.looks };
+  const st: DrawState = { shrine, prev: drawPrev, snap: drawSnap, t, me, flames, cast: castOf(), hoverWisp: lit, now, watchers: (lastWatchers = watchersFor(shrine.board)), staticOn: staticCut && now < staticCut.until ? staticCut.player : undefined, steps: stepsFor(shrine.board), lantern: room?.story?.pond?.lantern, light: room?.story?.pond?.light, dying: room?.story?.dying, sieve: room?.story?.sieve, rescue: room?.story?.rescue, opt: room?.story?.opt, ship: room?.story?.ship, fight: room?.story?.fight, walk: room?.story?.pond?.walk, looks: room?.story?.pond?.looks ?? room?.story?.camp?.looks, camp: room?.story?.camp, camAt: { x: cam.cx, y: cam.cy } };
   world.render(st);
   drawOverlay(g, cam, st);
   // On touch, ring the wisp the Staff button will work on.
@@ -2948,7 +2981,7 @@ function ferryTold() {
 }
 
 function speakerAt(who: string): { x: number; y: number; h: number } | null {
-  const cast = who.toLowerCase();
+  const cast = PART2_CAST[who.toLowerCase()] ?? who.toLowerCase();
   if (cast === "the ferryman") {
     const f = ferryAt();
     return f && { ...f, h: 2.1 * (CAST_SCALE.ferryman ?? 1) };
@@ -2991,12 +3024,14 @@ const STEPS_EDGE = 0.6;
 const WATCH_EDGE = 1.7;
 
 /** Story runs: who each player is, for their character model. In run 1 you are Rook. */
+/** Part 2's people by their tags (the cast thread's walk figures, 28 Nov): the crew go by what they do, and the boy is "The boy" until he names himself. */
+const PART2_CAST: Record<string, string> = { "the boy": "fen", outrider: "outrider", "the cook": "crew-cook", "the lantern man": "crew-lantern", "the gate one": "crew-gate", "the lamp hand": "crew-lamp" };
 function castOf(): Map<number, string> | undefined {
   if (!room?.story) return undefined;
   const m = new Map<number, string>();
   for (const p of room.players) {
     const name = p.name.toLowerCase();
-    const who = ["rook", "lumi", "wick", "moth", "kes", "hesta", "nell", "sefa", "maudie", "mabry", "orrin", "tilda", "solenne", "fen"].find((n) => name.startsWith(n));
+    const who = ["rook", "lumi", "wick", "moth", "kes", "hesta", "nell", "sefa", "maudie", "mabry", "orrin", "tilda", "solenne", "fen"].find((n) => name.startsWith(n)) ?? PART2_CAST[name];
     if (who) m.set(p.id, who);
   }
   if (room.story.run === "The Grand Kindling") m.set(me, "rook");

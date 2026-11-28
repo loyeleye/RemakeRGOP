@@ -155,6 +155,16 @@ export const THEMES: Record<string, Theme> = {
     const base = THEMES["low-one"]!;
     return { ...base, name: "The crew's yard", floor: "crew-yard", floorTiles: 4, grass: "#5f6b4c", exposure: 0.9, hemi: ["#c4c0cc", "#6e5a44", 0.95] as [string, string, number], particles: null, dressed: true, decorate() {} };
   },
+  // The crew's camp, warm (Part 2, the camp walk): the same yard after dark, lit by its own lamps and the cooking fire
+  // (camp-dress.ts lights them); the sky and the ground's own light low, so the lamps make the pool of light.
+  get "warm-camp"() {
+    const base = THEMES["solenne-yard"]!;
+    return {
+      ...base, name: "The crew's camp",
+      sky: { ...base.sky, zenith: "#0d1222", sky: "#1b2236", haze: "#3a3440", below: "#141a28", stars: 0.6 },
+      fog: "#1c2030", clouds: "#3a4256", hemi: ["#6a6c88", "#3a2a1c", 0.5] as [string, string, number], sun: ["#9aa8d8", 0.35] as [string, number], exposure: 1.05,
+    };
+  },
   // The Sieve (run 8): the palest, quietest place. Bleached chalk under a low, washed-out morning; nothing growing, no colour.
   get sieve() {
     const base = THEMES["tidepool-steps"]!;

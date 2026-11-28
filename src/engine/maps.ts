@@ -11,6 +11,7 @@
 import { DYING, craterBoard, craterTiles } from "./dying.js";
 import { SV_WELLS, sieveRows, svCoast, svOutline } from "./sieve.js";
 import { OFFSPRING, oyCoast, oyOutline, yardRows } from "./offspring.js";
+import { CAMP, CAMP_ROWS, campCoast, campOutline } from "./camp.js";
 import { LO_FRAME, LO_OVAL, RESCUE, loCoast, loFromSlip, loOutline, lowOneRows } from "./rescue.js";
 import { SHIP, SHIP_DECK, SHIP_FRAME, shipRows } from "./shiphome.js";
 import { KF_FAR, KF_OVAL, KF_LOBES, kfCoast, kfOutline, kiteFellRows } from "./kitefell.js";
@@ -1415,7 +1416,16 @@ export const STORY_SHRINES: Shrine[] = [
   tidepoolTerraces(),
   // Part 2, runs 3 and 4: the offspring fight in Solenne's yard (see offspring.ts).
   solenneYard(),
+  // Part 2, the camp walk: the same yard before the fight, warm (see camp.ts).
+  warmCamp(),
 ];
+
+/** The crew's camp, warm (Part 2, the camp walk): the same yard, whole, its gate open; drawn by camp-dress.ts. */
+function warmCamp(): Shrine {
+  const def: ShrineDef = { id: CAMP.shrine, name: CAMP.title, blurb: "A walled yard in a pool of lamplight round a cold brazier, its gate standing open.", full: true, scale: 1, rings: [], spawnBand: [3, 12], rows: CAMP_ROWS };
+  const sh = finish(def, CAMP_ROWS, 2, null);
+  return { ...sh, coast: campCoast, outline: campOutline, arms: true, lobes: [], core: { x: 0, y: 0, outline: campOutline } };
+}
 
 /** The crew's yard, breached (Part 2, runs 3 and 4): its walls, carts and cage drawn by yard-dress.ts. */
 function solenneYard(): Shrine {
